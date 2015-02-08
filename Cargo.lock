@@ -1,0 +1,55 @@
+[root]
+name = "rusty_window"
+version = "0.0.0"
+dependencies = [
+ "log 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rust-windows 0.0.1 (git+https://github.com/klutzy/rust-windows)",
+ "winapi 0.1.10 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "gdi32-sys"
+version = "0.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "winapi 0.1.10 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "kernel32-sys"
+version = "0.0.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "winapi 0.1.10 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "log"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
+name = "rust-windows"
+version = "0.0.1"
+source = "git+https://github.com/klutzy/rust-windows#2508c468934386afc71a105d51e61cf45bcc7d10"
+dependencies = [
+ "gdi32-sys 0.0.4 (registry+https://github.com/rust-lang/crates.io-index)",
+ "kernel32-sys 0.0.7 (registry+https://github.com/rust-lang/crates.io-index)",
+ "log 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "user32-sys 0.0.9 (registry+https://github.com/rust-lang/crates.io-index)",
+ "winapi 0.1.10 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "user32-sys"
+version = "0.0.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "winapi 0.1.10 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "winapi"
+version = "0.1.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+

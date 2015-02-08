@@ -1,0 +1,15 @@
+[package]
+
+name = "rusty_window"
+version = "0.0.0"
+authors = [ "David LeGare <excaliburhissheath@gmail.com>" ]
+
+[[bin]]
+name = "rusty_window"
+
+[dependencies.rust-windows]
+git = "https://github.com/klutzy/rust-windows"
+
+[dependencies]
+winapi = "*"
+log = "*"
