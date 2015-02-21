@@ -2,7 +2,7 @@
 
 name = "rusty_window"
 version = "0.0.0"
-authors = [ "David LeGare <excaliburhissheath@gmail.com>" ]
+authors = ["David LeGare <excaliburhissheath@gmail.com>"]
 
 [[bin]]
 name = "rusty_window"
@@ -10,6 +10,14 @@ name = "rusty_window"
 [dependencies.rust-windows]
 git = "https://github.com/klutzy/rust-windows"
 
+[dependencies.gl]
+git = "https://github.com/bjz/gl-rs"
+
+[dependencies.xml-rs]
+git = "https://github.com/bfops/xml-rs"
+
 [dependencies]
 winapi = "*"
+gdi32-sys = "*"
+opengl32-sys = "*"
 log = "*"
