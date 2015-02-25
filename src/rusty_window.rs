@@ -269,6 +269,10 @@ fn main() {
     let instance = bootstrap::main_instance();
     let window = Window::new("Rust Window", instance);
 
+    loop {
+        window.handle_messages();
+    };
+
     // let main = MainFrame::new(instance, "Rusty Window".to_string());
     // let main = main.unwrap();
     //
