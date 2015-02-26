@@ -1,6 +1,6 @@
 #![crate_type = "lib"]
 #![crate_name = "bootstrap-rs"]
-#![feature(core, collections, std_misc)]
+#![feature(core, collections, std_misc, alloc)]
 
 extern crate winapi;
 extern crate "user32-sys" as user32;

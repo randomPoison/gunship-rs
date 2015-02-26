@@ -1,9 +1,9 @@
 use std::mem;
 use std::ptr;
-use std::rc::Rc;
+use std::rc::{self, Rc};
 
 use user32;
-use winapi::{HWND, HDC, HINSTANCE, UINT, WPARAM, LPARAM, LRESULT,
+use winapi::{HWND, HDC, HINSTANCE, UINT, WPARAM, LPARAM, LRESULT, LPVOID,
              WNDCLASSEXW,
              CS_HREDRAW, CS_VREDRAW, CS_OWNDC, CW_USEDEFAULT,
              WS_OVERLAPPEDWINDOW, WS_VISIBLE,
@@ -11,6 +11,8 @@ use winapi::{HWND, HDC, HINSTANCE, UINT, WPARAM, LPARAM, LRESULT,
              WM_ACTIVATEAPP, WM_CREATE, WM_CLOSE, WM_DESTROY, WM_PAINT};
 
 use ToCU16Str;
+
+static WINDOW_PROP: &'static str = "window";
 
 pub struct Window {
     pub handle: HWND,
@@ -63,10 +65,21 @@ impl Window {
             user32::GetDC(handle)
         };
 
-        Window {
-            handle: handle,
-            dc: dc
+        // give the window a pointer to our Window object
+        let mut window = Rc::<Window>::new({
+            Window {
+                handle: handle,
+                dc: dc
+            }
+        });
+        let window_address = (rc::get_mut(&mut window).unwrap() as *mut Window) as LPVOID;
+        println!("window address: {:?}", window_address);
+
+        unsafe {
+            user32::SetPropW(handle, WINDOW_PROP.to_c_u16().as_ptr(), window_address);
         }
+
+        window
     }
 
     pub fn handle_messages(&self) {
@@ -106,6 +119,8 @@ unsafe extern "system" fn message_callback(
     wParam: WPARAM,
     lParam: LPARAM) -> LRESULT
 {
+    let window = user32::GetPropW(hwnd, WINDOW_PROP.to_c_u16().as_ptr()) as *mut Window;
+
     match uMsg {
         WM_ACTIVATEAPP => {
             println!("WM_ACTIVATEAPP");
