@@ -1,11 +1,10 @@
 use std::mem;
 use std::ptr;
-use std::ffi::CString;
+use std::rc::Rc;
 
 use user32;
-use kernel32;
-use winapi::{HWND, HINSTANCE, UINT, WPARAM, LPARAM, LRESULT,
-             ATOM, WNDCLASSEXW,
+use winapi::{HWND, HDC, HINSTANCE, UINT, WPARAM, LPARAM, LRESULT,
+             WNDCLASSEXW,
              CS_HREDRAW, CS_VREDRAW, CS_OWNDC, CW_USEDEFAULT,
              WS_OVERLAPPEDWINDOW, WS_VISIBLE,
              MSG, POINT,
@@ -14,14 +13,14 @@ use winapi::{HWND, HINSTANCE, UINT, WPARAM, LPARAM, LRESULT,
 use ToCU16Str;
 
 pub struct Window {
-    class: ATOM,
-    handle: HWND
+    pub handle: HWND,
+    pub dc: HDC
 }
 
 impl Window {
-    pub fn new(name: &str, instance: HINSTANCE) -> Window {
+    pub fn new(name: &str, instance: HINSTANCE) -> Rc<Window> {
         let name_u = name.to_c_u16();
-        let class_u = "supername".to_c_u16();
+        let class_u = "bootstrap".to_c_u16();
 
         let class_info = WNDCLASSEXW {
             cbSize: mem::size_of::<WNDCLASSEXW>() as u32,
@@ -38,9 +37,9 @@ impl Window {
             hIconSm: ptr::null_mut(),
         };
 
-        let class = unsafe {
-            user32::RegisterClassExW(&class_info)
-        };
+        unsafe {
+            user32::RegisterClassExW(&class_info);
+        }
 
         let handle = unsafe {
             user32::CreateWindowExW(
@@ -58,22 +57,19 @@ impl Window {
                 ptr::null_mut()) // TODO do we need to pass a pointer to the object here?
         };
 
-        if handle == ptr::null_mut() {
-            println!("{:?}", unsafe { kernel32::GetLastError() } );
-        }
+        // TODO handle any errors maybe?
 
-        // unsafe {
-        //     user32::ShowWindow(handle, 0);
-        // }
+        let dc = unsafe {
+            user32::GetDC(handle)
+        };
 
         Window {
-            class: class,
-            handle: handle
+            handle: handle,
+            dc: dc
         }
     }
 
-    pub fn handle_messages(&self)
-    {
+    pub fn handle_messages(&self) {
         let mut message = MSG {
             hwnd: ptr::null_mut(),
             message: 0,
@@ -103,6 +99,7 @@ impl Window {
     }
 }
 
+#[allow(non_snake_case)]
 unsafe extern "system" fn message_callback(
     hwnd: HWND,
     uMsg: UINT,
@@ -127,7 +124,6 @@ unsafe extern "system" fn message_callback(
             0
         },
         WM_PAINT => {
-            // println!("WM_PAINT");
             0
         },
         _ => {

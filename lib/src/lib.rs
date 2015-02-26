@@ -1,5 +1,6 @@
 #![crate_type = "lib"]
 #![crate_name = "bootstrap-rs"]
+#![feature(core, collections, std_misc)]
 
 extern crate winapi;
 extern crate "user32-sys" as user32;
@@ -10,6 +11,7 @@ extern crate "opengl32-sys" as opengl32;
 extern crate gl;
 
 pub mod window;
+pub mod gl_render;
 
 use std::ptr;
 
