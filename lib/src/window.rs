@@ -12,8 +12,10 @@ use winapi::{HWND, HDC, HINSTANCE, UINT, WPARAM, LPARAM, LRESULT, LPVOID,
 
 use ToCU16Str;
 
+static CLASS_NAME: &'static str = "bootstrap";
 static WINDOW_PROP: &'static str = "window";
 
+#[derive(Debug)]
 pub struct Window {
     pub handle: HWND,
     pub dc: HDC
@@ -22,7 +24,7 @@ pub struct Window {
 impl Window {
     pub fn new(name: &str, instance: HINSTANCE) -> Rc<Window> {
         let name_u = name.to_c_u16();
-        let class_u = "bootstrap".to_c_u16();
+        let class_u = CLASS_NAME.to_c_u16();
 
         let class_info = WNDCLASSEXW {
             cbSize: mem::size_of::<WNDCLASSEXW>() as u32,
@@ -73,7 +75,6 @@ impl Window {
             }
         });
         let window_address = (rc::get_mut(&mut window).unwrap() as *mut Window) as LPVOID;
-        println!("window address: {:?}", window_address);
 
         unsafe {
             user32::SetPropW(handle, WINDOW_PROP.to_c_u16().as_ptr(), window_address);
@@ -94,6 +95,7 @@ impl Window {
                 y: 0
             },
         };
+
         loop {
             let result = unsafe {
                 user32::PeekMessageW(&mut message, self.handle, 0, 0, true as u32)
@@ -119,7 +121,10 @@ unsafe extern "system" fn message_callback(
     wParam: WPARAM,
     lParam: LPARAM) -> LRESULT
 {
-    let window = user32::GetPropW(hwnd, WINDOW_PROP.to_c_u16().as_ptr()) as *mut Window;
+    let window_ptr = user32::GetPropW(hwnd, WINDOW_PROP.to_c_u16().as_ptr()) as *mut Window;
+    if !window_ptr.is_null() {
+        let window = &*window_ptr;
+    }
 
     match uMsg {
         WM_ACTIVATEAPP => {
