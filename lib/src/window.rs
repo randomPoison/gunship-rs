@@ -15,13 +15,13 @@ use ToCU16Str;
 static CLASS_NAME: &'static str = "bootstrap";
 static WINDOW_PROP: &'static str = "window";
 
-#[derive(Debug)]
-pub struct Window {
+pub struct Window<'a> {
     pub handle: HWND,
-    pub dc: HDC
+    pub dc: HDC,
+    on_focus: Option<&'a WindowFocus>
 }
 
-impl Window {
+impl<'a> Window<'a> {
     pub fn new(name: &str, instance: HINSTANCE) -> Rc<Window> {
         let name_u = name.to_c_u16();
         let class_u = CLASS_NAME.to_c_u16();
@@ -71,7 +71,8 @@ impl Window {
         let mut window = Rc::<Window>::new({
             Window {
                 handle: handle,
-                dc: dc
+                dc: dc,
+                on_focus: None
             }
         });
         let window_address = (rc::get_mut(&mut window).unwrap() as *mut Window) as LPVOID;
@@ -112,23 +113,36 @@ impl Window {
             }
         }
     }
+
+    pub fn set_on_focus(&mut self, on_focus: &'a WindowFocus) {
+        self.on_focus = Some(on_focus);
+    }
+}
+
+pub trait WindowFocus {
+    fn on_focus(&self);
 }
 
 #[allow(non_snake_case)]
-unsafe extern "system" fn message_callback(
+unsafe extern "system"
+fn message_callback(
     hwnd: HWND,
     uMsg: UINT,
     wParam: WPARAM,
     lParam: LPARAM) -> LRESULT
 {
     let window_ptr = user32::GetPropW(hwnd, WINDOW_PROP.to_c_u16().as_ptr()) as *mut Window;
-    if !window_ptr.is_null() {
-        let window = &*window_ptr;
-    }
 
     match uMsg {
         WM_ACTIVATEAPP => {
             println!("WM_ACTIVATEAPP");
+            if !window_ptr.is_null() {
+                let window = &*window_ptr;
+                match window.on_focus {
+                    Some(callback) => callback.on_focus(),
+                    None => ()
+                }
+            }
             0
         },
         WM_CREATE => {
@@ -146,8 +160,6 @@ unsafe extern "system" fn message_callback(
         WM_PAINT => {
             0
         },
-        _ => {
-            user32::DefWindowProcW(hwnd, uMsg, wParam, lParam)
-        }
+        _ => user32::DefWindowProcW(hwnd, uMsg, wParam, lParam)
     }
 }
