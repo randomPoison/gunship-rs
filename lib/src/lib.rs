@@ -10,6 +10,9 @@ extern crate "opengl32-sys" as opengl32;
 
 extern crate gl;
 
+#[cfg(target_family = "windows")]
+mod windows;
+
 pub mod window;
 pub mod gl_render;
 

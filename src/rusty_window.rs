@@ -3,35 +3,38 @@
 extern crate "bootstrap-rs" as bootstrap;
 
 use bootstrap::window::{Window,
-                        WindowFocus};
+                        WindowFocus, WindowClose};
 use bootstrap::gl_render;
 use bootstrap::gl_render::Mesh;
 
 struct MainWindow
 {
-    value: i32
-}
-
-impl WindowFocus for MainWindow {
-    fn on_focus(&self) {
-        println!("main window gained focus");
-    }
+    close: bool
 }
 
 fn main() {
-    let main_window = &MainWindow {
-        value: -1
+    let mut main_window = MainWindow {
+        close: false
     };
 
+    println!("initializing bootstrap");
     let instance = bootstrap::main_instance();
-    let mut window = Window::new("Rust Window", instance);
 
-    std::rc::get_mut(&mut window).unwrap().set_on_focus(main_window);
+    println!("creating window");
+    let window = Window::new("Rust Window", instance);
 
-    gl_render::init_opengl(&window);
-    gl_render::create_gl_context(&window);
-
+    //window.set_on_focus(&mut main_window);
+    // window.set_on_close(&mut main_window);
+    //
+    // gl_render::init_opengl(&window);
+    // gl_render::create_gl_context(&window);
+    //
     loop {
+        println!("handling messages");
         window.handle_messages();
+
+        if main_window.close {
+            break;
+        }
     };
 }
