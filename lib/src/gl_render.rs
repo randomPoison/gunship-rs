@@ -5,28 +5,29 @@ use std::ffi::CString;
 use gl;
 use gl::types::*;
 
+// reexport platform-specific versions of functions
 #[cfg(target_family = "windows")]
 pub use windows::gl_render::{init_opengl, create_gl_context, swap_buffers};
 
-pub static VERTEX_SHADER_SRC: &'static str = "\
-#version 150                            \n\
-                                        \n\
-in vec4 vertexPos;                      \n\
-                                        \n\
-void main(void)                         \n\
-{                                       \n\
-    gl_Position = vertexPos;            \n\
-}";
+pub static VERTEX_SHADER_SRC: &'static str = r#"
+#version 150
 
-pub static FRAGMENT_SHADER_SRC: &'static str = "\
-#version 150                              \n\
-                                          \n\
-out vec4 fragmentColor;                   \n\
-                                          \n\
-void main(void)                           \n\
-{                                         \n\
-    fragmentColor = vec4(1, 0, 0, 1);     \n\
-}";
+in vec4 vertexPos;
+
+void main(void)
+{
+    gl_Position = vertexPos;
+}"#;
+
+pub static FRAGMENT_SHADER_SRC: &'static str = r#"
+#version 150
+
+out vec4 fragmentColor;
+
+void main(void)
+{
+    fragmentColor = vec4(1, 0, 0, 1);
+}"#;
 
 pub struct Mesh;
 
