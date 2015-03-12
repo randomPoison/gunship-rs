@@ -43,12 +43,10 @@ impl<'a, 'b> Window<'a, 'b> {
             hIconSm: ptr::null_mut(),
         };
 
-        println!("registering window class");
         unsafe {
             user32::RegisterClassExW(&class_info);
         }
 
-        println!("creating window");
         let handle = unsafe {
             user32::CreateWindowExW(
                 0,
@@ -67,7 +65,6 @@ impl<'a, 'b> Window<'a, 'b> {
 
         // TODO handle any errors maybe?
 
-        println!("getting the DC");
         let dc = unsafe {
             user32::GetDC(handle)
         };
@@ -103,12 +100,10 @@ impl<'a, 'b> Window<'a, 'b> {
                 user32::PeekMessageW(&mut message, self.handle, 0, 0, true as u32)
             };
             if result > 0 {
-                println!("start dispatch messages");
                 unsafe {
                     user32::TranslateMessage(&message);
                     user32::DispatchMessageW(&message);
                 }
-                println!("end dispatch messages");
             }
             else
             {
@@ -134,7 +129,6 @@ fn message_callback(
     wParam: WPARAM,
     lParam: LPARAM) -> LRESULT
 {
-    println!("window proc");
     let window_ptr = user32::GetPropW(hwnd, WINDOW_PROP.to_c_u16().as_ptr()) as *mut Window;
 
     match uMsg {

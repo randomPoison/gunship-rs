@@ -6,7 +6,8 @@ use std::ffi::CString;
 use gl;
 use gl::types::*;
 
-use bootstrap::gl_utils;
+use bootstrap::window::Window;
+use bootstrap::gl_utils::{self, GLContext};
 
 use render::Mesh;
 
@@ -30,7 +31,7 @@ void main(void)
     fragmentColor = vec4(1, 0, 0, 1);
 }"#;
 
-pub fn draw_mesh(mesh: &Mesh) {
+pub fn draw_mesh() {
     unsafe {
         // TODO rebind the buffers or whatever
 
@@ -41,6 +42,19 @@ pub fn draw_mesh(mesh: &Mesh) {
         gl::DrawArrays(gl::TRIANGLE_FAN, 0, 5);
 
         gl_utils::swap_buffers(); // TODO don't swap buffers after every draw
+    }
+}
+
+pub struct GLRender {
+    context: GLContext
+}
+
+pub fn init(window: &Window) -> GLRender {
+    gl_utils::init(window);
+    let context = gl_utils::create_context(window);
+
+    GLRender {
+        context: context
     }
 }
 
@@ -100,6 +114,7 @@ pub fn gl_test() {
     let mut array_buffer = 0;
     let mut vertex_buffer = 0;
 
+    println!("create vertex arrays");
     unsafe {
         gl::GenVertexArrays(1, &mut array_buffer);
         gl::BindVertexArray(array_buffer);
@@ -112,6 +127,7 @@ pub fn gl_test() {
       0.25, 0.75, 0.00,
       0.00, 0.50, 0.00 ];
 
+    println!("create buffer object");
     unsafe {
         gl::GenBuffers(1, &mut vertex_buffer);
         gl::BindBuffer(gl::ARRAY_BUFFER, vertex_buffer);
@@ -137,4 +153,6 @@ pub fn gl_test() {
                                 gl::FALSE as GLboolean, 0, ptr::null());
         gl::EnableVertexAttribArray(pos_attr as GLuint);
     }
+
+    draw_mesh();
 }

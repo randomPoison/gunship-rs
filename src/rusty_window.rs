@@ -24,12 +24,9 @@ fn main() {
     println!("creating window");
     let window = Window::new("Rust Window", instance);
 
-    //window.set_on_focus(&mut main_window);
-    // window.set_on_close(&mut main_window);
-    //
-    // gl_render::init_opengl(&window);
-    // gl_render::create_gl_context(&window);
-    //
+    gl_render::init(&window);
+    gl_render::gl_test();
+
     loop {
         println!("handling messages");
         window.handle_messages();

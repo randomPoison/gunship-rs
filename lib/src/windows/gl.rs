@@ -13,6 +13,8 @@ use gl;
 
 use windows::window::Window;
 
+pub type GLContext = HGLRC;
+
 pub fn init(window: &Window) {
     let device_context = window.dc;
 
@@ -21,7 +23,7 @@ pub fn init(window: &Window) {
         nVersion: 1,
         dwFlags: PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER,
         iPixelType: PFD_TYPE_RGBA,
-        cColorBits: 16,
+        cColorBits: 32,
         cRedBits: 0,
         cRedShift: 0,
         cGreenBits: 0,
@@ -35,8 +37,8 @@ pub fn init(window: &Window) {
         cAccumGreenBits: 0,
         cAccumBlueBits: 0,
         cAccumAlphaBits: 0,
-        cDepthBits: 16,
-        cStencilBits: 1,
+        cDepthBits: 24,
+        cStencilBits: 8,
         cAuxBuffers: 0,
         iLayerType: PFD_MAIN_PLANE,
         bReserved: 0,
@@ -49,7 +51,17 @@ pub fn init(window: &Window) {
         let pixelformat = gdi32::ChoosePixelFormat(device_context, &pfd);
         gdi32::SetPixelFormat(device_context, pixelformat, &pfd);
         let render_context = opengl32::wglCreateContext(device_context);
-        opengl32::wglMakeCurrent(device_context, render_context)
+        opengl32::wglDeleteContext(render_context);
+    };
+}
+
+pub fn create_context(window: &Window) -> HGLRC {
+    let device_context = window.dc;
+
+    let context = unsafe {
+        let render_context = opengl32::wglCreateContext(device_context);
+        opengl32::wglMakeCurrent(device_context, render_context);
+        render_context
     };
 
     gl::load_with(|s| {
@@ -58,14 +70,8 @@ pub fn init(window: &Window) {
             opengl32::wglGetProcAddress(string.unwrap().as_ptr())
         }
     });
-}
 
-#[allow(unused_variables)]
-pub fn create_context(window: &Window) -> HGLRC {
-    let device_context = window.dc;
-
-    // TODO create a proper gl context
-    ptr::null_mut()
+    context
 }
 
 pub fn swap_buffers()
