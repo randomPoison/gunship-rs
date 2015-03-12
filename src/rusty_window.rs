@@ -22,14 +22,21 @@ fn main() {
     let instance = bootstrap::init();
 
     println!("creating window");
-    let window = Window::new("Rust Window", instance);
+    let mut window = Window::new("Rust Window", instance);
 
     gl_render::init(&window);
     gl_render::gl_test();
 
     loop {
-        println!("handling messages");
         window.handle_messages();
+
+        // handle messages
+        loop {
+            match window.next_message() {
+                Some(message) => println!("message: {:?}", message),
+                None => break
+            }
+        }
 
         if main_window.close {
             break;

@@ -58,12 +58,14 @@ pub fn init(window: &Window) {
 pub fn create_context(window: &Window) -> HGLRC {
     let device_context = window.dc;
 
+    // create context and make it current
     let context = unsafe {
         let render_context = opengl32::wglCreateContext(device_context);
         opengl32::wglMakeCurrent(device_context, render_context);
         render_context
     };
 
+    // provide method for loading functions
     gl::load_with(|s| {
         let string = CString::new(s);
         unsafe {

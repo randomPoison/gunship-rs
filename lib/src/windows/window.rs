@@ -1,5 +1,7 @@
 use std::mem;
 use std::ptr;
+use std::collections::vec_deque::RingBuf;
+use std::ops::DerefMut;
 
 use windows::user32;
 use windows::winapi::{
@@ -11,19 +13,19 @@ use windows::winapi::{
     WM_ACTIVATEAPP, WM_CREATE, WM_CLOSE, WM_DESTROY, WM_PAINT
 };
 use ToCU16Str;
-use window::{WindowFocus, WindowClose};
+use window::Message;
+use window::Message::*;
 
 static CLASS_NAME: &'static str = "bootstrap";
 static WINDOW_PROP: &'static str = "window";
 
-pub struct Window<'a, 'b> {
+pub struct Window {
     pub handle: HWND,
     pub dc: HDC,
-    on_focus: Option<&'a mut WindowFocus>,
-    on_close: Option<&'b mut WindowClose>
+    messages: RingBuf<Message>
 }
 
-impl<'a, 'b> Window<'a, 'b> {
+impl Window {
     pub fn new(name: &str, instance: HINSTANCE) -> Box<Window> {
         let name_u = name.to_c_u16();
         let class_u = CLASS_NAME.to_c_u16();
@@ -74,15 +76,19 @@ impl<'a, 'b> Window<'a, 'b> {
             Window {
                 handle: handle,
                 dc: dc,
-                on_focus: None,
-                on_close: None
+                messages: RingBuf::new()
             }
         });
+        let window_address = (window.deref_mut() as *mut Window) as LPVOID;
+
+        unsafe {
+            user32::SetPropW(handle, WINDOW_PROP.to_c_u16().as_ptr(), window_address);
+        }
 
         window
     }
 
-    pub fn handle_messages(&self) {
+    pub fn handle_messages(&mut self) {
         let mut message = MSG {
             hwnd: ptr::null_mut(),
             message: 0,
@@ -112,12 +118,8 @@ impl<'a, 'b> Window<'a, 'b> {
         }
     }
 
-    pub fn set_on_focus(&mut self, on_focus: &'a mut WindowFocus) {
-        self.on_focus = Some(on_focus);
-    }
-
-    pub fn set_on_close(&mut self, on_close: &'b mut WindowClose) {
-        self.on_close = Some(on_close);
+    pub fn next_message(&mut self) -> Option<Message> {
+        self.messages.pop_front()
     }
 }
 
@@ -133,31 +135,37 @@ fn message_callback(
 
     match uMsg {
         WM_ACTIVATEAPP => {
-            println!("WM_ACTIVATEAPP");
             if !window_ptr.is_null() {
                 let window = &mut *window_ptr;
-                match window.on_focus {
-                    Some(ref mut callback) => callback.on_focus(),
-                    None => ()
-                }
+                window.messages.push_back(Activate);
             }
-            0
         },
         WM_CREATE => {
-            println!("WM_CREATE");
-            0
+            if !window_ptr.is_null() {
+                let window = &mut *window_ptr;
+                //window.messages.push_back(Activate);
+            }
         },
         WM_CLOSE => {
-            println!("WM_CLOSE");
-            0
+            if !window_ptr.is_null() {
+                let window = &mut *window_ptr;
+                window.messages.push_back(Close);
+            }
         },
         WM_DESTROY => {
-            println!("WM_DESTROY");
-            0
+            if !window_ptr.is_null() {
+                let window = &mut *window_ptr;
+                window.messages.push_back(Destroy);
+            }
         },
         WM_PAINT => {
-            0
+            if !window_ptr.is_null() {
+                let window = &mut *window_ptr;
+                window.messages.push_back(Paint);
+            }
         },
-        _ => user32::DefWindowProcW(hwnd, uMsg, wParam, lParam)
-    }
+        _ => ()
+    };
+
+    user32::DefWindowProcW(hwnd, uMsg, wParam, lParam)
 }
