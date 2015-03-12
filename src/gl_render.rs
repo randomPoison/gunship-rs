@@ -1,13 +1,14 @@
 use std::ptr;
+use std::mem;
 use std::str;
 use std::ffi::CString;
 
 use gl;
 use gl::types::*;
 
-// reexport platform-specific versions of functions
-#[cfg(target_family = "windows")]
-pub use windows::gl_render::{init_opengl, create_gl_context, swap_buffers};
+use bootstrap::gl_utils;
+
+use render::Mesh;
 
 pub static VERTEX_SHADER_SRC: &'static str = r#"
 #version 150
@@ -29,14 +30,6 @@ void main(void)
     fragmentColor = vec4(1, 0, 0, 1);
 }"#;
 
-pub struct Mesh;
-
-impl Mesh {
-    pub fn new() -> Mesh {
-        Mesh
-    }
-}
-
 pub fn draw_mesh(mesh: &Mesh) {
     unsafe {
         // TODO rebind the buffers or whatever
@@ -47,7 +40,7 @@ pub fn draw_mesh(mesh: &Mesh) {
         // Draw a triangle from the 3 vertices
         gl::DrawArrays(gl::TRIANGLE_FAN, 0, 5);
 
-        swap_buffers(); // TODO don't swap buffers after every draw
+        gl_utils::swap_buffers(); // TODO don't swap buffers after every draw
     }
 }
 
@@ -99,5 +92,49 @@ pub fn link_program(vs: GLuint, fs: GLuint) -> GLuint {
             panic!("{}", str::from_utf8(buf.as_slice()).ok().expect("ProgramInfoLog not valid utf8"));
         }
         program
+    }
+}
+
+// TODO move this up into a more appropriate location
+pub fn gl_test() {
+    let mut array_buffer = 0;
+    let mut vertex_buffer = 0;
+
+    unsafe {
+        gl::GenVertexArrays(1, &mut array_buffer);
+        gl::BindVertexArray(array_buffer);
+    }
+
+    let vertex_data: [GLfloat; 15] =
+    [ 0.00, 0.00, 0.00,
+      0.50, 0.00, 0.00,
+      0.50, 0.50, 0.00,
+      0.25, 0.75, 0.00,
+      0.00, 0.50, 0.00 ];
+
+    unsafe {
+        gl::GenBuffers(1, &mut vertex_buffer);
+        gl::BindBuffer(gl::ARRAY_BUFFER, vertex_buffer);
+        gl::BufferData(gl::ARRAY_BUFFER,
+                       (vertex_data.len() * mem::size_of::<GLfloat>()) as GLsizeiptr,
+                       mem::transmute(&vertex_data[0]),
+                       gl::STATIC_DRAW);
+    }
+
+    let vs = compile_shader(VERTEX_SHADER_SRC, gl::VERTEX_SHADER);
+    let fs = compile_shader(FRAGMENT_SHADER_SRC, gl::FRAGMENT_SHADER);
+    let program = link_program(vs, fs);
+
+    unsafe {
+        gl::UseProgram(program);
+        // gl::BindFragDataLocation(program, 0,
+        //                          CString::new(b"fragmentColor").unwrap().as_ptr());
+
+        // Specify the layout of the vertex data
+        let pos_attr = gl::GetAttribLocation(program,
+                                             CString::new(b"vertexPos").unwrap().as_ptr());
+        gl::VertexAttribPointer(pos_attr as GLuint, 3, gl::FLOAT,
+                                gl::FALSE as GLboolean, 0, ptr::null());
+        gl::EnableVertexAttribArray(pos_attr as GLuint);
     }
 }

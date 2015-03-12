@@ -1,11 +1,12 @@
-#![feature(alloc)]
+#![feature(core)]
 
 extern crate "bootstrap-rs" as bootstrap;
+extern crate gl;
 
-use bootstrap::window::{Window,
-                        WindowFocus, WindowClose};
-use bootstrap::gl_render;
-use bootstrap::gl_render::Mesh;
+use bootstrap::window::Window;
+
+mod render;
+mod gl_render;
 
 struct MainWindow
 {
@@ -18,7 +19,7 @@ fn main() {
     };
 
     println!("initializing bootstrap");
-    let instance = bootstrap::main_instance();
+    let instance = bootstrap::init();
 
     println!("creating window");
     let window = Window::new("Rust Window", instance);

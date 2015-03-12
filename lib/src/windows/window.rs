@@ -1,14 +1,15 @@
 use std::mem;
 use std::ptr;
-use std::rc::{self, Rc};
 
-use user32;
-use winapi::{HWND, HDC, HINSTANCE, UINT, WPARAM, LPARAM, LRESULT, LPVOID,
-             WNDCLASSEXW,
-             CS_HREDRAW, CS_VREDRAW, CS_OWNDC, CW_USEDEFAULT,
-             WS_OVERLAPPEDWINDOW, WS_VISIBLE,
-             MSG, POINT,
-             WM_ACTIVATEAPP, WM_CREATE, WM_CLOSE, WM_DESTROY, WM_PAINT};
+use windows::user32;
+use windows::winapi::{
+    HWND, HDC, HINSTANCE, UINT, WPARAM, LPARAM, LRESULT, LPVOID,
+    WNDCLASSEXW,
+    CS_HREDRAW, CS_VREDRAW, CS_OWNDC, CW_USEDEFAULT,
+    WS_OVERLAPPEDWINDOW, WS_VISIBLE,
+    MSG, POINT,
+    WM_ACTIVATEAPP, WM_CREATE, WM_CLOSE, WM_DESTROY, WM_PAINT
+};
 use ToCU16Str;
 use window::{WindowFocus, WindowClose};
 

@@ -1,31 +1,17 @@
 #![crate_type = "lib"]
 #![crate_name = "bootstrap-rs"]
-#![feature(core, collections, std_misc, alloc)]
-
-extern crate winapi;
-extern crate "user32-sys" as user32;
-extern crate "kernel32-sys" as kernel32;
-extern crate "gdi32-sys" as gdi32;
-extern crate "opengl32-sys" as opengl32;
+#![feature(core, collections)]
 
 extern crate gl;
 
 #[cfg(target_family = "windows")]
 mod windows;
 
+#[cfg(target_family = "windows")]
+pub use windows::init::init;
+
 pub mod window;
-pub mod gl_render;
-
-use std::ptr;
-
-// use kernel32;
-use winapi::{HINSTANCE};
-
-pub fn main_instance() -> HINSTANCE {
-    unsafe {
-        kernel32::GetModuleHandleW(ptr::null()) as HINSTANCE
-    }
-}
+pub mod gl_utils;
 
 pub trait ToCU16Str {
     fn to_c_u16(&self) -> Vec<u16>;
