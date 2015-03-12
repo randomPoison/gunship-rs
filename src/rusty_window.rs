@@ -3,7 +3,8 @@
 extern crate "bootstrap-rs" as bootstrap;
 extern crate gl;
 
-use bootstrap::window::Window;
+use bootstrap::window::{Window, Message};
+use bootstrap::window::Message::*;
 
 mod render;
 mod gl_render;
@@ -33,7 +34,15 @@ fn main() {
         // handle messages
         loop {
             match window.next_message() {
-                Some(message) => println!("message: {:?}", message),
+                Some(message) => {
+                    println!("message: {:?}", message);
+                    match message {
+                        Activate => (),
+                        Close => main_window.close = true,
+                        Destroy => (),
+                        Paint => ()
+                    }
+                },
                 None => break
             }
         }
