@@ -132,40 +132,16 @@ fn message_callback(
     lParam: LPARAM) -> LRESULT
 {
     let window_ptr = user32::GetPropW(hwnd, WINDOW_PROP.to_c_u16().as_ptr()) as *mut Window;
-
-    match uMsg {
-        WM_ACTIVATEAPP => {
-            if !window_ptr.is_null() {
-                let window = &mut *window_ptr;
-                window.messages.push_back(Activate);
-            }
-        },
-        WM_CREATE => {
-            if !window_ptr.is_null() {
-                let window = &mut *window_ptr;
-                //window.messages.push_back(Activate);
-            }
-        },
-        WM_CLOSE => {
-            if !window_ptr.is_null() {
-                let window = &mut *window_ptr;
-                window.messages.push_back(Close);
-            }
-        },
-        WM_DESTROY => {
-            if !window_ptr.is_null() {
-                let window = &mut *window_ptr;
-                window.messages.push_back(Destroy);
-            }
-        },
-        WM_PAINT => {
-            if !window_ptr.is_null() {
-                let window = &mut *window_ptr;
-                window.messages.push_back(Paint);
-            }
-        },
-        _ => ()
-    };
+    if !window_ptr.is_null() {
+        let window = &mut *window_ptr;
+        match uMsg {
+            WM_ACTIVATEAPP => window.messages.push_back(Activate),
+            WM_CLOSE => window.messages.push_back(Close),
+            WM_DESTROY => window.messages.push_back(Destroy),
+            //WM_PAINT => window.messages.push_back(Paint), // TODO We need a user defined window proc to allow painting outside of the main loop.
+            _ => ()
+        }
+    }
 
     user32::DefWindowProcW(hwnd, uMsg, wParam, lParam)
 }

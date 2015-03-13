@@ -1,15 +1,15 @@
 [package]
 
-name = "rusty_window"
+name = "render_rs"
 version = "0.0.0"
 authors = ["David LeGare <excaliburhissheath@gmail.com>"]
 
 [[bin]]
-name = "rusty_window"
+name = "render_rs"
 
 [dependencies.gl]
 git = "https://github.com/bjz/gl-rs"
 
 [dependencies.bootstrap-rs]
 version = "*"
-path = "lib"
+path = "lib/bootstrap-rs"
