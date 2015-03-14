@@ -1,9 +1,12 @@
-#![feature(core)]
+#![feature(core, io, old_path)]
 
 extern crate "bootstrap-rs" as bootstrap;
 extern crate gl;
 
-use bootstrap::window::{Window, Message};
+use std::io::prelude::*;
+use std::fs::File;
+
+use bootstrap::window::Window;
 use bootstrap::window::Message::*;
 
 #[macro_use]
@@ -60,28 +63,9 @@ fn main() {
     };
 }
 
-pub static VERTEX_SHADER_SRC: &'static str = r#"
-#version 150
-
-in vec4 vertexPos;
-
-void main(void)
-{
-    gl_Position = vertexPos;
-}"#;
-
-pub static FRAGMENT_SHADER_SRC: &'static str = r#"
-#version 150
-
-out vec4 fragmentColor;
-
-void main(void)
-{
-    fragmentColor = vec4(1, 0, 0, 1);
-}"#;
-
-// TODO move this up into a more appropriate location
 pub fn gl_test(renderer: &GLRender) {
+
+    // create sample mesh data
     let vertex_data: [Point; 5] =
     [ point!(0.00, 0.00, 0.00),
       point!(0.50, 0.00, 0.00),
@@ -90,9 +74,36 @@ pub fn gl_test(renderer: &GLRender) {
       point!(0.00, 0.50, 0.00) ];
     let mesh = Mesh::from_slice(&vertex_data);
 
+    // load shaders
+    let vert_path = Path::new("shaders/test.vert.glsl");
+    let frag_path = Path::new("shaders/test.frag.glsl");
+
+    let mut vert_file = match File::open(&vert_path) {
+        // The `desc` field of `IoError` is a string that describes the error
+        Err(why) => panic!("couldn't open {}: {}", vert_path.display(), why.description()),
+        Ok(file) => file,
+    };
+    let mut frag_file = match File::open(&frag_path) {
+        // The `desc` field of `IoError` is a string that describes the error
+        Err(why) => panic!("couldn't open {}: {}", frag_path.display(), why.description()),
+        Ok(file) => file,
+    };
+
+    let mut vert_src = String::new();
+    match vert_file.read_to_string(&mut vert_src) {
+        Err(why) => panic!("couldn't read {}: {}", vert_path.display(), why.description()),
+        Ok(_) => print!("{} contains:\n{}", vert_path.display(), vert_src),
+    }
+
+    let mut frag_src = String::new()    ;
+    match frag_file.read_to_string(&mut frag_src) {
+        Err(why) => panic!("couldn't read {}: {}", frag_path.display(), why.description()),
+        Ok(_) => print!("{} contains:\n{}", frag_path.display(), frag_src),
+    }
+
     let gl_mesh =
         renderer.gen_mesh(&mesh,
-                          VERTEX_SHADER_SRC,
-                          FRAGMENT_SHADER_SRC);
+                          vert_src.as_slice(),
+                          frag_src.as_slice());
     renderer.draw_mesh(&gl_mesh);
 }
