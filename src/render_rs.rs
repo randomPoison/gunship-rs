@@ -63,6 +63,21 @@ fn main() {
     };
 }
 
+pub fn load_file(path: &str) -> String {
+    let file_path = Path::new(path);
+    let mut file = match File::open(&file_path) {
+        // The `desc` field of `IoError` is a string that describes the error
+        Err(why) => panic!("couldn't open {}: {}", file_path.display(), why.description()),
+        Ok(file) => file,
+    };
+    let mut contents = String::new();
+    match file.read_to_string(&mut contents) {
+        Err(why) => panic!("couldn't read {}: {}", file_path.display(), why.description()),
+        Ok(_) => print!("{} contains:\n{}", file_path.display(), contents)
+    }
+    contents
+}
+
 pub fn gl_test(renderer: &GLRender) {
 
     // create sample mesh data
@@ -74,32 +89,8 @@ pub fn gl_test(renderer: &GLRender) {
       point!(0.00, 0.50, 0.00) ];
     let mesh = Mesh::from_slice(&vertex_data);
 
-    // load shaders
-    let vert_path = Path::new("shaders/test.vert.glsl");
-    let frag_path = Path::new("shaders/test.frag.glsl");
-
-    let mut vert_file = match File::open(&vert_path) {
-        // The `desc` field of `IoError` is a string that describes the error
-        Err(why) => panic!("couldn't open {}: {}", vert_path.display(), why.description()),
-        Ok(file) => file,
-    };
-    let mut frag_file = match File::open(&frag_path) {
-        // The `desc` field of `IoError` is a string that describes the error
-        Err(why) => panic!("couldn't open {}: {}", frag_path.display(), why.description()),
-        Ok(file) => file,
-    };
-
-    let mut vert_src = String::new();
-    match vert_file.read_to_string(&mut vert_src) {
-        Err(why) => panic!("couldn't read {}: {}", vert_path.display(), why.description()),
-        Ok(_) => print!("{} contains:\n{}", vert_path.display(), vert_src),
-    }
-
-    let mut frag_src = String::new()    ;
-    match frag_file.read_to_string(&mut frag_src) {
-        Err(why) => panic!("couldn't read {}: {}", frag_path.display(), why.description()),
-        Ok(_) => print!("{} contains:\n{}", frag_path.display(), frag_src),
-    }
+    let frag_src = load_file("shaders/test.frag.glsl");
+    let vert_src = load_file("shaders/test.vert.glsl");
 
     let gl_mesh =
         renderer.gen_mesh(&mesh,
