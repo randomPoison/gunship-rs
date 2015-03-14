@@ -10,12 +10,12 @@ use bootstrap::window::Window;
 use bootstrap::window::Message::*;
 
 #[macro_use]
-mod point;
-mod mesh;
+mod geometry;
 mod gl_render;
 
-use point::Point;
-use mesh::Mesh;
+use geometry::point::Point;
+use geometry::mesh::Mesh;
+use geometry::face::Face;
 use gl_render::GLRender;
 
 struct MainWindow
@@ -81,16 +81,22 @@ pub fn load_file(path: &str) -> String {
 pub fn gl_test(renderer: &GLRender) {
 
     // create sample mesh data
-    let vertex_data: [Point; 5] =
-    [ point!(0.00, 0.00, 0.00),
-      point!(0.50, 0.00, 0.00),
-      point!(0.50, 0.50, 0.00),
-      point!(0.25, 0.75, 0.00),
-      point!(0.00, 0.50, 0.00) ];
-    let mesh = Mesh::from_slice(&vertex_data);
+    let vertex_data: [Point; 8] =
+    [point!( 1.0,  1.0,  1.0),
+     point!( 1.0,  1.0, -1.0),
+     point!( 1.0, -1.0,  1.0),
+     point!( 1.0, -1.0, -1.0),
+     point!(-1.0,  1.0,  1.0),
+     point!(-1.0,  1.0, -1.0),
+     point!(-1.0, -1.0,  1.0),
+     point!(-1.0, -1.0, -1.0)];
 
-    let frag_src = load_file("shaders/test.frag.glsl");
-    let vert_src = load_file("shaders/test.vert.glsl");
+    let face_data: [Face; 1] =
+    [face!(0, 4, 2)];
+    let mesh = Mesh::from_slice(&vertex_data, &face_data);
+
+    let frag_src = load_file("shaders/test3D.frag.glsl");
+    let vert_src = load_file("shaders/test3D.vert.glsl");
 
     let gl_mesh =
         renderer.gen_mesh(&mesh,

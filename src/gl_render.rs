@@ -9,16 +9,18 @@ use gl::types::*;
 use bootstrap::window::Window;
 use bootstrap::gl_utils::{self, GLContext};
 
-use point::Point;
-use mesh::Mesh;
+use geometry::point::Point;
+use geometry::mesh::Mesh;
+use geometry::face::Face;
 
 pub struct GLRender {
-    context: GLContext
+    context: GLContext // TODO: do we need to hold onto the context?
 }
 
 struct GLMeshData {
     array_buffer: GLuint,
     vertex_buffer: GLuint,
+    index_buffer: GLuint,
     shader: GLuint
 }
 
@@ -30,6 +32,10 @@ pub fn init(window: &Window) -> GLRender {
         context: context
     }
 }
+
+// pub fn tear_down(renderer: &GLRender) {
+//     gl_utils::destroy_context(renderer.context);
+// }
 
 impl GLRender {
     pub fn gen_mesh(&self, mesh: &Mesh, vertex_src: &str, frag_src: &str) -> GLMeshData {
@@ -54,6 +60,17 @@ impl GLRender {
                            gl::STATIC_DRAW);
         }
 
+        let mut index_buffer = 0;
+        unsafe {
+            gl::GenBuffers(1, &mut index_buffer);
+            gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, index_buffer);
+
+            gl::BufferData(gl::ELEMENT_ARRAY_BUFFER,
+                           (mesh.faces.len() * mem::size_of::<Face>()) as GLsizeiptr,
+                           mem::transmute(&(mesh.faces[0].indices[0])),
+                           gl::STATIC_DRAW);
+        }
+
         // TODO: do some handling of errors here?
         let vs = GLRender::compile_shader(vertex_src, gl::VERTEX_SHADER);
         let fs = GLRender::compile_shader(frag_src, gl::FRAGMENT_SHADER);
@@ -64,23 +81,26 @@ impl GLRender {
         GLMeshData {
             array_buffer: array_buffer,
             vertex_buffer: vertex_buffer,
+            index_buffer: index_buffer,
             shader: program
         }
     }
 
-    // TODO: make this a member of GLMeshData?
+    /// TODO: make this a member of GLMeshData?
     pub fn draw_mesh(&self, mesh: &GLMeshData) { unsafe {
-        // TODO bind the buffers or whatever
+
+        // Bind the buffers for the mesh
         gl::BindVertexArray(mesh.array_buffer);
         gl::BindBuffer(gl::ARRAY_BUFFER, mesh.vertex_buffer);
+        gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, mesh.index_buffer);
 
-        // set the shader to use
+        // Set the shader to use
         gl::UseProgram(mesh.shader);
 
         // Specify the layout of the vertex data
         let vertex_pos_location = gl::GetAttribLocation(
             mesh.shader,
-            CString::new(b"vertexPos").unwrap().as_ptr());
+            CString::new(b"vertexPosition").unwrap().as_ptr());
         gl::VertexAttribPointer(
             vertex_pos_location as GLuint,
             3,
@@ -95,7 +115,7 @@ impl GLRender {
         gl::Clear(gl::COLOR_BUFFER_BIT);
 
         // Draw a triangle from the 3 vertices
-        gl::DrawArrays(gl::TRIANGLE_FAN, 0, 5); // TODO: This value shouldn't be hardcoded
+        gl::DrawElements(gl::TRIANGLES, 3, gl::UNSIGNED_INT, 0 as *const GLvoid); // TODO: This value shouldn't be hardcoded
 
         gl_utils::swap_buffers(); // TODO don't swap buffers after every draw
     } }
@@ -147,6 +167,7 @@ impl GLRender {
                 gl::GetProgramInfoLog(program, len, ptr::null_mut(), buf.as_mut_ptr() as *mut GLchar);
                 panic!("{}", str::from_utf8(buf.as_slice()).ok().expect("ProgramInfoLog not valid utf8"));
             }
+
             program
         }
     }
