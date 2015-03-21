@@ -1,6 +1,10 @@
 use geometry::point::Point;
 use geometry::face::Face;
 
+/// The raw data representing a mesh in memory.
+///
+/// Meshes are represented as list of vertex positions and a list of faces.
+/// Each face is represented as 3 indices into the vertex array.
 pub struct Mesh {
     pub vertices: Vec<Point>,
     pub faces: Vec<Face>

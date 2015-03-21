@@ -28,10 +28,8 @@ fn main() {
         close: false
     };
 
-    println!("initializing bootstrap");
     let instance = bootstrap::init();
 
-    println!("creating window");
     let mut window = Window::new("Rust Window", instance);
 
     let renderer = gl_render::init(&window);
@@ -43,7 +41,6 @@ fn main() {
         loop {
             match window.next_message() {
                 Some(message) => {
-                    println!("message: {:?}", message);
                     match message {
                         Activate => (),
                         Close => main_window.close = true,
@@ -73,7 +70,7 @@ pub fn load_file(path: &str) -> String {
     let mut contents = String::new();
     match file.read_to_string(&mut contents) {
         Err(why) => panic!("couldn't read {}: {}", file_path.display(), why.description()),
-        Ok(_) => print!("{} contains:\n{}", file_path.display(), contents)
+        Ok(_) => ()
     }
     contents
 }
@@ -81,18 +78,33 @@ pub fn load_file(path: &str) -> String {
 pub fn gl_test(renderer: &GLRender) {
 
     // create sample mesh data
-    let vertex_data: [Point; 8] =
-    [point!( 1.0,  1.0,  1.0),
-     point!( 1.0,  1.0, -1.0),
-     point!( 1.0, -1.0,  1.0),
-     point!( 1.0, -1.0, -1.0),
-     point!(-1.0,  1.0,  1.0),
-     point!(-1.0,  1.0, -1.0),
-     point!(-1.0, -1.0,  1.0),
-     point!(-1.0, -1.0, -1.0)];
+    let vertex_data: [Point; 9] = [
+        point!( 0.0,  0.0,  0.0), // dummy element because obj indices are 1 bases (because obj is dumb).
+        point!( 1.0, -1.0, -1.0),
+        point!( 1.0, -1.0,  1.0),
+        point!(-1.0, -1.0,  1.0),
+        point!(-1.0, -1.0, -1.0),
+        point!( 1.0,  1.0, -1.0),
+        point!( 1.0,  1.0,  1.0),
+        point!(-1.0,  1.0,  1.0),
+        point!(-1.0,  1.0, -1.0)
+    ];
 
-    let face_data: [Face; 1] =
-    [face!(0, 4, 2)];
+    let face_data: [Face; 12] = [
+        face!(1, 2, 4),
+        face!(5, 8, 6),
+        face!(1, 5, 2),
+        face!(2, 6, 3),
+        face!(3, 7, 4),
+        face!(5, 1, 8),
+        face!(2, 3, 4),
+        face!(8, 7, 6),
+        face!(5, 6, 2),
+        face!(6, 7, 3),
+        face!(7, 8, 4),
+        face!(1, 4, 8)
+    ];
+
     let mesh = Mesh::from_slice(&vertex_data, &face_data);
 
     let frag_src = load_file("shaders/test3D.frag.glsl");

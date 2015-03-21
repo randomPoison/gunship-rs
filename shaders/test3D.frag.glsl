@@ -1,8 +1,10 @@
 #version 150
 
+in vec4 fragPosition;
+
 out vec4 fragmentColor;
 
 void main(void)
 {
-    fragmentColor = vec4(1, 0, 0, 1);
+    fragmentColor = abs(fragPosition);
 }

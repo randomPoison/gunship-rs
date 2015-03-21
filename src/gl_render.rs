@@ -21,7 +21,8 @@ struct GLMeshData {
     array_buffer: GLuint,
     vertex_buffer: GLuint,
     index_buffer: GLuint,
-    shader: GLuint
+    shader: GLuint,
+    element_count: usize
 }
 
 pub fn init(window: &Window) -> GLRender {
@@ -82,7 +83,8 @@ impl GLRender {
             array_buffer: array_buffer,
             vertex_buffer: vertex_buffer,
             index_buffer: index_buffer,
-            shader: program
+            shader: program,
+            element_count: mesh.faces.len() * 3
         }
     }
 
@@ -103,9 +105,9 @@ impl GLRender {
             CString::new(b"vertexPosition").unwrap().as_ptr());
         gl::VertexAttribPointer(
             vertex_pos_location as GLuint,
-            3,
+            4,
             gl::FLOAT,
-            gl::FALSE as GLboolean,
+            gl::FALSE,
             mem::size_of::<Point>() as GLsizei,
             ptr::null());
         gl::EnableVertexAttribArray(vertex_pos_location as GLuint);
@@ -115,7 +117,10 @@ impl GLRender {
         gl::Clear(gl::COLOR_BUFFER_BIT);
 
         // Draw a triangle from the 3 vertices
-        gl::DrawElements(gl::TRIANGLES, 3, gl::UNSIGNED_INT, 0 as *const GLvoid); // TODO: This value shouldn't be hardcoded
+        gl::DrawElements(gl::TRIANGLES,
+                         mesh.element_count as GLsizei,
+                         gl::UNSIGNED_INT,
+                         0 as *const GLvoid);
 
         gl_utils::swap_buffers(); // TODO don't swap buffers after every draw
     } }
