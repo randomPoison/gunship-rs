@@ -39,7 +39,7 @@ fn main() {
     let renderer = gl_render::init(&window);
 
     let mesh = gl_test(&renderer);
-    let mut mesh_transform = Matrix4::from_rotation(PI * 0.13, 0.0, 0.0); //Matrix4::from_translation(0.5, 0.0, 0.0);
+    let mut mesh_transform = Matrix4::from_rotation(PI * 0.13, 0.0, PI * 0.36); //Matrix4::from_translation(0.5, 0.0, 0.0);
     let frame_rotation = Matrix4::from_rotation(0.0, PI * 0.0001, 0.0);
 
     loop {
@@ -98,18 +98,18 @@ pub fn gl_test(renderer: &GLRender) -> GLMeshData {
     ];
 
     let face_data: [Face; 12] = [
-        face!(1, 2, 4),
-        face!(5, 8, 6),
-        face!(1, 5, 2),
-        face!(2, 6, 3),
-        face!(3, 7, 4),
-        face!(5, 1, 8),
-        face!(2, 3, 4),
-        face!(8, 7, 6),
-        face!(5, 6, 2),
-        face!(6, 7, 3),
-        face!(7, 8, 4),
-        face!(1, 4, 8)
+        face!(4, 2, 1),
+        face!(6, 8, 5),
+        face!(2, 5, 1),
+        face!(3, 6, 2),
+        face!(4, 7, 3),
+        face!(8, 1, 5),
+        face!(4, 3, 2),
+        face!(6, 7, 8),
+        face!(2, 6, 5),
+        face!(3, 7, 6),
+        face!(4, 8, 7),
+        face!(8, 4, 1)
     ];
 
     let mesh = Mesh::from_slice(&vertex_data, &face_data);

@@ -34,9 +34,13 @@ pub fn init(window: &Window) -> GLRender {
 
     // do some basic configuration stuff
     unsafe {
+        // Enable depth testing
         gl::Enable(gl::DEPTH_TEST);
         gl::ClearColor(0.3, 0.3, 0.3, 1.0);
         gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT); // TODO: Do we need to clear here?
+
+        // Enable backface culling
+        gl::Enable(gl::CULL_FACE);
     }
 
     GLRender {
