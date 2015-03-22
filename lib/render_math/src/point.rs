@@ -1,3 +1,9 @@
+/// A point in 3D space.
+///
+/// Points are represented as cartesian coordinates
+/// with an `x`, `y`, and `z` position, as well as
+/// a `w` homogeneous coordinate for the purposes
+/// of linear algebra calculations.
 #[repr(C)] #[derive(Copy)]
 pub struct Point {
     pub x: f32,
@@ -6,11 +12,15 @@ pub struct Point {
     pub w: f32
 }
 
-/// Utility macro for quickly defining hard-coded points.
+/// Utility macro for quickly defining hard-coded points
 ///
 /// # Examples
 ///
-/// ```
+/// ```rust
+/// # #[macro_use] extern crate "render_math" as math;
+/// # use math::point::Point;
+/// # fn main() {
+///
 /// let point = point!(0.0, 0.0, 0.0);
 ///
 /// // equivalent to:
@@ -20,6 +30,8 @@ pub struct Point {
 ///     z: 0.0,
 ///     w: 1.0
 /// };
+/// 
+/// # }
 /// ```
 #[macro_export]
 macro_rules! point {

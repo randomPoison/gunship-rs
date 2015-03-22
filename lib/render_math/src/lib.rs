@@ -2,3 +2,6 @@
 pub mod point;
 #[macro_use]
 pub mod matrix;
+
+#[cfg(test)]
+mod test;

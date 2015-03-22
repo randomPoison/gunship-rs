@@ -12,3 +12,4 @@
 /bin/
 .cargo/
 Cargo.lock
+lib/render_math/target/

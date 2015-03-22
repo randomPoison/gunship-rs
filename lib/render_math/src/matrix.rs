@@ -1,3 +1,6 @@
+use std::cmp::{PartialEq, Eq};
+use std::ops::{Index, IndexMut};
+
 /// A 4x4 matrix that can be used to transform 3D points and vectors.
 ///
 /// Matrices are row-major.
@@ -40,5 +43,40 @@ impl Matrix4 {
     pub unsafe fn raw_data(&self) -> *const f32
     {
         &self.data[0]
+    }
+}
+
+impl PartialEq for Matrix4 {
+    fn ne(&self, other: &Matrix4) -> bool {
+        for (&ours, &theirs) in self.data.iter().zip(other.data.iter()) {
+            if ours != theirs {
+                return true
+            }
+        }
+        false
+    }
+
+    fn eq(&self, other: &Matrix4) -> bool {
+        !(self != other)
+    }
+}
+
+impl Eq for Matrix4 {}
+
+impl Index<(usize, usize)> for Matrix4 {
+    type Output = f32;
+
+    fn index<'a>(&'a self, index: &(usize, usize)) -> &'a f32 {
+        let &(row, col) = index;
+        assert!(row < 4 && col < 4);
+        &self.data[row * 4 + col]
+    }
+}
+
+impl IndexMut<(usize, usize)> for Matrix4 {
+    fn index_mut<'a>(&'a mut self, index: &(usize, usize)) -> &'a mut f32 {
+        let &(row, col) = index;
+        assert!(row < 4 && col < 4);
+        &mut self.data[row * 4 + col]
     }
 }
