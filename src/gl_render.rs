@@ -27,15 +27,24 @@ pub struct GLMeshData {
     element_count: usize
 }
 
+// TODO: This should be GLRender::new() for consistency.
 pub fn init(window: &Window) -> GLRender {
     gl_utils::init(window);
     let context = gl_utils::create_context(window);
+
+    // do some basic configuration stuff
+    unsafe {
+        gl::Enable(gl::DEPTH_TEST);
+        gl::ClearColor(0.3, 0.3, 0.3, 1.0);
+        gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT); // TODO: Do we need to clear here?
+    }
 
     GLRender {
         context: context
     }
 }
 
+// TODO: This should be Drop for GLRender.
 // pub fn tear_down(renderer: &GLRender) {
 //     gl_utils::destroy_context(renderer.context);
 // }
@@ -122,8 +131,7 @@ impl GLRender {
                              transform.raw_data());
 
         // TODO don't clear for every mesh
-        gl::ClearColor(0.3, 0.3, 0.3, 1.0);
-        gl::Clear(gl::COLOR_BUFFER_BIT);
+        gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
 
         gl::DrawElements(gl::TRIANGLES,
                          mesh.element_count as GLsizei,
