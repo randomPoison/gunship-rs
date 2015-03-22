@@ -5,8 +5,9 @@ extern crate "bootstrap-rs" as bootstrap;
 extern crate "render_math" as math;
 extern crate gl;
 
-use std::io::prelude::*;
+use std::io::prelude::*; // TODO: What's up with "prelude" and do I have to manually include it?
 use std::fs::File;
+use std::f32::consts::PI;
 
 use bootstrap::window::Window;
 use bootstrap::window::Message::*;
@@ -38,7 +39,8 @@ fn main() {
     let renderer = gl_render::init(&window);
 
     let mesh = gl_test(&renderer);
-    let mesh_transform = Matrix4::from_translation(0.5, 0.0, 0.0);
+    let mut mesh_transform = Matrix4::from_rotation(PI * 0.13, 0.0, 0.0); //Matrix4::from_translation(0.5, 0.0, 0.0);
+    let frame_rotation = Matrix4::from_rotation(0.0, PI * 0.0001, 0.0);
 
     loop {
         window.handle_messages();
@@ -56,6 +58,7 @@ fn main() {
             }
         }
 
+        mesh_transform = frame_rotation * mesh_transform;
         renderer.draw_mesh(&mesh, mesh_transform);
 
         if main_window.close {

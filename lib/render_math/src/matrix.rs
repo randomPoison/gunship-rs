@@ -1,10 +1,11 @@
 use std::cmp::{PartialEq, Eq};
-use std::ops::{Index, IndexMut};
+use std::ops::{Index, IndexMut, Mul};
+use std::num::Float;
 
 /// A 4x4 matrix that can be used to transform 3D points and vectors.
 ///
 /// Matrices are row-major.
-#[repr(C)] #[derive(Copy)]
+#[repr(C)] #[derive(Copy)] #[derive(Debug)]
 pub struct Matrix4 {
     data: [f32; 16]
 }
@@ -33,6 +34,37 @@ impl Matrix4 {
                 0.0, 0.0, 0.0, 1.0
             ]
         }
+    }
+
+    pub fn from_rotation(x: f32, y: f32, z: f32) -> Matrix4 {
+        let x_rot = Matrix4 {
+            data: [
+                1.0, 0.0,      0.0,     0.0,
+                0.0, x.cos(), -x.sin(), 0.0,
+                0.0, x.sin(),  x.cos(), 0.0,
+                0.0, 0.0,      0.0,     1.0
+            ]
+        };
+
+        let y_rot = Matrix4 {
+            data: [
+                 y.cos(), 0.0, y.sin(), 0.0,
+                 0.0,     1.0, 0.0,     0.0,
+                -y.sin(), 0.0, y.cos(), 0.0,
+                 0.0,     0.0, 0.0,     1.0
+            ]
+        };
+
+        let z_rot = Matrix4 {
+            data: [
+                z.cos(), -z.sin(), 0.0, 0.0,
+                z.sin(),  z.cos(), 0.0, 0.0,
+                0.0,      0.0,     1.0, 0.0,
+                0.0,      0.0,     0.0, 1.0
+            ]
+        };
+
+        z_rot * (y_rot * x_rot)
     }
 
     /// Get the matrix data as a raw array.
@@ -78,5 +110,30 @@ impl IndexMut<(usize, usize)> for Matrix4 {
         let &(row, col) = index;
         assert!(row < 4 && col < 4);
         &mut self.data[row * 4 + col]
+    }
+}
+
+impl Mul<Matrix4> for Matrix4 {
+    type Output = Matrix4;
+
+    fn mul(self, other: Matrix4) -> Matrix4 {
+        let mut result = Matrix4::new();
+
+        // TODO: Should this be written with iterators instead?
+        for row in 0..4 {
+            for col in 0..4 {
+                result[(row, col)] = {
+                    let mut dot_product = 0.0;
+                    for offset in 0..4 {
+                        dot_product +=
+                            self[(row, offset)] *
+                            other[(offset, col)];
+                    }
+                    dot_product
+                };
+            }
+        }
+
+        result
     }
 }
