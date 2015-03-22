@@ -23,7 +23,7 @@ pub struct Point {
 /// ```
 #[macro_export]
 macro_rules! point {
-    ( $x:expr, $y:expr, $z:expr ) => {
+    ($x:expr, $y:expr, $z:expr) => {
         Point {
             x: $x,
             y: $y,

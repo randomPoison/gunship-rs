@@ -11,12 +11,15 @@ use bootstrap::window::Message::*;
 
 #[macro_use]
 mod geometry;
+#[macro_use]
+mod math;
 mod gl_render;
 
-use geometry::point::Point;
+use math::point::Point;
+use math::matrix::Matrix4;
 use geometry::mesh::Mesh;
 use geometry::face::Face;
-use gl_render::GLRender;
+use gl_render::{GLRender, GLMeshData};
 
 struct MainWindow
 {
@@ -34,7 +37,8 @@ fn main() {
 
     let renderer = gl_render::init(&window);
 
-    gl_test(&renderer);
+    let mesh = gl_test(&renderer);
+    let mesh_transform = Matrix4::from_translation(0.5, 0.0, 0.0);
 
     loop {
         window.handle_messages();
@@ -52,7 +56,7 @@ fn main() {
             }
         }
 
-        // gl_render::draw_mesh();
+        renderer.draw_mesh(&mesh, mesh_transform);
 
         if main_window.close {
             break;
@@ -75,7 +79,7 @@ pub fn load_file(path: &str) -> String {
     contents
 }
 
-pub fn gl_test(renderer: &GLRender) {
+pub fn gl_test(renderer: &GLRender) -> GLMeshData {
 
     // create sample mesh data
     let vertex_data: [Point; 9] = [
@@ -110,9 +114,7 @@ pub fn gl_test(renderer: &GLRender) {
     let frag_src = load_file("shaders/test3D.frag.glsl");
     let vert_src = load_file("shaders/test3D.vert.glsl");
 
-    let gl_mesh =
-        renderer.gen_mesh(&mesh,
-                          vert_src.as_slice(),
-                          frag_src.as_slice());
-    renderer.draw_mesh(&gl_mesh);
+    renderer.gen_mesh(&mesh,
+                      vert_src.as_slice(),
+                      frag_src.as_slice())
 }

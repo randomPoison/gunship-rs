@@ -9,7 +9,8 @@ use gl::types::*;
 use bootstrap::window::Window;
 use bootstrap::gl_utils::{self, GLContext};
 
-use geometry::point::Point;
+use math::point::Point;
+use math::matrix::Matrix4;
 use geometry::mesh::Mesh;
 use geometry::face::Face;
 
@@ -17,7 +18,7 @@ pub struct GLRender {
     context: GLContext // TODO: do we need to hold onto the context?
 }
 
-struct GLMeshData {
+pub struct GLMeshData {
     array_buffer: GLuint,
     vertex_buffer: GLuint,
     index_buffer: GLuint,
@@ -89,7 +90,7 @@ impl GLRender {
     }
 
     /// TODO: make this a member of GLMeshData?
-    pub fn draw_mesh(&self, mesh: &GLMeshData) { unsafe {
+    pub fn draw_mesh(&self, mesh: &GLMeshData, transform: Matrix4) { unsafe {
 
         // Bind the buffers for the mesh
         gl::BindVertexArray(mesh.array_buffer);
@@ -102,7 +103,7 @@ impl GLRender {
         // Specify the layout of the vertex data
         let vertex_pos_location = gl::GetAttribLocation(
             mesh.shader,
-            CString::new(b"vertexPosition").unwrap().as_ptr());
+            CString::new(b"vertexPosition").unwrap().as_ptr()); // TODO: Write a helper to make using cstrings easier.
         gl::VertexAttribPointer(
             vertex_pos_location as GLuint,
             4,
@@ -111,6 +112,13 @@ impl GLRender {
             mem::size_of::<Point>() as GLsizei,
             ptr::null());
         gl::EnableVertexAttribArray(vertex_pos_location as GLuint);
+
+        let transform_location =
+            gl::GetUniformLocation(mesh.shader, CString::new(b"modelTransform").unwrap().as_ptr());
+        gl::UniformMatrix4fv(transform_location,
+                             1,
+                             gl::TRUE,
+                             transform.raw_data());
 
         // TODO don't clear for every mesh
         gl::ClearColor(0.3, 0.3, 0.3, 1.0);

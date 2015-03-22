@@ -1,4 +1,4 @@
-use geometry::point::Point;
+use math::point::Point;
 use geometry::face::Face;
 
 /// The raw data representing a mesh in memory.
