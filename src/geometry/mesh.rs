@@ -12,6 +12,7 @@ pub struct Mesh {
 
 impl Mesh {
     /// Create a new Mesh with no data in it.
+    #[allow(dead_code)]
     pub fn new() -> Mesh {
         Mesh {
             vertices: Vec::new(),

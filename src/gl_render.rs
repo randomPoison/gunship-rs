@@ -14,6 +14,7 @@ use math::matrix::Matrix4;
 use geometry::mesh::Mesh;
 use geometry::face::Face;
 
+#[allow(dead_code)]
 pub struct GLRender {
     context: GLContext // TODO: do we need to hold onto the context?
 }
@@ -124,7 +125,6 @@ impl GLRender {
         gl::ClearColor(0.3, 0.3, 0.3, 1.0);
         gl::Clear(gl::COLOR_BUFFER_BIT);
 
-        // Draw a triangle from the 3 vertices
         gl::DrawElements(gl::TRIANGLES,
                          mesh.element_count as GLsizei,
                          gl::UNSIGNED_INT,

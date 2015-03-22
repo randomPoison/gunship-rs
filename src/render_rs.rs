@@ -1,6 +1,8 @@
 #![feature(core, io, old_path)]
 
 extern crate "bootstrap-rs" as bootstrap;
+#[macro_use]
+extern crate "render_math" as math;
 extern crate gl;
 
 use std::io::prelude::*;
@@ -11,8 +13,6 @@ use bootstrap::window::Message::*;
 
 #[macro_use]
 mod geometry;
-#[macro_use]
-mod math;
 mod gl_render;
 
 use math::point::Point;

@@ -13,3 +13,7 @@ git = "https://github.com/bjz/gl-rs"
 [dependencies.bootstrap-rs]
 version = "*"
 path = "lib/bootstrap-rs"
+
+[dependencies.render_math]
+version = "*"
+path = "lib/render_math"

@@ -1,0 +1,4 @@
+[package]
+name = "render_math"
+version = "0.0.1"
+authors = ["David LeGare <excaliburhissheath@gmail.com>"]
