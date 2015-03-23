@@ -13,3 +13,4 @@
 .cargo/
 Cargo.lock
 lib/render_math/target/
+lib/parse_xml/target/
