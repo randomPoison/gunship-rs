@@ -1,13 +1,15 @@
-#![feature(core, io, old_path)]
+#![feature(core, io)]
 
 extern crate "bootstrap-rs" as bootstrap;
 #[macro_use]
 extern crate "render_math" as math;
 extern crate gl;
 
-use std::io::prelude::*; // TODO: What's up with "prelude" and do I have to manually include it?
+use std::io::prelude::*;
 use std::fs::File;
+use std::path::Path;
 use std::f32::consts::PI;
+use std::error::Error;
 
 use bootstrap::window::Window;
 use bootstrap::window::Message::*;
@@ -38,7 +40,7 @@ fn main() {
 
     let renderer = gl_render::init(&window);
 
-    let mesh = gl_test(&renderer);
+    let mesh = create_test_mesh(&renderer);
     let mut mesh_transform = Matrix4::from_rotation(PI * 0.13, 0.0, PI * 0.36); //Matrix4::from_translation(0.5, 0.0, 0.0);
     let frame_rotation = Matrix4::from_rotation(0.0, PI * 0.0001, 0.0);
 
@@ -71,18 +73,18 @@ pub fn load_file(path: &str) -> String {
     let file_path = Path::new(path);
     let mut file = match File::open(&file_path) {
         // The `desc` field of `IoError` is a string that describes the error
-        Err(why) => panic!("couldn't open {}: {}", file_path.display(), why.description()),
+        Err(why) => panic!("couldn't open {}: {}", file_path.display(), Error::description(&why)),
         Ok(file) => file,
     };
     let mut contents = String::new();
     match file.read_to_string(&mut contents) {
-        Err(why) => panic!("couldn't read {}: {}", file_path.display(), why.description()),
+        Err(why) => panic!("couldn't read {}: {}", file_path.display(), Error::description(&why)),
         Ok(_) => ()
     }
     contents
 }
 
-pub fn gl_test(renderer: &GLRender) -> GLMeshData {
+pub fn create_test_mesh(renderer: &GLRender) -> GLMeshData {
 
     // create sample mesh data
     let vertex_data: [Point; 9] = [

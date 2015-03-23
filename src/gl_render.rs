@@ -117,7 +117,7 @@ impl GLRender {
         // Specify the layout of the vertex data
         let vertex_pos_location = gl::GetAttribLocation(
             mesh.shader,
-            CString::new(b"vertexPosition").unwrap().as_ptr()); // TODO: Write a helper to make using cstrings easier.
+            CString::new("vertexPosition").unwrap().as_ptr()); // TODO: Write a helper to make using cstrings easier.
         gl::VertexAttribPointer(
             vertex_pos_location as GLuint,
             4,
@@ -128,7 +128,7 @@ impl GLRender {
         gl::EnableVertexAttribArray(vertex_pos_location as GLuint);
 
         let transform_location =
-            gl::GetUniformLocation(mesh.shader, CString::new(b"modelTransform").unwrap().as_ptr());
+            gl::GetUniformLocation(mesh.shader, CString::new("modelTransform").unwrap().as_ptr());
         gl::UniformMatrix4fv(transform_location,
                              1,
                              gl::TRUE,
