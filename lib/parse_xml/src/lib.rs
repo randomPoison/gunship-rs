@@ -1,11 +1,15 @@
-#![feature(unicode)]
+#![feature(core, unicode)]
 
 use std::io::prelude::*;
 use std::fs::File;
 use std::str::Graphemes;
+use std::iter::Enumerate;
+
+use XMLEvent::*;
+use XMLElement::*;
 
 pub struct XMLParser {
-    raw_text: String
+    pub raw_text: String
 }
 
 /// The set of events that can be emitted by the parser.
@@ -14,6 +18,7 @@ pub struct XMLParser {
 /// representing the contents of the event. This means
 /// that no additional heap allocations are needed when
 /// parsing, but
+#[derive(Debug)]
 pub enum XMLEvent<'a> {
     StartElement(&'a str),
     EndElement(&'a str),
@@ -43,10 +48,15 @@ impl XMLParser {
     pub fn parse<'a>(&'a self) -> SAXEvents<'a> {
         SAXEvents {
             parser: self,
-            text_iterator: self.raw_text.graphemes(true),
-            tag_stack: Vec::new()
+            text_enumerator: self.raw_text.graphemes(true).enumerate(),
+            tag_stack: vec![StartDocument]
         }
     }
+}
+
+enum XMLElement<'a> {
+    StartDocument,
+    Element(&'a str)
 }
 
 /// An iterator over the contents of the document providing SAX-like events.
@@ -57,8 +67,8 @@ impl XMLParser {
 /// items given by `SAXEvents` is dependent on the parser they came from.
 pub struct SAXEvents<'a> {
     parser: &'a XMLParser,
-    text_iterator: Graphemes<'a>,
-    tag_stack: Vec<&'a str>
+    text_enumerator: Enumerate<Graphemes<'a>>,
+    tag_stack: Vec<XMLElement<'a>>
 }
 
 impl<'a> Iterator for SAXEvents<'a> {
@@ -66,15 +76,47 @@ impl<'a> Iterator for SAXEvents<'a> {
 
     fn next(&mut self) -> Option<XMLEvent<'a>> {
         match self.tag_stack.pop() {
-            None => {
-                // TODO: Start parsing the document.
+            None => None, // TODO: Keep parsing to check for invalid formatting
+            Some(element) => {
+                match element {
+                    StartDocument => {
+                        // TODO: Start parsing the document.
 
-                let tag = "COLLADA"; // let's pretend we got this from the document
-                self.tag_stack.push(tag);
-                Some(XMLEvent::StartElement(tag))
-            },
-            Some(tag) => {
-                Some(XMLEvent::EndElement(tag))
+                        match self.text_enumerator.next() {
+                            None => return Some(ParseError("XML document must have a top level element.")),
+                            Some((start_index, grapheme)) => match grapheme.as_slice() {
+                                "<" => {
+                                    // determine the name of the top level element
+                                    loop {
+                                        match self.text_enumerator.next()
+                                        {
+                                            None => return Some(ParseError("Bad tag.")),
+                                            Some((end_index, grapheme)) => match grapheme.as_slice() {
+                                                " " => {
+                                                    // create element, push it onto the stack, return it.
+                                                    let tag_name = &self.parser.raw_text[start_index + 1..end_index];
+                                                    self.tag_stack.push(Element(tag_name));
+                                                    return Some(StartElement(tag_name));
+                                                },
+                                                ">" => {
+                                                    // create element, push it onto the stack, return it.
+                                                    let tag_name = &self.parser.raw_text[start_index + 1..end_index];
+                                                    self.tag_stack.push(Element(tag_name));
+                                                    return Some(StartElement(tag_name));
+                                                },
+                                                _ => ()
+                                            }
+                                        }
+                                    }
+                                },
+                                _ => return Some(ParseError("XML document must have a top level element."))
+                            }
+                        }
+                    },
+                    Element(tag) => {
+                        Some(XMLEvent::EndElement(tag))
+                    }
+                }
             }
         }
     }

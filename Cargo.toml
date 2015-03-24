@@ -17,3 +17,7 @@ path = "lib/bootstrap-rs"
 [dependencies.render_math]
 version = "*"
 path = "lib/render_math"
+
+[dependencies.parse_xml]
+version = "*"
+path = "lib/parse_xml"

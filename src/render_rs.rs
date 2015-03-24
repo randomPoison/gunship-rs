@@ -1,9 +1,11 @@
-#![feature(core, io)]
+#![feature(core)]
+
+extern crate gl;
 
 extern crate "bootstrap-rs" as bootstrap;
 #[macro_use]
 extern crate "render_math" as math;
-extern crate gl;
+extern crate "parse_xml" as xml;
 
 use std::io::prelude::*;
 use std::fs::File;
@@ -30,6 +32,15 @@ struct MainWindow
 }
 
 fn main() {
+    // XML test
+    let mut xml_parser = xml::XMLParser::new();
+    xml_parser.raw_text =
+    r#"<COLLADA_TEST></COLLADA_TEST>"#.to_string();
+
+    for event in xml_parser.parse() {
+        println!("event: {:?}", event);
+    }
+
     let mut main_window = MainWindow {
         close: false
     };
