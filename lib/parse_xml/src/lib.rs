@@ -1,9 +1,12 @@
 #![feature(core, unicode)]
 
+extern crate unicode;
+
 use std::io::prelude::*;
 use std::fs::File;
 use std::str::Graphemes;
 use std::iter::Enumerate;
+use unicode::str::UnicodeStr;
 
 use XMLEvent::*;
 use XMLElement::*;
@@ -139,64 +142,68 @@ impl<'a> SAXEvents<'a> {
     /// - The text parser must currently be parsing an open tag, and must not
     ///   have reached the closing ">" character.
     fn parse_attribute(&mut self) -> Option<XMLEvent<'a>> {
-        loop { match self.text_enumerator.next() {
-            None => return Some(ParseError("Document ends in the middle of a tag!".to_string())),
-            Some((ident_start_index, grapheme)) => { match grapheme {
-                ">" => return None, // tag closes, so signal that we should keep parsing
-                " " => {
-                    match self.parse_identifier(ident_start_index) {
-                        Err(error) => return Some(ParseError(error)),
-                        Ok((attribute_name, name_delimiter)) => {
-                            if name_delimiter != "=" {
-                                return Some(ParseError(r#"Attribute name must be followed by "=" character"#.to_string()))
-                            }
+        let attribute_name = {
+            // eat leading whitespace to get the start of the attribute name
+            let start_index = match self.eat_whitespace() {
+                Err(error) => return Some(ParseError(error)),
+                Ok((index, _)) => index
+            };
 
-                            let (min_size, _) = self.text_enumerator.size_hint();
-                            if min_size < 2 {
-                                return Some(ParseError("Document ends in the middle of an attribute!".to_string()))
-                            }
-
-                            // TODO: check if characters are "=""
-                            let (_, temp_grapheme) = self.text_enumerator.next().unwrap();
-                            if temp_grapheme != "\"" {
-                                return Some(ParseError("Attributes must be wrapped in double quotes.".to_string()))
-                            }
-
-                            // parse the value of the attribute
-                            let(value_start_index, _) = self.text_enumerator.next().unwrap();
-                            match self.parse_attribute_value(value_start_index) {
-                                Err(error) => return Some(ParseError(error)),
-                                Ok((attribute_value, delimiter)) => {
-                                    if delimiter == ">" {
-                                        // remove OpenTag element since we're done with the tag
-                                        self.element_stack.pop();
-                                    }
-                                    return Some(Attribute(attribute_name, attribute_value))
-                                }
-                            }
-                        }
+            // parse the attribute name and check if
+            // it has the correct end delimieter.
+            match self.parse_identifier(start_index) {
+                Err(error) => return Some(ParseError(error)),
+                Ok((identifer, delimiter)) => {
+                    if delimiter != "=" {
+                        return Some(ParseError(r#"Attribute Identifier must be followed by a "=" character."#.to_string()))
                     }
-                },
-                _ => ()
-            } }
-        } }
+                    identifer
+                }
+            }
+        };
+
+        let attribute_value = {
+            match self.parse_attribute_value() {
+                Err(error) => return Some(ParseError(error)),
+                Ok(value) => value
+            }
+        };
+
+        Some(Attribute(attribute_name, attribute_value))
     }
 
-    fn parse_attribute_value(&mut self, start_index: usize) -> Result<(&'a str, &'a str), String> {
-        // TODO: Figure out why this version doesn't work.
-        // for (end_index, grapheme) in self.text_enumerator {
-        //     match grapheme {
-        //         "\"" => return Ok((&self.parser.raw_text[start_index..end_index], grapheme)),
-        //         ">" => return Err("Attribute value must be closed by \" character.".to_string()),
-        //         _ => ()
-        //     }
-        // }
-        // Err("Document ends in the middle of an attribute!".to_string())
+    /// Parse the value of an attribute.
+    ///
+    /// # Preconditions
+    ///
+    /// - The next grapheme parsed by the text parser must be the opening '"'
+    ///   character of the attribute value.
+    ///
+    /// # Results
+    ///
+    /// On a successful parse, the `Ok` value returned wraps
+    /// a string slice that contains the value of the attribute.
+    ///
+    /// # Postconditions
+    ///
+    /// The last character parsed by this method will be the
+    /// '"' character that closes the attribute value, so the
+    /// next character to be parsed will the first charcter
+    /// after the attribute.
+    fn parse_attribute_value(&mut self) -> Result<&'a str, String> {
+        // check that first character is '"'
+        let start_index = match self.text_enumerator.next() {
+            None => return Err("Document ends in the middle of an attribute!".to_string()),
+            Some((index, grapheme)) if grapheme == "\"" => {
+                index + 1
+            },
+            _ => return Err("Attribute value must be surrounded by double quotes.".to_string())
+        };
 
         loop { match self.text_enumerator.next() {
             None => return Err("Document ends in the middle of an attribute!".to_string()),
             Some((end_index, grapheme)) => match grapheme {
-                "\"" => return Ok((&self.parser.raw_text[start_index..end_index], grapheme)),
+                "\"" => return Ok(&self.parser.raw_text[start_index..end_index]),
                 ">" => return Err("Attribute value must be closed by \" character.".to_string()),
                 _ => ()
             }
@@ -216,30 +223,31 @@ impl<'a> SAXEvents<'a> {
     /// - `Err` if the document ends before the identifier finishes.
     /// - `Err` if the identifier is ill formatted.
     fn parse_identifier(&mut self, start_index: usize) -> Result<(&'a str, &'a str), String> {
-        loop {
-            match self.text_enumerator.next()
-            {
-                None => return Err("Document ends prematurely".to_string()),
-                Some((end_index, grapheme)) => {
-                    match grapheme {
-                        " " => { // TODO: Handle other tabs and other whitespace. Also, don't duplicate this line.
-                            return Ok((self.document_slice(start_index, end_index), &grapheme))
-                        },
-                        ">" => return Ok((self.document_slice(start_index, end_index), &grapheme)),
-                        _ => ()
-                    }
+        loop { match self.text_enumerator.next() {
+            None => return Err("Document ends prematurely".to_string()),
+            Some((end_index, grapheme)) => {
+                if grapheme.is_whitespace()
+                || grapheme == "="
+                || grapheme == ">" {
+                    return Ok((self.document_slice(start_index, end_index), &grapheme))
                 }
             }
-        }
+        } }
+    }
+
+    fn eat_whitespace(&mut self) -> Result<(usize, &'a str), String> {
+        loop { match self.text_enumerator.next() {
+            None => return Err("Document ends with whitespace.".to_string()),
+            Some((index, grapheme)) => {
+                if !grapheme.is_whitespace() {
+                    return Ok((index, grapheme))
+                }
+            }
+        } }
     }
 
     fn document_slice(&self, start_index: usize, end_index: usize) -> &'a str {
         &self.parser.raw_text[start_index..end_index]
-    }
-
-    fn push_tag(&mut self, tag_name: &'a str) -> XMLEvent<'a> {
-        self.element_stack.push(Element(tag_name));
-        StartElement(tag_name)
     }
 }
 
