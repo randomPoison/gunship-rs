@@ -34,7 +34,7 @@ struct MainWindow
 fn main() {
     // XML test
     let xml_parser = xml::XMLParser::from_string(
-        r#"<COLLADA_TEST     attr="value some value   another one"></COLLADA_TEST>"#.to_string());
+        r#"<COLLADA_TEST     attr="value some value   another one">blarf</COLLADA_TEST>"#.to_string());
 
     for event in xml_parser.parse() {
         println!("event: {:?}", event);

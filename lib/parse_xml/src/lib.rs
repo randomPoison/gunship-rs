@@ -10,6 +10,12 @@ use unicode::str::UnicodeStr;
 
 use XMLEvent::*;
 use XMLElement::*;
+use TagType::*;
+
+pub enum TagType {
+    StartTag,
+    EndTag
+}
 
 pub struct XMLParser {
     raw_text: String
@@ -71,6 +77,7 @@ impl XMLParser {
 
 /// Values used to track the state of the
 /// parser as it evaluates the document.
+#[derive(Debug)]
 enum XMLElement<'a> {
     StartDocument,
     Element(&'a str),
@@ -104,13 +111,14 @@ impl<'a> SAXEvents<'a> {
         // parse the first tag
         match self.text_enumerator.next() {
             None => return ParseError("XML document must have a top level element.".to_string()),
-            Some((bracket_index, grapheme)) => match grapheme.as_slice() {
+            Some((_, grapheme)) => match grapheme.as_slice() {
                 "<" => {
                     // determine the name of the top level element
-                    match self.parse_tag_name(bracket_index + 1) {
+                    match self.parse_tag_name() {
                         Err(error) => ParseError(error),
-                        Ok(tag_name) => {
-                            StartElement(tag_name)
+                        Ok((tag_name, tag_type)) => match tag_type {
+                            EndTag => ParseError("Top level element must be an start tag.".to_string()),
+                            StartTag => StartElement(tag_name)
                         }
                     }
                 },
@@ -119,7 +127,18 @@ impl<'a> SAXEvents<'a> {
         }
     }
 
-    fn parse_tag_name(&mut self, start_index: usize) -> Result<&'a str, String> {
+    /// Parses the tag name at the current location of the parser,
+    /// including whether the tag is an start-tag or end-tag.
+    fn parse_tag_name(&mut self) -> Result<(&'a str, TagType), String> {
+        let (start_index, tag_type) = match self.text_enumerator.next() {
+            None => return Err("Document ends prematurely.".to_string()),
+            Some((index, grapheme)) => match grapheme {
+                // TODO: Handle other illegal characters.
+                "/" => (index + 1, EndTag),
+                _ => (index, StartTag)
+            }
+        };
+
         match self.parse_identifier(start_index) {
             Ok((identifier, delimiter)) => {
                 self.element_stack.push(Element(identifier));
@@ -129,7 +148,7 @@ impl<'a> SAXEvents<'a> {
                     self.element_stack.push(OpenTag);
                 }
 
-                Ok(identifier)
+                Ok((identifier, tag_type))
             },
             Err(error) => Err(error)
         }
@@ -146,7 +165,11 @@ impl<'a> SAXEvents<'a> {
             // eat leading whitespace to get the start of the attribute name
             let start_index = match self.eat_whitespace() {
                 Err(error) => return Some(ParseError(error)),
-                Ok((index, _)) => index
+                Ok((index, grapheme)) => match grapheme {
+                    // TODO: Handle other special characters.
+                    ">" => return None,
+                    _ => index
+                }
             };
 
             // parse the attribute name and check if
@@ -210,7 +233,30 @@ impl<'a> SAXEvents<'a> {
         } }
     }
 
-    /// Parses the current identifier in the document.
+    fn parse_tag_body(&mut self) -> XMLEvent<'a> {
+        let start_index = match self.eat_whitespace() {
+            Err(error) => return ParseError(error),
+            Ok((index, grapheme)) => match grapheme {
+                "<" => return EndElement("butts"), // TODO: parse tag and do stuff
+                ">" => {
+                    println!("parse error at index {}", index);
+                    return ParseError("Illegal character in tag body. (1)".to_string())
+                },
+                _ => index
+            }
+        };
+
+        loop { match self.text_enumerator.next() {
+            None => return ParseError("Document ends in the middle of a tag body.".to_string()),
+            Some((end_index, grapheme)) => match grapheme {
+                "<" => return TextNode(self.document_slice(start_index, end_index)),
+                ">" => return ParseError("Illegal character in tag body. (2)".to_string()),
+                _ => ()
+            }
+        } }
+    }
+
+    /// Used to parse tag names and attribute names.
     ///
     /// # Returns
     ///
@@ -235,6 +281,12 @@ impl<'a> SAXEvents<'a> {
         } }
     }
 
+    /// Consumes all the whitespace at the current parse point, returning
+    /// the enumerated value of the first non-whitespace character.
+    ///
+    /// # Failures
+    ///
+    /// - `Err` if the document ends before a non-whitespace character.
     fn eat_whitespace(&mut self) -> Result<(usize, &'a str), String> {
         loop { match self.text_enumerator.next() {
             None => return Err("Document ends with whitespace.".to_string()),
@@ -255,36 +307,49 @@ impl<'a> Iterator for SAXEvents<'a> {
     type Item = XMLEvent<'a>;
 
     fn next(&mut self) -> Option<XMLEvent<'a>> {
-        match self.element_stack.pop() {
+        let result = match self.element_stack.pop() {
             None => None, // TODO: Keep parsing to check for invalid formatting
             Some(element) => {
+                println!("Top of stack was {:?}", element);
                 match element {
+                    // handle the start of the document
                     StartDocument => {
-                        println!("top of stack is StartDocument.");
                         Some(self.parse_document_start())
                     },
+
+                    // handle the body of a tag
                     Element(tag) => {
-                        // TODO: parse the body of the tag
-                        println!("top of stack is Element {}", tag);
-                        Some(XMLEvent::EndElement(tag))
+                        Some(self.parse_tag_body())
                     },
+
+                    // handle the tag's attributes
                     OpenTag => {
-                        println!("Top of stack is OpenTag");
                         match self.parse_attribute() {
                             Some(event) => {
-                                println!("Event occurred while parsing attribute.");
+                                // haven't reached ">", so tag is still open
+                                self.element_stack.push(OpenTag);
                                 Some(event)
                             },
                             None => {
-                                // TODO: parse the body of the tag
-                                println!("No event occurred while parsing, start parsing the contents of the tag.");
-                                None
+                                Some(self.parse_tag_body())
                             }
                         }
                     }
                 }
             }
+        };
+
+        // If a parse error occurred empty the stack
+        // so that no more events are emitted.
+        match result {
+            Some(ref event) => match event {
+                &ParseError(_) => self.element_stack.clear(),
+                _ => ()
+            },
+            _ => ()
         }
+
+        result
     }
 
     /// Provides a size hint as defined by the `Iterator` trait.
