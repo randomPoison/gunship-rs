@@ -344,13 +344,15 @@ impl<'a> Iterator for SAXEvents<'a> {
 
                     // handle the body of a tag
                     Element(tag) => {
+                        self.element_stack.push(Element(tag));
                         let tag_body = self.parse_tag_body();
                         println!("parse_tag_body() returned {:?}", tag_body);
                         let tag_body = match tag_body {
-                            EndElement(element) => {
-                                if element != tag {
-                                    ParseError(format!("Mismatched open and close tag: {} and {}.", tag, element))
+                            EndElement(tag_name) => {
+                                if tag_name != tag {
+                                    ParseError(format!("Mismatched open and close tag: {} and {}.", tag, tag_name))
                                 } else {
+                                    self.element_stack.pop();
                                     tag_body
                                 }
                             },
