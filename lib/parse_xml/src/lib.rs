@@ -139,8 +139,8 @@ impl<'a> SAXEvents<'a> {
     fn parse_xml_declaration(&mut self) -> XMLEvent<'a> {
         // pop the AttributeElement and Tag off the stack since
         // they shouldn't be there after the declaration ends
-        println!("Popping {:?} off the stack", self.element_stack.pop());
-        println!("Popping {:?} off the stack", self.element_stack.pop());
+        self.element_stack.pop();
+        self.element_stack.pop();
 
         let version = match self.parse_attribute() {
             None => return ParseError("XML declaration must specify the version.".to_string()),
@@ -217,7 +217,6 @@ impl<'a> SAXEvents<'a> {
                 self.element_stack.push(Element(identifier));
 
                 if delimiter != ">" {
-                    println!("Tag still open, pushing AttributeElement onto the stack.");
                     self.element_stack.push(AttributeElement);
                 }
 
@@ -254,6 +253,19 @@ impl<'a> SAXEvents<'a> {
                 Ok((index, grapheme)) => match grapheme {
                     // TODO: Handle other special characters.
                     ">" => return None,
+                    "/" => {
+                        // tag is self closing, so also pop
+                        // the Element() off the stack
+                        match self.text_enumerator.next() {
+                            None => return Some(ParseError("Document ends prematurely.".to_string())),
+                            Some((_, grapheme)) if grapheme != ">"
+                                => return Some(ParseError("/ character must be followed by > character.".to_string())),
+                            _ => ()
+                        }
+
+                        self.element_stack.pop();
+                        return None
+                    }
                     _ => index
                 }
             };
@@ -330,10 +342,7 @@ impl<'a> SAXEvents<'a> {
                         EndTag => return EndElement(name)
                     }
                 },
-                ">" => {
-                    println!("parse error at index {}", index);
-                    return ParseError("Illegal character in tag body. (1)".to_string())
-                },
+                ">" => return ParseError("Illegal character in tag body. (1)".to_string()),
                 _ => index
             }
         };
@@ -405,7 +414,6 @@ impl<'a> Iterator for SAXEvents<'a> {
         let result = match self.element_stack.pop() {
             None => None, // TODO: Keep parsing to check for invalid formatting
             Some(element) => {
-                println!("Top of stack was {:?}", element);
                 match element {
                     // handle the start of the document
                     StartDocument => {
@@ -416,7 +424,6 @@ impl<'a> Iterator for SAXEvents<'a> {
                     Element(tag) => {
                         self.element_stack.push(Element(tag));
                         let tag_body = self.parse_tag_body();
-                        println!("parse_tag_body() returned {:?}", tag_body);
                         let tag_body = match tag_body {
                             EndElement(tag_name) => {
                                 if tag_name != tag {
@@ -440,8 +447,6 @@ impl<'a> Iterator for SAXEvents<'a> {
                                 Some(event)
                             },
                             None => {
-                                println!("No attribute found, parse the tag's body.");
-
                                 let tag_body = self.parse_tag_body();
                                 let tag_body = match tag_body {
                                     EndElement(element) => {

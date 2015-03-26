@@ -33,8 +33,16 @@ struct MainWindow
 
 fn main() {
     // XML test
-    let xml_parser = xml::XMLParser::from_string(
-        r#"<COLLADA_TEST     attr="value some value   another one">Some numbers or something<cool>cool contents</cool>more junky contents</COLLADA_TEST>"#.to_string());
+    let file_path = Path::new("meshes/cube.dae");
+    let mut file = match File::open(&file_path) {
+        // The `desc` field of `IoError` is a string that describes the error
+        Err(why) => panic!("couldn't open {}: {}", file_path.display(), Error::description(&why)),
+        Ok(file) => file,
+    };
+    let xml_parser = match xml::XMLParser::from_file(&mut file) {
+        Err(why) => panic!(why),
+        Ok(parser) => parser
+    };
 
     for event in xml_parser.parse() {
         println!("event: {:?}", event);
