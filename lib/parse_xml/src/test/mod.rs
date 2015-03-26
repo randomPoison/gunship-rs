@@ -13,7 +13,10 @@ macro_rules! parse {
                 let mut events = parser.parse();
 
                 $( match events.next() {
-                    Some(element) => assert!(element == $element),
+                    Some(element) => {
+                        println!("element: {:?}", element);
+                        assert!(element == $element)
+                    },
                     _ => assert!(false)
                 } )*
 
@@ -43,10 +46,28 @@ fn test_single_tag() {
 fn test_attribute() {
     parse!(
         XML r#"<tag attribute="value"></tag>"#
+
         XML r#"<tag    attribute="value"
         >      </tag>"#, {
         StartElement("tag");
         Attribute("attribute", "value");
         EndElement("tag");
+    });
+}
+
+#[test]
+fn test_declaration() {
+    parse!(
+        XML r#"<?xml version="1.0" encoding="utf-8"?>
+        <COLLADA></COLLADA>"#
+
+        XML r#"<?xml
+version="1.0"
+encoding="utf-8"?>
+<COLLADA>          </COLLADA>"#,
+    {
+            Declaration("1.0", "utf-8");
+            StartElement("COLLADA");
+            EndElement("COLLADA");
     });
 }

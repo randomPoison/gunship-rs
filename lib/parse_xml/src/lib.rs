@@ -33,6 +33,7 @@ pub struct XMLParser {
 /// before parsing can begin.
 #[derive(Debug, PartialEq)]
 pub enum XMLEvent<'a> {
+    Declaration(&'a str, &'a str),
     StartElement(&'a str),
     EndElement(&'a str),
     TextNode(&'a str),
@@ -109,26 +110,92 @@ impl<'a> SAXEvents<'a> {
     /// - Returns ParseError if the first character is not "<".
     /// - Returns ParseError if the first tag is ill formatted.
     fn parse_document_start(&mut self) -> XMLEvent<'a> {
-        // remove the element that marks the start of the document
-        self.element_stack.pop();
-
-        // parse the first tag
-        match self.text_enumerator.next() {
+        let (tag_name, tag_type) = match self.text_enumerator.next() {
             None => return ParseError("XML document must have a top level element.".to_string()),
             Some((_, grapheme)) => match grapheme.as_slice() {
                 "<" => {
                     // determine the name of the top level element
                     match self.parse_tag_name() {
-                        Err(error) => ParseError(error),
-                        Ok((tag_name, tag_type)) => match tag_type {
-                            EndTag => ParseError("Top level element must be an start tag.".to_string()),
-                            StartTag => StartElement(tag_name)
-                        }
+                        Err(error) => return ParseError(error),
+                        Ok((tag_name, tag_type)) => (tag_name, tag_type)
                     }
                 },
-                _ => ParseError("XML document must have a top level element.".to_string())
+                _ => return ParseError("XML document must have a top level element.".to_string())
+            }
+        };
+
+        match tag_type {
+            EndTag => ParseError("Top level element must be an start tag or XML declaration.".to_string()),
+            StartTag => {
+                if tag_name == "?xml" {
+                    self.parse_xml_declaration()
+                } else {
+                    StartElement(tag_name)
+                }
             }
         }
+    }
+
+    fn parse_xml_declaration(&mut self) -> XMLEvent<'a> {
+        // pop the AttributeElement and Tag off the stack since
+        // they shouldn't be there after the declaration ends
+        println!("Popping {:?} off the stack", self.element_stack.pop());
+        println!("Popping {:?} off the stack", self.element_stack.pop());
+
+        let version = match self.parse_attribute() {
+            None => return ParseError("XML declaration must specify the version.".to_string()),
+            Some(event) => match event {
+                Attribute(name, value) => {
+                    if name != "version" {
+                        return ParseError("First attribute of XML declaration must be version".to_string())
+                    }
+                    value
+                },
+                _ => return event
+            }
+        };
+
+        let encoding = match self.parse_attribute() {
+            None => return ParseError("XML declaration must specify the encoding.".to_string()),
+            Some(event) => match event {
+                Attribute(name, value) => {
+                    if name != "encoding" {
+                        return ParseError("Second attribute of XML declaration must be encoding.".to_string())
+                    }
+                    value
+                },
+                _ => return event
+            }
+        };
+
+        // eat the "?" character
+        match self.eat_whitespace() {
+            Err(error) => return ParseError(error),
+            Ok((_, grapheme)) if grapheme != "?"
+                => return ParseError("XML declaration not closed correctly.".to_string()),
+            _ => ()
+        }
+
+        // eat the ">" character
+        match self.text_enumerator.next() {
+            None => return ParseError("Document ends prematurely.".to_string()),
+            Some((_, grapheme)) if grapheme != ">"
+                => return ParseError("XML declaration not closed correctly.".to_string()),
+            _ => ()
+        }
+
+        // eat to opening "<" character
+        match self.eat_whitespace() {
+            Err(error) => return ParseError(error),
+            Ok((_, grapheme)) if grapheme != "<"
+                => return ParseError("XML declaration must be followed by start tag.".to_string()),
+            _ => ()
+        }
+
+        // push element onto the stack so the parser doesn't stop
+        self.element_stack.push(Tag);
+
+        Declaration(version, encoding)
     }
 
     /// Parses the tag name at the current location of the parser,
