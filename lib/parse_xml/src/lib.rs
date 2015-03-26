@@ -81,7 +81,8 @@ impl XMLParser {
 enum XMLElement<'a> {
     StartDocument,
     Element(&'a str),
-    OpenTag
+    AttributeElement,
+    // TagBodyElement
 }
 
 /// An iterator over the contents of the document providing SAX-like events.
@@ -130,25 +131,40 @@ impl<'a> SAXEvents<'a> {
     /// Parses the tag name at the current location of the parser,
     /// including whether the tag is an start-tag or end-tag.
     fn parse_tag_name(&mut self) -> Result<(&'a str, TagType), String> {
-        let (start_index, tag_type) = match self.text_enumerator.next() {
-            None => return Err("Document ends prematurely.".to_string()),
+        match self.text_enumerator.next() {
+            None => Err("Document ends prematurely.".to_string()),
             Some((index, grapheme)) => match grapheme {
                 // TODO: Handle other illegal characters.
-                "/" => (index + 1, EndTag),
-                _ => (index, StartTag)
+                "/" => self.parse_end_tag_name(index + 1),
+                _ => self.parse_start_tag_name(index)
             }
-        };
+        }
+    }
 
+    fn parse_start_tag_name(&mut self, start_index: usize) -> Result<(&'a str, TagType), String> {
         match self.parse_identifier(start_index) {
             Ok((identifier, delimiter)) => {
                 self.element_stack.push(Element(identifier));
 
                 if delimiter != ">" {
-                    println!("Tag still open, pushing OpenTag onto the stack.");
-                    self.element_stack.push(OpenTag);
+                    println!("Tag still open, pushing AttributeElement onto the stack.");
+                    self.element_stack.push(AttributeElement);
                 }
 
-                Ok((identifier, tag_type))
+                Ok((identifier, StartTag))
+            },
+            Err(error) => Err(error)
+        }
+    }
+
+    fn parse_end_tag_name(&mut self, start_index: usize) -> Result<(&'a str, TagType), String> {
+        match self.parse_identifier(start_index) {
+            Ok((identifier, delimiter)) => {
+                if delimiter != ">" {
+                    Err("Close tag must end with \">\" character.".to_string())
+                } else {
+                    Ok((identifier, EndTag))
+                }
             },
             Err(error) => Err(error)
         }
@@ -237,7 +253,13 @@ impl<'a> SAXEvents<'a> {
         let start_index = match self.eat_whitespace() {
             Err(error) => return ParseError(error),
             Ok((index, grapheme)) => match grapheme {
-                "<" => return EndElement("butts"), // TODO: parse tag and do stuff
+                "<" => match self.parse_tag_name() {
+                    Err(error) => return ParseError(error),
+                    Ok((name, tag_type)) => match tag_type {
+                        StartTag => return StartElement(name),
+                        EndTag => return EndElement(name)
+                    }
+                },
                 ">" => {
                     println!("parse error at index {}", index);
                     return ParseError("Illegal character in tag body. (1)".to_string())
@@ -319,19 +341,53 @@ impl<'a> Iterator for SAXEvents<'a> {
 
                     // handle the body of a tag
                     Element(tag) => {
-                        Some(self.parse_tag_body())
+                        let tag_body = self.parse_tag_body();
+                        println!("parse_tag_body() returned {:?}", tag_body);
+                        let tag_body = match tag_body {
+                            EndElement(element) => {
+                                if element != tag {
+                                    ParseError(format!("Mismatched open and close tag: {} and {}.", tag, element))
+                                } else {
+                                    tag_body
+                                }
+                            },
+                            _ => tag_body
+                        };
+                        Some(tag_body)
                     },
 
                     // handle the tag's attributes
-                    OpenTag => {
+                    AttributeElement => {
                         match self.parse_attribute() {
                             Some(event) => {
                                 // haven't reached ">", so tag is still open
-                                self.element_stack.push(OpenTag);
+                                self.element_stack.push(AttributeElement);
                                 Some(event)
                             },
                             None => {
-                                Some(self.parse_tag_body())
+                                println!("No attribute found, parse the tag's body.");
+
+                                let tag_body = self.parse_tag_body();
+                                let tag_body = match tag_body {
+                                    EndElement(element) => {
+                                        // pop the last element off the stack to check if
+                                        // it matches the close tag.
+                                        let tag = match self.element_stack.pop().unwrap() {
+                                            Element(tag) => tag,
+                                            _ => panic!("Error! AttributeElement element was pushed on after something other than an Element element.")
+                                        };
+
+                                        if element == tag {
+                                            EndElement(element)
+                                        }
+                                        else
+                                        {
+                                            ParseError(format!("Mismatched open and close tag: {} and {}.", tag, element))
+                                        }
+                                    },
+                                    _ => tag_body
+                                };
+                                Some(tag_body)
                             }
                         }
                     }
