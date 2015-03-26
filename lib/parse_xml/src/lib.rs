@@ -2,6 +2,9 @@
 
 extern crate unicode;
 
+#[cfg(test)]
+mod test;
+
 use std::io::prelude::*;
 use std::fs::File;
 use std::str::Graphemes;
@@ -28,7 +31,7 @@ pub struct XMLParser {
 /// that no additional heap allocations are needed when
 /// parsing, but requires the document to be loaded into
 /// before parsing can begin.
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum XMLEvent<'a> {
     StartElement(&'a str),
     EndElement(&'a str),
