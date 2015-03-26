@@ -82,7 +82,7 @@ enum XMLElement<'a> {
     StartDocument,
     Element(&'a str),
     AttributeElement,
-    // TagBodyElement
+    Tag
 }
 
 /// An iterator over the contents of the document providing SAX-like events.
@@ -271,7 +271,10 @@ impl<'a> SAXEvents<'a> {
         loop { match self.text_enumerator.next() {
             None => return ParseError("Document ends in the middle of a tag body.".to_string()),
             Some((end_index, grapheme)) => match grapheme {
-                "<" => return TextNode(self.document_slice(start_index, end_index)),
+                "<" => {
+                    self.element_stack.push(Tag); // signal that the next thing to be parsed is a tag
+                    return TextNode(self.document_slice(start_index, end_index))
+                },
                 ">" => return ParseError("Illegal character in tag body. (2)".to_string()),
                 _ => ()
             }
@@ -390,6 +393,32 @@ impl<'a> Iterator for SAXEvents<'a> {
                                 Some(tag_body)
                             }
                         }
+                    },
+
+                    // handle a tag that hasn't yet been parsed
+                    Tag => {
+                        let event = match self.parse_tag_name() {
+                            Err(error) => ParseError(error),
+                            Ok((tag_name, tag_type)) => match tag_type {
+                                StartTag => StartElement(tag_name),
+                                EndTag => {
+                                    let tag = match self.element_stack.pop().unwrap() {
+                                        Element(tag) => tag,
+                                        _ => panic!("Error! AttributeElement element was pushed on after something other than an Element element.")
+                                    };
+
+                                    if tag_name == tag {
+                                        EndElement(tag_name)
+                                    }
+                                    else
+                                    {
+                                        ParseError(format!("Mismatched open and close tag: {} and {}.", tag, tag_name))
+                                    }
+                                }
+                            }
+                        };
+
+                        Some(event)
                     }
                 }
             }
