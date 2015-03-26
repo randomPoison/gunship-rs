@@ -263,8 +263,11 @@ impl<'a> SAXEvents<'a> {
                             _ => ()
                         }
 
-                        self.element_stack.pop();
-                        return None
+                        let tag_name = match self.element_stack.pop().unwrap() {
+                            Element(tag) => tag,
+                            _ => panic!("Illegal junk was at the top of the stack :(")
+                        };
+                        return Some(EndElement(tag_name))
                     }
                     _ => index
                 }
@@ -441,10 +444,13 @@ impl<'a> Iterator for SAXEvents<'a> {
                     // handle the tag's attributes
                     AttributeElement => {
                         match self.parse_attribute() {
-                            Some(event) => {
-                                // haven't reached ">", so tag is still open
-                                self.element_stack.push(AttributeElement);
-                                Some(event)
+                            Some(event) => match event {
+                                EndElement(_) => Some(event),
+                                _ =>  {
+                                    // haven't reached ">", so tag is still open
+                                    self.element_stack.push(AttributeElement);
+                                    Some(event)
+                                }
                             },
                             None => {
                                 let tag_body = self.parse_tag_body();
