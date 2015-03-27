@@ -18,6 +18,6 @@ path = "lib/bootstrap-rs"
 version = "*"
 path = "lib/render_math"
 
-[dependencies.parse_xml]
+[dependencies.parse_collada]
 version = "*"
-path = "lib/parse_xml"
+path = "lib/parse_collada"

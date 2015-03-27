@@ -5,7 +5,7 @@ extern crate gl;
 extern crate "bootstrap-rs" as bootstrap;
 #[macro_use]
 extern crate "render_math" as math;
-extern crate "parse_xml" as xml;
+extern crate "parse_collada" as collada;
 
 use std::io::prelude::*;
 use std::fs::File;
@@ -39,14 +39,10 @@ fn main() {
         Err(why) => panic!("couldn't open {}: {}", file_path.display(), Error::description(&why)),
         Ok(file) => file,
     };
-    let xml_parser = match xml::XMLParser::from_file(&mut file) {
+    let collada_data = match collada::ColladaData::from_file(&mut file) {
         Err(why) => panic!(why),
-        Ok(parser) => parser
+        Ok(data) => data
     };
-
-    for event in xml_parser.parse() {
-        println!("event: {:?}", event);
-    }
 
     let mut main_window = MainWindow {
         close: false
