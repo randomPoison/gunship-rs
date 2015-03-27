@@ -125,9 +125,25 @@ impl<'a> ColladaParser<'a> {
     }
 
     fn parse_source(&mut self) {
-        println!("Skipping over <source> element");
-        println!("Warning: <source> is not yet supported by parse_collada");
-        self.skip_to_event(EndElement("source"));
+        println!("Parsing <source>");
+
+        loop {
+            let event = self.next_event();
+            match event {
+                Attribute("id", _) => (),
+                Attribute("name", _) => (),
+                StartElement("asset") => self.parse_asset(),
+                StartElement("IDREF_array") => self.parse_IDREF_array(),
+                StartElement("Name_array") => self.parse_Name_array(),
+                StartElement("bool_array") => self.parse_bool_array(),
+                StartElement("float_array") => self.parse_float_array(),
+                StartElement("int_array") => self.parse_int_array(),
+                StartElement("technique_common") => self.parse_technique_common(),
+                StartElement("technique") => self.parse_technique(),
+                EndElement("source") => break,
+                _ => panic!("Illegal event while parsing <source>: {:?}", event)
+            }
+        }
     }
 
     fn parse_vertices(&mut self) {
@@ -176,6 +192,50 @@ impl<'a> ColladaParser<'a> {
         println!("Skipping over <tristrips> element");
         println!("Warning: <tristrips> is not yet supported by parse_collada");
         self.skip_to_event(EndElement("tristrips"));
+    }
+
+    #[allow(non_snake_case)]
+    fn parse_IDREF_array(&mut self) {
+        println!("Skipping over <IDREF_array> element");
+        println!("Warning: <IDREF_array> is not yet supported by parse_collada");
+        self.skip_to_event(EndElement("IDREF_array"));
+    }
+
+    #[allow(non_snake_case)]
+    fn parse_Name_array(&mut self) {
+        println!("Skipping over <Name_array> element");
+        println!("Warning: <Name_array> is not yet supported by parse_collada");
+        self.skip_to_event(EndElement("Name_array"));
+    }
+
+    fn parse_bool_array(&mut self) {
+        println!("Skipping over <bool_array> element");
+        println!("Warning: <bool_array> is not yet supported by parse_collada");
+        self.skip_to_event(EndElement("bool_array"));
+    }
+
+    fn parse_float_array(&mut self) {
+        println!("Skipping over <float_array> element");
+        println!("Warning: <float_array> is not yet supported by parse_collada");
+        self.skip_to_event(EndElement("float_array"));
+    }
+
+    fn parse_int_array(&mut self) {
+        println!("Skipping over <int_array> element");
+        println!("Warning: <int_array> is not yet supported by parse_collada");
+        self.skip_to_event(EndElement("int_array"));
+    }
+
+    fn parse_technique_common(&mut self) {
+        println!("Skipping over <technique_common> element");
+        println!("Warning: <technique_common> is not yet supported by parse_collada");
+        self.skip_to_event(EndElement("technique_common"));
+    }
+
+    fn parse_technique(&mut self) {
+        println!("Skipping over <technique> element");
+        println!("Warning: <technique> is not yet supported by parse_collada");
+        self.skip_to_event(EndElement("technique"));
     }
 
     /// Consumes all events until the desired one is reached.
