@@ -44,22 +44,6 @@ impl<'a> ColladaParser<'a> {
         })
     }
 
-    /// Consumes all events until the desired one is reached.
-    ///
-    /// This a placeholder until full support for all COLLADA
-    /// features is complete, at which points all events will
-    /// be handled in full.
-    fn skip_to_event(&mut self, to_event: XMLEvent) {
-        loop {
-            match self.events.next() {
-                Some(event) => if event == to_event {
-                    break
-                },
-                None => panic!("Event {:?} not found in file!", to_event)
-            }
-        }
-    }
-
     fn parse_library_geometries(&mut self) {
         println!("Parsing <library_geometries>");
 
@@ -113,16 +97,105 @@ impl<'a> ColladaParser<'a> {
     }
 
     fn parse_mesh(&mut self) {
-        println!("Skipping over <mesh> tag");
-        self.skip_to_event(EndElement("mesh"))
+        println!("Parsing <mesh>");
+
+        loop {
+            let event = self.next_event();
+            match event {
+                StartElement("source") => self.parse_source(),
+                StartElement("vertices") => self.parse_vertices(),
+                StartElement("lines") => self.parse_lines(),
+                StartElement("linestrips") => self.parse_linestrips(),
+                StartElement("polygons") => self.parse_polygons(),
+                StartElement("polylist") => self.parse_polylist(),
+                StartElement("triangles") => self.parse_triangles(),
+                StartElement("trifans") => self.parse_trifans(),
+                StartElement("tristrips") => self.parse_tristrips(),
+                StartElement("extra") => self.parse_extra(),
+                EndElement("mesh") => break,
+                _ => panic!("Illegal event while parsing <mesh>: {:?}", event)
+            }
+        }
     }
 
     fn parse_spline(&mut self) {
-        println!("Skipping over <spline> tag");
+        println!("Skipping over <spline> element");
         println!("Warning: <spline> is not yet supported by parse_collada");
         self.skip_to_event(EndElement("spline"));
     }
 
+    fn parse_source(&mut self) {
+        println!("Skipping over <source> element");
+        println!("Warning: <source> is not yet supported by parse_collada");
+        self.skip_to_event(EndElement("source"));
+    }
+
+    fn parse_vertices(&mut self) {
+        println!("Skipping over <vertices> element");
+        println!("Warning: <vertices> is not yet supported by parse_collada");
+        self.skip_to_event(EndElement("vertices"));
+    }
+
+    fn parse_lines(&mut self) {
+        println!("Skipping over <lines> element");
+        println!("Warning: <lines> is not yet supported by parse_collada");
+        self.skip_to_event(EndElement("lines"));
+    }
+
+    fn parse_linestrips(&mut self) {
+        println!("Skipping over <linestrips> element");
+        println!("Warning: <linestrips> is not yet supported by parse_collada");
+        self.skip_to_event(EndElement("linestrips"));
+    }
+
+    fn parse_polygons(&mut self) {
+        println!("Skipping over <polygons> element");
+        println!("Warning: <polygons> is not yet supported by parse_collada");
+        self.skip_to_event(EndElement("polygons"));
+    }
+
+    fn parse_polylist(&mut self) {
+        println!("Skipping over <polylist> element");
+        println!("Warning: <polylist> is not yet supported by parse_collada");
+        self.skip_to_event(EndElement("polylist"));
+    }
+
+    fn parse_triangles(&mut self) {
+        println!("Skipping over <triangles> element");
+        println!("Warning: <triangles> is not yet supported by parse_collada");
+        self.skip_to_event(EndElement("triangles"));
+    }
+
+    fn parse_trifans(&mut self) {
+        println!("Skipping over <trifans> element");
+        println!("Warning: <trifans> is not yet supported by parse_collada");
+        self.skip_to_event(EndElement("trifans"));
+    }
+
+    fn parse_tristrips(&mut self) {
+        println!("Skipping over <tristrips> element");
+        println!("Warning: <tristrips> is not yet supported by parse_collada");
+        self.skip_to_event(EndElement("tristrips"));
+    }
+
+    /// Consumes all events until the desired one is reached.
+    ///
+    /// This a placeholder until full support for all COLLADA
+    /// features is complete, at which points all events will
+    /// be handled in full.
+    fn skip_to_event(&mut self, to_event: XMLEvent) {
+        loop {
+            match self.events.next() {
+                Some(event) => if event == to_event {
+                    break
+                },
+                None => panic!("Event {:?} not found in file!", to_event)
+            }
+        }
+    }
+
+    /// Unwraps and returns the next `XMLEvent`,
+    /// panicking if there is no next event.
     fn next_event(&mut self) -> XMLEvent<'a> {
         match self.events.next() {
             None => panic!("Ran out of events too early."),
@@ -130,3 +203,12 @@ impl<'a> ColladaParser<'a> {
         }
     }
 }
+
+// A "macro" for quickly defining placeholder methods.
+/*
+fn parse_$name(&mut self) {
+    println!("Skipping over <$name> element");
+    println!("Warning: <$name> is not yet supported by parse_collada");
+    self.skip_to_event(EndElement("$name"));
+}
+*/
