@@ -1,4 +1,4 @@
-#![feature(str_words)]
+#![feature(core, str_words)]
 
 extern crate "parse_xml" as xml;
 
@@ -46,9 +46,23 @@ pub enum PrimitiveType {
     Linestrips,
     Polygons,
     Polylist,
-    Triangles,
+    Triangles {
+        name: Option<String>,
+        count: usize,
+        material: Option<String>,
+        inputs: Vec<Input>,
+        primitives: Vec<usize>
+    },
     Trifans,
     Tristrips
+}
+
+#[derive(Debug)]
+pub struct Input {
+    offset: u32,
+    semantic: String,
+    source: String,
+    set: Option<u32>
 }
 
 #[derive(Debug)]
@@ -203,7 +217,7 @@ impl<'a> ColladaParser<'a> {
 
         let mut sources = Vec::new();
         let vertices = Vertices;
-        let primitives = Vec::new();
+        let mut primitives = Vec::new();
 
         loop {
             let event = self.next_event();
@@ -219,7 +233,12 @@ impl<'a> ColladaParser<'a> {
                 StartElement("linestrips") => self.parse_linestrips(),
                 StartElement("polygons") => self.parse_polygons(),
                 StartElement("polylist") => self.parse_polylist(),
-                StartElement("triangles") => self.parse_triangles(),
+                StartElement("triangles") => match self.parse_triangles() {
+                    Err(error) => return Err(error),
+                    Ok(triangles) => {
+                        primitives.push(triangles);
+                    }
+                },
                 StartElement("trifans") => self.parse_trifans(),
                 StartElement("tristrips") => self.parse_tristrips(),
                 StartElement("extra") => self.parse_extra(),
@@ -381,10 +400,114 @@ impl<'a> ColladaParser<'a> {
         self.skip_to_event(EndElement("polylist"));
     }
 
-    fn parse_triangles(&mut self) {
-        println!("Skipping over <triangles> element");
-        println!("Warning: <triangles> is not yet supported by parse_collada");
-        self.skip_to_event(EndElement("triangles"));
+    fn parse_triangles(&mut self) -> Result<PrimitiveType, String> {
+        println!("Parsing <triangles>");
+
+        let mut name: Option<String> = None;
+        let mut count: usize = 0;
+        let mut material: Option<String> = None;
+        let mut inputs: Vec<Input> = Vec::new();
+        let mut primitives: Option<Vec<usize>> = None;
+
+        loop {
+            let event = self.next_event();
+            match event {
+                Attribute("name", name_str) => {
+                    name = Some(name_str.to_string());
+                },
+                Attribute("count", count_str) => {
+                    count = usize::from_str(count_str).unwrap();
+                },
+                Attribute("material", material_str) => {
+                    material = Some(material_str.to_string());
+                },
+                StartElement("input") => match self.parse_input() {
+                    Err(error) => return Err(error),
+                    Ok(input) => {
+                        inputs.push(input);
+                    }
+                },
+                StartElement("p") => match self.parse_p() {
+                    Err(error) => return Err(error),
+                    Ok(_primitives) => {
+                        primitives = Some(_primitives);
+                    }
+                },
+                StartElement("extra") => self.parse_extra(),
+                EndElement("triangles") => break,
+                _ => return Err(format!("Illegal event while parsing <triangles>: {:?}", event))
+            }
+        }
+
+        Ok(PrimitiveType::Triangles {
+            name: name,
+            count: count,
+            material: material,
+            inputs: inputs,
+            primitives: primitives.unwrap()
+        })
+    }
+
+    fn parse_input(&mut self) -> Result<Input, String> {
+        println!("parsing <input>");
+
+        let mut input = Input {
+            offset: u32::max_value(),
+            semantic: String::new(),
+            source: String::new(),
+            set: None
+        };
+
+        loop {
+            let event = self.next_event();
+            match event {
+                Attribute("offset", offset_str) => {
+                    input.offset = u32::from_str(offset_str).unwrap();
+                },
+                Attribute("semantic", semantic_str) => {
+                    input.semantic.push_str(semantic_str);
+                },
+                Attribute("source", source_str) => {
+                    input.semantic.push_str(source_str);
+                },
+                Attribute("set", set_str) => {
+                    input.set = Some(u32::from_str(set_str).unwrap());
+                },
+                EndElement("input") => break,
+                _ => return Err(format!("Illegal event while parsing <input>: {:?}", event))
+            }
+        }
+
+        assert!(input.offset != u32::max_value());
+
+        Ok(input)
+    }
+
+    fn parse_p(&mut self) -> Result<Vec<usize>, String> {
+        println!("Parsing <p>");
+
+        let mut primitives: Option<Vec<usize>> = None;
+
+        loop {
+            let event = self.next_event();
+            match event {
+                TextNode(text) => {
+                    let data = text.words().map(|word| {
+                        let value = match usize::from_str(word) {
+                            Err(error) => return panic!("Error while parsing <float_array>: {}", error), // TODO: Return an error instead of panicking.
+                            Ok(value) => value
+                        };
+                        value
+                    }).collect::<Vec<usize>>();
+
+                    primitives = Some(data);
+                },
+                EndElement("p") => break,
+                _ => return Err(format!("Illegal event while parsing <p>: {:?}", event))
+            }
+        }
+
+        Ok(primitives.unwrap())
     }
 
     fn parse_trifans(&mut self) {
