@@ -1,20 +1,74 @@
+#![feature(str_words)]
+
 extern crate "parse_xml" as xml;
 
 use std::fs::File;
+use std::str::FromStr;
 
 use xml::XMLParser;
 use xml::XMLEvent;
 use xml::XMLEvent::*;
 use xml::SAXEvents;
 
+#[derive(Debug)]
 pub struct ColladaData {
-    meshes: Vec<Mesh>
+    library_geometries: LibraryGeometries
 }
 
-pub struct Mesh {
-    vertices: Vec<f32>,
-    triangles: Vec<usize>
+#[derive(Debug)]
+pub struct LibraryGeometries {
+    id: Option<String>,
+    name: Option<String>,
+    geometries: Vec<Geometry>
 }
+
+#[derive(Debug)]
+pub struct Geometry {
+    id: Option<String>,
+    name: Option<String>,
+    data: GeometricElement
+}
+
+#[derive(Debug)]
+pub enum GeometricElement {
+    ConvexMesh,
+    Mesh {
+        sources: Vec<Source>,
+        vertices: Vertices,
+        primitives: Vec<PrimitiveType>
+    },
+    Spline
+}
+
+#[derive(Debug)]
+pub enum PrimitiveType {
+    Lines,
+    Linestrips,
+    Polygons,
+    Polylist,
+    Triangles,
+    Trifans,
+    Tristrips
+}
+
+#[derive(Debug)]
+pub struct Source {
+    id: Option<String>,
+    name: Option<String>,
+    array_element: Option<ArrayElement>
+}
+
+#[derive(Debug)]
+pub enum ArrayElement {
+    IDREF,
+    Name,
+    Bool,
+    Float(Vec<f32>),
+    Int
+}
+
+#[derive(Debug)]
+pub struct Vertices;
 
 impl ColladaData {
     pub fn from_file(file: &mut File) -> Result<ColladaData, String> {
@@ -37,28 +91,48 @@ struct ColladaParser<'a> {
 impl<'a> ColladaParser<'a> {
     fn parse(&mut self) -> Result<ColladaData, String> {
         self.skip_to_event(StartElement("library_geometries"));
-        let meshes = self.parse_library_geometries();
+        let library_geometries = match self.parse_library_geometries() {
+            Err(error) => return Err(error),
+            Ok(library_geometries) => library_geometries
+        };
 
         Ok(ColladaData {
-            meshes: Vec::new()
+            library_geometries: library_geometries
         })
     }
 
-    fn parse_library_geometries(&mut self) {
+    fn parse_library_geometries(&mut self) -> Result<LibraryGeometries, String> {
         println!("Parsing <library_geometries>");
+
+        let mut library_geometries = LibraryGeometries {
+            id: None,
+            name: None,
+            geometries: Vec::new()
+        };
 
         loop {
             let event = self.next_event();
             match event {
-                Attribute("id", _) => (), // TODO: Handle "id" attribute on <library_geometries>.
-                Attribute("name", _) => (), // TODO: Handle "name" attribute on <library_geometries>.
+                Attribute("id", _id) => {
+                    library_geometries.id = Some(_id.to_string());
+                },
+                Attribute("name", _name) => {
+                    library_geometries.name = Some(_name.to_string());
+                },
                 StartElement("asset") => self.parse_asset(),
-                StartElement("geometry") => self.parse_geometry(),
+                StartElement("geometry") => match self.parse_geometry() {
+                    Err(error) => return Err(error),
+                    Ok(geometry) => {
+                        library_geometries.geometries.push(geometry);
+                    }
+                },
                 StartElement("extra") => self.parse_extra(),
                 EndElement("library_geometries") => break,
-                _ => panic!("Illegal event occurred while parsing <library_geometries>: {:?}", event)
+                _ => return Err(format!("Illegal event occurred while parsing <library_geometries>: {:?}", event))
             }
         }
+
+        Ok(library_geometries)
     }
 
     fn parse_asset(&mut self) {
@@ -66,23 +140,42 @@ impl<'a> ColladaParser<'a> {
         self.skip_to_event(EndElement("asset"));
     }
 
-    fn parse_geometry(&mut self) {
+    fn parse_geometry(&mut self) -> Result<Geometry, String> {
         println!("Parsing <geometry>");
+
+        let mut id: Option<String> = None;
+        let mut name: Option<String> = None;
+        let mut data: Option<GeometricElement> = None;
 
         loop {
             let event = self.next_event();
             match event {
-                Attribute("id", _) => (), // TODO: Handle "id" attribute on <geometry>.
-                Attribute("name", _) => (), // TODO: Handle "name" attribute on <geometry>.
+                Attribute("id", _id) => {
+                    id = Some(_id.to_string());
+                },
+                Attribute("name", _name) => {
+                    name = Some(_name.to_string());
+                },
                 StartElement("asset") => self.parse_asset(),
                 StartElement("convex_mesh") => self.parse_convex_mesh(),
-                StartElement("mesh") => self.parse_mesh(),
+                StartElement("mesh") => match self.parse_mesh() {
+                    Err(error) => return Err(error),
+                    Ok(mesh) => {
+                        data = Some(mesh);
+                    }
+                },
                 StartElement("spline") => self.parse_spline(),
                 StartElement("extra") => self.parse_extra(),
                 EndElement("geometry") => break,
-                _ => panic!("Illegal event occurred while parsing <geometry>: {:?}", event)
+                _ => return Err(format!("Illegal event occurred while parsing <geometry>: {:?}", event))
             }
         }
+
+        Ok(Geometry {
+            id: id,
+            name: name,
+            data: data.unwrap()
+        })
     }
 
     fn parse_extra(&mut self) {
@@ -96,13 +189,22 @@ impl<'a> ColladaParser<'a> {
         self.skip_to_event(EndElement("convex_mesh"));
     }
 
-    fn parse_mesh(&mut self) {
+    fn parse_mesh(&mut self) -> Result<GeometricElement, String> {
         println!("Parsing <mesh>");
+
+        let mut sources = Vec::new();
+        let vertices = Vertices;
+        let primitives = Vec::new();
 
         loop {
             let event = self.next_event();
             match event {
-                StartElement("source") => self.parse_source(),
+                StartElement("source") => match self.parse_source() {
+                    Err(error) => return Err(error),
+                    Ok(source) => {
+                        sources.push(source);
+                    }
+                },
                 StartElement("vertices") => self.parse_vertices(),
                 StartElement("lines") => self.parse_lines(),
                 StartElement("linestrips") => self.parse_linestrips(),
@@ -113,9 +215,15 @@ impl<'a> ColladaParser<'a> {
                 StartElement("tristrips") => self.parse_tristrips(),
                 StartElement("extra") => self.parse_extra(),
                 EndElement("mesh") => break,
-                _ => panic!("Illegal event while parsing <mesh>: {:?}", event)
+                _ => return Err(format!("Illegal event while parsing <mesh>: {:?}", event))
             }
         }
+
+        Ok(GeometricElement::Mesh {
+            sources: sources,
+            vertices: vertices,
+            primitives: primitives
+        })
     }
 
     fn parse_spline(&mut self) {
@@ -124,26 +232,43 @@ impl<'a> ColladaParser<'a> {
         self.skip_to_event(EndElement("spline"));
     }
 
-    fn parse_source(&mut self) {
+    fn parse_source(&mut self) -> Result<Source, String> {
         println!("Parsing <source>");
+
+        let mut source = Source {
+            id: None,
+            name: None,
+            array_element: None
+        };
 
         loop {
             let event = self.next_event();
             match event {
-                Attribute("id", _) => (),
-                Attribute("name", _) => (),
+                Attribute("id", _id) => {
+                    source.id = Some(_id.to_string());
+                },
+                Attribute("name", _name) => {
+                    source.name = Some(_name.to_string());
+                },
                 StartElement("asset") => self.parse_asset(),
                 StartElement("IDREF_array") => self.parse_IDREF_array(),
                 StartElement("Name_array") => self.parse_Name_array(),
                 StartElement("bool_array") => self.parse_bool_array(),
-                StartElement("float_array") => self.parse_float_array(),
+                StartElement("float_array") => match self.parse_float_array() {
+                    Err(error) => return Err(error),
+                    Ok(float_array) => {
+                        source.array_element = Some(float_array);
+                    }
+                },
                 StartElement("int_array") => self.parse_int_array(),
                 StartElement("technique_common") => self.parse_technique_common(),
                 StartElement("technique") => self.parse_technique(),
                 EndElement("source") => break,
-                _ => panic!("Illegal event while parsing <source>: {:?}", event)
+                _ => return Err(format!("Illegal event while parsing <source>: {:?}", event))
             }
         }
+
+        Ok(source)
     }
 
     fn parse_vertices(&mut self) {
@@ -214,10 +339,37 @@ impl<'a> ColladaParser<'a> {
         self.skip_to_event(EndElement("bool_array"));
     }
 
-    fn parse_float_array(&mut self) {
-        println!("Skipping over <float_array> element");
-        println!("Warning: <float_array> is not yet supported by parse_collada");
-        self.skip_to_event(EndElement("float_array"));
+    fn parse_float_array(&mut self) -> Result<ArrayElement, String> {
+        println!("Parsing <float_array>");
+
+        let mut count: usize = 0;
+        let mut float_array: Option<ArrayElement> = None;
+
+        loop {
+            let event = self.next_event();
+            match event {
+                Attribute("count", count_str) => count = usize::from_str(count_str).unwrap(),
+                Attribute("id", _) => (),
+                Attribute("name", _) => (),
+                Attribute("digits", _) => (),
+                Attribute("magnitude", _) => (),
+                TextNode(text) => {
+                    let data = text.words().map(|word| {
+                        let value = match f32::from_str(word) {
+                            Err(error) => return panic!("Error while parsing <float_array>: {}", error), // TODO: Return an error instead of panicking.
+                            Ok(value) => value
+                        };
+                        value
+                    }).collect::<Vec<f32>>();
+
+                    float_array = Some(ArrayElement::Float(data));
+                },
+                EndElement("float_array") => break,
+                _ => return Err(format!("Illegal event while parsing <float_array>: {:?}", event))
+            }
+        }
+
+        Ok(float_array.unwrap())
     }
 
     fn parse_int_array(&mut self) {

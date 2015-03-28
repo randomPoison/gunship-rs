@@ -39,9 +39,9 @@ fn main() {
         Err(why) => panic!("couldn't open {}: {}", file_path.display(), Error::description(&why)),
         Ok(file) => file,
     };
-     match collada::ColladaData::from_file(&mut file) {
+    match collada::ColladaData::from_file(&mut file) {
         Err(why) => panic!(why),
-        Ok(_) => ()
+        Ok(data) => println!("collada data: {:#?}", data)
     };
 
     let mut main_window = MainWindow {
