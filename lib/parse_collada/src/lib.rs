@@ -55,7 +55,8 @@ pub enum PrimitiveType {
 pub struct Source {
     id: Option<String>,
     name: Option<String>,
-    array_element: Option<ArrayElement>
+    array_element: ArrayElement,
+    accessor: Accessor
 }
 
 #[derive(Debug)]
@@ -65,6 +66,14 @@ pub enum ArrayElement {
     Bool,
     Float(Vec<f32>),
     Int
+}
+
+#[derive(Debug)]
+pub struct Accessor {
+    count: usize,
+    offset: u32,
+    source: String,
+    stride: u32
 }
 
 #[derive(Debug)]
@@ -235,20 +244,19 @@ impl<'a> ColladaParser<'a> {
     fn parse_source(&mut self) -> Result<Source, String> {
         println!("Parsing <source>");
 
-        let mut source = Source {
-            id: None,
-            name: None,
-            array_element: None
-        };
+        let mut id: Option<String> = None;
+        let mut name: Option<String> = None;
+        let mut array_element: Option<ArrayElement> = None;
+        let mut accessor: Option<Accessor> = None;
 
         loop {
             let event = self.next_event();
             match event {
                 Attribute("id", _id) => {
-                    source.id = Some(_id.to_string());
+                    id = Some(_id.to_string());
                 },
                 Attribute("name", _name) => {
-                    source.name = Some(_name.to_string());
+                    name = Some(_name.to_string());
                 },
                 StartElement("asset") => self.parse_asset(),
                 StartElement("IDREF_array") => self.parse_IDREF_array(),
@@ -257,18 +265,90 @@ impl<'a> ColladaParser<'a> {
                 StartElement("float_array") => match self.parse_float_array() {
                     Err(error) => return Err(error),
                     Ok(float_array) => {
-                        source.array_element = Some(float_array);
+                        array_element = Some(float_array);
                     }
                 },
                 StartElement("int_array") => self.parse_int_array(),
-                StartElement("technique_common") => self.parse_technique_common(),
+                StartElement("technique_common") => match self.parse_technique_common_source() {
+                    Err(error) => return Err(error),
+                    Ok(_accessor) => {
+                        accessor = Some(_accessor);
+                    }
+                },
                 StartElement("technique") => self.parse_technique(),
                 EndElement("source") => break,
                 _ => return Err(format!("Illegal event while parsing <source>: {:?}", event))
             }
         }
 
-        Ok(source)
+        Ok(Source {
+            id: id,
+            name: name,
+            array_element: array_element.unwrap(),
+            accessor: accessor.unwrap()
+        })
+    }
+
+    fn parse_technique_common_source(&mut self) -> Result<Accessor, String> {
+        println!("Parsing <source><technique_common>");
+
+        let mut accessor: Option<Accessor> = None;
+
+        loop {
+            let event = self.next_event();
+            match event {
+                StartElement("accessor") => match self.parse_accessor() {
+                    Err(error) => return Err(error),
+                    Ok(_accessor) => {
+                        accessor = Some(_accessor);
+                    }
+                },
+                EndElement("technique_common") => break,
+                _ => return Err(format!("Illegal event while parsing <source><technique_common>: {:?}", event))
+            }
+        }
+
+        Ok(accessor.unwrap())
+    }
+
+    fn parse_accessor(&mut self) -> Result<Accessor, String> {
+        println!("Parsing <accessor>");
+
+        let mut accessor = Accessor {
+            count: 0,
+            offset: 0,
+            source: String::new(),
+            stride: 1
+        };
+
+        loop {
+            let event = self.next_event();
+            match event {
+                Attribute("count", count_str) => {
+                    accessor.count = usize::from_str(count_str).unwrap();
+                },
+                Attribute("offset", offset_str) => {
+                    accessor.offset = u32::from_str(offset_str).unwrap();
+                },
+                Attribute("source", source_str) => {
+                    accessor.source.push_str(source_str);
+                },
+                Attribute("stride", stride_str) => {
+                    accessor.stride = u32::from_str(stride_str).unwrap();
+                },
+                StartElement("param") => self.parse_param(),
+                EndElement("accessor") => break,
+                _ => return Err(format!("Illegal event while parsing <accessor>: {:?}", event))
+            }
+        }
+
+        Ok(accessor)
+    }
+
+    fn parse_param(&mut self) {
+        println!("Skipping over <param> element");
+        println!("Warning: <param> is not yet supported by parse_collada");
+        self.skip_to_event(EndElement("param"));
     }
 
     fn parse_vertices(&mut self) {
@@ -348,7 +428,9 @@ impl<'a> ColladaParser<'a> {
         loop {
             let event = self.next_event();
             match event {
-                Attribute("count", count_str) => count = usize::from_str(count_str).unwrap(),
+                Attribute("count", count_str) => {
+                    count = usize::from_str(count_str).unwrap()
+                },
                 Attribute("id", _) => (),
                 Attribute("name", _) => (),
                 Attribute("digits", _) => (),
@@ -361,6 +443,8 @@ impl<'a> ColladaParser<'a> {
                         };
                         value
                     }).collect::<Vec<f32>>();
+
+                    assert!(data.len() == count);
 
                     float_array = Some(ArrayElement::Float(data));
                 },
