@@ -1,9 +1,11 @@
-#![feature(core, io)]
+#![feature(core)]
+
+extern crate gl;
 
 extern crate "bootstrap-rs" as bootstrap;
 #[macro_use]
-extern crate "render_math" as math;
-extern crate gl;
+extern crate "polygon-math" as math;
+extern crate "parse-collada" as collada;
 
 use std::io::prelude::*;
 use std::fs::File;
@@ -23,6 +25,8 @@ use math::matrix::Matrix4;
 use geometry::mesh::Mesh;
 use geometry::face::Face;
 use gl_render::{GLRender, GLMeshData};
+
+use collada::{GeometricElement, ArrayElement, PrimitiveType};
 
 struct MainWindow
 {
@@ -85,36 +89,59 @@ pub fn load_file(path: &str) -> String {
 }
 
 pub fn create_test_mesh(renderer: &GLRender) -> GLMeshData {
+    // load data from COLLADA file
+    let file_path = Path::new("meshes/sphere.dae");
+    let mut file = match File::open(&file_path) {
+        // The `desc` field of `IoError` is a string that describes the error
+        Err(why) => panic!("couldn't open {}: {}", file_path.display(), Error::description(&why)),
+        Ok(file) => file,
+    };
+    let collada_data = match collada::ColladaData::from_file(&mut file) {
+        Err(why) => panic!(why),
+        Ok(data) => data
+    };
 
-    // create sample mesh data
-    let vertex_data: [Point; 9] = [
-        point!( 0.0,  0.0,  0.0), // dummy element because obj indices are 1 bases (because obj is dumb).
-        point!( 1.0, -1.0, -1.0),
-        point!( 1.0, -1.0,  1.0),
-        point!(-1.0, -1.0,  1.0),
-        point!(-1.0, -1.0, -1.0),
-        point!( 1.0,  1.0, -1.0),
-        point!( 1.0,  1.0,  1.0),
-        point!(-1.0,  1.0,  1.0),
-        point!(-1.0,  1.0, -1.0)
-    ];
+    let mesh = match collada_data.library_geometries.geometries[0].data {
+        GeometricElement::Mesh(ref mesh) => mesh,
+        _ => panic!("What even is this shit?")
+    };
 
-    let face_data: [Face; 12] = [
-        face!(4, 2, 1),
-        face!(6, 8, 5),
-        face!(2, 5, 1),
-        face!(3, 6, 2),
-        face!(4, 7, 3),
-        face!(8, 1, 5),
-        face!(4, 3, 2),
-        face!(6, 7, 8),
-        face!(2, 6, 5),
-        face!(3, 7, 6),
-        face!(4, 8, 7),
-        face!(8, 4, 1)
-    ];
+    let vertex_data_raw = match mesh.sources[0].array_element {
+        ArrayElement::Float(ref float_array)  => {
+            float_array.as_slice()
+        },
+        _ => panic!("Thas some bullshit.")
+    };
+    assert!(vertex_data_raw.len() > 0);
 
-    let mesh = Mesh::from_slice(&vertex_data, &face_data);
+    let mut vertex_data: Vec<Point> = Vec::new();
+    for offset in (0..vertex_data_raw.len() / 3) {
+        vertex_data.push(Point::from_slice(&vertex_data_raw[offset * 3..offset * 3 + 3]));
+    }
+    assert!(vertex_data.len() > 0);
+
+    let triangles = match mesh.primitives[0] {
+        PrimitiveType::Triangles(ref triangles) => triangles,
+        _ => panic!("This isn't even cool.")
+    };
+
+    let stride = triangles.inputs.len();
+    let face_data_raw = triangles.primitives.iter().enumerate().filter_map(|(index, &value)| {
+            if index % stride == 0 {
+                Some(value as u32)
+            } else {
+                None
+            }
+        }).collect::<Vec<u32>>();
+    assert!(face_data_raw.len() > 0);
+
+    let mut face_data: Vec<Face> = Vec::new();
+    for offset in (0..face_data_raw.len() / 3) {
+        face_data.push(Face::from_slice(&face_data_raw[offset * 3..offset * 3 + 3]));
+    }
+    assert!(face_data.len() > 0);
+
+    let mesh = Mesh::from_slice(vertex_data.as_slice(), face_data.as_slice());
 
     let frag_src = load_file("shaders/test3D.frag.glsl");
     let vert_src = load_file("shaders/test3D.vert.glsl");

@@ -1,4 +1,4 @@
 [package]
-name = "render_math"
-version = "0.0.1"
+name = "parse-xml"
+version = "0.1.0"
 authors = ["David LeGare <excaliburhissheath@gmail.com>"]

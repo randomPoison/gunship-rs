@@ -12,6 +12,23 @@ pub struct Point {
     pub w: f32
 }
 
+impl Point {
+    pub fn from_slice(data: &[f32]) -> Point {
+        assert!(data.len() == 3 || data.len() == 4);
+
+        Point {
+            x: data[0],
+            y: data[1],
+            z: data[2],
+            w: if data.len() == 4 {
+                data[4]
+            } else {
+                1.0
+            }
+        }
+    }
+}
+
 /// Utility macro for quickly defining hard-coded points
 ///
 /// # Examples
@@ -30,7 +47,7 @@ pub struct Point {
 ///     z: 0.0,
 ///     w: 1.0
 /// };
-/// 
+///
 /// # }
 /// ```
 #[macro_export]

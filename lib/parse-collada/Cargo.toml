@@ -1,0 +1,9 @@
+[package]
+
+name = "parse-collada"
+version = "0.1.0"
+authors = ["David LeGare <excaliburhissheath@gmail.com>"]
+
+[dependencies.parse-xml]
+version = "*"
+path = "../parse-xml"
