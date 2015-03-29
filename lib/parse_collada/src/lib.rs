@@ -12,32 +12,35 @@ use xml::SAXEvents;
 
 #[derive(Debug)]
 pub struct ColladaData {
-    library_geometries: LibraryGeometries
+    pub library_geometries: LibraryGeometries
 }
 
 #[derive(Debug)]
 pub struct LibraryGeometries {
-    id: Option<String>,
-    name: Option<String>,
-    geometries: Vec<Geometry>
+    pub id: Option<String>,
+    pub name: Option<String>,
+    pub geometries: Vec<Geometry>
 }
 
 #[derive(Debug)]
 pub struct Geometry {
-    id: Option<String>,
-    name: Option<String>,
-    data: GeometricElement
+    pub id: Option<String>,
+    pub name: Option<String>,
+    pub data: GeometricElement
 }
 
 #[derive(Debug)]
 pub enum GeometricElement {
     ConvexMesh,
-    Mesh {
-        sources: Vec<Source>,
-        vertices: Vertices,
-        primitives: Vec<PrimitiveType>
-    },
+    Mesh(Mesh),
     Spline
+}
+
+#[derive(Debug)]
+pub struct Mesh {
+    pub sources: Vec<Source>,
+    pub vertices: Vertices,
+    pub primitives: Vec<PrimitiveType>
 }
 
 #[derive(Debug)]
@@ -46,31 +49,34 @@ pub enum PrimitiveType {
     Linestrips,
     Polygons,
     Polylist,
-    Triangles {
-        name: Option<String>,
-        count: usize,
-        material: Option<String>,
-        inputs: Vec<Input>,
-        primitives: Vec<usize>
-    },
+    Triangles(Triangles),
     Trifans,
     Tristrips
 }
 
 #[derive(Debug)]
+pub struct Triangles {
+    pub name: Option<String>,
+    pub count: usize,
+    pub material: Option<String>,
+    pub inputs: Vec<Input>,
+    pub primitives: Vec<usize>
+}
+
+#[derive(Debug)]
 pub struct Input {
-    offset: u32,
-    semantic: String,
-    source: String,
-    set: Option<u32>
+    pub offset: u32,
+    pub semantic: String,
+    pub source: String,
+    pub set: Option<u32>
 }
 
 #[derive(Debug)]
 pub struct Source {
-    id: Option<String>,
-    name: Option<String>,
-    array_element: ArrayElement,
-    accessor: Accessor
+    pub id: Option<String>,
+    pub name: Option<String>,
+    pub array_element: ArrayElement,
+    pub accessor: Accessor
 }
 
 #[derive(Debug)]
@@ -84,10 +90,10 @@ pub enum ArrayElement {
 
 #[derive(Debug)]
 pub struct Accessor {
-    count: usize,
-    offset: u32,
-    source: String,
-    stride: u32
+    pub count: usize,
+    pub offset: u32,
+    pub source: String,
+    pub stride: u32
 }
 
 #[derive(Debug)]
@@ -247,11 +253,11 @@ impl<'a> ColladaParser<'a> {
             }
         }
 
-        Ok(GeometricElement::Mesh {
+        Ok(GeometricElement::Mesh(Mesh {
             sources: sources,
             vertices: vertices,
             primitives: primitives
-        })
+        }))
     }
 
     fn parse_spline(&mut self) {
@@ -439,13 +445,13 @@ impl<'a> ColladaParser<'a> {
             }
         }
 
-        Ok(PrimitiveType::Triangles {
+        Ok(PrimitiveType::Triangles(Triangles {
             name: name,
             count: count,
             material: material,
             inputs: inputs,
             primitives: primitives.unwrap()
-        })
+        }))
     }
 
     fn parse_input(&mut self) -> Result<Input, String> {
@@ -583,12 +589,6 @@ impl<'a> ColladaParser<'a> {
         println!("Skipping over <int_array> element");
         println!("Warning: <int_array> is not yet supported by parse_collada");
         self.skip_to_event(EndElement("int_array"));
-    }
-
-    fn parse_technique_common(&mut self) {
-        println!("Skipping over <technique_common> element");
-        println!("Warning: <technique_common> is not yet supported by parse_collada");
-        self.skip_to_event(EndElement("technique_common"));
     }
 
     fn parse_technique(&mut self) {
