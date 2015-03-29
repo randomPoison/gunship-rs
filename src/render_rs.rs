@@ -90,7 +90,7 @@ pub fn load_file(path: &str) -> String {
 
 pub fn create_test_mesh(renderer: &GLRender) -> GLMeshData {
     // load data from COLLADA file
-    let file_path = Path::new("meshes/cube.dae");
+    let file_path = Path::new("sphere/cube.dae");
     let mut file = match File::open(&file_path) {
         // The `desc` field of `IoError` is a string that describes the error
         Err(why) => panic!("couldn't open {}: {}", file_path.display(), Error::description(&why)),
@@ -122,18 +122,19 @@ pub fn create_test_mesh(renderer: &GLRender) -> GLMeshData {
 
     println!("vertex data has been gathered");
 
-    let face_data_raw = match mesh.primitives[0] {
-        PrimitiveType::Triangles(ref triangles) => {
-            triangles.primitives.iter().enumerate().filter_map(|(index, &value)| {
-                if index % 3 == 0 {
-                    Some(value as u32)
-                } else {
-                    None
-                }
-            }).collect::<Vec<u32>>()
-        },
+    let triangles = match mesh.primitives[0] {
+        PrimitiveType::Triangles(ref triangles) => triangles,
         _ => panic!("This isn't even cool.")
     };
+
+    let stride = triangles.inputs.len();
+    let face_data_raw = triangles.primitives.iter().enumerate().filter_map(|(index, &value)| {
+            if index % stride == 0 {
+                Some(value as u32)
+            } else {
+                None
+            }
+        }).collect::<Vec<u32>>();
     assert!(face_data_raw.len() > 0);
 
     let mut face_data: Vec<Face> = Vec::new();
