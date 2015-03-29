@@ -1,4 +1,4 @@
 [package]
-name = "render_math"
+name = "polygon-math"
 version = "0.0.1"
 authors = ["David LeGare <excaliburhissheath@gmail.com>"]

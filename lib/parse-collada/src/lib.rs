@@ -1,6 +1,6 @@
 #![feature(core, str_words)]
 
-extern crate "parse_xml" as xml;
+extern crate "parse-xml" as xml;
 
 use std::fs::File;
 use std::str::FromStr;
@@ -131,8 +131,6 @@ impl<'a> ColladaParser<'a> {
     }
 
     fn parse_library_geometries(&mut self) -> Result<LibraryGeometries, String> {
-        println!("Parsing <library_geometries>");
-
         let mut library_geometries = LibraryGeometries {
             id: None,
             name: None,
@@ -165,13 +163,10 @@ impl<'a> ColladaParser<'a> {
     }
 
     fn parse_asset(&mut self) {
-        println!("Skipping over <asset> tag");
         self.skip_to_event(EndElement("asset"));
     }
 
     fn parse_geometry(&mut self) -> Result<Geometry, String> {
-        println!("Parsing <geometry>");
-
         let mut id: Option<String> = None;
         let mut name: Option<String> = None;
         let mut data: Option<GeometricElement> = None;
@@ -208,7 +203,6 @@ impl<'a> ColladaParser<'a> {
     }
 
     fn parse_extra(&mut self) {
-        println!("Skipping over <extra> tag");
         self.skip_to_event(EndElement("extra"));
     }
 
@@ -219,8 +213,6 @@ impl<'a> ColladaParser<'a> {
     }
 
     fn parse_mesh(&mut self) -> Result<GeometricElement, String> {
-        println!("Parsing <mesh>");
-
         let mut sources = Vec::new();
         let vertices = Vertices;
         let mut primitives = Vec::new();
@@ -267,8 +259,6 @@ impl<'a> ColladaParser<'a> {
     }
 
     fn parse_source(&mut self) -> Result<Source, String> {
-        println!("Parsing <source>");
-
         let mut id: Option<String> = None;
         let mut name: Option<String> = None;
         let mut array_element: Option<ArrayElement> = None;
@@ -315,8 +305,6 @@ impl<'a> ColladaParser<'a> {
     }
 
     fn parse_technique_common_source(&mut self) -> Result<Accessor, String> {
-        println!("Parsing <source><technique_common>");
-
         let mut accessor: Option<Accessor> = None;
 
         loop {
@@ -337,8 +325,6 @@ impl<'a> ColladaParser<'a> {
     }
 
     fn parse_accessor(&mut self) -> Result<Accessor, String> {
-        println!("Parsing <accessor>");
-
         let mut accessor = Accessor {
             count: 0,
             offset: 0,
@@ -407,8 +393,6 @@ impl<'a> ColladaParser<'a> {
     }
 
     fn parse_triangles(&mut self) -> Result<PrimitiveType, String> {
-        println!("Parsing <triangles>");
-
         let mut name: Option<String> = None;
         let mut count: usize = 0;
         let mut material: Option<String> = None;
@@ -455,8 +439,6 @@ impl<'a> ColladaParser<'a> {
     }
 
     fn parse_input(&mut self) -> Result<Input, String> {
-        println!("parsing <input>");
-
         let mut input = Input {
             offset: u32::max_value(),
             semantic: String::new(),
@@ -490,8 +472,6 @@ impl<'a> ColladaParser<'a> {
     }
 
     fn parse_p(&mut self) -> Result<Vec<usize>, String> {
-        println!("Parsing <p>");
-
         let mut primitives: Option<Vec<usize>> = None;
 
         loop {
@@ -549,8 +529,6 @@ impl<'a> ColladaParser<'a> {
     }
 
     fn parse_float_array(&mut self) -> Result<ArrayElement, String> {
-        println!("Parsing <float_array>");
-
         let mut count: usize = 0;
         let mut float_array: Option<ArrayElement> = None;
 

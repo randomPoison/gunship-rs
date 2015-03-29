@@ -4,8 +4,8 @@ extern crate gl;
 
 extern crate "bootstrap-rs" as bootstrap;
 #[macro_use]
-extern crate "render_math" as math;
-extern crate "parse_collada" as collada;
+extern crate "polygon-math" as math;
+extern crate "parse-collada" as collada;
 
 use std::io::prelude::*;
 use std::fs::File;
@@ -90,7 +90,7 @@ pub fn load_file(path: &str) -> String {
 
 pub fn create_test_mesh(renderer: &GLRender) -> GLMeshData {
     // load data from COLLADA file
-    let file_path = Path::new("sphere/cube.dae");
+    let file_path = Path::new("meshes/sphere.dae");
     let mut file = match File::open(&file_path) {
         // The `desc` field of `IoError` is a string that describes the error
         Err(why) => panic!("couldn't open {}: {}", file_path.display(), Error::description(&why)),
@@ -120,8 +120,6 @@ pub fn create_test_mesh(renderer: &GLRender) -> GLMeshData {
     }
     assert!(vertex_data.len() > 0);
 
-    println!("vertex data has been gathered");
-
     let triangles = match mesh.primitives[0] {
         PrimitiveType::Triangles(ref triangles) => triangles,
         _ => panic!("This isn't even cool.")
@@ -142,8 +140,6 @@ pub fn create_test_mesh(renderer: &GLRender) -> GLMeshData {
         face_data.push(Face::from_slice(&face_data_raw[offset * 3..offset * 3 + 3]));
     }
     assert!(face_data.len() > 0);
-
-    println!("face data has been gathered");
 
     let mesh = Mesh::from_slice(vertex_data.as_slice(), face_data.as_slice());
 
