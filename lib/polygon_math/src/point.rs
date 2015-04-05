@@ -4,7 +4,7 @@
 /// with an `x`, `y`, and `z` position, as well as
 /// a `w` homogeneous coordinate for the purposes
 /// of linear algebra calculations.
-#[repr(C)] #[derive(Copy)]
+#[repr(C)]
 pub struct Point {
     pub x: f32,
     pub y: f32,

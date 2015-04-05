@@ -1,9 +1,9 @@
 [package]
 
-name = "parse-collada"
+name = "parse_collada"
 version = "0.1.0"
 authors = ["David LeGare <excaliburhissheath@gmail.com>"]
 
-[dependencies.parse-xml]
+[dependencies.parse_xml]
 version = "*"
-path = "../parse-xml"
+path = "../parse_xml"

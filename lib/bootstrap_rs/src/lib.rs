@@ -1,5 +1,3 @@
-#![crate_type = "lib"]
-#![crate_name = "bootstrap-rs"]
 #![feature(core, collections)]
 
 extern crate gl;

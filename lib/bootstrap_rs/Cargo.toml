@@ -1,5 +1,5 @@
 [package]
-name = "bootstrap-rs"
+name = "bootstrap_rs"
 version = "0.0.0"
 authors = ["David LeGare <excaliburhissheath@gmail.com>"]
 

@@ -1,6 +1,6 @@
 #![feature(core, str_words)]
 
-extern crate "parse-xml" as xml;
+extern crate parse_xml as xml;
 
 use std::fs::File;
 use std::str::FromStr;

@@ -1,6 +1,6 @@
 use std::mem;
 use std::ptr;
-use std::collections::vec_deque::RingBuf;
+use std::collections::VecDeque;
 use std::ops::DerefMut;
 
 use windows::user32;
@@ -10,7 +10,7 @@ use windows::winapi::{
     CS_HREDRAW, CS_VREDRAW, CS_OWNDC, CW_USEDEFAULT,
     WS_OVERLAPPEDWINDOW, WS_VISIBLE,
     MSG, POINT,
-    WM_ACTIVATEAPP, WM_CREATE, WM_CLOSE, WM_DESTROY, WM_PAINT
+    WM_ACTIVATEAPP, WM_CLOSE, WM_DESTROY
 };
 use ToCU16Str;
 use window::Message;
@@ -22,7 +22,7 @@ static WINDOW_PROP: &'static str = "window";
 pub struct Window {
     pub handle: HWND,
     pub dc: HDC,
-    messages: RingBuf<Message>
+    messages: VecDeque<Message>
 }
 
 impl Window {
@@ -76,7 +76,7 @@ impl Window {
             Window {
                 handle: handle,
                 dc: dc,
-                messages: RingBuf::new()
+                messages: VecDeque::new()
             }
         });
         let window_address = (window.deref_mut() as *mut Window) as LPVOID;

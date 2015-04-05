@@ -2,7 +2,7 @@
 ///
 /// A face is represented by exactly 3 indices into an array of vertices. render-rs does not
 /// yet (and likely never will) support faces with more than three vertices.
-#[repr(C)] #[derive(Copy)]
+#[repr(C)]
 pub struct Face {
     pub indices: [u32; 3]
 }

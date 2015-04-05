@@ -1,11 +1,10 @@
 use std::cmp::{PartialEq, Eq};
 use std::ops::{Index, IndexMut, Mul};
-use std::num::Float;
 
 /// A 4x4 matrix that can be used to transform 3D points and vectors.
 ///
 /// Matrices are row-major.
-#[repr(C)] #[derive(Copy)] #[derive(Debug)]
+#[repr(C)] #[derive(Debug, Clone, Copy)]
 pub struct Matrix4 {
     data: [f32; 16]
 }
@@ -98,16 +97,16 @@ impl Eq for Matrix4 {}
 impl Index<(usize, usize)> for Matrix4 {
     type Output = f32;
 
-    fn index<'a>(&'a self, index: &(usize, usize)) -> &'a f32 {
-        let &(row, col) = index;
+    fn index<'a>(&'a self, index: (usize, usize)) -> &'a f32 {
+        let (row, col) = index;
         assert!(row < 4 && col < 4);
         &self.data[row * 4 + col]
     }
 }
 
 impl IndexMut<(usize, usize)> for Matrix4 {
-    fn index_mut<'a>(&'a mut self, index: &(usize, usize)) -> &'a mut f32 {
-        let &(row, col) = index;
+    fn index_mut<'a>(&'a mut self, index: (usize, usize)) -> &'a mut f32 {
+        let (row, col) = index;
         assert!(row < 4 && col < 4);
         &mut self.data[row * 4 + col]
     }

@@ -1,11 +1,11 @@
-#![feature(core)]
+#![feature(core, convert)]
 
 extern crate gl;
 
-extern crate "bootstrap-rs" as bootstrap;
+extern crate bootstrap_rs as bootstrap;
 #[macro_use]
-extern crate "polygon-math" as math;
-extern crate "parse-collada" as collada;
+extern crate polygon_math as math;
+extern crate parse_collada as collada;
 
 use std::io::prelude::*;
 use std::fs::File;

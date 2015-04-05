@@ -1,6 +1,6 @@
 [package]
 
-name = "polygon-rs"
+name = "polygon_rs"
 version = "0.0.1"
 authors = ["David LeGare <excaliburhissheath@gmail.com>"]
 
@@ -10,14 +10,14 @@ name = "polygon_rs"
 [dependencies.gl]
 git = "https://github.com/bjz/gl-rs"
 
-[dependencies.bootstrap-rs]
+[dependencies.bootstrap_rs]
 version = "*"
-path = "lib/bootstrap-rs"
+path = "lib/bootstrap_rs"
 
-[dependencies.polygon-math]
+[dependencies.polygon_math]
 version = "*"
-path = "lib/polygon-math"
+path = "lib/polygon_math"
 
-[dependencies.parse-collada]
+[dependencies.parse_collada]
 version = "*"
-path = "lib/parse-collada"
+path = "lib/parse_collada"
