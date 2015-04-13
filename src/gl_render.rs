@@ -2,7 +2,6 @@ use std::ptr;
 use std::mem;
 use std::str;
 use std::ffi::CString;
-use std::f32::consts::PI;
 
 use gl;
 use gl::types::*;
@@ -11,10 +10,11 @@ use bootstrap::window::Window;
 use bootstrap::gl_utils::{self, GLContext};
 
 use math::point::Point;
-use math::vector::{Vector3, vector3};
 use math::matrix::Matrix4;
+
 use geometry::mesh::Mesh;
 use geometry::face::Face;
+use camera::Camera;
 
 #[allow(dead_code)]
 pub struct GLRender {
@@ -27,62 +27,6 @@ pub struct GLMeshData {
     index_buffer: GLuint,
     shader: GLuint,
     element_count: usize
-}
-
-pub struct Camera
-{
-    fov: f32,
-    aspect: f32,
-    near: f32,
-    far: f32,
-
-    position: Point,
-    rotation: Matrix4
-}
-
-impl Camera
-{
-    pub fn look_at(&mut self, interest: Point, up: Vector3) {
-        let forward = interest - self.position;
-        let forward = forward.normalized();
-        let up = up.normalized();
-
-        let right = Vector3::cross(forward, up);
-        let up = Vector3::cross(right, forward);
-
-        let mut look_matrix = Matrix4::identity();
-
-        look_matrix[(0, 0)] = right.x;
-        look_matrix[(1, 0)] = right.y;
-        look_matrix[(2, 0)] = right.z;
-
-        look_matrix[(0, 1)] = up.x;
-        look_matrix[(1, 1)] = up.y;
-        look_matrix[(2, 1)] = up.z;
-
-        look_matrix[(0, 2)] = -forward.x;
-        look_matrix[(1, 2)] = -forward.y;
-        look_matrix[(2, 2)] = -forward.z;
-
-        self.rotation = look_matrix;
-    }
-
-    pub fn view_transform(&self) -> Matrix4 {
-        self.rotation.transpose() * Matrix4::from_translation(-self.position.x, -self.position.y, -self.position.z)
-    }
-
-    pub fn projection_matrix(&self) -> Matrix4 {
-        let height = 2.0 * self.near * (self.fov * 0.5).tan();
-        let width = self.aspect * height;
-
-        let mut projection = Matrix4::new();
-        projection[(0, 0)] = 2.0 * self.near / width;
-        projection[(1, 1)] = 2.0 * self.near / height;
-        projection[(2, 2)] = -(self.far + self.near) / (self.far - self.near);
-        projection[(2, 3)] = -2.0 * self.far * self.near / (self.far - self.near);
-        projection[(3, 2)] = -1.0;
-        projection
-    }
 }
 
 // TODO: This should be GLRender::new() for consistency.
@@ -164,18 +108,7 @@ impl GLRender {
     }
 
     /// TODO: make this a member of GLMeshData?
-    pub fn draw_mesh(&self, mesh: &GLMeshData, model_transform: Matrix4) { unsafe {
-        // Setup test camera.
-        let mut camera = Camera {
-            fov: PI / 3.0,
-            aspect: 1.0,
-            near: 0.001,
-            far: 100.0,
-
-            position: point!(5.0, 5.0, 5.0),
-            rotation: Matrix4::from_rotation(0.0, 0.0, 0.0)
-        };
-        camera.look_at(point!(0.0, 0.0, 0.0), vector3(0.0, 1.0, 0.0));
+    pub fn draw_mesh(&self, mesh: &GLMeshData, model_transform: Matrix4, camera: &Camera) { unsafe {
         let view_transform = camera.view_transform();
         let projection = camera.projection_matrix();
 

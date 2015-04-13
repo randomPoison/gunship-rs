@@ -19,12 +19,15 @@ use bootstrap::window::Message::*;
 #[macro_use]
 mod geometry;
 mod gl_render;
+mod camera;
 
 use math::point::Point;
+use math::vector::{vector3};
 use math::matrix::Matrix4;
 use geometry::mesh::Mesh;
 use geometry::face::Face;
 use gl_render::{GLRender, GLMeshData};
+use camera::Camera;
 
 use collada::{GeometricElement, ArrayElement, PrimitiveType};
 
@@ -48,6 +51,17 @@ fn main() {
     let mut mesh_transform = Matrix4::from_rotation(PI * 0.13, 0.0, PI * 0.36); //Matrix4::from_translation(0.5, 0.0, 0.0);
     let frame_rotation = Matrix4::from_rotation(0.0, PI * 0.0001, 0.0);
 
+    let mut camera = Camera {
+        fov: PI / 3.0,
+        aspect: 1.0,
+        near: 0.001,
+        far: 100.0,
+
+        position: point!(5.0, 5.0, 5.0),
+        rotation: Matrix4::from_rotation(0.0, 0.0, 0.0)
+    };
+    camera.look_at(point!(0.0, 0.0, 0.0), vector3(0.0, 1.0, 0.0));
+
     loop {
         window.handle_messages();
         loop {
@@ -65,7 +79,7 @@ fn main() {
         }
 
         mesh_transform = frame_rotation * mesh_transform;
-        renderer.draw_mesh(&mesh, mesh_transform);
+        renderer.draw_mesh(&mesh, mesh_transform, &camera);
 
         if main_window.close {
             break;
@@ -90,7 +104,7 @@ pub fn load_file(path: &str) -> String {
 
 pub fn create_test_mesh(renderer: &GLRender) -> GLMeshData {
     // load data from COLLADA file
-    let file_path = Path::new("meshes/sphere.dae");
+    let file_path = Path::new("meshes/cube.dae");
     let mut file = match File::open(&file_path) {
         // The `desc` field of `IoError` is a string that describes the error
         Err(why) => panic!("couldn't open {}: {}", file_path.display(), Error::description(&why)),
