@@ -2,6 +2,7 @@ use std::ptr;
 use std::mem;
 use std::str;
 use std::ffi::CString;
+use std::f32::consts::PI;
 
 use gl;
 use gl::types::*;
@@ -25,6 +26,24 @@ pub struct GLMeshData {
     index_buffer: GLuint,
     shader: GLuint,
     element_count: usize
+}
+
+pub struct Camera
+{
+    width: f32,
+    height: f32,
+    near: f32,
+    far: f32,
+
+    position: Point,
+    rotation: Matrix4
+}
+
+impl Camera
+{
+    pub fn view_transform(&self) -> Matrix4 {
+        self.rotation.transpose() * Matrix4::from_translation(-self.position.x, -self.position.y, -self.position.z)
+    }
 }
 
 // TODO: This should be GLRender::new() for consistency.
@@ -104,17 +123,28 @@ impl GLRender {
     }
 
     /// TODO: make this a member of GLMeshData?
-    pub fn draw_mesh(&self, mesh: &GLMeshData, transform: Matrix4) { unsafe {
+    pub fn draw_mesh(&self, mesh: &GLMeshData, model_transform: Matrix4) { unsafe {
+        // Setup test camera.
+        let camera = Camera {
+            width: 800.0,
+            height: 800.0,
+            near: 0.1,
+            far: 1000.0,
 
-        // Bind the buffers for the mesh
+            position: point!(0.5, 0.0, 0.0),
+            rotation: Matrix4::from_rotation(0.0, 0.0, PI * 0.5)
+        };
+        let view_transform = camera.view_transform();
+
+        // Bind the buffers for the mesh.
         gl::BindVertexArray(mesh.array_buffer);
         gl::BindBuffer(gl::ARRAY_BUFFER, mesh.vertex_buffer);
         gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, mesh.index_buffer);
 
-        // Set the shader to use
+        // Set the shader to use.
         gl::UseProgram(mesh.shader);
 
-        // Specify the layout of the vertex data
+        // Specify the layout of the vertex data.
         let vertex_pos_location = gl::GetAttribLocation(
             mesh.shader,
             CString::new("vertexPosition").unwrap().as_ptr()); // TODO: Write a helper to make using cstrings easier.
@@ -127,14 +157,21 @@ impl GLRender {
             ptr::null());
         gl::EnableVertexAttribArray(vertex_pos_location as GLuint);
 
-        let transform_location =
+        let model_transform_location =
             gl::GetUniformLocation(mesh.shader, CString::new("modelTransform").unwrap().as_ptr());
-        gl::UniformMatrix4fv(transform_location,
+        gl::UniformMatrix4fv(model_transform_location,
                              1,
                              gl::TRUE,
-                             transform.raw_data());
+                             model_transform.raw_data());
 
-        // TODO don't clear for every mesh
+        let view_transform_location =
+            gl::GetUniformLocation(mesh.shader, CString::new("viewTransform").unwrap().as_ptr());
+        gl::UniformMatrix4fv(view_transform_location,
+                             1,
+                             gl::TRUE,
+                             view_transform.raw_data());
+
+        // TODO Don't clear for every mesh.
         gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
 
         gl::DrawElements(gl::TRIANGLES,

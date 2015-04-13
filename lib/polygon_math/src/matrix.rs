@@ -66,11 +66,23 @@ impl Matrix4 {
         z_rot * (y_rot * x_rot)
     }
 
+    pub fn transpose(&self) -> Matrix4 {
+        let mut transpose = *self;
+        for row in 0..4 {
+            for col in (row + 1)..4
+            {
+                let temp = transpose[(row, col)];
+                transpose[(row, col)] = transpose[(col, row)];
+                transpose[(col, row)] = temp;
+            }
+        }
+        transpose
+    }
+
     /// Get the matrix data as a raw array.
     ///
-    /// This is meant to be used for ffi and when passing
-    /// matrix data to the graphics card, it should not
-    /// be used to directly manipulate the contents of the matrix.
+    /// This is meant to be used for ffi and when passing matrix data to the graphics card,
+    /// it should not be used to directly manipulate the contents of the matrix.
     pub unsafe fn raw_data(&self) -> *const f32
     {
         &self.data[0]
