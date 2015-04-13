@@ -1,4 +1,4 @@
-#![feature(core, convert)]
+#![feature(convert)]
 
 extern crate gl;
 
@@ -106,9 +106,9 @@ pub fn create_test_mesh(renderer: &GLRender) -> GLMeshData {
         _ => panic!("What even is this shit?")
     };
 
-    let vertex_data_raw = match mesh.sources[0].array_element {
+    let vertex_data_raw: &[f32] = match mesh.sources[0].array_element {
         ArrayElement::Float(ref float_array)  => {
-            float_array.as_slice()
+            float_array.as_ref()
         },
         _ => panic!("Thas some bullshit.")
     };
@@ -141,12 +141,12 @@ pub fn create_test_mesh(renderer: &GLRender) -> GLMeshData {
     }
     assert!(face_data.len() > 0);
 
-    let mesh = Mesh::from_slice(vertex_data.as_slice(), face_data.as_slice());
+    let mesh = Mesh::from_slice(vertex_data.as_ref(), face_data.as_ref());
 
     let frag_src = load_file("shaders/test3D.frag.glsl");
     let vert_src = load_file("shaders/test3D.vert.glsl");
 
     renderer.gen_mesh(&mesh,
-                      vert_src.as_slice(),
-                      frag_src.as_slice())
+                      vert_src.as_ref(),
+                      frag_src.as_ref())
 }

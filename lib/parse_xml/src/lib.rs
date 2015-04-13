@@ -1,4 +1,4 @@
-#![feature(core, unicode)]
+#![feature(unicode)]
 
 extern crate unicode;
 
@@ -7,8 +7,7 @@ mod test;
 
 use std::io::prelude::*;
 use std::fs::File;
-use std::str::Graphemes;
-use std::iter::Enumerate;
+use std::str::GraphemeIndices;
 use unicode::str::UnicodeStr;
 
 use XMLEvent::*;
@@ -73,7 +72,7 @@ impl XMLParser {
     pub fn parse<'a>(&'a self) -> SAXEvents<'a> {
         SAXEvents {
             parser: self,
-            text_enumerator: self.raw_text.graphemes(true).enumerate(),
+            text_enumerator: self.raw_text.grapheme_indices(true),
             element_stack: vec![StartDocument]
         }
     }
@@ -97,7 +96,7 @@ enum XMLElement<'a> {
 /// items given by `SAXEvents` is dependent on the parser they came from.
 pub struct SAXEvents<'a> {
     parser: &'a XMLParser,
-    text_enumerator: Enumerate<Graphemes<'a>>,
+    text_enumerator: GraphemeIndices<'a>,
     element_stack: Vec<XMLElement<'a>>
 }
 
@@ -112,7 +111,7 @@ impl<'a> SAXEvents<'a> {
     fn parse_document_start(&mut self) -> XMLEvent<'a> {
         let (tag_name, tag_type) = match self.text_enumerator.next() {
             None => return ParseError("XML document must have a top level element.".to_string()),
-            Some((_, grapheme)) => match grapheme.as_slice() {
+            Some((_, grapheme)) => match grapheme.as_ref() {
                 "<" => {
                     // determine the name of the top level element
                     match self.parse_tag_name() {

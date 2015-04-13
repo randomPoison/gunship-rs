@@ -1,4 +1,4 @@
-#![feature(core, str_words)]
+#![feature(str_words)]
 
 extern crate parse_xml as xml;
 
