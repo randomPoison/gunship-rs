@@ -1,10 +1,14 @@
+use std::ops::{Sub};
+
+use vector::{vector3, Vector3};
+
 /// A point in 3D space.
 ///
 /// Points are represented as cartesian coordinates
 /// with an `x`, `y`, and `z` position, as well as
 /// a `w` homogeneous coordinate for the purposes
 /// of linear algebra calculations.
-#[repr(C)]
+#[repr(C)] #[derive(Debug, Clone, Copy)]
 pub struct Point {
     pub x: f32,
     pub y: f32,
@@ -26,6 +30,14 @@ impl Point {
                 1.0
             }
         }
+    }
+}
+
+impl Sub for Point {
+    type Output = Vector3;
+
+    fn sub(self, rhs: Self) -> Vector3 {
+        vector3(self.x - rhs.x, self.y - rhs.y, self.z - rhs.z)
     }
 }
 

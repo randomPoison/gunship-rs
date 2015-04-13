@@ -11,8 +11,23 @@ pub struct Matrix4 {
 
 impl Matrix4 {
 
-    /// Create a new identity matrix.
+    /// Create a new empy matrix.
+    ///
+    /// The result matrix is filled entirely with zeroes, it is NOT an identity
+    /// matrix. use Matrix4::identity() to get a new identit matrix.
     pub fn new() -> Matrix4 {
+        Matrix4 {
+            data: [
+                0.0, 0.0, 0.0, 0.0,
+                0.0, 0.0, 0.0, 0.0,
+                0.0, 0.0, 0.0, 0.0,
+                0.0, 0.0, 0.0, 0.0
+            ]
+        }
+    }
+
+    /// Create a new identity matrix.
+    pub fn identity() -> Matrix4 {
         Matrix4 {
             data: [
                 1.0, 0.0, 0.0, 0.0,

@@ -11,6 +11,7 @@ use bootstrap::window::Window;
 use bootstrap::gl_utils::{self, GLContext};
 
 use math::point::Point;
+use math::vector::{Vector3, vector3};
 use math::matrix::Matrix4;
 use geometry::mesh::Mesh;
 use geometry::face::Face;
@@ -30,8 +31,8 @@ pub struct GLMeshData {
 
 pub struct Camera
 {
-    width: f32,
-    height: f32,
+    fov: f32,
+    aspect: f32,
     near: f32,
     far: f32,
 
@@ -41,8 +42,46 @@ pub struct Camera
 
 impl Camera
 {
+    pub fn look_at(&mut self, interest: Point, up: Vector3) {
+        let forward = interest - self.position;
+        let forward = forward.normalized();
+        let up = up.normalized();
+
+        let right = Vector3::cross(forward, up);
+        let up = Vector3::cross(right, forward);
+
+        let mut look_matrix = Matrix4::identity();
+
+        look_matrix[(0, 0)] = right.x;
+        look_matrix[(1, 0)] = right.y;
+        look_matrix[(2, 0)] = right.z;
+
+        look_matrix[(0, 1)] = up.x;
+        look_matrix[(1, 1)] = up.y;
+        look_matrix[(2, 1)] = up.z;
+
+        look_matrix[(0, 2)] = -forward.x;
+        look_matrix[(1, 2)] = -forward.y;
+        look_matrix[(2, 2)] = -forward.z;
+
+        self.rotation = look_matrix;
+    }
+
     pub fn view_transform(&self) -> Matrix4 {
         self.rotation.transpose() * Matrix4::from_translation(-self.position.x, -self.position.y, -self.position.z)
+    }
+
+    pub fn projection_matrix(&self) -> Matrix4 {
+        let height = 2.0 * self.near * (self.fov * 0.5).tan();
+        let width = self.aspect * height;
+
+        let mut projection = Matrix4::new();
+        projection[(0, 0)] = 2.0 * self.near / width;
+        projection[(1, 1)] = 2.0 * self.near / height;
+        projection[(2, 2)] = -(self.far + self.near) / (self.far - self.near);
+        projection[(2, 3)] = -2.0 * self.far * self.near / (self.far - self.near);
+        projection[(3, 2)] = -1.0;
+        projection
     }
 }
 
@@ -60,6 +99,8 @@ pub fn init(window: &Window) -> GLRender {
 
         // Enable backface culling
         gl::Enable(gl::CULL_FACE);
+
+        gl::Viewport(0, 0, 800, 800);
     }
 
     GLRender {
@@ -125,16 +166,18 @@ impl GLRender {
     /// TODO: make this a member of GLMeshData?
     pub fn draw_mesh(&self, mesh: &GLMeshData, model_transform: Matrix4) { unsafe {
         // Setup test camera.
-        let camera = Camera {
-            width: 800.0,
-            height: 800.0,
-            near: 0.1,
-            far: 1000.0,
+        let mut camera = Camera {
+            fov: PI / 3.0,
+            aspect: 1.0,
+            near: 0.001,
+            far: 100.0,
 
-            position: point!(0.5, 0.0, 0.0),
-            rotation: Matrix4::from_rotation(0.0, 0.0, PI * 0.5)
+            position: point!(5.0, 5.0, 5.0),
+            rotation: Matrix4::from_rotation(0.0, 0.0, 0.0)
         };
+        camera.look_at(point!(0.0, 0.0, 0.0), vector3(0.0, 1.0, 0.0));
         let view_transform = camera.view_transform();
+        let projection = camera.projection_matrix();
 
         // Bind the buffers for the mesh.
         gl::BindVertexArray(mesh.array_buffer);
@@ -170,6 +213,21 @@ impl GLRender {
                              1,
                              gl::TRUE,
                              view_transform.raw_data());
+
+        let projection_transform_location =
+            gl::GetUniformLocation(mesh.shader, CString::new("projectionTransform").unwrap().as_ptr());
+        gl::UniformMatrix4fv(projection_transform_location,
+                             1,
+                             gl::TRUE,
+                             projection.raw_data());
+
+        let model_view_projection = projection * ( view_transform * model_transform );
+        let model_view_projection_location =
+            gl::GetUniformLocation(mesh.shader, CString::new("modelViewProjection").unwrap().as_ptr());
+        gl::UniformMatrix4fv(model_view_projection_location,
+                             1,
+                             gl::TRUE,
+                             model_view_projection.raw_data());
 
         // TODO Don't clear for every mesh.
         gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
