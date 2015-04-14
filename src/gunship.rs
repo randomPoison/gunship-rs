@@ -58,7 +58,9 @@ fn main() {
                         Activate => (),
                         Close => close = true,
                         Destroy => (),
-                        Paint => ()
+                        Paint => (),
+                        KeyUp(key) => println!("Key up: {:?}", key),
+                        KeyDown(key) => println!("Key down: {:?}", key)
                     }
                 },
                 None => break

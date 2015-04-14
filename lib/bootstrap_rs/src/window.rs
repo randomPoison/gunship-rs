@@ -1,10 +1,13 @@
 #[cfg(target_family = "windows")]
 pub use windows::window::Window;
+pub use input::ScanCode;
 
 #[derive(Debug)]
 pub enum Message {
     Activate,
     Close,
     Destroy,
-    Paint
+    Paint,
+    KeyUp(ScanCode),
+    KeyDown(ScanCode)
 }

@@ -10,6 +10,7 @@ pub use windows::init::init;
 
 pub mod window;
 pub mod gl_utils;
+pub mod input;
 
 pub trait ToCU16Str {
     fn to_c_u16(&self) -> Vec<u16>;

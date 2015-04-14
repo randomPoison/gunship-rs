@@ -2,19 +2,15 @@ use std::mem;
 use std::ptr;
 use std::collections::VecDeque;
 use std::ops::DerefMut;
+use std::num::FromPrimitive;
 
 use windows::user32;
-use windows::winapi::{
-    HWND, HDC, HINSTANCE, UINT, WPARAM, LPARAM, LRESULT, LPVOID,
-    WNDCLASSEXW,
-    CS_HREDRAW, CS_VREDRAW, CS_OWNDC, CW_USEDEFAULT,
-    WS_OVERLAPPED, WS_CAPTION, WS_SYSMENU, WS_MINIMIZEBOX, WS_MAXIMIZEBOX, WS_VISIBLE,
-    MSG, POINT,
-    WM_ACTIVATEAPP, WM_CLOSE, WM_DESTROY
-};
+use windows::winapi::*;
 use ToCU16Str;
 use window::Message;
 use window::Message::*;
+use input::ScanCode;
+use input::ScanCode::*;
 
 static CLASS_NAME: &'static str = "bootstrap";
 static WINDOW_PROP: &'static str = "window";
@@ -139,9 +135,23 @@ fn message_callback(
             WM_CLOSE => window.messages.push_back(Close),
             WM_DESTROY => window.messages.push_back(Destroy),
             //WM_PAINT => window.messages.push_back(Paint), // TODO We need a user defined window proc to allow painting outside of the main loop.
+            WM_SYSKEYDOWN | WM_KEYDOWN => window.messages.push_back(KeyDown(convert_windows_scancode(wParam, lParam))),
+            WM_SYSKEYUP | WM_KEYUP => window.messages.push_back(KeyUp(convert_windows_scancode(wParam, lParam))),
             _ => ()
         }
     }
 
     user32::DefWindowProcW(hwnd, uMsg, wParam, lParam)
+}
+
+fn convert_windows_scancode(wParam: WPARAM, lParam: LPARAM) -> ScanCode {
+    // Keys in the ascii range get mapped directly.
+    let key_code = wParam;// as char;
+    if (key_code >= 'A' as WPARAM && key_code <= 'Z' as WPARAM)
+    || (key_code >= '0' as WPARAM && key_code <= '9' as WPARAM) {
+        return ScanCode::from_u64(wParam).expect("Non-ascii scancode is somehow in ascii range?")
+    }
+
+    println!("Unrecognized key press: {}", wParam);
+    Unsupported
 }
