@@ -1,4 +1,4 @@
-use std::ops::{Sub};
+use std::ops::{Sub, Add};
 
 use vector::{vector3, Vector3};
 
@@ -31,6 +31,10 @@ impl Point {
             }
         }
     }
+
+    pub fn origin() -> Point {
+        point(0.0, 0.0, 0.0)
+    }
 }
 
 impl Sub for Point {
@@ -41,16 +45,28 @@ impl Sub for Point {
     }
 }
 
-/// Utility macro for quickly defining hard-coded points
+impl Add<Vector3> for Point {
+    type Output = Point;
+
+    fn add(self, rhs: Vector3) -> Point {
+        point(self.x + rhs.x, self.y + rhs.y, self.z + rhs.z)
+    }
+}
+
+impl Sub<Vector3> for Point {
+    type Output = Point;
+
+    fn sub(self, rhs: Vector3) -> Point {
+        point(self.x - rhs.x, self.y - rhs.y, self.z - rhs.z)
+    }
+}
+
+/// Utility for quickly defining hard-coded points.
 ///
 /// # Examples
 ///
 /// ```rust
-/// # #[macro_use] extern crate "render_math" as math;
-/// # use math::point::Point;
-/// # fn main() {
-///
-/// let point = point!(0.0, 0.0, 0.0);
+/// let origin = point(0.0, 0.0, 0.0);
 ///
 /// // equivalent to:
 /// let point = Point {
@@ -59,17 +75,12 @@ impl Sub for Point {
 ///     z: 0.0,
 ///     w: 1.0
 /// };
-///
-/// # }
 /// ```
-#[macro_export]
-macro_rules! point {
-    ($x:expr, $y:expr, $z:expr) => {
-        Point {
-            x: $x,
-            y: $y,
-            z: $z,
-            w: 1.0
-        }
-    };
+pub fn point(x:f32, y:f32, z:f32) -> Point {
+    Point {
+        x: x,
+        y: y,
+        z: z,
+        w: 1.0
+    }
 }

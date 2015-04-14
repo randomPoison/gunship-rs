@@ -1,3 +1,5 @@
+use std::ops::{Mul, Neg};
+
 #[repr(C)] #[derive(Debug, Clone, Copy)]
 pub struct Vector3 {
     pub x: f32,
@@ -33,6 +35,22 @@ impl Vector3 {
 
     pub fn magnitude_squared(&self) -> f32 {
         self.x * self.x + self.y * self.y + self.z * self.z
+    }
+}
+
+impl Mul<f32> for Vector3 {
+    type Output = Vector3;
+
+    fn mul(self, rhs: f32) -> Vector3 {
+        vector3(self.x * rhs, self.y * rhs, self.z * rhs)
+    }
+}
+
+impl Neg for Vector3 {
+    type Output = Vector3;
+
+    fn neg(self) -> Vector3 {
+        vector3(-self.x, -self.y, -self.z)
     }
 }
 

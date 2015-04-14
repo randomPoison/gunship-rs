@@ -1,8 +1,9 @@
 extern crate bootstrap_rs as bootstrap;
 extern crate parse_collada as collada;
 extern crate polygon_rs as polygon;
-#[macro_use]
 extern crate polygon_math as math;
+
+mod input;
 
 use std::io::prelude::*;
 use std::fs::File;
@@ -12,9 +13,10 @@ use std::error::Error;
 
 use bootstrap::window::Window;
 use bootstrap::window::Message::*;
+use bootstrap::input::ScanCode;
 
-use math::point::Point;
-use math::vector::{vector3};
+use math::point::{Point, point};
+use math::vector::{Vector3, vector3};
 use math::matrix::Matrix4;
 
 use polygon::geometry::mesh::Mesh;
@@ -44,10 +46,18 @@ fn main() {
         near: 0.001,
         far: 100.0,
 
-        position: point!(5.0, 5.0, 5.0),
+        position: point(5.0, 5.0, 5.0),
         rotation: Matrix4::from_rotation(0.0, 0.0, 0.0)
     };
-    camera.look_at(point!(0.0, 0.0, 0.0), vector3(0.0, 1.0, 0.0));
+    camera.look_at(point(0.0, 0.0, 0.0), vector3(0.0, 1.0, 0.0));
+
+    let forward_dir = -camera.rotation.z_part();
+    let right_dir = camera.rotation.x_part();
+
+    let mut forward = false;
+    let mut backward = false;
+    let mut left = false;
+    let mut right = false;
 
     loop {
         window.handle_messages();
@@ -59,12 +69,36 @@ fn main() {
                         Close => close = true,
                         Destroy => (),
                         Paint => (),
-                        KeyUp(key) => println!("Key up: {:?}", key),
-                        KeyDown(key) => println!("Key down: {:?}", key)
+
+                        // Handle inputs.
+                        KeyDown(ScanCode::W) => forward = true,
+                        KeyUp(ScanCode::W) => forward = false,
+
+                        KeyDown(ScanCode::S) => backward = true,
+                        KeyUp(ScanCode::S) => backward = false,
+
+                        KeyDown(ScanCode::D) => right = true,
+                        KeyUp(ScanCode::D) => right = false,
+
+                        KeyDown(ScanCode::A) => left = true,
+                        KeyUp(ScanCode::A) => left = false,
+
+                        _ => ()
                     }
                 },
                 None => break
             }
+        }
+
+        // Move camera based on input
+        if forward {
+            camera.position = camera.position + forward_dir * 0.01;
+        } else if backward {
+            camera.position = camera.position - forward_dir * 0.01;
+        } else if right {
+            camera.position = camera.position + right_dir * 0.01;
+        } else if left {
+            camera.position = camera.position - right_dir * 0.01
         }
 
         mesh_transform = frame_rotation * mesh_transform;
