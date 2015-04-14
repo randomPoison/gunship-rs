@@ -8,7 +8,7 @@ use windows::winapi::{
     HWND, HDC, HINSTANCE, UINT, WPARAM, LPARAM, LRESULT, LPVOID,
     WNDCLASSEXW,
     CS_HREDRAW, CS_VREDRAW, CS_OWNDC, CW_USEDEFAULT,
-    WS_OVERLAPPEDWINDOW, WS_VISIBLE,
+    WS_OVERLAPPED, WS_CAPTION, WS_SYSMENU, WS_MINIMIZEBOX, WS_MAXIMIZEBOX, WS_VISIBLE,
     MSG, POINT,
     WM_ACTIVATEAPP, WM_CLOSE, WM_DESTROY
 };
@@ -54,7 +54,7 @@ impl Window {
                 0,
                 class_u.as_ptr(),
                 name_u.as_ptr(),
-                WS_OVERLAPPEDWINDOW | WS_VISIBLE,
+                WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_VISIBLE,
                 CW_USEDEFAULT,
                 CW_USEDEFAULT,
                 800,

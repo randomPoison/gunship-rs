@@ -25,15 +25,8 @@ use polygon::camera::Camera;
 
 use collada::{GeometricElement, ArrayElement, PrimitiveType};
 
-struct MainWindow
-{
-    close: bool
-}
-
 fn main() {
-    let mut main_window = MainWindow {
-        close: false
-    };
+    let mut close = false;
 
     let instance = bootstrap::init();
 
@@ -63,7 +56,7 @@ fn main() {
                 Some(message) => {
                     match message {
                         Activate => (),
-                        Close => main_window.close = true,
+                        Close => close = true,
                         Destroy => (),
                         Paint => ()
                     }
@@ -75,7 +68,7 @@ fn main() {
         mesh_transform = frame_rotation * mesh_transform;
         renderer.draw_mesh(&mesh, mesh_transform, &camera);
 
-        if main_window.close {
+        if close {
             break;
         }
     };
