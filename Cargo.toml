@@ -1,23 +1,24 @@
 [package]
 
-name = "polygon_rs"
-version = "0.0.1"
+name = "gunship"
+version = "0.0.0"
 authors = ["David LeGare <excaliburhissheath@gmail.com>"]
 
 [[bin]]
-name = "polygon_rs"
-
-[dependencies.gl]
-git = "https://github.com/bjz/gl-rs"
+name = "gunship"
 
 [dependencies.bootstrap_rs]
 version = "*"
 path = "lib/bootstrap_rs"
 
-[dependencies.polygon_math]
-version = "*"
-path = "lib/polygon_math"
-
 [dependencies.parse_collada]
 version = "*"
 path = "lib/parse_collada"
+
+[dependencies.polygon_rs]
+version = "*"
+path = "lib/polygon_rs"
+
+[dependencies.polygon_math]
+version = "*"
+path = "lib/polygon_math"

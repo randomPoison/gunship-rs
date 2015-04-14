@@ -1,11 +1,8 @@
-#![feature(convert)]
-
-extern crate gl;
-
 extern crate bootstrap_rs as bootstrap;
+extern crate parse_collada as collada;
+extern crate polygon_rs as polygon;
 #[macro_use]
 extern crate polygon_math as math;
-extern crate parse_collada as collada;
 
 use std::io::prelude::*;
 use std::fs::File;
@@ -16,18 +13,15 @@ use std::error::Error;
 use bootstrap::window::Window;
 use bootstrap::window::Message::*;
 
-#[macro_use]
-mod geometry;
-mod gl_render;
-mod camera;
-
 use math::point::Point;
 use math::vector::{vector3};
 use math::matrix::Matrix4;
-use geometry::mesh::Mesh;
-use geometry::face::Face;
-use gl_render::{GLRender, GLMeshData};
-use camera::Camera;
+
+use polygon::geometry::mesh::Mesh;
+use polygon::geometry::face::Face;
+use polygon::gl_render;
+use polygon::gl_render::{GLRender, GLMeshData};
+use polygon::camera::Camera;
 
 use collada::{GeometricElement, ArrayElement, PrimitiveType};
 

@@ -1,0 +1,16 @@
+[package]
+
+name = "polygon_rs"
+version = "0.0.1"
+authors = ["David LeGare <excaliburhissheath@gmail.com>"]
+
+[dependencies.gl]
+git = "https://github.com/bjz/gl-rs"
+
+[dependencies.polygon_math]
+version = "*"
+path = "../polygon_math"
+
+[dependencies.bootstrap_rs]
+version = "*"
+path = "../bootstrap_rs"
