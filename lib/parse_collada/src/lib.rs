@@ -545,7 +545,7 @@ impl<'a> ColladaParser<'a> {
                 TextNode(text) => {
                     let data = text.words().map(|word| {
                         let value = match f32::from_str(word) {
-                            Err(error) => return panic!("Error while parsing <float_array>: {}", error), // TODO: Return an error instead of panicking.
+                            Err(error) => return panic!("Error while parsing <float_array>: {} (value was {})", error, word), // TODO: Return an error instead of panicking.
                             Ok(value) => value
                         };
                         value

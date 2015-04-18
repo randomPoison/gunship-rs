@@ -9,5 +9,6 @@ pub enum Message {
     Destroy,
     Paint,
     KeyUp(ScanCode),
-    KeyDown(ScanCode)
+    KeyDown(ScanCode),
+    MouseMove(i32, i32)
 }

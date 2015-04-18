@@ -137,6 +137,11 @@ fn message_callback(
             //WM_PAINT => window.messages.push_back(Paint), // TODO We need a user defined window proc to allow painting outside of the main loop.
             WM_SYSKEYDOWN | WM_KEYDOWN => window.messages.push_back(KeyDown(convert_windows_scancode(wParam, lParam))),
             WM_SYSKEYUP | WM_KEYUP => window.messages.push_back(KeyUp(convert_windows_scancode(wParam, lParam))),
+            WM_MOUSEMOVE => {
+                let x_coord = ( lParam as i16 ) as i32;
+                let y_coord = ( ( lParam >> 16 ) as i16 ) as i32;
+                window.messages.push_back(MouseMove(x_coord, y_coord));
+            }
             _ => ()
         }
     }
