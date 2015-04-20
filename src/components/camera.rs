@@ -2,6 +2,8 @@ use polygon::camera::Camera;
 use math::point::Point;
 use math::matrix::Matrix4;
 
+use entity::Entity;
+
 pub struct CameraManager {
     cameras: Vec<Camera>
 }
@@ -13,7 +15,7 @@ impl CameraManager {
         }
     }
 
-    pub fn create(&mut self, fov: f32, aspect: f32, near: f32, far: f32,) -> &mut Camera {
+    pub fn create(&mut self, entity: Entity, fov: f32, aspect: f32, near: f32, far: f32,) -> &mut Camera {
         self.cameras.push(Camera {
             fov: fov,
             aspect: aspect,

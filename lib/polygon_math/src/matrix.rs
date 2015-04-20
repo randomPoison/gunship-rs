@@ -2,6 +2,7 @@ use std::cmp::{PartialEq, Eq};
 use std::ops::{Index, IndexMut, Mul};
 
 use vector::{Vector3, vector3};
+use point::Point;
 
 /// A 4x4 matrix that can be used to transform 3D points and vectors.
 ///
@@ -41,7 +42,7 @@ impl Matrix4 {
     }
 
     /// Create a new translation matrix.
-    pub fn from_translation(x: f32, y: f32, z: f32) -> Matrix4 {
+    pub fn translation(x: f32, y: f32, z: f32) -> Matrix4 {
         Matrix4 {
             data: [
                 1.0, 0.0, 0.0, x,
@@ -52,7 +53,11 @@ impl Matrix4 {
         }
     }
 
-    pub fn from_rotation(x: f32, y: f32, z: f32) -> Matrix4 {
+    pub fn from_point(point: Point) -> Matrix4 {
+        Matrix4::translation(point.x, point.y, point.z)
+    }
+
+    pub fn rotation(x: f32, y: f32, z: f32) -> Matrix4 {
         let x_rot = Matrix4 {
             data: [
                 1.0, 0.0,      0.0,     0.0,
@@ -81,6 +86,17 @@ impl Matrix4 {
         };
 
         z_rot * (y_rot * x_rot)
+    }
+
+    pub fn scale(x: f32, y: f32, z: f32) -> Matrix4 {
+        Matrix4 {
+            data: [
+                x,   0.0, 0.0, 0.0,
+                0.0, y,   0.0, 0.0,
+                0.0, 0.0, z,   0.0,
+                0.0, 0.0, 0.0, 1.0
+            ]
+        }
     }
 
     pub fn transpose(&self) -> Matrix4 {
