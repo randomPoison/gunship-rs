@@ -3,6 +3,8 @@ extern crate parse_collada as collada;
 extern crate polygon_rs as polygon;
 extern crate polygon_math as math;
 
+mod components;
+mod entity;
 mod input;
 
 use std::io::prelude::*;
@@ -27,6 +29,10 @@ use polygon::camera::Camera;
 
 use collada::{GeometricElement, ArrayElement, PrimitiveType};
 
+use components::transform::{TransformManager, Transform};
+use components::camera::CameraManager;
+use entity::EntityManager;
+
 fn main() {
     let mut close = false;
 
@@ -36,28 +42,36 @@ fn main() {
 
     let renderer = gl_render::init(&window);
 
-    let mesh = create_test_mesh(&renderer);
-    let mut mesh_transform = Matrix4::from_rotation(PI * 0.13, 0.0, PI * 0.36); //Matrix4::from_translation(0.5, 0.0, 0.0);
+    let mesh = create_test_mesh(&renderer, "meshes/gun_small.dae");
+    let mut mesh_transform = Matrix4::identity();
     let frame_rotation = Matrix4::from_rotation(0.0, PI * 0.0001, 0.0);
 
-    let mut camera = Camera {
-        fov: PI / 3.0,
-        aspect: 1.0,
-        near: 0.001,
-        far: 100.0,
+    let mut entity_manager = EntityManager::new();
+    let camera_entity = entity_manager.create();
 
-        position: point(5.0, 5.0, 5.0),
-        rotation: Matrix4::from_rotation(0.0, 0.0, 0.0)
-    };
+    let mut transform_manager = TransformManager::new();
+    let transform = transform_manager.create(camera_entity);
+
+    let mut camera_manager = CameraManager::new();
+
+    let mut camera = camera_manager.create(
+        PI / 3.0,
+        1.0,
+        0.001,
+        100.0);
+    camera.position = point(5.0, 0.0, 5.0);
     camera.look_at(point(0.0, 0.0, 0.0), vector3(0.0, 1.0, 0.0));
-
-    let forward_dir = -camera.rotation.z_part();
-    let right_dir = camera.rotation.x_part();
 
     let mut forward = false;
     let mut backward = false;
     let mut left = false;
     let mut right = false;
+
+    let mut last_x = 400;
+    let mut last_y = 400;
+
+    let mut rotation_x = 0.0;
+    let mut rotation_y = 0.0;
 
     loop {
         window.handle_messages();
@@ -83,6 +97,24 @@ fn main() {
                         KeyDown(ScanCode::A) => left = true,
                         KeyUp(ScanCode::A) => left = false,
 
+                        MouseMove(x_coord, y_coord) => {
+                            let movement_x = last_x - x_coord;
+                            let movement_y = last_y - y_coord;
+
+                            // Add mouse movement to total rotation.
+                            rotation_x += (movement_y as f32) * PI * 0.001;
+                            rotation_y += (movement_x as f32) * PI * 0.001;
+
+                            // Apply a rotation to the camera based on mouse movmeent.
+                            camera.rotation =
+                                Matrix4::from_rotation(rotation_x,
+                                                       rotation_y,
+                                                       0.0);
+
+                            // Save mouse coordinates.
+                            last_x = x_coord;
+                            last_y = y_coord;
+                        }
                         _ => ()
                     }
                 },
@@ -90,18 +122,28 @@ fn main() {
             }
         }
 
-        // Move camera based on input
+        // Calculate the forward and right vectors.
+        let forward_dir = -camera.rotation.z_part();
+        let right_dir = camera.rotation.x_part();
+
+        // Move camera based on input.
         if forward {
             camera.position = camera.position + forward_dir * 0.01;
-        } else if backward {
+        }
+
+        if backward {
             camera.position = camera.position - forward_dir * 0.01;
-        } else if right {
+        }
+
+        if right {
             camera.position = camera.position + right_dir * 0.01;
-        } else if left {
+        }
+
+        if left {
             camera.position = camera.position - right_dir * 0.01
         }
 
-        mesh_transform = frame_rotation * mesh_transform;
+        // mesh_transform = frame_rotation * mesh_transform;
         renderer.draw_mesh(&mesh, mesh_transform, &camera);
 
         if close {
@@ -125,9 +167,9 @@ pub fn load_file(path: &str) -> String {
     contents
 }
 
-pub fn create_test_mesh(renderer: &GLRender) -> GLMeshData {
+pub fn create_test_mesh(renderer: &GLRender, path_text: &str) -> GLMeshData {
     // load data from COLLADA file
-    let file_path = Path::new("meshes/cube.dae");
+    let file_path = Path::new(path_text);
     let mut file = match File::open(&file_path) {
         // The `desc` field of `IoError` is a string that describes the error
         Err(why) => panic!("couldn't open {}: {}", file_path.display(), Error::description(&why)),

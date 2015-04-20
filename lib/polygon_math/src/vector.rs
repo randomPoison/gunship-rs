@@ -8,6 +8,14 @@ pub struct Vector3 {
 }
 
 impl Vector3 {
+    pub fn zero() -> Vector3 {
+        vector3(0.0, 0.0, 0.0)
+    }
+
+    pub fn one() -> Vector3 {
+        vector3(1.0, 1.0, 1.0)
+    }
+
     pub fn cross(first: Vector3, second: Vector3) -> Vector3 {
         Vector3 {
             x: first.y * second.z - first.z * second.y,
