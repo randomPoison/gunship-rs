@@ -29,4 +29,12 @@ impl CameraManager {
         let index = self.cameras.len() - 1;
         &mut self.cameras[index]
     }
+
+    pub fn cameras(&self) -> &Vec<Camera> {
+        &self.cameras
+    }
+
+    pub fn cameras_mut(&mut self) -> &mut Vec<Camera> {
+        &mut self.cameras
+    }
 }

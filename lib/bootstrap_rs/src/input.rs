@@ -1,7 +1,4 @@
-// #[cfg(windows)]
-// pub use windows::input::*;
-
-#[derive(FromPrimitive, Debug)]
+#[derive(FromPrimitive, Debug, PartialEq, Eq, Hash, Clone, Copy)]
 pub enum ScanCode {
     A = 'A' as isize,
     B = 'B' as isize,

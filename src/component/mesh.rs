@@ -29,6 +29,10 @@ impl MeshManager {
         let index = self.meshes.len() - 1;
         &self.meshes[index]
     }
+
+    pub fn meshes(&self) -> &Vec<GLMeshData> {
+        &self.meshes
+    }
 }
 
 pub fn load_file(path: &str) -> String {
