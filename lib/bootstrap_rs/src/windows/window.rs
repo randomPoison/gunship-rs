@@ -4,13 +4,15 @@ use std::collections::VecDeque;
 use std::ops::DerefMut;
 use std::num::FromPrimitive;
 
-use windows::user32;
 use windows::winapi::*;
+use windows::user32;
 use ToCU16Str;
 use window::Message;
 use window::Message::*;
 use input::ScanCode;
 use input::ScanCode::*;
+
+use super::input::{register_raw_input, handle_raw_input};
 
 static CLASS_NAME: &'static str = "bootstrap";
 static WINDOW_PROP: &'static str = "window";
@@ -60,6 +62,8 @@ impl Window {
                 instance,
                 ptr::null_mut()) // TODO do we need to pass a pointer to the object here?
         };
+
+        register_raw_input(handle);
 
         // TODO handle any errors maybe?
 
@@ -140,8 +144,12 @@ fn message_callback(
             WM_MOUSEMOVE => {
                 let x_coord = ( lParam as i16 ) as i32;
                 let y_coord = ( ( lParam >> 16 ) as i16 ) as i32;
-                window.messages.push_back(MouseMove(x_coord, y_coord));
-            }
+                window.messages.push_back(MousePos(x_coord, y_coord));
+            },
+            WM_INPUT => {
+                let message = handle_raw_input(lParam);
+                window.messages.push_back(message);
+            },
             _ => ()
         }
     }

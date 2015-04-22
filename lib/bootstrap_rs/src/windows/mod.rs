@@ -8,4 +8,4 @@ extern crate opengl32;
 pub mod init;
 pub mod window;
 pub mod gl;
-// pub mod input;
+pub mod input;

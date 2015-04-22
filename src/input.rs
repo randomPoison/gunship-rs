@@ -39,11 +39,12 @@ impl Input {
                 self.released.insert(key);
                 self.down.remove(&key);
             },
-            MouseMove(x_pos, y_pos) => {
-                let (old_x, old_y) = self.mouse_pos;
-                self.mouse_delta = (old_x - x_pos, old_y - y_pos);
-                self.mouse_pos = (x_pos, y_pos);
+            MouseMove(x_delta, y_delta) => {
+                self.mouse_delta = (x_delta, y_delta);
             },
+            MousePos(x_pos, y_pos) => {
+                self.mouse_pos = (x_pos, y_pos);
+            }
             _ => panic!("Non-input message passed to Input::push_input()")
         }
     }

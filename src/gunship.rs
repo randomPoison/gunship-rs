@@ -86,7 +86,7 @@ impl Engine {
                             Paint => (),
 
                             // Handle inputs.
-                            KeyDown(_) | KeyUp(_) | MouseMove(_, _) => self.input.push_input(message),
+                            KeyDown(_) | KeyUp(_) | MouseMove(_, _) | MousePos(_, _) => self.input.push_input(message),
                         }
                     },
                     None => break
@@ -153,8 +153,8 @@ impl System for CameraMoveSystem {
         let (movement_x, movement_y) = engine.input.mouse_delta();
 
         // Add mouse movement to total rotation.
-        self.rotation_x += (movement_y as f32) * PI * 0.001;
-        self.rotation_y += (movement_x as f32) * PI * 0.001;
+        self.rotation_x += (-movement_y as f32) * PI * 0.001;
+        self.rotation_y += (-movement_x as f32) * PI * 0.001;
 
         // Apply a rotation to the camera based on mouse movmeent.
         camera.rotation =
