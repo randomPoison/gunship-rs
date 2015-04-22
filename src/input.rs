@@ -4,53 +4,91 @@ use bootstrap::window::Message;
 use bootstrap::window::Message::*;
 use bootstrap::input::ScanCode;
 
+pub const MAX_SUPPORTED_MOUSE_BUTTONS: usize = 5;
+
 pub struct Input {
-    pressed: HashSet<ScanCode>,
-    released: HashSet<ScanCode>,
-    down: HashSet<ScanCode>,
+    keys_pressed: HashSet<ScanCode>,
+    keys_released: HashSet<ScanCode>,
+    keys_down: HashSet<ScanCode>,
     mouse_pos: (i32, i32),
-    mouse_delta: (i32, i32)
+    mouse_delta: (i32, i32),
+    mouse_down: [bool; MAX_SUPPORTED_MOUSE_BUTTONS],
+    mouse_pressed: [bool; MAX_SUPPORTED_MOUSE_BUTTONS],
+    mouse_released: [bool; MAX_SUPPORTED_MOUSE_BUTTONS],
+    mouse_scroll: u32,
 }
 
 impl Input {
     pub fn new() -> Input {
         Input {
-            pressed: HashSet::new(),
-            released: HashSet::new(),
-            down: HashSet::new(),
+            keys_pressed: HashSet::new(),
+            keys_released: HashSet::new(),
+            keys_down: HashSet::new(),
             mouse_pos: (400, 400),
-            mouse_delta: (0, 0)
+            mouse_delta: (0, 0),
+            mouse_down: [false; MAX_SUPPORTED_MOUSE_BUTTONS],
+            mouse_pressed: [false; MAX_SUPPORTED_MOUSE_BUTTONS],
+            mouse_released: [false; MAX_SUPPORTED_MOUSE_BUTTONS],
+            mouse_scroll: 0,
         }
     }
 
     pub fn clear(&mut self) {
-        self.pressed.clear();
-        self.released.clear();
+        self.keys_pressed.clear();
+        self.keys_released.clear();
         self.mouse_delta = (0, 0);
+        self.mouse_pressed = [false; MAX_SUPPORTED_MOUSE_BUTTONS];
+        self.mouse_released = [false; MAX_SUPPORTED_MOUSE_BUTTONS];
+        self.mouse_scroll = 0;
     }
 
     pub fn push_input(&mut self, message: Message) {
         match message {
             KeyDown(key) => {
-                self.pressed.insert(key);
-                self.down.insert(key);
+                self.keys_pressed.insert(key);
+                self.keys_down.insert(key);
             },
             KeyUp(key) => {
-                self.released.insert(key);
-                self.down.remove(&key);
+                self.keys_released.insert(key);
+                self.keys_down.remove(&key);
             },
             MouseMove(x_delta, y_delta) => {
                 self.mouse_delta = (x_delta, y_delta);
             },
             MousePos(x_pos, y_pos) => {
                 self.mouse_pos = (x_pos, y_pos);
+            },
+            MouseButtonPressed(button) => {
+                let index = button as usize;
+                assert!(index < MAX_SUPPORTED_MOUSE_BUTTONS);
+
+                self.mouse_down[index] = false;
+                self.mouse_released[index] = true;
+            },
+            MouseButtonReleased(button) => {
+                let index = button as usize;
+                assert!(index < MAX_SUPPORTED_MOUSE_BUTTONS);
+
+                self.mouse_pressed[index] = true ^ self.mouse_down[index];
+                self.mouse_down[index] = true;
+            },
+            MouseWheel(scroll_amount) => {
+                self.mouse_scroll += scroll_amount;
             }
-            _ => panic!("Non-input message passed to Input::push_input()")
+            _ => panic!("Unhandled message {:?} passed to Input::push_input()", message)
         }
     }
 
-    pub fn down(&self, key: ScanCode) -> bool {
-        self.down.contains(&key)
+    pub fn key_down(&self, key: ScanCode) -> bool {
+        self.keys_down.contains(&key)
+    }
+
+    pub fn key_pressed(&self, key: ScanCode) -> bool {
+        self.keys_pressed.contains(&key)
+    }
+
+    pub fn key_released(&self, key: ScanCode) -> bool {
+        self.keys_released.contains(&key)
     }
 
     pub fn mouse_pos(&self) -> (i32, i32) {
@@ -59,5 +97,27 @@ impl Input {
 
     pub fn mouse_delta(&self) -> (i32, i32) {
         self.mouse_delta
+    }
+
+    pub fn mouse_button_down(&self, button: usize) -> bool {
+        assert!(button < MAX_SUPPORTED_MOUSE_BUTTONS);
+
+        self.mouse_down[button]
+    }
+
+    pub fn mouse_button_pressed(&self, button: usize) -> bool {
+        assert!(button < MAX_SUPPORTED_MOUSE_BUTTONS);
+
+        self.mouse_pressed[button]
+    }
+
+    pub fn mouse_button_released(&self, button: usize) -> bool {
+        assert!(button < MAX_SUPPORTED_MOUSE_BUTTONS);
+
+        self.mouse_released[button]
+    }
+
+    pub fn mouse_scroll(&self) -> u32 {
+        self.mouse_scroll
     }
 }

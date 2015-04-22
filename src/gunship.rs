@@ -81,7 +81,7 @@ impl Engine {
             self.window.handle_messages();
             self.input.clear();
             loop {
-                let message = self.window.next_message();
+                let message = self.window.next_message(); // TODO: Make this an iterator to simplify this loop.
                 match message {
                     Some(message) => {
                         match message {
@@ -91,7 +91,13 @@ impl Engine {
                             Paint => (),
 
                             // Handle inputs.
-                            KeyDown(_) | KeyUp(_) | MouseMove(_, _) | MousePos(_, _) => self.input.push_input(message),
+                            KeyDown(_)
+                          | KeyUp(_)
+                          | MouseMove(_, _)
+                          | MousePos(_, _)
+                          | MouseButtonPressed(_)
+                          | MouseButtonReleased(_)
+                          | MouseWheel(_) => self.input.push_input(message),
                         }
                     },
                     None => break
@@ -178,20 +184,25 @@ impl System for CameraMoveSystem {
         let right_dir = rotation_matrix.x_part();
 
         // Move camera based on input.
-        if engine.input.down(ScanCode::W) {
+        if engine.input.key_down(ScanCode::W) {
             transform.position = transform.position + forward_dir * 0.01;
         }
 
-        if engine.input.down(ScanCode::S) {
+        if engine.input.key_down(ScanCode::S) {
             transform.position = transform.position - forward_dir * 0.01;
         }
 
-        if engine.input.down(ScanCode::D) {
+        if engine.input.key_down(ScanCode::D) {
             transform.position = transform.position + right_dir * 0.01;
         }
 
-        if engine.input.down(ScanCode::A) {
+        if engine.input.key_down(ScanCode::A) {
             transform.position = transform.position - right_dir * 0.01
+        }
+
+        // Maybe shoot some bullets?
+        if engine.input.mouse_button_pressed(0) {
+            println!("PEW PEW!");
         }
     }
 }

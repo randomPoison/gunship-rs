@@ -37,5 +37,5 @@ pub enum ScanCode {
     Key8 = '8' as isize,
     Key9 = '9' as isize,
 
-    Unsupported
+    Unsupported,
 }

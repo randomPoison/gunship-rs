@@ -20,7 +20,7 @@ static WINDOW_PROP: &'static str = "window";
 pub struct Window {
     pub handle: HWND,
     pub dc: HDC,
-    messages: VecDeque<Message>
+    pub messages: VecDeque<Message>
 }
 
 impl Window {
@@ -147,8 +147,7 @@ fn message_callback(
                 window.messages.push_back(MousePos(x_coord, y_coord));
             },
             WM_INPUT => {
-                let message = handle_raw_input(lParam);
-                window.messages.push_back(message);
+                handle_raw_input(window, lParam);
             },
             _ => ()
         }
