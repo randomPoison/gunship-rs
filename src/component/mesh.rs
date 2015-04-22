@@ -2,6 +2,8 @@ use std::io::prelude::*;
 use std::fs::File;
 use std::path::Path;
 use std::error::Error;
+use std::collections::HashMap;
+use std::slice::Iter;
 
 use collada::{ColladaData, GeometricElement, ArrayElement, PrimitiveType};
 
@@ -14,24 +16,55 @@ use math::point::Point;
 use entity::Entity;
 
 pub struct MeshManager {
-    meshes: Vec<GLMeshData>
+    meshes: Vec<GLMeshData>,
+    entities: Vec<Entity>,
+    indices: HashMap<Entity, usize>,
 }
 
 impl MeshManager {
     pub fn new() -> MeshManager {
         MeshManager {
-            meshes: Vec::new()
+            meshes: Vec::new(),
+            entities: Vec::new(),
+            indices: HashMap::new(),
         }
     }
 
     pub fn create(&mut self, entity: Entity, renderer: &GLRender, path_text: &str) -> &GLMeshData {
+        assert!(!self.indices.contains_key(&entity));
+
+        let index = self.meshes.len();
         self.meshes.push(load_mesh(renderer, path_text));
-        let index = self.meshes.len() - 1;
+        self.entities.push(entity);
+        self.indices.insert(entity, index);
         &self.meshes[index]
     }
 
     pub fn meshes(&self) -> &Vec<GLMeshData> {
         &self.meshes
+    }
+
+    pub fn iter(&self) -> MeshIter {
+        MeshIter {
+            mesh_iter: self.meshes.iter(),
+            entity_iter: self.entities.iter()
+        }
+    }
+}
+
+pub struct MeshIter<'a> {
+    mesh_iter: Iter<'a, GLMeshData>,
+    entity_iter: Iter<'a, Entity>,
+}
+
+impl<'a> Iterator for MeshIter<'a> {
+    type Item = (&'a GLMeshData, Entity);
+
+    fn next(&mut self) -> Option<(&'a GLMeshData, Entity)> {
+        match self.mesh_iter.next() {
+            None => None,
+            Some(mesh) => Some((mesh, *self.entity_iter.next().unwrap()))
+        }
     }
 }
 

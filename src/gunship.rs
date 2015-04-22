@@ -67,9 +67,9 @@ impl Engine {
             camera.rotation = Matrix4::rotation(transform.rotation.x, transform.rotation.y, transform.rotation.z);
 
             // Draw all of the meshes.
-            for mesh in self.mesh_manager.meshes() {
-                let transform_matrix = Matrix4::identity(); // TODO: Retrieve the actual matrix from the entity's transform.
-                self.renderer.draw_mesh(&mesh, transform_matrix, &camera);
+            for (mesh, entity) in self.mesh_manager.iter() {
+                let transform = self.transform_manager.get(entity);
+                self.renderer.draw_mesh(&mesh, transform.matrix(), &camera);
             }
         }
     }
