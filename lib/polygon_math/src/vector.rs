@@ -8,12 +8,20 @@ pub struct Vector3 {
 }
 
 impl Vector3 {
+    pub fn new(x: f32, y: f32, z: f32) -> Vector3 {
+        Vector3 {
+            x: x,
+            y: y,
+            z: z
+        }
+    }
+
     pub fn zero() -> Vector3 {
-        vector3(0.0, 0.0, 0.0)
+        Vector3::new(0.0, 0.0, 0.0)
     }
 
     pub fn one() -> Vector3 {
-        vector3(1.0, 1.0, 1.0)
+        Vector3::new(1.0, 1.0, 1.0)
     }
 
     pub fn cross(first: Vector3, second: Vector3) -> Vector3 {
@@ -50,7 +58,7 @@ impl Mul<f32> for Vector3 {
     type Output = Vector3;
 
     fn mul(self, rhs: f32) -> Vector3 {
-        vector3(self.x * rhs, self.y * rhs, self.z * rhs)
+        Vector3::new(self.x * rhs, self.y * rhs, self.z * rhs)
     }
 }
 
@@ -58,14 +66,6 @@ impl Neg for Vector3 {
     type Output = Vector3;
 
     fn neg(self) -> Vector3 {
-        vector3(-self.x, -self.y, -self.z)
-    }
-}
-
-pub fn vector3(x: f32, y: f32, z: f32) -> Vector3 {
-    Vector3 {
-        x: x,
-        y: y,
-        z: z
+        Vector3::new(-self.x, -self.y, -self.z)
     }
 }

@@ -16,8 +16,8 @@ use bootstrap::window::Window;
 use bootstrap::window::Message::*;
 use bootstrap::input::ScanCode;
 
-use math::point::{point};
-use math::vector::{vector3};
+use math::point::Point;
+use math::vector::Vector3;
 use math::matrix::Matrix4;
 
 use polygon::gl_render::{self, GLRender};
@@ -58,14 +58,19 @@ impl Engine {
         }
     }
 
-    pub fn draw(&self) {
-        // TODO: Handle multiple cameras.
-        let camera = &self.camera_manager.cameras()[0];
+    pub fn draw(&mut self) {
+        // Handle rendering for each camera.
+        for (camera, entity) in self.camera_manager.iter_mut() {
+            // Update the camera's bounds based on it's transform.
+            let transform = self.transform_manager.get(entity);
+            camera.position = transform.position;
+            camera.rotation = Matrix4::rotation(transform.rotation.x, transform.rotation.y, transform.rotation.z);
 
-        // Draw all of the meshes.
-        for mesh in self.mesh_manager.meshes() {
-            let transform_matrix = Matrix4::identity(); // TODO: Retrieve the actual matrix from the entity's transform.
-            self.renderer.draw_mesh(&mesh, transform_matrix, &camera);
+            // Draw all of the meshes.
+            for mesh in self.mesh_manager.meshes() {
+                let transform_matrix = Matrix4::identity(); // TODO: Retrieve the actual matrix from the entity's transform.
+                self.renderer.draw_mesh(&mesh, transform_matrix, &camera);
+            }
         }
     }
 
@@ -118,7 +123,7 @@ fn main() {
     let camera_entity = engine.entity_manager.create();
     {
         let mut transform = engine.transform_manager.create(camera_entity);
-        transform.position = point(5.0, 0.0, 5.0);
+        transform.position = Point::new(5.0, 0.0, 5.0);
         transform.update();
     }
 
@@ -130,8 +135,8 @@ fn main() {
             1.0,
             0.001,
             100.0);
-        camera.position = point(5.0, 0.0, 5.0);
-        camera.look_at(point(0.0, 0.0, 0.0), vector3(0.0, 1.0, 0.0));
+        camera.position = Point::new(5.0, 0.0, 5.0);
+        camera.look_at(Point::new(0.0, 0.0, 0.0), Vector3::new(0.0, 1.0, 0.0));
     }
 
     engine.register_system(Rc::new(RefCell::new(Box::new(CameraMoveSystem {
@@ -149,7 +154,9 @@ struct CameraMoveSystem {
 
 impl System for CameraMoveSystem {
     fn update(&mut self, engine: &mut Engine, delta: f32) {
+        let entity = engine.camera_manager.entities()[0];
         let camera = &mut engine.camera_manager.cameras_mut()[0];
+        let transform = engine.transform_manager.get_mut(entity);
         let (movement_x, movement_y) = engine.input.mouse_delta();
 
         // Add mouse movement to total rotation.
@@ -157,30 +164,34 @@ impl System for CameraMoveSystem {
         self.rotation_y += (-movement_x as f32) * PI * 0.001;
 
         // Apply a rotation to the camera based on mouse movmeent.
-        camera.rotation =
+        transform.rotation =
+            Vector3::new(self.rotation_x,
+                         self.rotation_y,
+                         0.0);
+        let rotation_matrix =
             Matrix4::rotation(self.rotation_x,
                               self.rotation_y,
                               0.0);
 
         // Calculate the forward and right vectors.
-        let forward_dir = -camera.rotation.z_part();
-        let right_dir = camera.rotation.x_part();
+        let forward_dir = -rotation_matrix.z_part();
+        let right_dir = rotation_matrix.x_part();
 
         // Move camera based on input.
         if engine.input.down(ScanCode::W) {
-            camera.position = camera.position + forward_dir * 0.01;
+            transform.position = transform.position + forward_dir * 0.01;
         }
 
         if engine.input.down(ScanCode::S) {
-            camera.position = camera.position - forward_dir * 0.01;
+            transform.position = transform.position - forward_dir * 0.01;
         }
 
         if engine.input.down(ScanCode::D) {
-            camera.position = camera.position + right_dir * 0.01;
+            transform.position = transform.position + right_dir * 0.01;
         }
 
         if engine.input.down(ScanCode::A) {
-            camera.position = camera.position - right_dir * 0.01
+            transform.position = transform.position - right_dir * 0.01
         }
     }
 }

@@ -1,6 +1,6 @@
 use std::ops::{Sub, Add};
 
-use vector::{vector3, Vector3};
+use vector::Vector3;
 
 /// A point in 3D space.
 ///
@@ -17,6 +17,15 @@ pub struct Point {
 }
 
 impl Point {
+    pub fn new(x: f32, y: f32, z: f32) -> Point {
+        Point {
+            x: x,
+            y: y,
+            z: z,
+            w: 1.0
+        }
+    }
+
     pub fn from_slice(data: &[f32]) -> Point {
         assert!(data.len() == 3 || data.len() == 4);
 
@@ -33,7 +42,12 @@ impl Point {
     }
 
     pub fn origin() -> Point {
-        point(0.0, 0.0, 0.0)
+        Point {
+            x: 0.0,
+            y: 0.0,
+            z: 0.0,
+            w: 1.0
+        }
     }
 }
 
@@ -41,7 +55,7 @@ impl Sub for Point {
     type Output = Vector3;
 
     fn sub(self, rhs: Self) -> Vector3 {
-        vector3(self.x - rhs.x, self.y - rhs.y, self.z - rhs.z)
+        Vector3::new(self.x - rhs.x, self.y - rhs.y, self.z - rhs.z)
     }
 }
 
@@ -49,7 +63,12 @@ impl Add<Vector3> for Point {
     type Output = Point;
 
     fn add(self, rhs: Vector3) -> Point {
-        point(self.x + rhs.x, self.y + rhs.y, self.z + rhs.z)
+        Point {
+            x: self.x + rhs.x,
+            y: self.y + rhs.y,
+            z: self.z + rhs.z,
+            w: 1.0
+        }
     }
 }
 
@@ -57,30 +76,11 @@ impl Sub<Vector3> for Point {
     type Output = Point;
 
     fn sub(self, rhs: Vector3) -> Point {
-        point(self.x - rhs.x, self.y - rhs.y, self.z - rhs.z)
-    }
-}
-
-/// Utility for quickly defining hard-coded points.
-///
-/// # Examples
-///
-/// ```rust
-/// let origin = point(0.0, 0.0, 0.0);
-///
-/// // equivalent to:
-/// let point = Point {
-///     x: 0.0,
-///     y: 0.0,
-///     z: 0.0,
-///     w: 1.0
-/// };
-/// ```
-pub fn point(x:f32, y:f32, z:f32) -> Point {
-    Point {
-        x: x,
-        y: y,
-        z: z,
-        w: 1.0
+        Point {
+            x: self.x - rhs.x,
+            y: self.y - rhs.y,
+            z: self.z - rhs.z,
+            w: 1.0
+        }
     }
 }

@@ -1,10 +1,39 @@
+use std::collections::HashMap;
+
 use math::vector::Vector3;
 use math::matrix::Matrix4;
 use math::point::Point;
 use entity::Entity;
 
 pub struct TransformManager {
-    transforms: Vec<Transform>
+    transforms: Vec<Transform>,
+    indices: HashMap<Entity, usize>,
+}
+
+impl TransformManager {
+    pub fn new() -> TransformManager {
+        TransformManager {
+            transforms: Vec::new(),
+            indices: HashMap::new(),
+        }
+    }
+
+    pub fn create(&mut self, entity: Entity) -> &mut Transform {
+        let index = self.transforms.len();
+        self.transforms.push(Transform::new());
+        self.indices.insert(entity, index);
+        &mut self.transforms[index]
+    }
+
+    pub fn get(&self, entity: Entity) -> &Transform {
+        let index = *self.indices.get(&entity).expect("Transform manager does not contain a transform for the given entity.");
+        &self.transforms[index]
+    }
+
+    pub fn get_mut(&mut self, entity: Entity) -> &mut Transform {
+        let index = *self.indices.get(&entity).expect("Transform manager does not contain a transform for the given entity.");
+        &mut self.transforms[index]
+    }
 }
 
 pub struct Transform {
@@ -12,20 +41,6 @@ pub struct Transform {
     pub rotation: Vector3,
     pub scale: Vector3,
     matrix: Matrix4
-}
-
-impl TransformManager {
-    pub fn new() -> TransformManager {
-        TransformManager {
-            transforms: Vec::new()
-        }
-    }
-
-    pub fn create(&mut self, entity: Entity) -> &mut Transform {
-        let index = self.transforms.len();
-        self.transforms.push(Transform::new());
-        &mut self.transforms[index]
-    }
 }
 
 impl Transform {

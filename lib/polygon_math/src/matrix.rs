@@ -1,7 +1,7 @@
 use std::cmp::{PartialEq, Eq};
 use std::ops::{Index, IndexMut, Mul};
 
-use vector::{Vector3, vector3};
+use vector::Vector3;
 use point::Point;
 
 /// A 4x4 matrix that can be used to transform 3D points and vectors.
@@ -113,15 +113,15 @@ impl Matrix4 {
     }
 
     pub fn x_part(&self) -> Vector3 {
-        vector3(self[(0, 0)], self[(1, 0)], self[(2, 0)])
+        Vector3::new(self[(0, 0)], self[(1, 0)], self[(2, 0)])
     }
 
     pub fn y_part(&self) -> Vector3 {
-        vector3(self[(0, 1)], self[(1, 1)], self[(2, 1)])
+        Vector3::new(self[(0, 1)], self[(1, 1)], self[(2, 1)])
     }
 
     pub fn z_part(&self) -> Vector3 {
-        vector3(self[(0, 2)], self[(1, 2)], self[(2, 2)])
+        Vector3::new(self[(0, 2)], self[(1, 2)], self[(2, 2)])
     }
 
     /// Get the matrix data as a raw array.
