@@ -21,7 +21,7 @@ pub struct GLRender {
     context: GLContext // TODO: do we need to hold onto the context?
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct GLMeshData {
     array_buffer: GLuint,
     vertex_buffer: GLuint,

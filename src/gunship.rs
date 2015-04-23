@@ -3,10 +3,11 @@ extern crate parse_collada as collada;
 extern crate polygon_rs as polygon;
 extern crate polygon_math as math;
 
-mod entity;
-mod component;
-mod system;
-mod input;
+pub mod entity;
+pub mod component;
+pub mod system;
+pub mod input;
+pub mod resource;
 
 use std::f32::consts::PI;
 use std::rc::Rc;
@@ -28,10 +29,12 @@ use component::transform::TransformManager;
 use component::camera::CameraManager;
 use component::mesh::MeshManager;
 use system::System;
+use resource::ResourceManager;
 
-struct Engine {
+pub struct Engine {
     pub window: Box<Window>,
     pub renderer: GLRender,
+    pub resource_manager: Rc<RefCell<ResourceManager>>,
     pub entity_manager: EntityManager,
     pub transform_manager: TransformManager,
     pub camera_manager: CameraManager,
@@ -45,14 +48,16 @@ impl Engine {
         let instance = bootstrap::init();
         let window = Window::new("Rust Window", instance);
         let renderer = gl_render::init(&window);
+        let resource_manager = Rc::new(RefCell::new(ResourceManager::new(renderer)));
 
         Engine {
             window: window,
             renderer: renderer,
+            resource_manager: resource_manager.clone(),
             entity_manager: EntityManager::new(),
             transform_manager: TransformManager::new(),
             camera_manager: CameraManager::new(),
-            mesh_manager: MeshManager::new(renderer),
+            mesh_manager: MeshManager::new(resource_manager.clone()),
             input: Input::new(),
             systems: Vec::new()
         }
