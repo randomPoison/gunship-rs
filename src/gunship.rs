@@ -12,6 +12,7 @@ pub mod resource;
 use std::f32::consts::PI;
 use std::rc::Rc;
 use std::cell::RefCell;
+use std::thread;
 
 use bootstrap::window::Window;
 use bootstrap::window::Message::*;
@@ -31,6 +32,8 @@ use component::camera::CameraManager;
 use component::mesh::MeshManager;
 use system::System;
 use resource::ResourceManager;
+
+pub const TARGET_FRAME_TIME_SECONDS: f32 = 1.0 / 60.0;
 
 pub struct Engine {
     pub window: Box<Window>,
@@ -90,13 +93,13 @@ impl Engine {
 
     pub fn main_loop(&mut self) {
         let mut close = false;
-        let frequency = time::frequency();
+        let frequency = time::frequency() as f32;
         let mut last_time = time::now();
 
         loop {
-            let time_now = time::now();
-            let elapsed_time = (time_now - last_time) as f64 / frequency as f64;
-            last_time = time_now;
+            let start_time = time::now();
+            let frame_time = (start_time - last_time) as f32 / frequency;
+            last_time = start_time;
 
             self.window.handle_messages();
             self.input.clear();
@@ -126,13 +129,27 @@ impl Engine {
 
             // Update systems.
             for system in self.systems.clone().iter_mut() {
-                system.borrow_mut().update(self, elapsed_time as f32);
+                system.borrow_mut().update(self, frame_time as f32);
             }
 
             self.draw();
 
             if close {
                 break;
+            }
+
+            let end_time = time::now();
+            let mut elapsed_time = (end_time - start_time) as f32 / frequency;
+            if elapsed_time > 0.1 {
+                elapsed_time = 0.1;
+            }
+
+            let difference = TARGET_FRAME_TIME_SECONDS - elapsed_time;
+            if difference > 0.0 {
+                let sleep_ms = (difference * 1000.0).round() as u32;
+                thread::sleep_ms(sleep_ms);
+            } else {
+                println!("Failed to meet required frame time: {} ms", elapsed_time);
             }
         };
     }
