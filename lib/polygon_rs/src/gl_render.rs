@@ -16,11 +16,12 @@ use geometry::mesh::Mesh;
 use geometry::face::Face;
 use camera::Camera;
 
-#[allow(dead_code)]
+#[allow(dead_code)] #[derive(Clone, Copy)]
 pub struct GLRender {
     context: GLContext // TODO: do we need to hold onto the context?
 }
 
+#[derive(Debug)]
 pub struct GLMeshData {
     array_buffer: GLuint,
     vertex_buffer: GLuint,
@@ -96,7 +97,12 @@ impl GLRender {
         let fs = GLRender::compile_shader(frag_src, gl::FRAGMENT_SHADER);
         let program = GLRender::link_program(vs, fs);
 
-        // TODO: unbind buffers and stuff?
+        unsafe {
+            // Unbind buffers.
+            gl::BindVertexArray(0);
+            gl::BindBuffer(gl::ARRAY_BUFFER, 0);
+            gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, 0);
+        }
 
         GLMeshData {
             array_buffer: array_buffer,
@@ -162,16 +168,28 @@ impl GLRender {
                              gl::TRUE,
                              model_view_projection.raw_data());
 
-        // TODO Don't clear for every mesh.
-        gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
-
         gl::DrawElements(gl::TRIANGLES,
                          mesh.element_count as GLsizei,
                          gl::UNSIGNED_INT,
                          0 as *const GLvoid);
 
-        gl_utils::swap_buffers(); // TODO don't swap buffers after every draw
+        // Unbind buffers.
+        gl::BindVertexArray(0);
+        gl::BindBuffer(gl::ARRAY_BUFFER, 0);
+        gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, 0);
     } }
+
+    /// Clears the current back buffer.
+    pub fn clear(&self) {
+        unsafe {
+            gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
+        }
+    }
+
+    /// Swap the front and back buffers for the render system.
+    pub fn swap_buffers(&self) {
+        gl_utils::swap_buffers();
+    }
 
     fn compile_shader(src: &str, ty: GLenum) -> GLuint {
         unsafe {

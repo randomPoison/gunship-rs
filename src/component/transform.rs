@@ -36,6 +36,7 @@ impl TransformManager {
     }
 }
 
+#[derive(Debug)]
 pub struct Transform {
     pub position: Point,
     pub rotation: Vector3,

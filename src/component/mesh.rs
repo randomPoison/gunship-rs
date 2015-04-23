@@ -16,25 +16,27 @@ use math::point::Point;
 use entity::Entity;
 
 pub struct MeshManager {
+    renderer: GLRender,
     meshes: Vec<GLMeshData>,
     entities: Vec<Entity>,
     indices: HashMap<Entity, usize>,
 }
 
 impl MeshManager {
-    pub fn new() -> MeshManager {
+    pub fn new(renderer: GLRender) -> MeshManager {
         MeshManager {
+            renderer: renderer,
             meshes: Vec::new(),
             entities: Vec::new(),
             indices: HashMap::new(),
         }
     }
 
-    pub fn create(&mut self, entity: Entity, renderer: &GLRender, path_text: &str) -> &GLMeshData {
+    pub fn create(&mut self, entity: Entity, path_text: &str) -> &GLMeshData {
         assert!(!self.indices.contains_key(&entity));
 
         let index = self.meshes.len();
-        self.meshes.push(load_mesh(renderer, path_text));
+        self.meshes.push(load_mesh(&self.renderer, path_text));
         self.entities.push(entity);
         self.indices.insert(entity, index);
         &self.meshes[index]
@@ -141,7 +143,9 @@ pub fn load_mesh(renderer: &GLRender, path_text: &str) -> GLMeshData {
     let frag_src = load_file("shaders/test3D.frag.glsl");
     let vert_src = load_file("shaders/test3D.vert.glsl");
 
-    renderer.gen_mesh(&mesh,
-                      vert_src.as_ref(),
-                      frag_src.as_ref())
+    let mesh_data = renderer.gen_mesh(&mesh,
+                                      vert_src.as_ref(),
+                                      frag_src.as_ref());
+
+    mesh_data
 }

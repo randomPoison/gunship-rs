@@ -52,26 +52,34 @@ impl Engine {
             entity_manager: EntityManager::new(),
             transform_manager: TransformManager::new(),
             camera_manager: CameraManager::new(),
-            mesh_manager: MeshManager::new(),
+            mesh_manager: MeshManager::new(renderer),
             input: Input::new(),
             systems: Vec::new()
         }
     }
 
     pub fn draw(&mut self) {
+        self.renderer.clear();
+
         // Handle rendering for each camera.
         for (camera, entity) in self.camera_manager.iter_mut() {
             // Update the camera's bounds based on it's transform.
-            let transform = self.transform_manager.get(entity);
-            camera.position = transform.position;
-            camera.rotation = Matrix4::rotation(transform.rotation.x, transform.rotation.y, transform.rotation.z);
+            // TODO: Update the camera's bounds before rendering.
+            {
+                let transform = self.transform_manager.get(entity);
+                camera.position = transform.position;
+                camera.rotation = Matrix4::rotation(transform.rotation.x, transform.rotation.y, transform.rotation.z);
+            }
 
             // Draw all of the meshes.
             for (mesh, entity) in self.mesh_manager.iter() {
-                let transform = self.transform_manager.get(entity);
+                let mut transform = self.transform_manager.get_mut(entity);
+                transform.update(); // TODO: Update all transforms before rendering.
                 self.renderer.draw_mesh(&mesh, transform.matrix(), &camera);
             }
         }
+
+        self.renderer.swap_buffers();
     }
 
     pub fn main_loop(&mut self) {
@@ -126,23 +134,28 @@ fn main() {
     // Start Gunship.
     let mut engine = Engine::new();
 
-    let camera_entity = engine.entity_manager.create();
+    // Create camera.
     {
+        let camera_entity = engine.entity_manager.create();
         let mut transform = engine.transform_manager.create(camera_entity);
         transform.position = Point::new(5.0, 0.0, 5.0);
         transform.update();
-    }
-
-    engine.mesh_manager.create(camera_entity, &engine.renderer, "meshes/gun_small.dae");
-    {
-        let mut camera = engine.camera_manager.create(
+        engine.camera_manager.create(
             camera_entity,
             PI / 3.0,
             1.0,
             0.001,
             100.0);
-        camera.position = Point::new(5.0, 0.0, 5.0);
-        camera.look_at(Point::new(0.0, 0.0, 0.0), Vector3::new(0.0, 1.0, 0.0));
+    }
+
+    // Create gun mesh.
+    {
+        let mesh_entity = engine.entity_manager.create();
+        let mesh_transform = engine.transform_manager.create(mesh_entity);
+        mesh_transform.position = Point::new(5.0, 5.0, 5.0);
+        mesh_transform.rotation = Vector3::new(0.0, PI, 5.0);
+        mesh_transform.scale = Vector3::new(0.5, 1.0, 2.0);
+        engine.mesh_manager.create(mesh_entity, "meshes/gun_small.dae");
     }
 
     engine.register_system(Rc::new(RefCell::new(Box::new(CameraMoveSystem {
@@ -161,48 +174,59 @@ struct CameraMoveSystem {
 impl System for CameraMoveSystem {
     fn update(&mut self, engine: &mut Engine, delta: f32) {
         let entity = engine.camera_manager.entities()[0];
-        let camera = &mut engine.camera_manager.cameras_mut()[0];
-        let transform = engine.transform_manager.get_mut(entity);
-        let (movement_x, movement_y) = engine.input.mouse_delta();
 
-        // Add mouse movement to total rotation.
-        self.rotation_x += (-movement_y as f32) * PI * 0.001;
-        self.rotation_y += (-movement_x as f32) * PI * 0.001;
+        // Cache off the position and rotation and then drop the transform
+        // so that we don't have multiple borrows of transform_manager.
+        let (position, rotation) = {
+            let transform = engine.transform_manager.get_mut(entity);
+            let (movement_x, movement_y) = engine.input.mouse_delta();
 
-        // Apply a rotation to the camera based on mouse movmeent.
-        transform.rotation =
-            Vector3::new(self.rotation_x,
-                         self.rotation_y,
-                         0.0);
-        let rotation_matrix =
-            Matrix4::rotation(self.rotation_x,
-                              self.rotation_y,
-                              0.0);
+            // Add mouse movement to total rotation.
+            self.rotation_x += (-movement_y as f32) * PI * 0.001;
+            self.rotation_y += (-movement_x as f32) * PI * 0.001;
 
-        // Calculate the forward and right vectors.
-        let forward_dir = -rotation_matrix.z_part();
-        let right_dir = rotation_matrix.x_part();
+            // Apply a rotation to the camera based on mouse movmeent.
+            transform.rotation =
+                Vector3::new(self.rotation_x,
+                             self.rotation_y,
+                             0.0);
+            let rotation_matrix =
+                Matrix4::rotation(self.rotation_x,
+                                  self.rotation_y,
+                                  0.0);
 
-        // Move camera based on input.
-        if engine.input.key_down(ScanCode::W) {
-            transform.position = transform.position + forward_dir * 0.01;
-        }
+            // Calculate the forward and right vectors.
+            let forward_dir = -rotation_matrix.z_part();
+            let right_dir = rotation_matrix.x_part();
 
-        if engine.input.key_down(ScanCode::S) {
-            transform.position = transform.position - forward_dir * 0.01;
-        }
+            // Move camera based on input.
+            if engine.input.key_down(ScanCode::W) {
+                transform.position = transform.position + forward_dir * 0.01;
+            }
 
-        if engine.input.key_down(ScanCode::D) {
-            transform.position = transform.position + right_dir * 0.01;
-        }
+            if engine.input.key_down(ScanCode::S) {
+                transform.position = transform.position - forward_dir * 0.01;
+            }
 
-        if engine.input.key_down(ScanCode::A) {
-            transform.position = transform.position - right_dir * 0.01
-        }
+            if engine.input.key_down(ScanCode::D) {
+                transform.position = transform.position + right_dir * 0.01;
+            }
+
+            if engine.input.key_down(ScanCode::A) {
+                transform.position = transform.position - right_dir * 0.01
+            }
+
+            (transform.position, transform.rotation)
+        };
 
         // Maybe shoot some bullets?
         if engine.input.mouse_button_pressed(0) {
-            println!("PEW PEW!");
+            let bullet_entity = engine.entity_manager.create();
+            let bullet_transform = engine.transform_manager.create(bullet_entity);
+            bullet_transform.position = position;
+            bullet_transform.rotation = rotation;
+            bullet_transform.scale = Vector3::new(0.5, 0.5, 0.5);
+            engine.mesh_manager.create(bullet_entity, "meshes/gun_small.dae");
         }
     }
 }
