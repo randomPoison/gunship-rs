@@ -1,5 +1,5 @@
-use super::Engine;
+use super::Scene;
 
 pub trait System {
-    fn update(&mut self, engine: &mut Engine, delta: f32);
+    fn update(&mut self, scene: &mut Scene, delta: f32);
 }
