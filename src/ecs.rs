@@ -1,3 +1,5 @@
+use super::Scene;
+
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Entity {
     id: u32
@@ -24,4 +26,13 @@ impl EntityManager {
         self.entities.push(entity);
         entity
     }
+}
+
+pub trait System {
+    fn update(&mut self, scene: &mut Scene, delta: f32);
+}
+
+pub trait ComponentManager {
+    fn init();
+    fn tear_down();
 }

@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use math::vector::Vector3;
 use math::matrix::Matrix4;
 use math::point::Point;
-use entity::Entity;
+use ecs::Entity;
 
 pub struct TransformManager {
     transforms: Vec<Transform>,

@@ -5,7 +5,7 @@ use std::cell::RefCell;
 
 use polygon::gl_render::GLMeshData;
 
-use entity::Entity;
+use ecs::Entity;
 use resource::ResourceManager;
 
 pub struct MeshManager {

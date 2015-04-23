@@ -3,9 +3,8 @@ extern crate parse_collada as collada;
 extern crate polygon_rs as polygon;
 extern crate polygon_math as math;
 
-pub mod entity;
+pub mod ecs;
 pub mod component;
-pub mod system;
 pub mod input;
 pub mod resource;
 
@@ -25,12 +24,11 @@ use math::matrix::Matrix4;
 
 use polygon::gl_render::{self, GLRender};
 
-use entity::EntityManager;
+use ecs::{EntityManager, System};
 use input::Input;
 use component::transform::TransformManager;
 use component::camera::CameraManager;
 use component::mesh::MeshManager;
-use system::System;
 use resource::ResourceManager;
 
 pub const TARGET_FRAME_TIME_SECONDS: f32 = 1.0 / 60.0;

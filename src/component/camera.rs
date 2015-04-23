@@ -5,7 +5,7 @@ use polygon::camera::Camera;
 use math::point::Point;
 use math::matrix::Matrix4;
 
-use entity::Entity;
+use ecs::Entity;
 
 pub struct CameraManager {
     cameras: Vec<Camera>,
