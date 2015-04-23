@@ -16,6 +16,7 @@ use std::cell::RefCell;
 use bootstrap::window::Window;
 use bootstrap::window::Message::*;
 use bootstrap::input::ScanCode;
+use bootstrap::time;
 
 use math::point::Point;
 use math::vector::Vector3;
@@ -89,8 +90,14 @@ impl Engine {
 
     pub fn main_loop(&mut self) {
         let mut close = false;
+        let frequency = time::frequency();
+        let mut last_time = time::now();
 
         loop {
+            let time_now = time::now();
+            let elapsed_time = (time_now - last_time) as f64 / frequency as f64;
+            last_time = time_now;
+
             self.window.handle_messages();
             self.input.clear();
             loop {
@@ -119,7 +126,7 @@ impl Engine {
 
             // Update systems.
             for system in self.systems.clone().iter_mut() {
-                system.borrow_mut().update(self, 0.01666);
+                system.borrow_mut().update(self, elapsed_time as f32);
             }
 
             self.draw();
@@ -206,19 +213,19 @@ impl System for CameraMoveSystem {
 
             // Move camera based on input.
             if engine.input.key_down(ScanCode::W) {
-                transform.position = transform.position + forward_dir * 0.01;
+                transform.position = transform.position + forward_dir * delta;
             }
 
             if engine.input.key_down(ScanCode::S) {
-                transform.position = transform.position - forward_dir * 0.01;
+                transform.position = transform.position - forward_dir * delta;
             }
 
             if engine.input.key_down(ScanCode::D) {
-                transform.position = transform.position + right_dir * 0.01;
+                transform.position = transform.position + right_dir * delta;
             }
 
             if engine.input.key_down(ScanCode::A) {
-                transform.position = transform.position - right_dir * 0.01
+                transform.position = transform.position - right_dir * delta
             }
 
             (transform.position, transform.rotation)
