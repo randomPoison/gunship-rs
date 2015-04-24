@@ -7,6 +7,7 @@ pub mod ecs;
 pub mod component;
 pub mod input;
 pub mod resource;
+pub mod scene;
 
 use std::f32::consts::PI;
 use std::rc::Rc;
@@ -24,12 +25,14 @@ use math::matrix::Matrix4;
 
 use polygon::gl_render::{self, GLRender};
 
-use ecs::{EntityManager, System};
+use ecs::{EntityManager, System, ComponentManager};
 use input::Input;
 use component::transform::TransformManager;
 use component::camera::CameraManager;
 use component::mesh::MeshManager;
+use component::struct_component_manager::{StructComponentManager, StructComponent};
 use resource::ResourceManager;
+use scene::Scene;
 
 pub const TARGET_FRAME_TIME_SECONDS: f32 = 1.0 / 60.0;
 
@@ -72,7 +75,9 @@ impl Engine {
             {
                 let transform = scene.transform_manager.get(entity);
                 camera.position = transform.position;
-                camera.rotation = Matrix4::rotation(transform.rotation.x, transform.rotation.y, transform.rotation.z);
+                camera.rotation =
+                    Matrix4::rotation(transform.rotation.x, transform.rotation.y, transform.rotation.z)
+                  * Matrix4::rotation(0.0, PI, 0.0);
             }
 
             // Draw all of the meshes.
@@ -159,26 +164,6 @@ impl Engine {
     }
 }
 
-pub struct Scene {
-    pub entity_manager: EntityManager,
-    pub transform_manager: TransformManager,
-    pub camera_manager: CameraManager,
-    pub mesh_manager: MeshManager,
-    pub input: Input,
-}
-
-impl Scene {
-    fn new(resource_manager: Rc<RefCell<ResourceManager>>) -> Scene {
-        Scene {
-            entity_manager: EntityManager::new(),
-            transform_manager: TransformManager::new(),
-            camera_manager: CameraManager::new(),
-            mesh_manager: MeshManager::new(resource_manager),
-            input: Input::new(),
-        }
-    }
-}
-
 fn main() {
     // Start Gunship.
     let mut engine = Engine::new();
@@ -207,15 +192,17 @@ fn main() {
             let mesh_transform = scene.transform_manager.create(mesh_entity);
             mesh_transform.position = Point::new(5.0, 5.0, 5.0);
             mesh_transform.rotation = Vector3::new(0.0, PI, 5.0);
-            mesh_transform.scale = Vector3::new(0.5, 1.0, 2.0);
             scene.mesh_manager.create(mesh_entity, "meshes/gun_small.dae");
         }
+
+        scene.register_manager::<BulletManager>(Box::new(StructComponentManager::new()));
     }
 
     engine.register_system(Box::new(CameraMoveSystem {
         rotation_x: 0.0,
         rotation_y: 0.0,
     }));
+    engine.register_system(Box::new(BulletSystem));
 
     engine.main_loop();
 }
@@ -236,7 +223,7 @@ impl System for CameraMoveSystem {
             let (movement_x, movement_y) = scene.input.mouse_delta();
 
             // Add mouse movement to total rotation.
-            self.rotation_x += (-movement_y as f32) * PI * 0.001;
+            self.rotation_x += (movement_y as f32) * PI * 0.001;
             self.rotation_y += (-movement_x as f32) * PI * 0.001;
 
             // Apply a rotation to the camera based on mouse movmeent.
@@ -250,8 +237,8 @@ impl System for CameraMoveSystem {
                                   0.0);
 
             // Calculate the forward and right vectors.
-            let forward_dir = -rotation_matrix.z_part();
-            let right_dir = rotation_matrix.x_part();
+            let forward_dir = rotation_matrix.z_part();
+            let right_dir = -rotation_matrix.x_part();
 
             // Move camera based on input.
             if scene.input.key_down(ScanCode::W) {
@@ -276,11 +263,50 @@ impl System for CameraMoveSystem {
         // Maybe shoot some bullets?
         if scene.input.mouse_button_pressed(0) {
             let bullet_entity = scene.entity_manager.create();
-            let bullet_transform = scene.transform_manager.create(bullet_entity);
-            bullet_transform.position = position;
-            bullet_transform.rotation = rotation;
-            bullet_transform.scale = Vector3::new(0.5, 0.5, 0.5);
-            scene.mesh_manager.create(bullet_entity, "meshes/gun_small.dae");
+
+            // Block is needed to end borrow of scene.transform_manager
+            // before scene.get_manager_mut() can be called.
+            {
+                let bullet_transform = scene.transform_manager.create(bullet_entity);
+                bullet_transform.position = position;
+                bullet_transform.rotation = rotation;
+                bullet_transform.scale = Vector3::new(0.5, 0.5, 0.5);
+                scene.mesh_manager.create(bullet_entity, "meshes/bullet_small.dae");
+            }
+
+            let mut bullet_handle = scene.get_manager_mut::<BulletManager>();
+            let mut bullet_manager = bullet_handle.get();
+            bullet_manager.create(bullet_entity);
+        }
+    }
+}
+
+struct Bullet {
+    direction: Vector3,
+    speed: f32,
+}
+
+pub type BulletManager = StructComponentManager<Bullet>;
+
+impl StructComponent for Bullet {
+    fn new() -> Bullet {
+        Bullet {
+            direction: Vector3::one(),
+            speed: 1.0,
+        }
+    }
+}
+
+struct BulletSystem;
+
+impl System for BulletSystem {
+    fn update(&mut self, scene: &mut Scene, delta: f32) {
+        let mut bullet_handle = scene.get_manager_mut::<BulletManager>();
+        let mut bullet_manager = bullet_handle.get();
+        for (bullet, entity) in bullet_manager.iter() {
+            let mut transform = scene.transform_manager.get_mut(entity);
+            let forward = transform.rotation_matrix().z_part();
+            transform.position = transform.position + forward * bullet.speed * delta;
         }
     }
 }

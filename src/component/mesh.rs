@@ -8,6 +8,8 @@ use polygon::gl_render::GLMeshData;
 use ecs::Entity;
 use resource::ResourceManager;
 
+pub type Mesh = GLMeshData;
+
 pub struct MeshManager {
     resource_manager: Rc<RefCell<ResourceManager>>,
     meshes: Vec<GLMeshData>,

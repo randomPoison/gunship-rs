@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::slice::{Iter, IterMut};
 
-use polygon::camera::Camera;
+pub use polygon::camera::Camera;
 use math::point::Point;
 use math::matrix::Matrix4;
 

@@ -1,4 +1,4 @@
-use super::Scene;
+use scene::Scene;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Entity {
@@ -33,6 +33,4 @@ pub trait System {
 }
 
 pub trait ComponentManager {
-    fn init();
-    fn tear_down();
 }

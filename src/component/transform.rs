@@ -64,4 +64,8 @@ impl Transform {
                    * (Matrix4::rotation(self.rotation.x, self.rotation.y, self.rotation.z)
                     * Matrix4::scale(self.scale.x, self.scale.y, self.scale.z));
     }
+
+    pub fn rotation_matrix(&self) -> Matrix4 {
+        Matrix4::rotation(self.rotation.x, self.rotation.y, self.rotation.z)
+    }
 }
