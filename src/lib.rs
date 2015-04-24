@@ -19,4 +19,4 @@ pub use self::ecs::{EntityManager, System, ComponentManager};
 pub use self::component::transform::{TransformManager, Transform};
 pub use self::component::camera::{CameraManager, Camera};
 pub use self::component::mesh::{MeshManager, Mesh};
-pub use self::component::struct_component_manager::{StructComponentManager, StructComponent};
+pub use self::component::struct_component_manager::StructComponentManager;

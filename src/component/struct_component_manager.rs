@@ -5,13 +5,13 @@ use ecs::{Entity, ComponentManager};
 
 /// A default implementation for a component manager that can be represented
 /// as a single struct.
-pub struct StructComponentManager<T: StructComponent> {
+pub struct StructComponentManager<T> {
     components: Vec<T>,
     entities: Vec<Entity>,
     indices: HashMap<Entity, usize>,
 }
 
-impl<T: StructComponent> StructComponentManager<T> {
+impl<T> StructComponentManager<T> {
     pub fn new() -> StructComponentManager<T> {
         StructComponentManager {
             components: Vec::new(),
@@ -20,11 +20,11 @@ impl<T: StructComponent> StructComponentManager<T> {
         }
     }
 
-    pub fn create(&mut self, entity: Entity) -> &mut T {
+    pub fn create(&mut self, entity: Entity, component: T) -> &mut T {
         assert!(!self.indices.contains_key(&entity));
 
         let index = self.components.len();
-        self.components.push(T::new());
+        self.components.push(component);
         self.entities.push(entity);
         self.indices.insert(entity, index);
 
@@ -58,7 +58,7 @@ impl<T: StructComponent> StructComponentManager<T> {
     }
 }
 
-impl<T: StructComponent> ComponentManager for StructComponentManager<T> {
+impl<T> ComponentManager for StructComponentManager<T> {
 }
 
 pub struct ComponentIter<'a, T: 'a> {
@@ -92,8 +92,4 @@ impl<'a, T: 'a> Iterator for ComponentIterMut<'a, T> {
             Some(camera) => Some((camera, *self.entity_iter.next().unwrap()))
         }
     }
-}
-
-pub trait StructComponent {
-    fn new() -> Self;
 }
