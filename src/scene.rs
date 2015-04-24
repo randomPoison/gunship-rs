@@ -5,7 +5,7 @@ use std::cell::{RefCell, RefMut};
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 
-use ecs::{Entity, EntityManager, ComponentManager};
+use ecs::{EntityManager, ComponentManager};
 use input::Input;
 use super::component::{TransformManager, CameraManager, MeshManager};
 use resource::ResourceManager;
@@ -51,7 +51,7 @@ impl Scene {
 
         let index = *self.component_indices
             .get(&manager_id).expect("Scene must have the specified manager.");
-        let mut manager_clone = self.components[index].clone();
+        let manager_clone = self.components[index].clone();
         ManagerHandle::new(manager_clone)
     }
 }

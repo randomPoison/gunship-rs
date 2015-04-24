@@ -4,9 +4,6 @@ name = "gunship"
 version = "0.0.0"
 authors = ["David LeGare <excaliburhissheath@gmail.com>"]
 
-[[bin]]
-name = "gunship"
-
 [dependencies.bootstrap_rs]
 version = "*"
 path = "lib/bootstrap_rs"
