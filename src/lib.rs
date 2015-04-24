@@ -10,9 +10,10 @@ pub mod resource;
 pub mod ecs;
 pub mod component;
 
+pub use math::*;
 pub use self::engine::Engine;
 pub use self::scene::Scene;
-pub use self::input::Input;
+pub use self::input::{Input, ScanCode};
 pub use self::resource::ResourceManager;
 pub use self::ecs::{EntityManager, System, ComponentManager};
 pub use self::component::transform::{TransformManager, Transform};

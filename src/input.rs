@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use bootstrap::window::Message;
 use bootstrap::window::Message::*;
-use bootstrap::input::ScanCode;
+pub use bootstrap::input::ScanCode;
 
 pub const MAX_SUPPORTED_MOUSE_BUTTONS: usize = 5;
 

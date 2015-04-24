@@ -144,4 +144,12 @@ impl Engine {
     pub fn register_system(&mut self, system: Box<System>) {
         self.systems.push(system);
     }
+
+    pub fn scene(&self) -> &Scene {
+        self.scene.as_ref().unwrap()
+    }
+
+    pub fn scene_mut(&mut self) -> &mut Scene {
+        self.scene.as_mut().unwrap()
+    }
 }
