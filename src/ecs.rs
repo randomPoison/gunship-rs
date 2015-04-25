@@ -1,6 +1,6 @@
 use scene::Scene;
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct Entity {
     id: u32
 }

@@ -1,71 +1,168 @@
 use std::collections::HashMap;
+use std::cell::Cell;
 
 use math::vector::Vector3;
 use math::matrix::Matrix4;
 use math::point::Point;
-use ecs::Entity;
+use ecs::{Entity, System};
+use scene::Scene;
 
 pub struct TransformManager {
-    transforms: Vec<Transform>,
-    indices: HashMap<Entity, usize>,
+    transforms: Vec<Vec<Transform>>,
+    entities: Vec<Vec<Entity>>,
+
+    /// A map between the entity owning the transform and the location of the transform.
+    ///
+    /// The first value of the mapped tuple is the row containing the transform, the
+    /// second is the index of the transform within that row.
+    indices: HashMap<Entity, (usize, usize)>,
 }
 
 impl TransformManager {
     pub fn new() -> TransformManager {
-        TransformManager {
+        let mut transform_manager = TransformManager {
             transforms: Vec::new(),
+            entities: Vec::new(),
             indices: HashMap::new(),
-        }
+        };
+
+        transform_manager.transforms.push(Vec::new());
+        transform_manager.entities.push(Vec::new());
+        transform_manager
     }
 
     pub fn create(&mut self, entity: Entity) -> &mut Transform {
-        let index = self.transforms.len();
-        self.transforms.push(Transform::new());
-        self.indices.insert(entity, index);
-        &mut self.transforms[index]
+        let index = self.transforms[0].len();
+        self.transforms[0].push(Transform::new());
+        self.entities[0].push(entity);
+
+        assert!(self.transforms[0].len() == self.entities[0].len());
+
+        self.indices.insert(entity, (0, index));
+        &mut self.transforms[0][index]
     }
 
     pub fn get(&self, entity: Entity) -> &Transform {
-        let index = *self.indices.get(&entity).expect("Transform manager does not contain a transform for the given entity.");
-        &self.transforms[index]
+        let (row, index) = *self.indices.get(&entity).expect("Transform manager does not contain a transform for the given entity.");
+        &self.transforms[row][index]
     }
 
     pub fn get_mut(&mut self, entity: Entity) -> &mut Transform {
-        let index = *self.indices.get(&entity).expect("Transform manager does not contain a transform for the given entity.");
-        &mut self.transforms[index]
+        let (row, index) = *self.indices.get(&entity).expect("Transform manager does not contain a transform for the given entity.");
+        &mut self.transforms[row][index]
+    }
+
+    pub fn set_child(&mut self, parent: Entity, child: Entity) {
+        // Remove old transform component.
+        let mut transform = self.remove(child);
+
+        // Get the indices of the parent.
+        let (parent_row, _) = *self.indices.get(&parent).unwrap();
+        let child_row = parent_row + 1;
+
+        println!("child row: {}", child_row);
+
+        // Ensure that there are enough rows for the child.
+        while self.transforms.len() < child_row + 1 {
+            self.transforms.push(Vec::new());
+            self.entities.push(Vec::new());
+        }
+
+        println!("transforms len: {}, entities len: {}", self.transforms.len(), self.entities.len());
+
+        // Add the child to the correct row.
+        transform.parent = Some(parent);
+        let child_index = self.transforms[child_row].len();
+        self.transforms[child_row].push(transform);
+        self.entities[child_row].push(child);
+
+        // Update the index map.
+        self.indices.insert(child, (child_row, child_index));
+    }
+
+    fn remove(&mut self, entity: Entity) -> Transform {
+        // Retrieve indices of removed entity and the one it's swapped with.
+        let (row, index) = *self.indices.get(&entity)
+            .expect("Transform manager does not contain a transform for the given entity.");
+        assert!(self.transforms[row].len() == self.entities[row].len());
+
+        // Remove transform and the associate entity.
+        let transform = self.transforms[row].swap_remove(index);
+        let removed_entity = self.entities[row].swap_remove(index);
+        assert!(removed_entity == entity);
+        // Remove mapping for the removed component.
+        self.indices.remove(&entity);
+
+        // Update the index mapping for the moved entity, but only if the one we removed
+        // wasn't the only one in the row.
+        if index != self.entities[row].len() {
+            let moved_entity = self.entities[row][index];
+            self.indices.insert(moved_entity, (row, index));
+        }
+
+        transform
     }
 }
 
 #[derive(Debug)]
 pub struct Transform {
+    parent: Option<Entity>,
     pub position: Point,
     pub rotation: Vector3,
     pub scale: Vector3,
-    matrix: Matrix4
+    matrix: Cell<Matrix4>,
 }
 
 impl Transform {
     pub fn new() -> Transform {
         Transform {
+            parent: None,
             position: Point::origin(),
             rotation: Vector3::zero(),
             scale:    Vector3::one(),
-            matrix:   Matrix4::identity()
+            matrix:   Cell::new(Matrix4::identity())
         }
     }
 
     pub fn matrix(&self) -> Matrix4 {
-        self.matrix
+        self.matrix.get()
     }
 
-    // TODO: This shouldn't be a member of Transform, it should be done by the TransformManager.
-    pub fn update(&mut self) {
-        self.matrix = Matrix4::from_point(self.position)
-                   * (Matrix4::rotation(self.rotation.x, self.rotation.y, self.rotation.z)
-                    * Matrix4::scale(self.scale.x, self.scale.y, self.scale.z));
+    fn update(&self, parent_matrix: Matrix4) {
+        self.matrix.set(
+            parent_matrix
+                * (Matrix4::from_point(self.position)
+                    * (Matrix4::rotation(self.rotation.x, self.rotation.y, self.rotation.z)
+                        * Matrix4::scale(self.scale.x, self.scale.y, self.scale.z))));
     }
 
     pub fn rotation_matrix(&self) -> Matrix4 {
         Matrix4::rotation(self.rotation.x, self.rotation.y, self.rotation.z)
+    }
+}
+
+pub struct TransformUpdateSystem;
+
+impl System for TransformUpdateSystem {
+    fn update(&mut self, scene: &mut Scene, _: f32) {
+        let transform_manager = &mut scene.transform_manager;
+        for row in transform_manager.transforms.iter() {
+            for transform in row.iter() {
+                // Retrieve the parent's transformation matrix, using the identity
+                // matrix if the transform has no parent.
+                let parent_matrix = {
+                    match transform.parent {
+                        None => Matrix4::identity(),
+                        Some(parent) => {
+                            let (parent_row, parent_index) = *transform_manager.indices.get(&parent).unwrap();
+                            let ref parent_transform = transform_manager.transforms[parent_row][parent_index];
+                            parent_transform.matrix.get()
+                        }
+                    }
+                };
+
+                transform.update(parent_matrix);
+            }
+        }
     }
 }

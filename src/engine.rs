@@ -15,6 +15,7 @@ use math::matrix::Matrix4;
 use scene::Scene;
 use resource::ResourceManager;
 use ecs::System;
+use component::transform::TransformUpdateSystem;
 
 pub const TARGET_FRAME_TIME_SECONDS: f32 = 1.0 / 60.0;
 
@@ -23,6 +24,7 @@ pub struct Engine {
     renderer: GLRender,
     resource_manager: Rc<RefCell<ResourceManager>>,
     systems: Vec<Box<System>>,
+    transform_update: Box<System>,
     scene: Option<Scene>,
 }
 
@@ -38,10 +40,12 @@ impl Engine {
             renderer: renderer,
             resource_manager: resource_manager.clone(),
             systems: Vec::new(),
+            transform_update: Box::new(TransformUpdateSystem),
             scene: None,
         };
 
         engine.scene = Some(Scene::new(engine.resource_manager.clone()));
+
         engine
     }
 
@@ -64,8 +68,7 @@ impl Engine {
 
             // Draw all of the meshes.
             for (mesh, entity) in scene.mesh_manager.iter() {
-                let mut transform = scene.transform_manager.get_mut(entity);
-                transform.update(); // TODO: Update all transforms before rendering.
+                let transform = scene.transform_manager.get_mut(entity);
                 self.renderer.draw_mesh(&mesh, transform.matrix(), &camera);
             }
         }
@@ -117,6 +120,8 @@ impl Engine {
                 for system in self.systems.iter_mut() {
                     system.update(scene, frame_time as f32);
                 }
+
+                self.transform_update.update(scene, frame_time as f32);
             }
 
             self.draw();
