@@ -24,6 +24,16 @@ impl Vector3 {
         Vector3::new(1.0, 1.0, 1.0)
     }
 
+    pub fn from_slice(data: &[f32]) -> Vector3 {
+        assert!(data.len() == 3);
+
+        Vector3 {
+            x: data[0],
+            y: data[1],
+            z: data[2],
+        }
+    }
+
     pub fn cross(first: Vector3, second: Vector3) -> Vector3 {
         Vector3 {
             x: first.y * second.z - first.z * second.y,
@@ -59,6 +69,14 @@ impl Mul<f32> for Vector3 {
 
     fn mul(self, rhs: f32) -> Vector3 {
         Vector3::new(self.x * rhs, self.y * rhs, self.z * rhs)
+    }
+}
+
+impl Mul<Vector3> for f32 {
+    type Output = Vector3;
+
+    fn mul(self, rhs: Vector3) -> Vector3 {
+        rhs * self
     }
 }
 

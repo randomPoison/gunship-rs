@@ -60,16 +60,11 @@ impl TransformManager {
         let (parent_row, _) = *self.indices.get(&parent).unwrap();
         let child_row = parent_row + 1;
 
-        println!("child row: {}", child_row);
-
         // Ensure that there are enough rows for the child.
         while self.transforms.len() < child_row + 1 {
             self.transforms.push(Vec::new());
             self.entities.push(Vec::new());
         }
-
-        println!("transforms len: {}, entities len: {}", self.transforms.len(), self.entities.len());
-
         // Add the child to the correct row.
         transform.parent = Some(parent);
         let child_index = self.transforms[child_row].len();
@@ -126,6 +121,15 @@ impl Transform {
 
     pub fn matrix(&self) -> Matrix4 {
         self.matrix.get()
+    }
+
+    pub fn normal_matrix(&self) -> Matrix4 {
+        let inverse =
+            Matrix4::scale(1.0 / self.scale.x, 1.0 / self.scale.y, 1.0 / self.scale.z)
+          * Matrix4::rotation(self.rotation.x, self.rotation.y, self.rotation.z).transpose()
+          * Matrix4::translation(-self.position.x, -self.position.y, -self.position.z);
+
+        inverse.transpose()
     }
 
     fn update(&self, parent_matrix: Matrix4) {

@@ -9,10 +9,11 @@ use gl::types::*;
 use bootstrap::window::Window;
 use bootstrap::gl_utils::{self, GLContext};
 
-use math::point::Point;
-use math::matrix::Matrix4;
+use math::Point;
+use math::Matrix4;
+use math::Color;
 
-use geometry::mesh::Mesh;
+use geometry::mesh::{Mesh, Vertex};
 use geometry::face::Face;
 use camera::Camera;
 
@@ -68,16 +69,15 @@ impl GLRender {
             gl::BindVertexArray(array_buffer);
         }
 
-        // generate vertex buffer,
-        // passing the raw data held by the mesh
+        // generate vertex buffer, passing the raw data held by the mesh
         let mut vertex_buffer = 0;
         unsafe {
             gl::GenBuffers(1, &mut vertex_buffer);
             gl::BindBuffer(gl::ARRAY_BUFFER, vertex_buffer);
 
             gl::BufferData(gl::ARRAY_BUFFER,
-                           (mesh.vertices.len() * mem::size_of::<Point>()) as GLsizeiptr,
-                           mem::transmute(&(mesh.vertices[0].x)),
+                           (mesh.vertices.len() * mem::size_of::<Vertex>()) as GLsizeiptr,
+                           mem::transmute(&mesh.vertices[0]),
                            gl::STATIC_DRAW);
         }
 
@@ -97,8 +97,8 @@ impl GLRender {
         let fs = GLRender::compile_shader(frag_src, gl::FRAGMENT_SHADER);
         let program = GLRender::link_program(vs, fs);
 
+        // Unbind buffers.
         unsafe {
-            // Unbind buffers.
             gl::BindVertexArray(0);
             gl::BindBuffer(gl::ARRAY_BUFFER, 0);
             gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, 0);
@@ -113,10 +113,11 @@ impl GLRender {
         }
     }
 
-    /// TODO: make this a member of GLMeshData?
-    pub fn draw_mesh(&self, mesh: &GLMeshData, model_transform: Matrix4, camera: &Camera) { unsafe {
+    pub fn draw_mesh(&self, mesh: &GLMeshData, model_transform: Matrix4, normal_transform: Matrix4, camera: &Camera) { unsafe {
         let view_transform = camera.view_transform();
+        let model_view_transform = view_transform * model_transform;
         let projection = camera.projection_matrix();
+        let model_view_projection = projection * ( view_transform * model_transform );
 
         // Bind the buffers for the mesh.
         gl::BindVertexArray(mesh.array_buffer);
@@ -127,46 +128,84 @@ impl GLRender {
         gl::UseProgram(mesh.shader);
 
         // Specify the layout of the vertex data.
-        let vertex_pos_location = gl::GetAttribLocation(
+        let position_location = gl::GetAttribLocation(
             mesh.shader,
             CString::new("vertexPosition").unwrap().as_ptr()); // TODO: Write a helper to make using cstrings easier.
         gl::VertexAttribPointer(
-            vertex_pos_location as GLuint,
+            position_location as GLuint,
             4,
             gl::FLOAT,
             gl::FALSE,
-            mem::size_of::<Point>() as GLsizei,
+            mem::size_of::<Vertex>() as GLsizei,
             ptr::null());
-        gl::EnableVertexAttribArray(vertex_pos_location as GLuint);
+        gl::EnableVertexAttribArray(position_location as GLuint);
 
+        let normal_location = gl::GetAttribLocation(
+            mesh.shader,
+            CString::new("vertexNormal").unwrap().as_ptr());
+        gl::VertexAttribPointer(
+            normal_location as GLuint,
+            3,
+            gl::FLOAT,
+            gl::FALSE,
+            mem::size_of::<Vertex>() as GLsizei,
+            mem::transmute(mem::size_of::<Point>()));
+        gl::EnableVertexAttribArray(normal_location as GLuint);
+
+        // Set uniform transforms.
         let model_transform_location =
             gl::GetUniformLocation(mesh.shader, CString::new("modelTransform").unwrap().as_ptr());
-        gl::UniformMatrix4fv(model_transform_location,
-                             1,
-                             gl::TRUE,
-                             model_transform.raw_data());
+        gl::UniformMatrix4fv(
+            model_transform_location,
+            1,
+            gl::TRUE,
+            model_transform.raw_data());
+
+        let normal_transform_location =
+            gl::GetUniformLocation(mesh.shader, CString::new("normalTransform").unwrap().as_ptr());
+        gl::UniformMatrix4fv(
+            normal_transform_location,
+            1,
+            gl::TRUE,
+            normal_transform.raw_data());
 
         let view_transform_location =
             gl::GetUniformLocation(mesh.shader, CString::new("viewTransform").unwrap().as_ptr());
-        gl::UniformMatrix4fv(view_transform_location,
-                             1,
-                             gl::TRUE,
-                             view_transform.raw_data());
+        gl::UniformMatrix4fv(
+            view_transform_location,
+            1,
+            gl::TRUE,
+            view_transform.raw_data());
+
+        let model_view_transform_location =
+            gl::GetUniformLocation(mesh.shader, CString::new("modelViewTransform").unwrap().as_ptr());
+        gl::UniformMatrix4fv(
+            model_view_transform_location,
+            1,
+            gl::TRUE,
+            model_view_transform.raw_data());
 
         let projection_transform_location =
             gl::GetUniformLocation(mesh.shader, CString::new("projectionTransform").unwrap().as_ptr());
-        gl::UniformMatrix4fv(projection_transform_location,
-                             1,
-                             gl::TRUE,
-                             projection.raw_data());
+        gl::UniformMatrix4fv(
+            projection_transform_location,
+            1,
+            gl::TRUE,
+            projection.raw_data());
 
-        let model_view_projection = projection * ( view_transform * model_transform );
         let model_view_projection_location =
             gl::GetUniformLocation(mesh.shader, CString::new("modelViewProjection").unwrap().as_ptr());
-        gl::UniformMatrix4fv(model_view_projection_location,
-                             1,
-                             gl::TRUE,
-                             model_view_projection.raw_data());
+        gl::UniformMatrix4fv(
+            model_view_projection_location,
+            1,
+            gl::TRUE,
+            model_view_projection.raw_data());
+
+        // Set uniform colors.
+        let ambient_color = Color::new(0.5, 0.5, 0.5, 1.0);
+        let ambient_location =
+            gl::GetUniformLocation(mesh.shader, CString::new("globalAmbient").unwrap().as_ptr());
+        gl::Uniform4fv(ambient_location, 1, ambient_color.raw_data());
 
         gl::DrawElements(gl::TRIANGLES,
                          mesh.element_count as GLsizei,

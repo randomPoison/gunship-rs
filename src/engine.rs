@@ -69,7 +69,7 @@ impl Engine {
             // Draw all of the meshes.
             for (mesh, entity) in scene.mesh_manager.iter() {
                 let transform = scene.transform_manager.get_mut(entity);
-                self.renderer.draw_mesh(&mesh, transform.matrix(), &camera);
+                self.renderer.draw_mesh(&mesh, transform.matrix(), transform.normal_matrix(), &camera);
             }
         }
 

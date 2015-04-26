@@ -6,7 +6,7 @@ use std::error::Error;
 
 use collada::{ColladaData, GeometricElement, ArrayElement, PrimitiveType};
 
-use math::point::Point;
+use math::{Point, Vector3};
 
 use polygon::gl_render::{GLRender, GLMeshData};
 use polygon::geometry::mesh::Mesh;
@@ -56,12 +56,16 @@ impl ResourceManager {
         };
 
         let vertex_data_raw: &[f32] = match mesh.sources[0].array_element {
-            ArrayElement::Float(ref float_array)  => {
-                float_array.as_ref()
-            },
+            ArrayElement::Float(ref float_array) => float_array.as_ref(),
             _ => panic!("Thas some bullshit.")
         };
         assert!(vertex_data_raw.len() > 0);
+
+        let normal_data_raw: &[f32] = match mesh.sources[1].array_element {
+            ArrayElement::Float(ref float_array) => float_array.as_ref(),
+            _ => panic!("We don't support anything other than float arrays right now")
+        };
+        assert!(normal_data_raw.len() > 0);
 
         let mut vertex_data: Vec<Point> = Vec::new();
         for offset in (0..vertex_data_raw.len() / 3) {
@@ -90,10 +94,16 @@ impl ResourceManager {
         }
         assert!(face_data.len() > 0);
 
-        let mesh = Mesh::from_slice(vertex_data.as_ref(), face_data.as_ref());
+        let mut normal_data: Vec<Vector3> = Vec::new();
+        for offset in (0..normal_data_raw.len() / 3) {
+            normal_data.push(
+                Vector3::from_slice(&normal_data_raw[offset * 3..offset * 3 + 3]));
+        }
 
-        let frag_src = load_file("shaders/test3D.frag.glsl");
-        let vert_src = load_file("shaders/test3D.vert.glsl");
+        let mesh = Mesh::from_slice(vertex_data.as_ref(), face_data.as_ref(), normal_data.as_ref());
+
+        let frag_src = load_file("shaders/forward_phong.frag.glsl");
+        let vert_src = load_file("shaders/forward_phong.vert.glsl");
 
         let mesh_data =
             self.renderer.gen_mesh(&mesh,
