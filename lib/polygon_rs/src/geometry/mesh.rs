@@ -6,57 +6,39 @@ use geometry::face::Face;
 /// Meshes are represented as list of vertex positions and a list of faces.
 /// Each face is represented as 3 indices into the vertex array.
 pub struct Mesh {
-    pub vertices: Vec<Vertex>,
-    pub faces: Vec<Face>,
+    pub raw_data: Vec<f32>,
+    pub indices: Vec<u32>,
+    pub position_attribute: VertexAttribute,
+    pub normal_attribute: VertexAttribute,
 }
 
 impl Mesh {
-    /// Create a new Mesh with no data in it.
-    #[allow(dead_code)]
-    pub fn new() -> Mesh {
-        Mesh {
-            vertices: Vec::new(),
-            faces: Vec::new(),
-        }
-    }
-
     /// Create a new mesh from existing data passed as slices.
-    pub fn from_slice(vert_data: &[Point], face_data: &[Face], normal_data: &[Vector3]) -> Mesh {
-        let mut vertices: Vec<Vertex> = Vec::new();
-        for (point, normal) in vert_data.iter().zip(normal_data.iter()) {
-            let vertex = Vertex {
-                position: *point,
-                normal: *normal,
-            };
+    pub fn from_raw_data(positions_raw: &[f32], normals_raw: &[f32], indices_raw: &[u32]) -> Mesh {
+        let mut raw_data: Vec<f32> = Vec::with_capacity(positions_raw.len() + normals_raw.len());
+        raw_data.push_all(positions_raw);
+        raw_data.push_all(normals_raw);
 
-            vertices.push(vertex);
-        }
-
-
-        let mut normals: Vec<Vector3> = Vec::new();
-        for normal in normal_data {
-            normals.push(*normal);
-        }
-
-        let mut faces: Vec<Face> = Vec::new();
-        for face in face_data {
-            faces.push(Face {
-                indices:
-                    [face.indices[0],
-                     face.indices[1],
-                     face.indices[2]]
-            });
-        }
+        let mut indices: Vec<u32> = Vec::with_capacity(indices_raw.len());
+        indices.push_all(indices_raw);
 
         Mesh {
-            vertices: vertices,
-            faces: faces,
+            raw_data: raw_data,
+            indices: indices,
+            position_attribute: VertexAttribute {
+                stride: 4,
+                offset: 0,
+            },
+            normal_attribute: VertexAttribute {
+                stride: 3,
+                offset: positions_raw.len() as u32,
+            },
         }
     }
 }
 
-#[repr(C)] #[derive(Debug, Clone, Copy)]
-pub struct Vertex {
-    position: Point,
-    normal: Vector3,
+#[derive(Debug, Clone, Copy)]
+pub struct VertexAttribute {
+    pub stride: u32,
+    pub offset: u32,
 }

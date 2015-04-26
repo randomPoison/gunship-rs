@@ -4,7 +4,7 @@ use std::fs::File;
 use std::path::Path;
 use std::error::Error;
 
-use collada::{ColladaData, GeometricElement, ArrayElement, PrimitiveType};
+use collada::{self, ColladaData, GeometricElement, ArrayElement, PrimitiveType};
 
 use math::{Point, Vector3};
 
@@ -31,13 +31,23 @@ impl ResourceManager {
         }
         else
         {
-            let mesh = self.load_from_file(path_text);
-            self.meshes.insert(path_text.to_string(), mesh);
-            mesh
+            let frag_src = load_file("shaders/test3D.frag.glsl");
+            let vert_src = load_file("shaders/test3D.vert.glsl");
+
+            let mesh = COLLADALoader::load_from_file(path_text);
+            let mesh_data =
+                self.renderer.gen_mesh(&mesh, vert_src.as_ref(), frag_src.as_ref());
+
+            self.meshes.insert(path_text.to_string(), mesh_data);
+            mesh_data
         }
     }
+}
 
-    fn load_from_file(&mut self, path_text: &str) -> GLMeshData {
+struct COLLADALoader;
+
+impl COLLADALoader {
+    fn load_from_file(path_text: &str) -> Mesh {
         // load data from COLLADA file
         let file_path = Path::new(path_text);
         let mut file = match File::open(&file_path) {
@@ -50,67 +60,95 @@ impl ResourceManager {
             Ok(data) => data
         };
 
+        COLLADALoader::parse(collada_data)
+    }
+
+    /// Load the mesh data from a COLLADA .dae file.
+    ///
+    /// The data in a COLLADA files is formatted for efficiency, but isn't necessarily
+    /// organized in a way that is supported by the graphics API. This method reformats the
+    /// data so that it can be sent straight to the GPU without further manipulation.
+    ///
+    /// In order to to this, it reorganizes the normals, UVs, and other vertex attributes to
+    /// be in the same order as the vertex positions.
+    fn parse(collada_data: ColladaData) -> Mesh {
         let mesh = match collada_data.library_geometries.geometries[0].data {
             GeometricElement::Mesh(ref mesh) => mesh,
-            _ => panic!("What even is this shit?")
+            _ => panic!("No mesh found within geometry")
         };
 
-        let vertex_data_raw: &[f32] = match mesh.sources[0].array_element {
-            ArrayElement::Float(ref float_array) => float_array.as_ref(),
-            _ => panic!("Thas some bullshit.")
-        };
-        assert!(vertex_data_raw.len() > 0);
-
-        let normal_data_raw: &[f32] = match mesh.sources[1].array_element {
-            ArrayElement::Float(ref float_array) => float_array.as_ref(),
-            _ => panic!("We don't support anything other than float arrays right now")
-        };
-        assert!(normal_data_raw.len() > 0);
-
-        let mut vertex_data: Vec<Point> = Vec::new();
-        for offset in (0..vertex_data_raw.len() / 3) {
-            vertex_data.push(Point::from_slice(&vertex_data_raw[offset * 3..offset * 3 + 3]));
-        }
-        assert!(vertex_data.len() > 0);
+        let position_data_raw = COLLADALoader::get_raw_positions(&mesh);
+        let normal_data_raw = COLLADALoader::get_normals(&mesh);
 
         let triangles = match mesh.primitives[0] {
             PrimitiveType::Triangles(ref triangles) => triangles,
-            _ => panic!("This isn't even cool.")
+            _ => panic!("Only triangles primitives are supported currently")
         };
+        let primitive_indices = &triangles.primitives;
 
+        // Create a new array for the positions so we can add the w coordinate.
+        let mut position_data: Vec<f32> = Vec::with_capacity(position_data_raw.len() / 3 * 4);
+        position_data.resize(position_data_raw.len() / 3 * 4, 0.0);
+
+        for offset in 0..position_data_raw.len() / 3 {
+            // Copy the position from the source array and add the w coordinate.
+            let source_offset = offset * 3;
+            let dest_offset = offset * 4;
+            position_data[dest_offset + 0] = position_data_raw[source_offset + 0];
+            position_data[dest_offset + 1] = position_data_raw[source_offset + 1];
+            position_data[dest_offset + 2] = position_data_raw[source_offset + 2];
+            position_data[dest_offset + 3] = 1.0;
+        }
+
+        // Create a new array for the normals and rearrange them to match the order of position attributes.
+        let mut sorted_normals: Vec<f32> = Vec::with_capacity(position_data.len());
+        sorted_normals.resize(position_data.len(), 0.0);
+
+        // Iterate over the indices, rearranging the normal data to match the position data.
         let stride = triangles.inputs.len();
-        let face_data_raw = triangles.primitives.iter().enumerate().filter_map(|(index, &value)| {
-                if index % stride == 0 {
-                    Some(value as u32)
-                } else {
-                    None
-                }
-            }).collect::<Vec<u32>>();
-        assert!(face_data_raw.len() > 0);
+        let mut indices: Vec<u32> = Vec::new();
+        for offset in 0..(triangles.count * 3) {
+            // Determine the offset of the the current vertex's attributes
+            let source_offset = primitive_indices[offset * stride];
+            let normal_offset = primitive_indices[offset * stride + 1];
 
-        let mut face_data: Vec<Face> = Vec::new();
-        for offset in (0..face_data_raw.len() / 3) {
-            face_data.push(Face::from_slice(&face_data_raw[offset * 3..offset * 3 + 3]));
-        }
-        assert!(face_data.len() > 0);
+            // Copy the normal from the source array to the correct location in the sorted array.
+            // sorted_normals[source_offset + 0] = normal_data_raw[normal_offset + 0];
+            // sorted_normals[source_offset + 1] = normal_data_raw[normal_offset + 1];
+            // sorted_normals[source_offset + 2] = normal_data_raw[normal_offset + 2];
 
-        let mut normal_data: Vec<Vector3> = Vec::new();
-        for offset in (0..normal_data_raw.len() / 3) {
-            normal_data.push(
-                Vector3::from_slice(&normal_data_raw[offset * 3..offset * 3 + 3]));
+            indices.push(primitive_indices[offset * stride] as u32);
         }
 
-        let mesh = Mesh::from_slice(vertex_data.as_ref(), face_data.as_ref(), normal_data.as_ref());
+        println!("position data: {:?}", position_data);
+        println!("normal data: {:?}", sorted_normals);
+        println!("indices: {:?}", indices);
 
-        let frag_src = load_file("shaders/forward_phong.frag.glsl");
-        let vert_src = load_file("shaders/forward_phong.vert.glsl");
+        let mesh = Mesh::from_raw_data(position_data.as_ref(), sorted_normals.as_ref(), indices.as_ref());
 
-        let mesh_data =
-            self.renderer.gen_mesh(&mesh,
-                                   vert_src.as_ref(),
-                                   frag_src.as_ref());
+        mesh
+    }
 
-        mesh_data
+    fn get_raw_positions(mesh: &collada::Mesh) -> &[f32] {
+        // TODO: Consult the correct element (<triangles> for now) to determine which source has position data.
+        let position_data: &[f32] = match mesh.sources[0].array_element {
+            ArrayElement::Float(ref float_array) => float_array.as_ref(),
+            _ => panic!("Only float arrays supported for vertex position array")
+        };
+        assert!(position_data.len() > 0);
+
+        position_data
+    }
+
+    fn get_normals(mesh: &collada::Mesh) -> &[f32] {
+        // TODO: Consult the correct element (<triangles> for now) to determine which source has normal data.
+        let normal_data: &[f32] = match mesh.sources[1].array_element {
+            ArrayElement::Float(ref float_array) => float_array.as_ref(),
+            _ => panic!("Only float arrays supported for vertex normal array")
+        };
+        assert!(normal_data.len() > 0);
+
+        normal_data
     }
 }
 

@@ -13,7 +13,7 @@ use math::Point;
 use math::Matrix4;
 use math::Color;
 
-use geometry::mesh::{Mesh, Vertex};
+use geometry::mesh::{Mesh, VertexAttribute};
 use geometry::face::Face;
 use camera::Camera;
 
@@ -28,7 +28,9 @@ pub struct GLMeshData {
     vertex_buffer: GLuint,
     index_buffer: GLuint,
     shader: GLuint,
-    element_count: usize
+    pub position_attribute: VertexAttribute,
+    pub normal_attribute: VertexAttribute,
+    element_count: usize,
 }
 
 // TODO: This should be GLRender::new() for consistency.
@@ -76,8 +78,8 @@ impl GLRender {
             gl::BindBuffer(gl::ARRAY_BUFFER, vertex_buffer);
 
             gl::BufferData(gl::ARRAY_BUFFER,
-                           (mesh.vertices.len() * mem::size_of::<Vertex>()) as GLsizeiptr,
-                           mem::transmute(&mesh.vertices[0]),
+                           (mesh.raw_data.len() * mem::size_of::<f32>()) as GLsizeiptr,
+                           mem::transmute(&mesh.raw_data[0]),
                            gl::STATIC_DRAW);
         }
 
@@ -87,8 +89,8 @@ impl GLRender {
             gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, index_buffer);
 
             gl::BufferData(gl::ELEMENT_ARRAY_BUFFER,
-                           (mesh.faces.len() * mem::size_of::<Face>()) as GLsizeiptr,
-                           mem::transmute(&(mesh.faces[0].indices[0])),
+                           (mesh.indices.len() * mem::size_of::<u32>()) as GLsizeiptr,
+                           mem::transmute(&(mesh.indices[0])),
                            gl::STATIC_DRAW);
         }
 
@@ -109,7 +111,9 @@ impl GLRender {
             vertex_buffer: vertex_buffer,
             index_buffer: index_buffer,
             shader: program,
-            element_count: mesh.faces.len() * 3
+            position_attribute: mesh.position_attribute,
+            normal_attribute: mesh.normal_attribute,
+            element_count: mesh.indices.len(),
         }
     }
 
@@ -133,24 +137,24 @@ impl GLRender {
             CString::new("vertexPosition").unwrap().as_ptr()); // TODO: Write a helper to make using cstrings easier.
         gl::VertexAttribPointer(
             position_location as GLuint,
-            4,
-            gl::FLOAT,
-            gl::FALSE,
-            mem::size_of::<Vertex>() as GLsizei,
-            ptr::null());
-        gl::EnableVertexAttribArray(position_location as GLuint);
-
-        let normal_location = gl::GetAttribLocation(
-            mesh.shader,
-            CString::new("vertexNormal").unwrap().as_ptr());
-        gl::VertexAttribPointer(
-            normal_location as GLuint,
             3,
             gl::FLOAT,
             gl::FALSE,
-            mem::size_of::<Vertex>() as GLsizei,
-            mem::transmute(mem::size_of::<Point>()));
-        gl::EnableVertexAttribArray(normal_location as GLuint);
+            (mesh.position_attribute.stride * mem::size_of::<f32>() as u32) as i32,
+            mem::transmute(mesh.position_attribute.offset as u64));
+        gl::EnableVertexAttribArray(position_location as GLuint);
+
+        // let normal_location = gl::GetAttribLocation(
+        //     mesh.shader,
+        //     CString::new("vertexNormal").unwrap().as_ptr());
+        // gl::VertexAttribPointer(
+        //     normal_location as GLuint,
+        //     3,
+        //     gl::FLOAT,
+        //     gl::FALSE,
+        //     mesh.normal_attribute.stride as i32,
+        //     mem::transmute(mesh.normal_attribute.offset as u64));
+        // gl::EnableVertexAttribArray(normal_location as GLuint);
 
         // Set uniform transforms.
         let model_transform_location =

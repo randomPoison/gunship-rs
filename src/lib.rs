@@ -1,3 +1,5 @@
+#![feature(collections)]
+
 extern crate bootstrap_rs as bootstrap;
 extern crate parse_collada as collada;
 extern crate polygon_rs as polygon;

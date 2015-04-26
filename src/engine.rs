@@ -62,7 +62,7 @@ impl Engine {
                 let transform = scene.transform_manager.get(entity);
                 camera.position = transform.position;
                 camera.rotation =
-                    Matrix4::rotation(transform.rotation.x, transform.rotation.y, transform.rotation.z)
+                    transform.rotation
                   * Matrix4::rotation(0.0, PI, 0.0);
             }
 

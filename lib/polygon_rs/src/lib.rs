@@ -1,4 +1,4 @@
-#![feature(convert)]
+#![feature(convert, collections)]
 
 extern crate gl;
 

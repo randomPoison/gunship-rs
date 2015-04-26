@@ -103,7 +103,7 @@ impl TransformManager {
 pub struct Transform {
     parent: Option<Entity>,
     pub position: Point,
-    pub rotation: Vector3,
+    pub rotation: Matrix4,
     pub scale: Vector3,
     matrix: Cell<Matrix4>,
 }
@@ -113,7 +113,7 @@ impl Transform {
         Transform {
             parent: None,
             position: Point::origin(),
-            rotation: Vector3::zero(),
+            rotation: Matrix4::identity(),
             scale:    Vector3::one(),
             matrix:   Cell::new(Matrix4::identity())
         }
@@ -126,7 +126,7 @@ impl Transform {
     pub fn normal_matrix(&self) -> Matrix4 {
         let inverse =
             Matrix4::scale(1.0 / self.scale.x, 1.0 / self.scale.y, 1.0 / self.scale.z)
-          * Matrix4::rotation(self.rotation.x, self.rotation.y, self.rotation.z).transpose()
+          * self.rotation.transpose()
           * Matrix4::translation(-self.position.x, -self.position.y, -self.position.z);
 
         inverse.transpose()
@@ -136,12 +136,37 @@ impl Transform {
         self.matrix.set(
             parent_matrix
                 * (Matrix4::from_point(self.position)
-                    * (Matrix4::rotation(self.rotation.x, self.rotation.y, self.rotation.z)
-                        * Matrix4::scale(self.scale.x, self.scale.y, self.scale.z))));
+                *  (self.rotation
+                *   Matrix4::scale(self.scale.x, self.scale.y, self.scale.z))));
     }
 
     pub fn rotation_matrix(&self) -> Matrix4 {
-        Matrix4::rotation(self.rotation.x, self.rotation.y, self.rotation.z)
+        self.rotation
+    }
+
+    pub fn look_at(&mut self, interest: Point, up: Vector3) {
+        let forward = interest - self.position;
+        let forward = forward.normalized();
+        let up = up.normalized();
+
+        let right = Vector3::cross(forward, up);
+        let up = Vector3::cross(right, forward);
+
+        let mut look_matrix = Matrix4::identity();
+
+        look_matrix[(0, 0)] = right.x;
+        look_matrix[(1, 0)] = right.y;
+        look_matrix[(2, 0)] = right.z;
+
+        look_matrix[(0, 1)] = up.x;
+        look_matrix[(1, 1)] = up.y;
+        look_matrix[(2, 1)] = up.z;
+
+        look_matrix[(0, 2)] = -forward.x;
+        look_matrix[(1, 2)] = -forward.y;
+        look_matrix[(2, 2)] = -forward.z;
+
+        self.rotation = look_matrix;
     }
 }
 
