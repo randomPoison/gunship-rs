@@ -1,5 +1,6 @@
 use std::cmp::{PartialEq, Eq};
 use std::ops::{Index, IndexMut, Mul};
+use std::fmt::{Debug, Formatter, Error};
 
 use vector::Vector3;
 use point::Point;
@@ -7,7 +8,7 @@ use point::Point;
 /// A 4x4 matrix that can be used to transform 3D points and vectors.
 ///
 /// Matrices are row-major.
-#[repr(C)] #[derive(Debug, Clone, Copy)]
+#[repr(C)] #[derive(Clone, Copy)]
 pub struct Matrix4 {
     data: [f32; 16]
 }
@@ -191,5 +192,33 @@ impl Mul<Matrix4> for Matrix4 {
         }
 
         result
+    }
+}
+
+impl Mul<Point> for Matrix4 {
+    type Output = Point;
+
+    fn mul(self, rhs: Point) -> Point {
+        Point {
+            x: self[(0, 0)] * rhs.x + self[(0, 1)] * rhs.y + self[(0, 2)] * rhs.z + self[(0, 3)] * rhs.w,
+            y: self[(1, 0)] * rhs.x + self[(1, 1)] * rhs.y + self[(1, 2)] * rhs.z + self[(1, 3)] * rhs.w,
+            z: self[(2, 0)] * rhs.x + self[(2, 1)] * rhs.y + self[(2, 2)] * rhs.z + self[(2, 3)] * rhs.w,
+            w: self[(3, 0)] * rhs.x + self[(3, 1)] * rhs.y + self[(3, 2)] * rhs.z + self[(3, 3)] * rhs.w,
+        }
+    }
+}
+
+impl Debug for Matrix4 {
+    fn fmt(&self, formatter: &mut Formatter) -> Result<(), Error> {
+        formatter.write_str("\n");
+        for row in 0..4 {
+            formatter.write_str("[");
+            for col in 0..4 {
+                write!(formatter, "{:>10}, ", self[(row, col)]);
+            }
+            formatter.write_str("]\n");
+        }
+
+        Ok(())
     }
 }

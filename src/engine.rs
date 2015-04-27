@@ -56,14 +56,14 @@ impl Engine {
 
         // Handle rendering for each camera.
         for (camera, entity) in scene.camera_manager.iter_mut() {
+
             // Update the camera's bounds based on it's transform.
             // TODO: Update the camera's bounds before rendering.
             {
                 let transform = scene.transform_manager.get(entity);
+
                 camera.position = transform.position;
-                camera.rotation =
-                    transform.rotation
-                  * Matrix4::rotation(0.0, PI, 0.0);
+                camera.rotation = transform.rotation;
             }
 
             // Draw all of the meshes.

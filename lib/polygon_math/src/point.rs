@@ -1,6 +1,7 @@
-use std::ops::{Sub, Add};
+use std::ops::{Sub, Add, Neg, Mul};
 
 use vector::Vector3;
+use matrix::Matrix4;
 
 /// A point in 3D space.
 ///
@@ -13,7 +14,7 @@ pub struct Point {
     pub x: f32,
     pub y: f32,
     pub z: f32,
-    pub w: f32
+    pub w: f32,
 }
 
 impl Point {
@@ -46,8 +47,12 @@ impl Point {
             x: 0.0,
             y: 0.0,
             z: 0.0,
-            w: 1.0
+            w: 1.0,
         }
+    }
+
+    pub unsafe fn raw_data(&self) -> *const f32 {
+        &self.x
     }
 }
 
@@ -67,7 +72,7 @@ impl Add<Vector3> for Point {
             x: self.x + rhs.x,
             y: self.y + rhs.y,
             z: self.z + rhs.z,
-            w: 1.0
+            w: 1.0,
         }
     }
 }
@@ -80,7 +85,20 @@ impl Sub<Vector3> for Point {
             x: self.x - rhs.x,
             y: self.y - rhs.y,
             z: self.z - rhs.z,
-            w: 1.0
+            w: 1.0,
+        }
+    }
+}
+
+impl Neg for Point {
+    type Output = Point;
+
+    fn neg(self) -> Point {
+        Point {
+            x: -self.x,
+            y: -self.y,
+            z: -self.z,
+            w: 1.0,
         }
     }
 }

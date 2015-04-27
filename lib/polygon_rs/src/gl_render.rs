@@ -118,10 +118,19 @@ impl GLRender {
     }
 
     pub fn draw_mesh(&self, mesh: &GLMeshData, model_transform: Matrix4, normal_transform: Matrix4, camera: &Camera) { unsafe {
-        let view_transform = camera.view_transform();
+        let view_transform = camera.view_matrix();
         let model_view_transform = view_transform * model_transform;
-        let projection = camera.projection_matrix();
-        let model_view_projection = projection * ( view_transform * model_transform );
+        let projection_transform = camera.projection_matrix();
+        let model_view_projection = projection_transform * ( view_transform * model_transform );
+
+        let view_normal_transform = {
+            let inverse_model = normal_transform.transpose();
+            let inverse_view = camera.inverse_view_matrix();
+            let inverse_model_view = inverse_model * inverse_view;
+            inverse_model_view.transpose()
+        };
+
+        let light_position = view_transform * Point::origin();
 
         // Bind the buffers for the mesh.
         gl::BindVertexArray(mesh.array_buffer);
@@ -171,7 +180,7 @@ impl GLRender {
             normal_transform_location,
             1,
             gl::TRUE,
-            normal_transform.raw_data());
+            view_normal_transform.raw_data());
 
         let view_transform_location =
             gl::GetUniformLocation(mesh.shader, CString::new("viewTransform").unwrap().as_ptr());
@@ -195,7 +204,7 @@ impl GLRender {
             projection_transform_location,
             1,
             gl::TRUE,
-            projection.raw_data());
+            projection_transform.raw_data());
 
         let model_view_projection_location =
             gl::GetUniformLocation(mesh.shader, CString::new("modelViewProjection").unwrap().as_ptr());
@@ -210,6 +219,15 @@ impl GLRender {
         let ambient_location =
             gl::GetUniformLocation(mesh.shader, CString::new("globalAmbient").unwrap().as_ptr());
         gl::Uniform4fv(ambient_location, 1, ambient_color.raw_data());
+
+        // Light stuffs.
+        let light_position_location =
+            gl::GetUniformLocation(mesh.shader, CString::new("lightPosition").unwrap().as_ptr());
+        gl::Uniform4fv(light_position_location, 1, light_position.raw_data());
+
+        let camera_position_location =
+            gl::GetUniformLocation(mesh.shader, CString::new("cameraPosition").unwrap().as_ptr());
+        gl::Uniform4fv(camera_position_location, 1, camera.position.raw_data());
 
         gl::DrawElements(gl::TRIANGLES,
                          mesh.element_count as GLsizei,

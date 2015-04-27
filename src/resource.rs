@@ -131,10 +131,6 @@ impl COLLADALoader {
             indices.push(vertex_index);
         }
 
-        println!("position data: {:?}", position_data);
-        println!("normal data: {:?}", normal_data);
-        println!("indices: {:?}", indices);
-
         let mesh = Mesh::from_raw_data(position_data.as_ref(), normal_data.as_ref(), indices.as_ref());
 
         mesh

@@ -3,6 +3,7 @@ use math::vector::Vector3;
 use math::matrix::Matrix4;
 
 /// A camera in the scene.
+#[derive(Debug)]
 pub struct Camera
 {
     pub fov: f32,
@@ -46,8 +47,12 @@ impl Camera
     ///
     /// The view transform the matrix that converts from world coordinates
     /// to camera coordinates.
-    pub fn view_transform(&self) -> Matrix4 {
+    pub fn view_matrix(&self) -> Matrix4 {
         self.rotation.transpose() * Matrix4::translation(-self.position.x, -self.position.y, -self.position.z)
+    }
+
+    pub fn inverse_view_matrix(&self) -> Matrix4 {
+        Matrix4::from_point(self.position) * self.rotation
     }
 
     /// Calculates the projection matrix for the camera.
