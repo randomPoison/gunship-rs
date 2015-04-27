@@ -126,8 +126,8 @@ impl Transform {
     pub fn normal_matrix(&self) -> Matrix4 {
         let inverse =
             Matrix4::scale(1.0 / self.scale.x, 1.0 / self.scale.y, 1.0 / self.scale.z)
-          * self.rotation.transpose()
-          * Matrix4::translation(-self.position.x, -self.position.y, -self.position.z);
+          * (self.rotation.transpose()
+          *  Matrix4::translation(-self.position.x, -self.position.y, -self.position.z));
 
         inverse.transpose()
     }

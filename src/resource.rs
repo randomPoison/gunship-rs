@@ -31,8 +31,8 @@ impl ResourceManager {
         }
         else
         {
-            let frag_src = load_file("shaders/test3D.frag.glsl");
-            let vert_src = load_file("shaders/test3D.vert.glsl");
+            let frag_src = load_file("shaders/forward_phong.frag.glsl");
+            let vert_src = load_file("shaders/forward_phong.vert.glsl");
 
             let mesh = COLLADALoader::load_from_file(path_text);
             let mesh_data =
@@ -88,43 +88,54 @@ impl COLLADALoader {
 
         // Create a new array for the positions so we can add the w coordinate.
         let mut position_data: Vec<f32> = Vec::with_capacity(position_data_raw.len() / 3 * 4);
-        position_data.resize(position_data_raw.len() / 3 * 4, 0.0);
-
-        for offset in 0..position_data_raw.len() / 3 {
-            // Copy the position from the source array and add the w coordinate.
-            let source_offset = offset * 3;
-            let dest_offset = offset * 4;
-            position_data[dest_offset + 0] = position_data_raw[source_offset + 0];
-            position_data[dest_offset + 1] = position_data_raw[source_offset + 1];
-            position_data[dest_offset + 2] = position_data_raw[source_offset + 2];
-            position_data[dest_offset + 3] = 1.0;
-        }
 
         // Create a new array for the normals and rearrange them to match the order of position attributes.
-        let mut sorted_normals: Vec<f32> = Vec::with_capacity(position_data.len());
-        sorted_normals.resize(position_data.len(), 0.0);
+        let mut normal_data: Vec<f32> = Vec::with_capacity(position_data.len());
 
         // Iterate over the indices, rearranging the normal data to match the position data.
         let stride = triangles.inputs.len();
+        let mut vertex_index_map: HashMap<(usize, usize), u32> = HashMap::new();
         let mut indices: Vec<u32> = Vec::new();
-        for offset in 0..(triangles.count * 3) {
+        let vertex_count = triangles.count * 3;
+        let mut index_count = 0;
+        for offset in 0..vertex_count {
             // Determine the offset of the the current vertex's attributes
-            let source_offset = primitive_indices[offset * stride];
-            let normal_offset = primitive_indices[offset * stride + 1];
+            let position_index = primitive_indices[offset * stride];
+            let normal_index = primitive_indices[offset * stride + 1];
 
-            // Copy the normal from the source array to the correct location in the sorted array.
-            // sorted_normals[source_offset + 0] = normal_data_raw[normal_offset + 0];
-            // sorted_normals[source_offset + 1] = normal_data_raw[normal_offset + 1];
-            // sorted_normals[source_offset + 2] = normal_data_raw[normal_offset + 2];
+            // Push the index of the vertex, either reusing an existing vertex or creating a new one.
+            let vertex_key = (position_index, normal_index);
+            let vertex_index = if vertex_index_map.contains_key(&vertex_key) {
+                // Vertex has already been assembled, reuse the index.
+                (*vertex_index_map.get(&vertex_key).unwrap()) as u32
+            } else {
+                // Assemble new vertex.
+                let vertex_index = index_count;
+                index_count += 1;
+                vertex_index_map.insert(vertex_key, vertex_index as u32);
 
-            indices.push(primitive_indices[offset * stride] as u32);
+                // Append position to position data array.
+                for offset in 0..3 {
+                    position_data.push(position_data_raw[position_index * 3 + offset]);
+                }
+                position_data.push(1.0);
+
+                // Append normal to normal data array.
+                for offset in 0..3 {
+                    normal_data.push(normal_data_raw[normal_index * 3 + offset]);
+                }
+
+                vertex_index
+            };
+
+            indices.push(vertex_index);
         }
 
         println!("position data: {:?}", position_data);
-        println!("normal data: {:?}", sorted_normals);
+        println!("normal data: {:?}", normal_data);
         println!("indices: {:?}", indices);
 
-        let mesh = Mesh::from_raw_data(position_data.as_ref(), sorted_normals.as_ref(), indices.as_ref());
+        let mesh = Mesh::from_raw_data(position_data.as_ref(), normal_data.as_ref(), indices.as_ref());
 
         mesh
     }

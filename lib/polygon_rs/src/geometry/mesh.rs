@@ -31,7 +31,7 @@ impl Mesh {
             },
             normal_attribute: VertexAttribute {
                 stride: 3,
-                offset: positions_raw.len() as u32,
+                offset: positions_raw.len(),
             },
         }
     }
@@ -39,6 +39,6 @@ impl Mesh {
 
 #[derive(Debug, Clone, Copy)]
 pub struct VertexAttribute {
-    pub stride: u32,
-    pub offset: u32,
+    pub stride: usize,
+    pub offset: usize,
 }

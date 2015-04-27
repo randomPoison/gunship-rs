@@ -140,21 +140,21 @@ impl GLRender {
             3,
             gl::FLOAT,
             gl::FALSE,
-            (mesh.position_attribute.stride * mem::size_of::<f32>() as u32) as i32,
-            mem::transmute(mesh.position_attribute.offset as u64));
+            (mesh.position_attribute.stride * mem::size_of::<f32>()) as i32,
+            mem::transmute(mesh.position_attribute.offset * mem::size_of::<f32>()));
         gl::EnableVertexAttribArray(position_location as GLuint);
 
-        // let normal_location = gl::GetAttribLocation(
-        //     mesh.shader,
-        //     CString::new("vertexNormal").unwrap().as_ptr());
-        // gl::VertexAttribPointer(
-        //     normal_location as GLuint,
-        //     3,
-        //     gl::FLOAT,
-        //     gl::FALSE,
-        //     mesh.normal_attribute.stride as i32,
-        //     mem::transmute(mesh.normal_attribute.offset as u64));
-        // gl::EnableVertexAttribArray(normal_location as GLuint);
+        let normal_location = gl::GetAttribLocation(
+            mesh.shader,
+            CString::new("vertexNormal").unwrap().as_ptr());
+        gl::VertexAttribPointer(
+            normal_location as GLuint,
+            3,
+            gl::FLOAT,
+            gl::FALSE,
+            (mesh.normal_attribute.stride * mem::size_of::<f32>()) as i32,
+            mem::transmute(mesh.normal_attribute.offset * mem::size_of::<f32>()));
+        gl::EnableVertexAttribArray(normal_location as GLuint);
 
         // Set uniform transforms.
         let model_transform_location =
