@@ -116,7 +116,7 @@ impl GLRender {
         }
     }
 
-    pub fn draw_mesh(&self, mesh: &GLMeshData, model_transform: Matrix4, normal_transform: Matrix4, camera: &Camera, light: &Light) { unsafe {
+    pub fn draw_mesh(&self, mesh: &GLMeshData, model_transform: Matrix4, normal_transform: Matrix4, camera: &Camera, lights: &[Light]) { unsafe {
         let view_transform = camera.view_matrix();
         let model_view_transform = view_transform * model_transform;
         let projection_transform = camera.projection_matrix();
@@ -128,11 +128,6 @@ impl GLRender {
             let inverse_model_view = inverse_model * inverse_view;
             inverse_model_view.transpose()
         };
-
-        let light_position = match light {
-            &Light::Point(ref point_light) => point_light.position
-        };
-        let light_position_view = view_transform * light_position;
 
         // Bind the buffers for the mesh.
         gl::BindVertexArray(mesh.array_buffer);
@@ -217,24 +212,58 @@ impl GLRender {
             model_view_projection.raw_data());
 
         // Set uniform colors.
-        let ambient_color = Color::new(0.5, 0.5, 0.5, 1.0);
+        let ambient_color = Color::new(0.25, 0.25, 0.25, 1.0);
         let ambient_location =
             gl::GetUniformLocation(mesh.shader, CString::new("globalAmbient").unwrap().as_ptr());
         gl::Uniform4fv(ambient_location, 1, ambient_color.raw_data());
-
-        // Light stuffs.
-        let light_position_location =
-            gl::GetUniformLocation(mesh.shader, CString::new("lightPosition").unwrap().as_ptr());
-        gl::Uniform4fv(light_position_location, 1, light_position_view.raw_data());
 
         let camera_position_location =
             gl::GetUniformLocation(mesh.shader, CString::new("cameraPosition").unwrap().as_ptr());
         gl::Uniform4fv(camera_position_location, 1, camera.position.raw_data());
 
-        gl::DrawElements(gl::TRIANGLES,
-                         mesh.element_count as GLsizei,
-                         gl::UNSIGNED_INT,
-                         0 as *const GLvoid);
+        let light_position_location =
+            gl::GetUniformLocation(mesh.shader, CString::new("lightPosition").unwrap().as_ptr());
+
+        {
+            let light = &lights[0];
+
+            let light_position = match light {
+                &Light::Point(ref point_light) => point_light.position
+            };
+            let light_position_view = view_transform * light_position;
+
+            gl::Uniform4fv(light_position_location, 1, light_position_view.raw_data());
+
+            gl::Disable(gl::BLEND);
+            gl::DrawElements(gl::TRIANGLES,
+                             mesh.element_count as GLsizei,
+                             gl::UNSIGNED_INT,
+                             0 as *const GLvoid);
+        }
+
+
+        gl::Disable(gl::DEPTH_TEST);
+        gl::Enable(gl::BLEND);
+        gl::BlendFunc(gl::ONE, gl::ONE);
+
+        let ambient_color = Color::new(0.0, 0.0, 0.0, 1.0);
+        gl::Uniform4fv(ambient_location, 1, ambient_color.raw_data());
+
+        for light in lights.iter().skip(1) {
+            let light_position = match light {
+                &Light::Point(ref point_light) => point_light.position
+            };
+            let light_position_view = view_transform * light_position;
+
+            gl::Uniform4fv(light_position_location, 1, light_position_view.raw_data());
+
+            gl::DrawElements(gl::TRIANGLES,
+                             mesh.element_count as GLsizei,
+                             gl::UNSIGNED_INT,
+                             0 as *const GLvoid);
+        }
+
+        gl::Enable(gl::DEPTH_TEST);
 
         // Unbind buffers.
         gl::BindVertexArray(0);

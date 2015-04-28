@@ -12,7 +12,7 @@ use polygon::gl_render::{self, GLRender};
 use scene::Scene;
 use resource::ResourceManager;
 use ecs::System;
-use component::{TransformUpdateSystem, LightUpdateSystem, CameraManager, TransformManager, MeshManager, LightManager};
+use component::*;
 
 pub const TARGET_FRAME_TIME_SECONDS: f32 = 1.0 / 60.0;
 
@@ -22,6 +22,7 @@ pub struct Engine {
     resource_manager: Rc<RefCell<ResourceManager>>,
     systems: Vec<Box<System>>,
     transform_update: Box<System>,
+    light_update: Box<System>,
     scene: Option<Scene>,
 }
 
@@ -38,6 +39,7 @@ impl Engine {
             resource_manager: resource_manager.clone(),
             systems: Vec::new(),
             transform_update: Box::new(TransformUpdateSystem),
+            light_update: Box::new(LightUpdateSystem),
             scene: None,
         };
 
@@ -73,18 +75,11 @@ impl Engine {
                 camera.rotation = transform.rotation;
             }
 
-            for (light, light_entity) in light_manager.iter_mut() {
+            // Draw all of the meshes.
+            for (mesh, entity) in mesh_manager.iter() {
+                let transform = transform_manager.get_mut(entity);
 
-                // TODO: Update the light's stuffs in a separate system.
-                {
-
-                }
-
-                // Draw all of the meshes.
-                for (mesh, entity) in mesh_manager.iter() {
-                    let transform = transform_manager.get_mut(entity);
-                    self.renderer.draw_mesh(&mesh, transform.matrix(), transform.normal_matrix(), &camera, &light);
-                }
+                self.renderer.draw_mesh(&mesh, transform.matrix(), transform.normal_matrix(), &camera, light_manager.components().as_ref());
             }
         }
 
@@ -137,6 +132,7 @@ impl Engine {
                 }
 
                 self.transform_update.update(scene, frame_time as f32);
+                self.light_update.update(scene, frame_time as f32);
             }
 
             self.draw();
