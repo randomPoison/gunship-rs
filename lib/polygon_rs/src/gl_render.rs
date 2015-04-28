@@ -9,13 +9,12 @@ use gl::types::*;
 use bootstrap::window::Window;
 use bootstrap::gl_utils::{self, GLContext};
 
-use math::Point;
 use math::Matrix4;
 use math::Color;
 
 use geometry::mesh::{Mesh, VertexAttribute};
-use geometry::face::Face;
 use camera::Camera;
+use light::Light;
 
 #[allow(dead_code)] #[derive(Clone, Copy)]
 pub struct GLRender {
@@ -117,7 +116,7 @@ impl GLRender {
         }
     }
 
-    pub fn draw_mesh(&self, mesh: &GLMeshData, model_transform: Matrix4, normal_transform: Matrix4, camera: &Camera) { unsafe {
+    pub fn draw_mesh(&self, mesh: &GLMeshData, model_transform: Matrix4, normal_transform: Matrix4, camera: &Camera, light: &Light) { unsafe {
         let view_transform = camera.view_matrix();
         let model_view_transform = view_transform * model_transform;
         let projection_transform = camera.projection_matrix();
@@ -130,7 +129,10 @@ impl GLRender {
             inverse_model_view.transpose()
         };
 
-        let light_position = view_transform * Point::origin();
+        let light_position = match light {
+            &Light::Point(ref point_light) => point_light.position
+        };
+        let light_position_view = view_transform * light_position;
 
         // Bind the buffers for the mesh.
         gl::BindVertexArray(mesh.array_buffer);
@@ -223,7 +225,7 @@ impl GLRender {
         // Light stuffs.
         let light_position_location =
             gl::GetUniformLocation(mesh.shader, CString::new("lightPosition").unwrap().as_ptr());
-        gl::Uniform4fv(light_position_location, 1, light_position.raw_data());
+        gl::Uniform4fv(light_position_location, 1, light_position_view.raw_data());
 
         let camera_position_location =
             gl::GetUniformLocation(mesh.shader, CString::new("cameraPosition").unwrap().as_ptr());

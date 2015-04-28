@@ -1,3 +1,3 @@
 pub mod mesh;
-#[macro_use]
-pub mod face;
+
+pub use self::mesh::{Mesh, VertexAttribute};

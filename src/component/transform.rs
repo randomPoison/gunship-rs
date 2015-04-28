@@ -4,7 +4,7 @@ use std::cell::Cell;
 use math::vector::Vector3;
 use math::matrix::Matrix4;
 use math::point::Point;
-use ecs::{Entity, System};
+use ecs::{Entity, System, ComponentManager};
 use scene::Scene;
 
 pub struct TransformManager {
@@ -99,6 +99,9 @@ impl TransformManager {
     }
 }
 
+impl ComponentManager for TransformManager {
+}
+
 #[derive(Debug)]
 pub struct Transform {
     parent: Option<Entity>,
@@ -174,7 +177,9 @@ pub struct TransformUpdateSystem;
 
 impl System for TransformUpdateSystem {
     fn update(&mut self, scene: &mut Scene, _: f32) {
-        let transform_manager = &mut scene.transform_manager;
+        let mut transform_handle = scene.get_manager::<TransformManager>();
+        let mut transform_manager = transform_handle.get();
+
         for row in transform_manager.transforms.iter() {
             for transform in row.iter() {
                 // Retrieve the parent's transformation matrix, using the identity

@@ -10,3 +10,4 @@ extern crate bootstrap_rs as bootstrap;
 pub mod geometry;
 pub mod gl_render;
 pub mod camera;
+pub mod light;

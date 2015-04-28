@@ -5,7 +5,7 @@ use std::cell::RefCell;
 
 use polygon::gl_render::GLMeshData;
 
-use ecs::Entity;
+use ecs::{Entity, ComponentManager};
 use resource::ResourceManager;
 
 pub type Mesh = GLMeshData;
@@ -47,6 +47,9 @@ impl MeshManager {
             entity_iter: self.entities.iter()
         }
     }
+}
+
+impl ComponentManager for MeshManager {
 }
 
 pub struct MeshIter<'a> {

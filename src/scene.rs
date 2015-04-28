@@ -7,7 +7,7 @@ use std::ops::{Deref, DerefMut};
 
 use ecs::{EntityManager, ComponentManager};
 use input::Input;
-use super::component::{TransformManager, CameraManager, MeshManager};
+use super::component::{TransformManager, CameraManager, MeshManager, LightManager};
 use resource::ResourceManager;
 
 /// Contains all the data that defines the current state of the world.
@@ -16,42 +16,43 @@ use resource::ResourceManager;
 /// managers and input.
 pub struct Scene {
     pub entity_manager: EntityManager,
-    pub transform_manager: TransformManager,
-    pub camera_manager: CameraManager,
-    pub mesh_manager: MeshManager,
-    components: Vec<Rc<RefCell<Box<Any>>>>,
+    component_managers: Vec<Rc<RefCell<Box<Any>>>>,
     component_indices: HashMap<TypeId, usize>,
     pub input: Input,
 }
 
 impl Scene {
     pub fn new(resource_manager: Rc<RefCell<ResourceManager>>) -> Scene {
-        Scene {
+        let mut scene = Scene {
             entity_manager: EntityManager::new(),
-            transform_manager: TransformManager::new(),
-            camera_manager: CameraManager::new(),
-            mesh_manager: MeshManager::new(resource_manager),
-            components: Vec::new(),
+            component_managers: Vec::new(),
             component_indices: HashMap::new(),
             input: Input::new(),
-        }
+        };
+
+        scene.register_manager(Box::new(TransformManager::new()));
+        scene.register_manager(Box::new(CameraManager::new()));
+        scene.register_manager(Box::new(MeshManager::new(resource_manager)));
+        scene.register_manager(Box::new(LightManager::new()));
+
+        scene
     }
 
     pub fn register_manager<T: Any + ComponentManager>(&mut self, manager: Box<T>) {
         let manager_id = TypeId::of::<T>();
         assert!(!self.component_indices.contains_key(&manager_id));
 
-        let index = self.components.len();
-        self.components.push(Rc::new(RefCell::new(manager)));
+        let index = self.component_managers.len();
+        self.component_managers.push(Rc::new(RefCell::new(manager)));
         self.component_indices.insert(manager_id, index);
     }
 
-    pub fn get_manager_mut<T: Any + ComponentManager>(&self) -> ManagerHandle<T> {
+    pub fn get_manager<T: Any + ComponentManager>(&self) -> ManagerHandle<T> {
         let manager_id = TypeId::of::<T>();
 
         let index = *self.component_indices
             .get(&manager_id).expect("Scene must have the specified manager.");
-        let manager_clone = self.components[index].clone();
+        let manager_clone = self.component_managers[index].clone();
         ManagerHandle::new(manager_clone)
     }
 }

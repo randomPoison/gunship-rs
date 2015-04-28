@@ -6,11 +6,8 @@ use std::error::Error;
 
 use collada::{self, ColladaData, GeometricElement, ArrayElement, PrimitiveType};
 
-use math::{Point, Vector3};
-
 use polygon::gl_render::{GLRender, GLMeshData};
 use polygon::geometry::mesh::Mesh;
-use polygon::geometry::face::Face;
 
 pub struct ResourceManager {
     renderer: GLRender,

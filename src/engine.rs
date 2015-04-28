@@ -1,4 +1,3 @@
-use std::f32::consts::PI;
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::thread;
@@ -10,12 +9,10 @@ use bootstrap::time;
 
 use polygon::gl_render::{self, GLRender};
 
-use math::matrix::Matrix4;
-
 use scene::Scene;
 use resource::ResourceManager;
 use ecs::System;
-use component::transform::TransformUpdateSystem;
+use component::{TransformUpdateSystem, LightUpdateSystem, CameraManager, TransformManager, MeshManager, LightManager};
 
 pub const TARGET_FRAME_TIME_SECONDS: f32 = 1.0 / 60.0;
 
@@ -52,24 +49,42 @@ impl Engine {
     pub fn draw(&mut self) {
         self.renderer.clear();
 
-        let mut scene = self.scene.as_mut().unwrap();
+        let scene = self.scene.as_mut().unwrap();
+        let mut camera_handle = scene.get_manager::<CameraManager>();
+        let mut camera_manager = camera_handle.get();
+
+        let mut transform_handle = scene.get_manager::<TransformManager>();
+        let mut transform_manager = transform_handle.get();
+
+        let mut mesh_handle = scene.get_manager::<MeshManager>();
+        let mesh_manager = mesh_handle.get();
+
+        let mut light_handle = scene.get_manager::<LightManager>();
+        let mut light_manager = light_handle.get();
 
         // Handle rendering for each camera.
-        for (camera, entity) in scene.camera_manager.iter_mut() {
+        for (camera, entity) in camera_manager.iter_mut() {
 
-            // Update the camera's bounds based on it's transform.
-            // TODO: Update the camera's bounds before rendering.
+            // TODO: Update the camera's bounds in a separate system.
             {
-                let transform = scene.transform_manager.get(entity);
+                let transform = transform_manager.get(entity);
 
                 camera.position = transform.position;
                 camera.rotation = transform.rotation;
             }
 
-            // Draw all of the meshes.
-            for (mesh, entity) in scene.mesh_manager.iter() {
-                let transform = scene.transform_manager.get_mut(entity);
-                self.renderer.draw_mesh(&mesh, transform.matrix(), transform.normal_matrix(), &camera);
+            for (light, light_entity) in light_manager.iter_mut() {
+
+                // TODO: Update the light's stuffs in a separate system.
+                {
+
+                }
+
+                // Draw all of the meshes.
+                for (mesh, entity) in mesh_manager.iter() {
+                    let transform = transform_manager.get_mut(entity);
+                    self.renderer.draw_mesh(&mesh, transform.matrix(), transform.normal_matrix(), &camera, &light);
+                }
             }
         }
 

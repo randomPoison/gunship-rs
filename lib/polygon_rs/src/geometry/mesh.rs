@@ -1,10 +1,8 @@
-use math::{Point, Vector3};
-use geometry::face::Face;
-
 /// The raw data representing a mesh in memory.
 ///
 /// Meshes are represented as list of vertex positions and a list of faces.
 /// Each face is represented as 3 indices into the vertex array.
+#[derive(Debug)]
 pub struct Mesh {
     pub raw_data: Vec<f32>,
     pub indices: Vec<u32>,

@@ -12,11 +12,23 @@ pub struct Camera
     pub far: f32,
 
     pub position: Point,
-    pub rotation: Matrix4
+    pub rotation: Matrix4,
 }
 
 impl Camera
 {
+    pub fn new(fov: f32, aspect: f32, near: f32, far: f32) -> Camera {
+        Camera {
+            fov: fov,
+            aspect: aspect,
+            near: near,
+            far: far,
+
+            position: Point::origin(),
+            rotation: Matrix4::identity(),
+        }
+    }
+
     /// Recalculates the rotation of the camera so that it looks at the given point.
     pub fn look_at(&mut self, interest: Point, up: Vector3) {
         let forward = interest - self.position;
