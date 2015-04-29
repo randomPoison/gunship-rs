@@ -224,6 +224,7 @@ impl GLRender {
         let light_position_location =
             gl::GetUniformLocation(mesh.shader, CString::new("lightPosition").unwrap().as_ptr());
 
+        // Render first light without blending so it overrides any objects behind it.
         {
             let light = &lights[0];
 
@@ -241,8 +242,8 @@ impl GLRender {
                              0 as *const GLvoid);
         }
 
-
-        gl::Disable(gl::DEPTH_TEST);
+        // Render the rest of the lights with blending on the the depth check set to LEQUAL.
+        gl::DepthFunc(gl::LEQUAL);
         gl::Enable(gl::BLEND);
         gl::BlendFunc(gl::ONE, gl::ONE);
 

@@ -28,6 +28,10 @@ impl Vector3 {
         Vector3::new(0.0, 1.0, 0.0)
     }
 
+    pub fn down() -> Vector3 {
+        Vector3::new(0.0, -1.0, 0.0)
+    }
+
     pub fn from_slice(data: &[f32]) -> Vector3 {
         assert!(data.len() == 3);
 
