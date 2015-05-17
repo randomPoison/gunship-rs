@@ -76,6 +76,33 @@ impl TransformManager {
         self.indices.insert(child, (child_row, child_index));
     }
 
+    pub fn update_single(&self, entity: Entity) {
+        let transform = self.get(entity);
+        self.update_transform(transform);
+    }
+
+    pub fn update_transform(&self, transform: &Transform) {
+        let (parent_matrix, parent_rotation) = match transform.parent {
+            None => {
+                (Matrix4::identity(), Matrix4::identity())
+            },
+            Some(parent) => {
+                let parent_transform = self.get(parent);
+
+                if parent_transform.out_of_date.get() {
+                    self.update_transform(parent_transform);
+                }
+
+                let parent_matrix = parent_transform.derived_matrix();
+                let parent_rotation = parent_transform.rotation_derived();
+
+                (parent_matrix, parent_rotation)
+            }
+        };
+
+        transform.update(parent_matrix, parent_rotation);
+    }
+
     fn remove(&mut self, entity: Entity) -> Transform {
         // Retrieve indices of removed entity and the one it's swapped with.
         let (row, index) = *self.indices.get(&entity)
@@ -243,14 +270,6 @@ impl Transform {
 
         self.out_of_date.set(false);
     }
-
-    /// Used to update the matrices for a single transform.
-    ///
-    /// This is less efficient than letting the TransformUpdateSystem to update all
-    /// transforms at once, so try to limit usage as much as possible.
-    fn update_self(&self, transform_handle: ManagerHandle<TransformManager>) {
-        // TODO: Actually update the derived transform.
-    }
 }
 
 pub struct TransformUpdateSystem;
@@ -264,19 +283,17 @@ impl System for TransformUpdateSystem {
             for transform in row.iter() {
                 // Retrieve the parent's transformation matrix, using the identity
                 // matrix if the transform has no parent.
-                let (parent_matrix, parent_rotation) = {
-                    match transform.parent {
-                        None => {
-                            (Matrix4::identity(), Matrix4::identity())
-                        },
-                        Some(parent) => {
-                            let (parent_row, parent_index) = *transform_manager.indices.get(&parent).unwrap();
-                            let ref parent_transform = transform_manager.transforms[parent_row][parent_index];
-                            let parent_matrix = parent_transform.derived_matrix();
-                            let parent_rotation = parent_transform.rotation_derived();
+                let (parent_matrix, parent_rotation) = match transform.parent {
+                    None => {
+                        (Matrix4::identity(), Matrix4::identity())
+                    },
+                    Some(parent) => {
+                        let parent_transform = transform_manager.get(parent);
 
-                            (parent_matrix, parent_rotation)
-                        }
+                        let parent_matrix = parent_transform.derived_matrix();
+                        let parent_rotation = parent_transform.rotation_derived();
+
+                        (parent_matrix, parent_rotation)
                     }
                 };
 
