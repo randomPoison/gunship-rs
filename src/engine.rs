@@ -71,8 +71,8 @@ impl Engine {
             {
                 let transform = transform_manager.get(entity);
 
-                camera.position = transform.position();
-                camera.rotation = transform.rotation();
+                camera.position = transform.position_derived();
+                camera.rotation = transform.rotation_derived();
             }
 
             // Draw all of the meshes.

@@ -238,6 +238,7 @@ impl Transform {
         let derived_matrix = parent_matrix * local_matrix;
         self.matrix_derived.set(derived_matrix);
 
+        self.position_derived.set(derived_matrix.translation_part());
         self.rotation_derived.set(parent_rotation * self.rotation);
 
         self.out_of_date.set(false);
