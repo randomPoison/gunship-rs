@@ -1,7 +1,6 @@
-use std::ops::{Sub, Add, Neg, Mul};
+use std::ops::{Sub, Add, Neg};
 
 use vector::Vector3;
-use matrix::Matrix4;
 
 /// A point in 3D space.
 ///
@@ -49,6 +48,10 @@ impl Point {
             z: 0.0,
             w: 1.0,
         }
+    }
+
+    pub fn as_vector3(&self) -> Vector3 {
+        Vector3::new(self.x, self.y, self.z)
     }
 
     pub unsafe fn raw_data(&self) -> *const f32 {

@@ -14,13 +14,13 @@ impl System for LightUpdateSystem {
         let mut light_manager = light_handle.get();
 
         let mut transorm_handle = scene.get_manager::<TransformManager>();
-        let mut transform_manager = transorm_handle.get();
+        let transform_manager = transorm_handle.get();
 
         for (light, entity) in light_manager.iter_mut() {
             let light_transform = transform_manager.get(entity);
             match light {
                 &mut Light::Point(ref mut point_light) => {
-                    point_light.position = light_transform.position;
+                    point_light.position = light_transform.position();
                 }
             }
         }

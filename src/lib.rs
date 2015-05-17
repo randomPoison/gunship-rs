@@ -15,7 +15,7 @@ pub use self::engine::Engine;
 pub use self::scene::Scene;
 pub use self::input::{Input, ScanCode};
 pub use self::resource::ResourceManager;
-pub use self::ecs::{EntityManager, System, ComponentManager};
+pub use self::ecs::{Entity, EntityManager, System, ComponentManager};
 pub use self::component::transform::{TransformManager, Transform};
 pub use self::component::camera::{CameraManager, Camera};
 pub use self::component::mesh::{MeshManager, Mesh};

@@ -125,6 +125,10 @@ impl Matrix4 {
         Vector3::new(self[(0, 2)], self[(1, 2)], self[(2, 2)])
     }
 
+    pub fn translation_part(&self) -> Point {
+        Point::new(self[(0, 3)], self[(1, 3)], self[(2, 3)])
+    }
+
     /// Get the matrix data as a raw array.
     ///
     /// This is meant to be used for ffi and when passing matrix data to the graphics card,
@@ -210,13 +214,13 @@ impl Mul<Point> for Matrix4 {
 
 impl Debug for Matrix4 {
     fn fmt(&self, formatter: &mut Formatter) -> Result<(), Error> {
-        formatter.write_str("\n");
+        try!(formatter.write_str("\n"));
         for row in 0..4 {
-            formatter.write_str("[");
+            try!(formatter.write_str("["));
             for col in 0..4 {
-                write!(formatter, "{:>10}, ", self[(row, col)]);
+                try!(write!(formatter, "{:>10}, ", self[(row, col)]));
             }
-            formatter.write_str("]\n");
+            try!(formatter.write_str("]\n"));
         }
 
         Ok(())

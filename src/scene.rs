@@ -57,6 +57,7 @@ impl Scene {
     }
 }
 
+#[derive(Clone)]
 pub struct ManagerHandle<T: Any + ComponentManager> {
     manager: Rc<RefCell<Box<Any>>>,
     _type: PhantomData<T>,

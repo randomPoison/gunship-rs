@@ -62,7 +62,7 @@ impl Engine {
         let mesh_manager = mesh_handle.get();
 
         let mut light_handle = scene.get_manager::<LightManager>();
-        let mut light_manager = light_handle.get();
+        let light_manager = light_handle.get();
 
         // Handle rendering for each camera.
         for (camera, entity) in camera_manager.iter_mut() {
@@ -71,15 +71,15 @@ impl Engine {
             {
                 let transform = transform_manager.get(entity);
 
-                camera.position = transform.position;
-                camera.rotation = transform.rotation;
+                camera.position = transform.position();
+                camera.rotation = transform.rotation();
             }
 
             // Draw all of the meshes.
             for (mesh, entity) in mesh_manager.iter() {
                 let transform = transform_manager.get_mut(entity);
 
-                self.renderer.draw_mesh(&mesh, transform.matrix(), transform.normal_matrix(), &camera, light_manager.components().as_ref());
+                self.renderer.draw_mesh(&mesh, transform.derived_matrix(), transform.normal_matrix(), &camera, light_manager.components().as_ref());
             }
         }
 

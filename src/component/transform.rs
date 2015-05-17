@@ -4,8 +4,9 @@ use std::cell::Cell;
 use math::vector::Vector3;
 use math::matrix::Matrix4;
 use math::point::Point;
+
 use ecs::{Entity, System, ComponentManager};
-use scene::Scene;
+use scene::{Scene, ManagerHandle};
 
 pub struct TransformManager {
     transforms: Vec<Vec<Transform>>,
@@ -104,26 +105,92 @@ impl ComponentManager for TransformManager {
 
 #[derive(Debug)]
 pub struct Transform {
-    parent: Option<Entity>,
-    pub position: Point,
-    pub rotation: Matrix4,
-    pub scale: Vector3,
-    matrix: Cell<Matrix4>,
+    position:         Point,
+    rotation:         Matrix4,
+    scale:            Vector3,
+    local_matrix:     Cell<Matrix4>,
+    position_derived: Cell<Point>,
+    rotation_derived: Cell<Matrix4>,
+    matrix_derived:   Cell<Matrix4>,
+    parent:           Option<Entity>,
+    out_of_date:      Cell<bool>,
 }
 
 impl Transform {
     pub fn new() -> Transform {
         Transform {
-            parent: None,
-            position: Point::origin(),
-            rotation: Matrix4::identity(),
-            scale:    Vector3::one(),
-            matrix:   Cell::new(Matrix4::identity())
+            position:         Point::origin(),
+            rotation:         Matrix4::identity(),
+            scale:            Vector3::one(),
+            local_matrix:     Cell::new(Matrix4::identity()),
+            position_derived: Cell::new(Point::origin()),
+            rotation_derived: Cell::new(Matrix4::identity()),
+            matrix_derived:   Cell::new(Matrix4::identity()),
+            parent:           None,
+            out_of_date:      Cell::new(false),
         }
     }
 
-    pub fn matrix(&self) -> Matrix4 {
-        self.matrix.get()
+    pub fn position(&self) -> Point {
+        self.position
+    }
+
+    pub fn set_position(&mut self, new_position: Point) {
+        self.position = new_position;
+        self.out_of_date.set(true);
+    }
+
+    pub fn rotation(&self) -> Matrix4 {
+        self.rotation
+    }
+
+    pub fn set_rotation(&mut self, new_rotation: Matrix4) {
+        self.rotation = new_rotation;
+        self.out_of_date.set(true);
+    }
+
+    pub fn scale(&self) -> Vector3 {
+        self.scale
+    }
+
+    pub fn set_scale(&mut self, new_scale: Vector3) {
+        self.scale = new_scale;
+        self.out_of_date.set(true);
+    }
+
+    /// Retrieves the derived position of the transform.
+    ///
+    /// In debug builds this method asserts if the transform is out of date.
+    pub fn position_derived(&self) -> Point {
+        assert!(!self.out_of_date.get());
+
+        self.position_derived.get()
+    }
+
+    /// Retrieves the derived rotation of the transform.
+    ///
+    /// In debug builds this method asserts if the transform is out of date.
+    pub fn rotation_derived(&self) -> Matrix4 {
+        assert!(!self.out_of_date.get());
+
+        self.rotation_derived.get()
+    }
+
+    pub fn local_matrix(&self) -> Matrix4 {
+        if self.out_of_date.get() {
+            let local_matrix =
+                Matrix4::from_point(self.position)
+                * (self.rotation * Matrix4::scale(self.scale.x, self.scale.y, self.scale.z));
+            self.local_matrix.set(local_matrix);
+        }
+
+        self.local_matrix.get()
+    }
+
+    pub fn derived_matrix(&self) -> Matrix4 {
+        assert!(!self.out_of_date.get());
+
+        self.matrix_derived.get()
     }
 
     pub fn normal_matrix(&self) -> Matrix4 {
@@ -133,14 +200,6 @@ impl Transform {
           *  Matrix4::translation(-self.position.x, -self.position.y, -self.position.z));
 
         inverse.transpose()
-    }
-
-    fn update(&self, parent_matrix: Matrix4) {
-        self.matrix.set(
-            parent_matrix
-                * (Matrix4::from_point(self.position)
-                *  (self.rotation
-                *   Matrix4::scale(self.scale.x, self.scale.y, self.scale.z))));
     }
 
     pub fn rotation_matrix(&self) -> Matrix4 {
@@ -171,6 +230,26 @@ impl Transform {
 
         self.rotation = look_matrix;
     }
+
+    /// Updates the local and derived matrices for the transform.
+    fn update(&self, parent_matrix: Matrix4, parent_rotation: Matrix4) {
+        let local_matrix = self.local_matrix();
+
+        let derived_matrix = parent_matrix * local_matrix;
+        self.matrix_derived.set(derived_matrix);
+
+        self.rotation_derived.set(parent_rotation * self.rotation);
+
+        self.out_of_date.set(false);
+    }
+
+    /// Used to update the matrices for a single transform.
+    ///
+    /// This is less efficient than letting the TransformUpdateSystem to update all
+    /// transforms at once, so try to limit usage as much as possible.
+    fn update_self(&self, transform_handle: ManagerHandle<TransformManager>) {
+        // TODO: Actually update the derived transform.
+    }
 }
 
 pub struct TransformUpdateSystem;
@@ -178,24 +257,29 @@ pub struct TransformUpdateSystem;
 impl System for TransformUpdateSystem {
     fn update(&mut self, scene: &mut Scene, _: f32) {
         let mut transform_handle = scene.get_manager::<TransformManager>();
-        let mut transform_manager = transform_handle.get();
+        let transform_manager = transform_handle.get();
 
         for row in transform_manager.transforms.iter() {
             for transform in row.iter() {
                 // Retrieve the parent's transformation matrix, using the identity
                 // matrix if the transform has no parent.
-                let parent_matrix = {
+                let (parent_matrix, parent_rotation) = {
                     match transform.parent {
-                        None => Matrix4::identity(),
+                        None => {
+                            (Matrix4::identity(), Matrix4::identity())
+                        },
                         Some(parent) => {
                             let (parent_row, parent_index) = *transform_manager.indices.get(&parent).unwrap();
                             let ref parent_transform = transform_manager.transforms[parent_row][parent_index];
-                            parent_transform.matrix.get()
+                            let parent_matrix = parent_transform.derived_matrix();
+                            let parent_rotation = parent_transform.rotation_derived();
+
+                            (parent_matrix, parent_rotation)
                         }
                     }
                 };
 
-                transform.update(parent_matrix);
+                transform.update(parent_matrix, parent_rotation);
             }
         }
     }
