@@ -8,6 +8,10 @@ authors = ["David LeGare <excaliburhissheath@gmail.com>"]
 version = "*"
 path = "lib/bootstrap_rs"
 
+[dependencies.bootstrap_audio]
+version = "*"
+path = "lib/bootstrap_audio"
+
 [dependencies.parse_collada]
 version = "*"
 path = "lib/parse_collada"

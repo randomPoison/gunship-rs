@@ -7,6 +7,8 @@ use bootstrap::window::Window;
 use bootstrap::window::Message::*;
 use bootstrap::time;
 
+use audio;
+
 use polygon::gl_render::{self, GLRender};
 
 use scene::Scene;
@@ -44,6 +46,12 @@ impl Engine {
         };
 
         engine.scene = Some(Scene::new(engine.resource_manager.clone()));
+
+        // Initialize audio subsystem.
+        match audio::init() {
+            Ok(_) => println!("Audio subsystem successfully initialized"),
+            Err(error) => println!("Error while initialzing audio subsystem: {}", error),
+        }
 
         engine
     }

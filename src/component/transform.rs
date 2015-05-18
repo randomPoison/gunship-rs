@@ -6,7 +6,7 @@ use math::matrix::Matrix4;
 use math::point::Point;
 
 use ecs::{Entity, System, ComponentManager};
-use scene::{Scene, ManagerHandle};
+use scene::Scene;
 
 pub struct TransformManager {
     transforms: Vec<Vec<Transform>>,
