@@ -3,13 +3,85 @@ extern crate ole32;
 
 use std::ptr;
 use std::mem;
-use std::u16;
 
 use ::libc;
 
 use self::winapi::*;
 
-pub fn init() -> Result<(), String> { unsafe {
+pub struct AudioSource {
+    audio_client: &'static mut IAudioClient,
+    render_client: &'static mut IAudioRenderClient,
+    max_frames_in_buffer: u32,
+    bytes_per_frame: u16,
+}
+
+impl AudioSource {
+    pub fn stream<T: Iterator<Item = u16>>(&mut self, data_source: &mut T) { unsafe {
+        let frames_available = {
+            let mut padding = mem::uninitialized();
+            let hresult = self.audio_client.GetCurrentPadding(&mut padding);
+            if hresult != S_OK {
+                panic!("IAudioClient::GetCurrentPadding() failed with code 0x{:x}", hresult);
+            }
+            self.max_frames_in_buffer - padding
+        };
+
+        if frames_available == 0 {
+            // ::std::thread::sleep_ms(1);
+            return;
+        }
+
+        let max_elements = 32768;
+        let frames_available = ::std::cmp::min(
+            frames_available,
+            max_elements as u32 * mem::size_of::<u16>() as u32 / self.bytes_per_frame as u32);
+        assert!(frames_available != 0);
+
+        // loading buffer
+        let (buffer_data, buffer_len) = {
+            let mut buffer: *mut BYTE = mem::uninitialized();
+            let hresult =
+                self.render_client.GetBuffer(
+                    frames_available,
+                    &mut buffer as *mut *mut libc::c_uchar);
+            if hresult != S_OK {
+                panic!("IAudioRenderClient::GetBuffer() failed with code 0x{:x}", hresult);
+            }
+            assert!(!buffer.is_null());
+
+            (buffer as *mut u16,
+            frames_available as usize * self.bytes_per_frame as usize / mem::size_of::<u16>())
+        };
+        let mut write_head = buffer_data;
+
+        let mut bytes_written: u64 = 0;
+        for (index, sample) in data_source.enumerate() {
+            if index >= buffer_len {
+                break;
+            }
+            bytes_written += 2;
+
+            *write_head = sample;
+            write_head = write_head.offset(1);
+        }
+
+        let hresult = self.render_client.ReleaseBuffer((bytes_written / self.bytes_per_frame as u64) as u32, 0);
+        if hresult != S_OK {
+            panic!("IAudioRenderClient::ReleaseBuffer() failed with code 0x{:x}", hresult);
+        }
+
+        self.audio_client.Start();
+    } }
+}
+
+impl Drop for AudioSource {
+    fn drop(&mut self) { unsafe {
+        self.audio_client.Release();
+        self.render_client.Release();
+    } }
+}
+
+pub fn init() -> Result<AudioSource, String> { unsafe {
     // TODO: Initialize with multithreading support once for better performance.
     let hresult = ole32::CoInitializeEx(ptr::null_mut(), COINIT_APARTMENTTHREADED);
     if hresult != S_OK {
@@ -20,11 +92,13 @@ pub fn init() -> Result<(), String> { unsafe {
     let enumerator = {
         let mut enumerator: *mut IMMDeviceEnumerator = mem::uninitialized();
 
-        let hresult = ole32::CoCreateInstance(&CLSID_MMDeviceEnumerator,
-                                               ptr::null_mut(),
-                                               CLSCTX_ALL,
-                                              &IID_IMMDeviceEnumerator,
-                                               mem::transmute(&mut enumerator));
+        let hresult =
+            ole32::CoCreateInstance(
+                &CLSID_MMDeviceEnumerator,
+                ptr::null_mut(),
+                CLSCTX_ALL,
+                &IID_IMMDeviceEnumerator,
+                mem::transmute(&mut enumerator));
 
         if hresult != S_OK {
            return Err(format!("ole32::CoCreateInstance() failed with error code 0x{:x}", hresult))
@@ -144,88 +218,13 @@ pub fn init() -> Result<(), String> { unsafe {
     };
 
     let num_channels = format.nChannels;
-    let bytes_per_frame = format.nBlockAlign;
     let samples_per_second = format.nSamplesPerSec;
     let bits_per_sample = format.wBitsPerSample;
 
-    // Player sample sound.
-
-    let max = u16::MAX as f32;
-    let mut data_source = (0u64..).map(|t| t as f32 * 0.03)
-                                  .map(|t| ((t.sin() * 0.5 + 0.5) * max) as u16);
-
-for _ in (0..1000) {
-    let frames_available = {
-        let mut padding = mem::uninitialized();
-        let hresult = audio_client.GetCurrentPadding(&mut padding);
-        if hresult != S_OK {
-            panic!("IAudioClient::GetCurrentPadding() failed with code 0x{:x}", hresult);
-        }
-        max_frames_in_buffer - padding
-    };
-    assert!(frames_available != 0);
-
-    if frames_available == 0 {
-        // TODO:
-        ::std::thread::sleep_ms(1);
-        continue;
-    }
-
-    let max_elements = 32768;
-    let frames_available = ::std::cmp::min(
-        frames_available,
-        max_elements as u32 * mem::size_of::<u16>() as u32 / bytes_per_frame as u32);
-    assert!(frames_available != 0);
-
-    // loading buffer
-    let (buffer_data, buffer_len) = {
-        let mut buffer: *mut BYTE = mem::uninitialized();
-        let hresult =
-            render_client.GetBuffer(frames_available,
-                                    &mut buffer as *mut *mut libc::c_uchar);
-        if hresult != S_OK {
-            panic!("IAudioRenderClient::GetBuffer() failed with code 0x{:x}", hresult);
-        }
-        assert!(!buffer.is_null());
-
-        (buffer as *mut u16,
-        frames_available as usize * bytes_per_frame as usize / mem::size_of::<u16>())
-    };
-    let mut write_head = buffer_data;
-
-    println!("buffer size: {}", buffer_len);
-    println!("about to fill audio buffer");
-    let mut bytes_written: u64 = 0;
-    for (index, sample) in (&mut data_source).enumerate() {
-        if index >= buffer_len {
-            break;
-        }
-        bytes_written += 2;
-
-        *write_head = sample;
-        write_head = write_head.offset(1);
-    }
-    println!("done filling audio buffer");
-
-    let hresult = render_client.ReleaseBuffer((bytes_written / bytes_per_frame as u64) as u32, 0);
-    if hresult != S_OK {
-        panic!("IAudioRenderClient::ReleaseBuffer() failed with code 0x{:x}", hresult);
-    }
-
-    audio_client.Start();
-
-    // let buffer = Buffer {
-    //     render_client: self.render_client,
-    //     buffer_data: buffer_data,
-    //     buffer_len: buffer_len,
-    //     frames: frames_available,
-    //     marker: PhantomData,
-    // };
-
-    // Make sure we release the audio client and render client when we're done with them.
-    // audio_client.Release();
-    // render_client.Release();
-}
-
-    Ok(())
+    Ok(AudioSource {
+        audio_client: audio_client,
+        render_client: render_client,
+        max_frames_in_buffer: max_frames_in_buffer,
+        bytes_per_frame: format.nBlockAlign,
+    })
 } }

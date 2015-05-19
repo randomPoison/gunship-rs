@@ -4,4 +4,4 @@ extern crate libc;
 #[path="windows.rs"]
 mod audio_impl;
 
-pub use audio_impl::init;
+pub use audio_impl::{AudioSource, init};

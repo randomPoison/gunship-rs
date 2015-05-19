@@ -1,13 +1,14 @@
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::thread;
+use std::u16;
 
 use bootstrap;
 use bootstrap::window::Window;
 use bootstrap::window::Message::*;
 use bootstrap::time;
 
-use audio;
+use audio::{self, AudioSource};
 
 use polygon::gl_render::{self, GLRender};
 
@@ -26,6 +27,7 @@ pub struct Engine {
     transform_update: Box<System>,
     light_update: Box<System>,
     scene: Option<Scene>,
+    audio_source: AudioSource,
 }
 
 impl Engine {
@@ -43,15 +45,21 @@ impl Engine {
             transform_update: Box::new(TransformUpdateSystem),
             light_update: Box::new(LightUpdateSystem),
             scene: None,
+            audio_source: match audio::init() {
+                Ok(audio_source) => {
+                    println!("Audio subsystem successfully initialized");
+                    audio_source
+                },
+                Err(error) => {
+                    panic!("Error while initialzing audio subsystem: {}", error)
+                },
+            }
         };
 
         engine.scene = Some(Scene::new(engine.resource_manager.clone()));
 
         // Initialize audio subsystem.
-        match audio::init() {
-            Ok(_) => println!("Audio subsystem successfully initialized"),
-            Err(error) => println!("Error while initialzing audio subsystem: {}", error),
-        }
+
 
         engine
     }
@@ -99,6 +107,10 @@ impl Engine {
         let frequency = time::frequency() as f32;
         let mut last_time = time::now();
 
+        let max = u16::MAX as f32;
+        let mut data_source = (0u64..).map(|t| t as f32 * 0.03)
+                                      .map(|t| ((t.sin() * 0.5 + 0.5) * max) as u16);
+
         loop {
             let start_time = time::now();
             let frame_time = (start_time - last_time) as f32 / frequency;
@@ -142,6 +154,9 @@ impl Engine {
                 self.transform_update.update(scene, frame_time as f32);
                 self.light_update.update(scene, frame_time as f32);
             }
+
+            // Play some audio.
+            self.audio_source.stream(&mut data_source);
 
             self.draw();
 
