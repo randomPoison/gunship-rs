@@ -58,9 +58,6 @@ impl Engine {
 
         engine.scene = Some(Scene::new(engine.resource_manager.clone()));
 
-        // Initialize audio subsystem.
-
-
         engine
     }
 
@@ -156,7 +153,7 @@ impl Engine {
             }
 
             // Play some audio.
-            self.audio_source.stream(&mut data_source);
+            self.audio_source.stream(&mut data_source, 2.0);
 
             self.draw();
 

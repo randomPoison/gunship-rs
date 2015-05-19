@@ -12,11 +12,19 @@ pub struct AudioSource {
     audio_client: &'static mut IAudioClient,
     render_client: &'static mut IAudioRenderClient,
     max_frames_in_buffer: u32,
-    bytes_per_frame: u16,
+    bytes_per_frame: u32,
+    bytes_per_sample: u32,
+    samples_per_second: u32,
 }
 
 impl AudioSource {
-    pub fn stream<T: Iterator<Item = u16>>(&mut self, data_source: &mut T) { unsafe {
+    /// Stream samples to the audio buffer.
+    ///
+    /// # Params
+    ///
+    /// - data_source: An iterator that will provide the samples to be written.
+    /// - max_time: The maximum amount of time in seconds that should be written to the buffer.
+    pub fn stream<T: Iterator<Item = u16>>(&mut self, data_source: &mut T, max_time: f32) { unsafe {
         let frames_available = {
             let mut padding = mem::uninitialized();
             let hresult = self.audio_client.GetCurrentPadding(&mut padding);
@@ -27,18 +35,17 @@ impl AudioSource {
         };
 
         if frames_available == 0 {
-            // ::std::thread::sleep_ms(1);
             return;
         }
 
-        let max_elements = 32768;
+        let max_samples = max_time * self.samples_per_second as f32;
         let frames_available = ::std::cmp::min(
             frames_available,
-            max_elements as u32 * mem::size_of::<u16>() as u32 / self.bytes_per_frame as u32);
+            max_samples as u32 * self.bytes_per_sample / self.bytes_per_frame);
         assert!(frames_available != 0);
 
         // loading buffer
-        let (buffer_data, buffer_len) = {
+        let mut buffer = {
             let mut buffer: *mut BYTE = mem::uninitialized();
             let hresult =
                 self.render_client.GetBuffer(
@@ -49,20 +56,15 @@ impl AudioSource {
             }
             assert!(!buffer.is_null());
 
-            (buffer as *mut u16,
-            frames_available as usize * self.bytes_per_frame as usize / mem::size_of::<u16>())
+            ::std::slice::from_raw_parts_mut(
+                buffer as *mut u16,
+                (frames_available as usize * self.bytes_per_frame as usize) / self.bytes_per_sample as usize)
         };
-        let mut write_head = buffer_data;
 
         let mut bytes_written: u64 = 0;
-        for (index, sample) in data_source.enumerate() {
-            if index >= buffer_len {
-                break;
-            }
-            bytes_written += 2;
-
-            *write_head = sample;
-            write_head = write_head.offset(1);
+        for (dest, source) in buffer.iter_mut().zip(data_source) {
+            *dest = source;
+            bytes_written += self.bytes_per_sample as u64;
         }
 
         let hresult = self.render_client.ReleaseBuffer((bytes_written / self.bytes_per_frame as u64) as u32, 0);
@@ -217,14 +219,14 @@ pub fn init() -> Result<AudioSource, String> { unsafe {
         &mut *render_client
     };
 
-    let num_channels = format.nChannels;
-    let samples_per_second = format.nSamplesPerSec;
-    let bits_per_sample = format.wBitsPerSample;
+    // let num_channels = format.nChannels;
 
     Ok(AudioSource {
         audio_client: audio_client,
         render_client: render_client,
         max_frames_in_buffer: max_frames_in_buffer,
-        bytes_per_frame: format.nBlockAlign,
+        bytes_per_frame: format.nBlockAlign as u32,
+        bytes_per_sample: mem::size_of::<u16>() as u32,
+        samples_per_second: format.nSamplesPerSec,
     })
 } }
