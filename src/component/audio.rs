@@ -8,8 +8,38 @@ use resource::ResourceManager;
 use wav::Wave;
 
 pub struct AudioSource {
-    wave:   Rc<Wave>,
-    offset: usize,
+    audio_clip: Rc<Wave>,
+    offset:     usize,
+    is_playing: bool,
+    looping:    bool,
+}
+
+impl AudioSource {
+    /// Start playing the current audio clip from where it left off.
+    pub fn play(&mut self) {
+        self.is_playing = true;
+    }
+
+    /// Pause the clip without resetting it to the beginning.
+    pub fn pause(&mut self) {
+        self.is_playing = false;
+    }
+
+    /// Stop the current audio clip and reset it to the beginning.
+    pub fn stop(&mut self) {
+        self.is_playing = false;
+        self.offset = 0;
+    }
+
+    /// Reset the audio clip the start without stoping it.
+    pub fn reset(&mut self) {
+        self.offset = 0;
+    }
+
+    /// Retrieve whether the audio clip is currently playing.
+    pub fn is_playing(&self) -> bool {
+        self.is_playing
+    }
 }
 
 pub struct AudioSourceManager {
@@ -29,21 +59,36 @@ impl AudioSourceManager {
         }
     }
 
-    pub fn assign(&mut self, entity: Entity, clip_name: &str) -> &AudioSource {
+    pub fn assign(&mut self, entity: Entity, clip_name: &str) -> &mut AudioSource {
         assert!(!self.indices.contains_key(&entity));
 
         let mut resource_manager = self.resource_manager.borrow_mut();
-        let wave = resource_manager.get_audio_clip(clip_name);
+        let audio_clip = resource_manager.get_audio_clip(clip_name);
         let index = self.audio_sources.len();
-        // let () = Box::new(wave.data.samples.iter().map(|sample| *sample));
         self.audio_sources.push(AudioSource {
-            wave: wave,
-            offset: 0,
+            audio_clip: audio_clip,
+            offset:     0,
+            is_playing: false,
+            looping:    false,
         });
         self.entities.push(entity);
         self.indices.insert(entity, index);
 
+        &mut self.audio_sources[index]
+    }
+
+    pub fn get(&mut self, entity: Entity) -> &AudioSource {
+        assert!(self.indices.contains_key(&entity));
+
+        let index = *self.indices.get(&entity).unwrap();
         &self.audio_sources[index]
+    }
+
+    pub fn get_mut(&mut self, entity: Entity) -> &mut AudioSource {
+        assert!(self.indices.contains_key(&entity));
+
+        let index = *self.indices.get(&entity).unwrap();
+        &mut self.audio_sources[index]
     }
 }
 
@@ -58,20 +103,26 @@ impl System for AudioSystem {
         let mut audio_source_manager = audio_handle.get();
 
         let mut audio_sources = &mut audio_source_manager.audio_sources;
-        for audio_source in audio_sources.iter_mut() {
+        // TODO: Use a better method to filter out audio sources that aren't playing.
+        for audio_source in audio_sources.iter_mut().filter(|audio_source| audio_source.is_playing) {
             // Create an iterator over the samples using the data from the audio clip.
-            let mut stream = audio_source.wave.data.samples.iter()
-                .skip(audio_source.offset)
-                .map(|sample| *sample);
+            let total_samples = {
+                let mut stream = audio_source.audio_clip.data.samples.iter()
+                    .skip(audio_source.offset)
+                    .map(|sample| *sample);
 
-            // Sream the samples to the audio card.
-            let samples_written = scene.audio_source.stream(&mut stream, 1.0);
+                // Sream the samples to the audio card.
+                let samples_written = scene.audio_source.stream(&mut stream, 1.0);
 
-            // Determine if we're done playing the clip yet.
-            let total_samples = audio_source.offset + samples_written;
-            if total_samples >= audio_source.wave.data.samples.len() {
-                // TODO: Handle the audio clip finishing.
+                // Determine if we're done playing the clip yet.
+                audio_source.offset + samples_written
+            };
+            if total_samples >= audio_source.audio_clip.data.samples.len() {
                 audio_source.offset = 0;
+
+                if !audio_source.looping {
+                    audio_source.stop();
+                }
             } else {
                 audio_source.offset = total_samples;
             }
