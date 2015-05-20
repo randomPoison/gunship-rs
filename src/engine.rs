@@ -1,14 +1,13 @@
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::thread;
-use std::u16;
 
 use bootstrap;
 use bootstrap::window::Window;
 use bootstrap::window::Message::*;
 use bootstrap::time;
 
-use audio::{self, AudioSource};
+use bs_audio;
 
 use polygon::gl_render::{self, GLRender};
 
@@ -26,8 +25,8 @@ pub struct Engine {
     systems: Vec<Box<System>>,
     transform_update: Box<System>,
     light_update: Box<System>,
+    audio_update: Box<System>,
     scene: Option<Scene>,
-    audio_source: AudioSource,
 }
 
 impl Engine {
@@ -44,19 +43,21 @@ impl Engine {
             systems: Vec::new(),
             transform_update: Box::new(TransformUpdateSystem),
             light_update: Box::new(LightUpdateSystem),
+            audio_update: Box::new(AudioSystem),
             scene: None,
-            audio_source: match audio::init() {
-                Ok(audio_source) => {
-                    println!("Audio subsystem successfully initialized");
-                    audio_source
-                },
-                Err(error) => {
-                    panic!("Error while initialzing audio subsystem: {}", error)
-                },
-            }
         };
 
-        engine.scene = Some(Scene::new(engine.resource_manager.clone()));
+        let audio_source = match bs_audio::init() {
+            Ok(audio_source) => {
+                println!("Audio subsystem successfully initialized");
+                audio_source
+            },
+            Err(error) => {
+                panic!("Error while initialzing audio subsystem: {}", error)
+            },
+        };
+
+        engine.scene = Some(Scene::new(&engine.resource_manager, audio_source));
 
         engine
     }
@@ -104,10 +105,6 @@ impl Engine {
         let frequency = time::frequency() as f32;
         let mut last_time = time::now();
 
-        let max = u16::MAX as f32;
-        let mut data_source = (0u64..).map(|t| t as f32 * 0.03)
-                                      .map(|t| ((t.sin() * 0.5 + 0.5) * max) as u16);
-
         loop {
             let start_time = time::now();
             let frame_time = (start_time - last_time) as f32 / frequency;
@@ -145,15 +142,13 @@ impl Engine {
 
                 // Update systems.
                 for system in self.systems.iter_mut() {
-                    system.update(scene, frame_time as f32);
+                    system.update(scene, frame_time);
                 }
 
-                self.transform_update.update(scene, frame_time as f32);
-                self.light_update.update(scene, frame_time as f32);
+                self.transform_update.update(scene, frame_time);
+                self.light_update.update(scene, frame_time);
+                self.audio_update.update(scene, TARGET_FRAME_TIME_SECONDS);
             }
-
-            // Play some audio.
-            self.audio_source.stream(&mut data_source, 2.0);
 
             self.draw();
 

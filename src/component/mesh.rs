@@ -31,7 +31,7 @@ impl MeshManager {
         assert!(!self.indices.contains_key(&entity));
 
         let index = self.meshes.len();
-        self.meshes.push(self.resource_manager.borrow_mut().get(path_text));
+        self.meshes.push(self.resource_manager.borrow_mut().get_mesh(path_text));
         self.entities.push(entity);
         self.indices.insert(entity, index);
         &self.meshes[index]

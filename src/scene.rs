@@ -5,9 +5,11 @@ use std::cell::{RefCell, RefMut};
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 
+use bs_audio::AudioSource;
+
 use ecs::{EntityManager, ComponentManager};
 use input::Input;
-use super::component::{TransformManager, CameraManager, MeshManager, LightManager};
+use super::component::{TransformManager, CameraManager, MeshManager, LightManager, AudioSourceManager};
 use resource::ResourceManager;
 
 /// Contains all the data that defines the current state of the world.
@@ -19,21 +21,24 @@ pub struct Scene {
     component_managers: Vec<Rc<RefCell<Box<Any>>>>,
     component_indices: HashMap<TypeId, usize>,
     pub input: Input,
+    pub audio_source: AudioSource,
 }
 
 impl Scene {
-    pub fn new(resource_manager: Rc<RefCell<ResourceManager>>) -> Scene {
+    pub fn new(resource_manager: &Rc<RefCell<ResourceManager>>, audio_source: AudioSource) -> Scene {
         let mut scene = Scene {
             entity_manager: EntityManager::new(),
             component_managers: Vec::new(),
             component_indices: HashMap::new(),
             input: Input::new(),
+            audio_source: audio_source,
         };
 
         scene.register_manager(Box::new(TransformManager::new()));
         scene.register_manager(Box::new(CameraManager::new()));
-        scene.register_manager(Box::new(MeshManager::new(resource_manager)));
+        scene.register_manager(Box::new(MeshManager::new(resource_manager.clone())));
         scene.register_manager(Box::new(LightManager::new()));
+        scene.register_manager(Box::new(AudioSourceManager::new(resource_manager.clone())));
 
         scene
     }

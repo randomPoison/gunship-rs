@@ -3,15 +3,19 @@ use std::io::prelude::*;
 use std::fs::File;
 use std::path::Path;
 use std::error::Error;
+use std::rc::Rc;
 
 use collada::{self, ColladaData, GeometricElement, ArrayElement, PrimitiveType};
 
 use polygon::gl_render::{GLRender, GLMeshData};
 use polygon::geometry::mesh::Mesh;
 
+use wav::Wave;
+
 pub struct ResourceManager {
     renderer: GLRender,
     meshes: HashMap<String, GLMeshData>,
+    audio_clips: HashMap<String, Rc<Wave>>,
 }
 
 impl ResourceManager {
@@ -19,10 +23,11 @@ impl ResourceManager {
         ResourceManager {
             renderer: renderer,
             meshes: HashMap::new(),
+            audio_clips: HashMap::new(),
         }
     }
 
-    pub fn get(&mut self, path_text: &str) -> GLMeshData {
+    pub fn get_mesh(&mut self, path_text: &str) -> GLMeshData {
         if self.meshes.contains_key(path_text) {
             *self.meshes.get(path_text).unwrap()
         }
@@ -38,6 +43,15 @@ impl ResourceManager {
             self.meshes.insert(path_text.to_string(), mesh_data);
             mesh_data
         }
+    }
+
+    pub fn get_audio_clip(&mut self, path_text: &str) -> Rc<Wave> {
+        if !self.audio_clips.contains_key(path_text) {
+            let wave = Wave::from_file(path_text).unwrap();
+            self.audio_clips.insert(path_text.into(), Rc::new(wave));
+        }
+
+        self.audio_clips.get(path_text).unwrap().clone()
     }
 }
 

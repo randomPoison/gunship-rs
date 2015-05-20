@@ -11,6 +11,7 @@ use self::winapi::*;
 pub struct AudioSource {
     audio_client: &'static mut IAudioClient,
     render_client: &'static mut IAudioRenderClient,
+    channels: u32,
     max_frames_in_buffer: u32,
     bytes_per_frame: u32,
     bytes_per_sample: u32,
@@ -24,7 +25,11 @@ impl AudioSource {
     ///
     /// - data_source: An iterator that will provide the samples to be written.
     /// - max_time: The maximum amount of time in seconds that should be written to the buffer.
-    pub fn stream<T: Iterator<Item = u16>>(&mut self, data_source: &mut T, max_time: f32) { unsafe {
+    ///
+    /// # Returns
+    ///
+    /// The number of samples written to the audio buffer.
+    pub fn stream<T: Iterator<Item = u16>>(&mut self, data_source: &mut T, max_time: f32) -> usize { unsafe {
         let frames_available = {
             let mut padding = mem::uninitialized();
             let hresult = self.audio_client.GetCurrentPadding(&mut padding);
@@ -35,7 +40,7 @@ impl AudioSource {
         };
 
         if frames_available == 0 {
-            return;
+            return 0
         }
 
         let max_samples = max_time * self.samples_per_second as f32;
@@ -61,18 +66,21 @@ impl AudioSource {
                 (frames_available as usize * self.bytes_per_frame as usize) / self.bytes_per_sample as usize)
         };
 
-        let mut bytes_written: u64 = 0;
+        let mut samples_written = 0;
         for (dest, source) in buffer.iter_mut().zip(data_source) {
             *dest = source;
-            bytes_written += self.bytes_per_sample as u64;
+            samples_written += 1;
         }
 
-        let hresult = self.render_client.ReleaseBuffer((bytes_written / self.bytes_per_frame as u64) as u32, 0);
+        assert!(samples_written % self.channels == 0);
+        let hresult = self.render_client.ReleaseBuffer(samples_written / self.channels, 0);
         if hresult != S_OK {
             panic!("IAudioRenderClient::ReleaseBuffer() failed with code 0x{:x}", hresult);
         }
 
         self.audio_client.Start();
+
+        samples_written as usize
     } }
 }
 
@@ -140,12 +148,13 @@ pub fn init() -> Result<AudioSource, String> { unsafe {
     };
 
     // computing the format and initializing the device
+    // TODO: Support other audio formats.
     let format = {
         let format_attempt = WAVEFORMATEX {
             wFormatTag: WAVE_FORMAT_PCM,
             nChannels: 2,
-            nSamplesPerSec: 48000,
-            nAvgBytesPerSec: 2 * 48000 * 2,
+            nSamplesPerSec: 44100,
+            nAvgBytesPerSec: 2 * 44100 * 2,
             nBlockAlign: (2 * 16) / 8,
             wBitsPerSample: 16,
             cbSize: 0,
@@ -224,6 +233,7 @@ pub fn init() -> Result<AudioSource, String> { unsafe {
     Ok(AudioSource {
         audio_client: audio_client,
         render_client: render_client,
+        channels: format.nChannels as u32,
         max_frames_in_buffer: max_frames_in_buffer,
         bytes_per_frame: format.nBlockAlign as u32,
         bytes_per_sample: mem::size_of::<u16>() as u32,
