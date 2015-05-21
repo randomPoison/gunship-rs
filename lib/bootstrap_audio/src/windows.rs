@@ -43,7 +43,7 @@ impl AudioSource {
             return 0
         }
 
-        let max_samples = max_time * self.samples_per_second as f32;
+        let max_samples = max_time * (self.samples_per_second * self.channels) as f32;
         let frames_available = ::std::cmp::min(
             frames_available,
             max_samples as u32 * self.bytes_per_sample / self.bytes_per_frame);

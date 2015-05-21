@@ -6,6 +6,8 @@ use std::num::FromPrimitive;
 
 use windows::winapi::*;
 use windows::user32;
+use windows::kernel32;
+use windows::winmm;
 use ToCU16Str;
 use window::Message;
 use window::Message::*;
@@ -21,6 +23,12 @@ pub struct Window {
     pub handle: HWND,
     pub dc: HDC,
     pub messages: VecDeque<Message>
+}
+
+impl Drop for Window {
+    fn drop(&mut self) {
+        unsafe { winmm::timeEndPeriod(1) };
+    }
 }
 
 impl Window {
@@ -83,6 +91,17 @@ impl Window {
 
         unsafe {
             user32::SetPropW(handle, WINDOW_PROP.to_c_u16().as_ptr(), window_address);
+        }
+
+        unsafe {
+            let process = kernel32::GetCurrentProcess();
+            kernel32::SetPriorityClass(process, REALTIME_PRIORITY_CLASS);
+        }
+
+        match unsafe { winmm::timeBeginPeriod(1) } {
+            TIMERR_NOERROR => println!("time period set to 1ms"),
+            TIMERR_NOCANDO => println!("unable to set timer period"),
+            _ => panic!("invalid result form winmm::timeBeginPeriod()"),
         }
 
         window

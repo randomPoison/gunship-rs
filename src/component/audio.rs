@@ -98,7 +98,7 @@ impl ComponentManager for AudioSourceManager {
 pub struct AudioSystem;
 
 impl System for AudioSystem {
-    fn update(&mut self, scene: &mut Scene, _: f32) {
+    fn update(&mut self, scene: &mut Scene, delta: f32) {
         let mut audio_handle = scene.get_manager::<AudioSourceManager>();
         let mut audio_source_manager = audio_handle.get();
 
@@ -107,12 +107,11 @@ impl System for AudioSystem {
         for audio_source in audio_sources.iter_mut().filter(|audio_source| audio_source.is_playing) {
             // Create an iterator over the samples using the data from the audio clip.
             let total_samples = {
-                let mut stream = audio_source.audio_clip.data.samples.iter()
-                    .skip(audio_source.offset)
+                let mut stream = audio_source.audio_clip.data.samples[audio_source.offset..].iter()
                     .map(|sample| *sample);
 
                 // Sream the samples to the audio card.
-                let samples_written = scene.audio_source.stream(&mut stream, 1.0);
+                let samples_written = scene.audio_source.stream(&mut stream, delta);
 
                 // Determine if we're done playing the clip yet.
                 audio_source.offset + samples_written

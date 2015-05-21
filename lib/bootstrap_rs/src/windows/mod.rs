@@ -5,6 +5,7 @@ extern crate user32;
 extern crate kernel32;
 extern crate gdi32;
 extern crate opengl32;
+extern crate winmm;
 // extern crate xinput;
 
 pub mod init;
