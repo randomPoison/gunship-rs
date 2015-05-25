@@ -108,6 +108,7 @@ impl Engine {
         loop {
             let start_time = time::now();
             let frame_time = (start_time - last_time) as f32 / frequency;
+            println!("frame ms: {}", frame_time * 1000.0);
             last_time = start_time;
 
             // Block needed to end the borrow of self.scene before the call to draw().
@@ -156,19 +157,18 @@ impl Engine {
                 break;
             }
 
-            let end_time = time::now();
-            let mut elapsed_time = (end_time - start_time) as f32 / frequency;
-            if elapsed_time > 0.1 {
-                elapsed_time = 0.1;
+            loop {
+                let end_time = time::now();
+                let elapsed_time = (end_time - start_time) as f32 / frequency;
+                let remaining_time = TARGET_FRAME_TIME_SECONDS - elapsed_time;
+                if remaining_time < 0.0 {
+                    break;
+                } else if remaining_time > 0.001 {
+                    thread::sleep_ms(remaining_time as u32);
+                }
             }
 
-            let difference = TARGET_FRAME_TIME_SECONDS - elapsed_time;
-            if difference > 0.0 {
-                let sleep_ms = (difference * 1000.0).round() as u32;
-                thread::sleep_ms(sleep_ms);
-            } else {
-                println!("Failed to meet required frame time: {} ms", elapsed_time);
-            }
+            // TODO: Don't flip buffers until end of frame time?
         };
     }
 

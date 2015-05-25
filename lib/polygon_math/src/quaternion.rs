@@ -42,9 +42,9 @@ impl Quaternion {
 
     /// Creates a quaternion from a set of euler angles.
     pub fn from_eulers(x: f32, y: f32, z: f32) -> Quaternion {
-        Quaternion::axis_angle(Vector3(1.0, 0.0, 0.0), x)
-      * Quaternion::axis_angle(Vector3(0.0, 1.0, 0.0), y)
-      * Quaternion::axis_angle(Vector3(0.0, 0.0, 1.0), z);
+        Quaternion::axis_angle(Vector3::new(1.0, 0.0, 0.0), x)
+      * Quaternion::axis_angle(Vector3::new(0.0, 1.0, 0.0), y)
+      * Quaternion::axis_angle(Vector3::new(0.0, 0.0, 1.0), z)
     }
 
     /// Converts the quaternion to the corresponding rotation matrix.
