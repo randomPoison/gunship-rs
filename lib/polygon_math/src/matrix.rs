@@ -1,9 +1,12 @@
-use std::cmp::{PartialEq, Eq};
 use std::ops::{Index, IndexMut, Mul};
 use std::fmt::{Debug, Formatter, Error};
+use std::cmp::PartialEq;
 
 use vector::Vector3;
 use point::Point;
+use quaternion::Quaternion;
+
+pub const EPSILON: f32 = 0.00001;
 
 /// A 4x4 matrix that can be used to transform 3D points and vectors.
 ///
@@ -14,7 +17,6 @@ pub struct Matrix4 {
 }
 
 impl Matrix4 {
-
     /// Create a new empy matrix.
     ///
     /// The result matrix is filled entirely with zeroes, it is NOT an identity
@@ -89,6 +91,17 @@ impl Matrix4 {
         z_rot * (y_rot * x_rot)
     }
 
+    pub fn from_quaternion(q: &Quaternion) -> Matrix4 {
+        Matrix4 {
+            data: [
+                (q.w*q.w + q.x*q.x - q.y*q.y - q.z*q.z), (2.0*q.x*q.y - 2.0*q.w*q.z),             (2.0*q.x*q.z + 2.0*q.w*q.y),             0.0,
+                (2.0*q.x*q.y + 2.0*q.w*q.z),             (q.w*q.w - q.x*q.x + q.y*q.y - q.z*q.z), (2.0*q.y*q.z - 2.0*q.w*q.x),             0.0,
+                (2.0*q.x*q.z - 2.0*q.w*q.y),             (2.0*q.y*q.z + 2.0*q.w*q.x),             (q.w*q.w - q.x*q.x - q.y*q.y + q.z*q.z), 0.0,
+                0.0,                                     0.0,                                     0.0,                                     1.0,
+            ]
+        }
+    }
+
     pub fn scale(x: f32, y: f32, z: f32) -> Matrix4 {
         Matrix4 {
             data: [
@@ -142,7 +155,7 @@ impl Matrix4 {
 impl PartialEq for Matrix4 {
     fn ne(&self, other: &Matrix4) -> bool {
         for (&ours, &theirs) in self.data.iter().zip(other.data.iter()) {
-            if ours != theirs {
+            if (ours - theirs).abs() > EPSILON {
                 return true
             }
         }
@@ -153,9 +166,6 @@ impl PartialEq for Matrix4 {
         !(self != other)
     }
 }
-
-impl Eq for Matrix4 {}
-
 impl Index<(usize, usize)> for Matrix4 {
     type Output = f32;
 
@@ -218,7 +228,7 @@ impl Debug for Matrix4 {
         for row in 0..4 {
             try!(formatter.write_str("["));
             for col in 0..4 {
-                try!(write!(formatter, "{:>10}, ", self[(row, col)]));
+                try!(write!(formatter, "{:>+.8}, ", self[(row, col)]));
             }
             try!(formatter.write_str("]\n"));
         }
