@@ -93,7 +93,7 @@ impl Engine {
             for (mesh, entity) in mesh_manager.iter() {
                 let transform = transform_manager.get_mut(entity);
 
-                self.renderer.draw_mesh(&mesh, transform.derived_matrix(), transform.normal_matrix(), &camera, light_manager.components().as_ref());
+                self.renderer.draw_mesh(&mesh, transform.derived_matrix(), transform.derived_normal_matrix(), &camera, light_manager.components().as_ref());
             }
         }
 
@@ -108,7 +108,6 @@ impl Engine {
         loop {
             let start_time = time::now();
             let frame_time = (start_time - last_time) as f32 / frequency;
-            println!("frame ms: {}", frame_time * 1000.0);
             last_time = start_time;
 
             // Block needed to end the borrow of self.scene before the call to draw().

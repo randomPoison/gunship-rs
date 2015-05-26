@@ -1,7 +1,9 @@
 use std::ops::Mul;
+use std::f32::consts::PI;
 
 use vector::Vector3;
 use matrix::Matrix4;
+use IsZero;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct Quaternion {
@@ -32,12 +34,38 @@ impl Quaternion {
     /// - axis - The axis being used to represent the rotation. This should
     ///   be normalized before being passed into `axis_angle()`.
     pub fn axis_angle(axis: Vector3, angle: f32) -> Quaternion {
+        let s = (angle * 0.5).sin();
         Quaternion {
             w: (angle * 0.5).cos(),
-            x: (angle * 0.5).sin() * axis.x,
-            y: (angle * 0.5).sin() * axis.y,
-            z: (angle * 0.5).sin() * axis.z,
+            x: s * axis.x,
+            y: s * axis.y,
+            z: s * axis.z,
         }
+    }
+
+    /// Creates a quaternion that rotates an object to look in the specified direction.
+    pub fn look_rotation(forward: Vector3, up: Vector3) -> Quaternion {
+        let source = Vector3::forward();
+        let forward = forward.normalized();
+        let up = up.normalized();
+
+        let dot = source.dot(forward);
+
+        if (dot + 1.0).is_zero() {
+            // vector a and b point exactly in the opposite direction,
+            // so it is a 180 degrees turn around the up-axis
+            return Quaternion::axis_angle(up, PI)
+        }
+
+        if (dot - 1.0).is_zero() {
+            // Vector a and b point exactly in the same direction
+            // so we return the identity quaternion.
+            return Quaternion::identity()
+        }
+
+        let rotAngle = dot.acos();
+        let rotAxis = Vector3::cross(source, forward).normalized();// source.cross(forward).normalized();
+        return Quaternion::axis_angle(rotAxis, rotAngle)
     }
 
     /// Creates a quaternion from a set of euler angles.

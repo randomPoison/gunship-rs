@@ -1,9 +1,10 @@
 use std::collections::HashMap;
 use std::cell::Cell;
 
-use math::vector::Vector3;
-use math::matrix::Matrix4;
-use math::point::Point;
+use math::Vector3;
+use math::Matrix4;
+use math::Point;
+use math::Quaternion;
 
 use ecs::{Entity, System, ComponentManager};
 use scene::Scene;
@@ -84,7 +85,7 @@ impl TransformManager {
     pub fn update_transform(&self, transform: &Transform) {
         let (parent_matrix, parent_rotation) = match transform.parent {
             None => {
-                (Matrix4::identity(), Matrix4::identity())
+                (Matrix4::identity(), Quaternion::identity())
             },
             Some(parent) => {
                 let parent_transform = self.get(parent);
@@ -93,8 +94,8 @@ impl TransformManager {
                     self.update_transform(parent_transform);
                 }
 
-                let parent_matrix = parent_transform.derived_matrix();
-                let parent_rotation = parent_transform.rotation_derived();
+                let parent_matrix = parent_transform.matrix_derived.get();
+                let parent_rotation = parent_transform.rotation_derived.get();
 
                 (parent_matrix, parent_rotation)
             }
@@ -133,11 +134,12 @@ impl ComponentManager for TransformManager {
 #[derive(Debug)]
 pub struct Transform {
     position:         Point,
-    rotation:         Matrix4,
+    rotation:         Quaternion,
     scale:            Vector3,
     local_matrix:     Cell<Matrix4>,
     position_derived: Cell<Point>,
-    rotation_derived: Cell<Matrix4>,
+    rotation_derived: Cell<Quaternion>,
+    scale_derived:    Cell<Vector3>,
     matrix_derived:   Cell<Matrix4>,
     parent:           Option<Entity>,
     out_of_date:      Cell<bool>,
@@ -147,11 +149,12 @@ impl Transform {
     pub fn new() -> Transform {
         Transform {
             position:         Point::origin(),
-            rotation:         Matrix4::identity(),
+            rotation:         Quaternion::identity(),
             scale:            Vector3::one(),
             local_matrix:     Cell::new(Matrix4::identity()),
             position_derived: Cell::new(Point::origin()),
-            rotation_derived: Cell::new(Matrix4::identity()),
+            rotation_derived: Cell::new(Quaternion::identity()),
+            scale_derived:    Cell::new(Vector3::one()),
             matrix_derived:   Cell::new(Matrix4::identity()),
             parent:           None,
             out_of_date:      Cell::new(false),
@@ -167,11 +170,11 @@ impl Transform {
         self.out_of_date.set(true);
     }
 
-    pub fn rotation(&self) -> Matrix4 {
+    pub fn rotation(&self) -> Quaternion {
         self.rotation
     }
 
-    pub fn set_rotation(&mut self, new_rotation: Matrix4) {
+    pub fn set_rotation(&mut self, new_rotation: Quaternion) {
         self.rotation = new_rotation;
         self.out_of_date.set(true);
     }
@@ -197,17 +200,26 @@ impl Transform {
     /// Retrieves the derived rotation of the transform.
     ///
     /// In debug builds this method asserts if the transform is out of date.
-    pub fn rotation_derived(&self) -> Matrix4 {
+    pub fn rotation_derived(&self) -> Quaternion {
         assert!(!self.out_of_date.get());
 
         self.rotation_derived.get()
+    }
+
+    /// Retrieves the derived scale of the transform.
+    ///
+    /// In debug builds this method asserts if the transform is out of date.
+    pub fn scale_derived(&self) -> Vector3 {
+        assert!(!self.out_of_date.get());
+
+        self.scale_derived.get()
     }
 
     pub fn local_matrix(&self) -> Matrix4 {
         if self.out_of_date.get() {
             let local_matrix =
                 Matrix4::from_point(self.position)
-                * (self.rotation * Matrix4::scale(self.scale.x, self.scale.y, self.scale.z));
+                * (self.rotation.as_matrix() * Matrix4::from_scale_vector(self.scale));
             self.local_matrix.set(local_matrix);
         }
 
@@ -220,46 +232,30 @@ impl Transform {
         self.matrix_derived.get()
     }
 
-    pub fn normal_matrix(&self) -> Matrix4 {
+    pub fn derived_normal_matrix(&self) -> Matrix4 {
+        assert!(!self.out_of_date.get());
+
         let inverse =
-            Matrix4::scale(1.0 / self.scale.x, 1.0 / self.scale.y, 1.0 / self.scale.z)
-          * (self.rotation.transpose()
-          *  Matrix4::translation(-self.position.x, -self.position.y, -self.position.z));
+            Matrix4::from_scale_vector(1.0 / self.scale_derived.get())
+          * (self.rotation_derived.get().as_matrix().transpose()
+          *  Matrix4::from_point(-self.position_derived.get()));
 
         inverse.transpose()
     }
 
-    pub fn rotation_matrix(&self) -> Matrix4 {
-        self.rotation
-    }
-
     pub fn look_at(&mut self, interest: Point, up: Vector3) {
         let forward = interest - self.position;
-        let forward = forward.normalized();
-        let up = up.normalized();
+        self.rotation = Quaternion::look_rotation(forward, up);
+        self.out_of_date.set(true);
+    }
 
-        let right = Vector3::cross(forward, up);
-        let up = Vector3::cross(right, forward);
-
-        let mut look_matrix = Matrix4::identity();
-
-        look_matrix[(0, 0)] = right.x;
-        look_matrix[(1, 0)] = right.y;
-        look_matrix[(2, 0)] = right.z;
-
-        look_matrix[(0, 1)] = up.x;
-        look_matrix[(1, 1)] = up.y;
-        look_matrix[(2, 1)] = up.z;
-
-        look_matrix[(0, 2)] = -forward.x;
-        look_matrix[(1, 2)] = -forward.y;
-        look_matrix[(2, 2)] = -forward.z;
-
-        self.rotation = look_matrix;
+    pub fn look_direction(&mut self, forward: Vector3, up: Vector3) {
+        self.rotation = Quaternion::look_rotation(forward, up);
+        self.out_of_date.set(true);
     }
 
     /// Updates the local and derived matrices for the transform.
-    fn update(&self, parent_matrix: Matrix4, parent_rotation: Matrix4) {
+    fn update(&self, parent_matrix: Matrix4, parent_rotation: Quaternion) {
         let local_matrix = self.local_matrix();
 
         let derived_matrix = parent_matrix * local_matrix;
@@ -285,7 +281,7 @@ impl System for TransformUpdateSystem {
                 // matrix if the transform has no parent.
                 let (parent_matrix, parent_rotation) = match transform.parent {
                     None => {
-                        (Matrix4::identity(), Matrix4::identity())
+                        (Matrix4::identity(), Quaternion::identity())
                     },
                     Some(parent) => {
                         let parent_transform = transform_manager.get(parent);

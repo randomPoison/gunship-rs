@@ -1,6 +1,6 @@
-use math::point::Point;
-use math::vector::Vector3;
-use math::matrix::Matrix4;
+use math::Point;
+use math::Matrix4;
+use math::Quaternion;
 
 /// A camera in the scene.
 #[derive(Debug)]
@@ -12,7 +12,7 @@ pub struct Camera
     pub far: f32,
 
     pub position: Point,
-    pub rotation: Matrix4,
+    pub rotation: Quaternion,
 }
 
 impl Camera
@@ -25,34 +25,8 @@ impl Camera
             far: far,
 
             position: Point::origin(),
-            rotation: Matrix4::identity(),
+            rotation: Quaternion::identity(),
         }
-    }
-
-    /// Recalculates the rotation of the camera so that it looks at the given point.
-    pub fn look_at(&mut self, interest: Point, up: Vector3) {
-        let forward = interest - self.position;
-        let forward = forward.normalized();
-        let up = up.normalized();
-
-        let right = Vector3::cross(forward, up);
-        let up = Vector3::cross(right, forward);
-
-        let mut look_matrix = Matrix4::identity();
-
-        look_matrix[(0, 0)] = right.x;
-        look_matrix[(1, 0)] = right.y;
-        look_matrix[(2, 0)] = right.z;
-
-        look_matrix[(0, 1)] = up.x;
-        look_matrix[(1, 1)] = up.y;
-        look_matrix[(2, 1)] = up.z;
-
-        look_matrix[(0, 2)] = -forward.x;
-        look_matrix[(1, 2)] = -forward.y;
-        look_matrix[(2, 2)] = -forward.z;
-
-        self.rotation = look_matrix;
     }
 
     /// Calculates the view transform for the camera.
@@ -60,11 +34,11 @@ impl Camera
     /// The view transform the matrix that converts from world coordinates
     /// to camera coordinates.
     pub fn view_matrix(&self) -> Matrix4 {
-        self.rotation.transpose() * Matrix4::translation(-self.position.x, -self.position.y, -self.position.z)
+        self.rotation.as_matrix().transpose() * Matrix4::translation(-self.position.x, -self.position.y, -self.position.z)
     }
 
     pub fn inverse_view_matrix(&self) -> Matrix4 {
-        Matrix4::from_point(self.position) * self.rotation
+        Matrix4::from_point(self.position) * self.rotation.as_matrix()
     }
 
     /// Calculates the projection matrix for the camera.

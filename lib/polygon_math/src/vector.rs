@@ -1,4 +1,4 @@
-use std::ops::{Mul, Neg};
+use std::ops::{Mul, Div, Neg};
 
 #[repr(C)] #[derive(Debug, Clone, Copy)]
 pub struct Vector3 {
@@ -32,6 +32,10 @@ impl Vector3 {
         Vector3::new(0.0, -1.0, 0.0)
     }
 
+    pub fn forward() -> Vector3 {
+        Vector3::new(0.0, 0.0, -1.0)
+    }
+
     pub fn from_slice(data: &[f32]) -> Vector3 {
         assert!(data.len() == 3);
 
@@ -46,7 +50,7 @@ impl Vector3 {
         Vector3 {
             x: first.y * second.z - first.z * second.y,
             y: first.z * second.x - first.x * second.z,
-            z: first.x * second.y - first.y * second.x
+            z: first.x * second.y - first.y * second.x,
         }
     }
 
@@ -70,6 +74,17 @@ impl Vector3 {
     pub fn magnitude_squared(&self) -> f32 {
         self.x * self.x + self.y * self.y + self.z * self.z
     }
+
+    pub fn dot(&self, rhs: Vector3) -> f32 {
+        self.x * rhs.x + self.y * rhs.y + self.z * rhs.z
+    }
+
+    // pub fn cross(&self, rhs: Vector3) -> Vector3 {
+    //     Vector3::new(
+    //         self.y * rhs.z - self.z * rhs.y,
+    //         self.z * rhs.x - self.x * rhs.z,
+    //         self.x * rhs.y - self.y * rhs.x)
+    // }
 }
 
 impl Mul<f32> for Vector3 {
@@ -93,5 +108,13 @@ impl Neg for Vector3 {
 
     fn neg(self) -> Vector3 {
         Vector3::new(-self.x, -self.y, -self.z)
+    }
+}
+
+impl Div<Vector3> for f32 {
+    type Output = Vector3;
+
+    fn div(self, rhs: Vector3) -> Vector3 {
+        Vector3::new(self / rhs.x, self / rhs.y, self / rhs.z)
     }
 }

@@ -12,3 +12,15 @@ pub use self::vector::Vector3;
 pub use self::matrix::Matrix4;
 pub use self::color::Color;
 pub use self::quaternion::Quaternion;
+
+pub const EPSILON: f32 = 1e-6;
+
+pub trait IsZero {
+    fn is_zero(&self) -> bool;
+}
+
+impl IsZero for f32 {
+    fn is_zero(&self) -> bool {
+        self.abs() < EPSILON
+    }
+}

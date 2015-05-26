@@ -5,8 +5,7 @@ use std::cmp::PartialEq;
 use vector::Vector3;
 use point::Point;
 use quaternion::Quaternion;
-
-pub const EPSILON: f32 = 0.00001;
+use IsZero;
 
 /// A 4x4 matrix that can be used to transform 3D points and vectors.
 ///
@@ -56,10 +55,12 @@ impl Matrix4 {
         }
     }
 
+    /// Creates a new translation matrix from a point.
     pub fn from_point(point: Point) -> Matrix4 {
         Matrix4::translation(point.x, point.y, point.z)
     }
 
+    /// Creates a new rotation matrix from a set of Euler angles.
     pub fn rotation(x: f32, y: f32, z: f32) -> Matrix4 {
         let x_rot = Matrix4 {
             data: [
@@ -91,6 +92,7 @@ impl Matrix4 {
         z_rot * (y_rot * x_rot)
     }
 
+    /// Creates a new rotation matrix from a quaternion.
     pub fn from_quaternion(q: &Quaternion) -> Matrix4 {
         Matrix4 {
             data: [
@@ -102,6 +104,7 @@ impl Matrix4 {
         }
     }
 
+    /// Creates a new scale matrix.
     pub fn scale(x: f32, y: f32, z: f32) -> Matrix4 {
         Matrix4 {
             data: [
@@ -109,6 +112,17 @@ impl Matrix4 {
                 0.0, y,   0.0, 0.0,
                 0.0, 0.0, z,   0.0,
                 0.0, 0.0, 0.0, 1.0
+            ]
+        }
+    }
+
+    pub fn from_scale_vector(scale: Vector3) -> Matrix4 {
+        Matrix4 {
+            data: [
+                scale.x, 0.0,     0.0,     0.0,
+                0.0,     scale.y, 0.0,     0.0,
+                0.0,     0.0,     scale.z, 0.0,
+                0.0,     0.0,     0.0,     1.0,
             ]
         }
     }
@@ -155,7 +169,7 @@ impl Matrix4 {
 impl PartialEq for Matrix4 {
     fn ne(&self, other: &Matrix4) -> bool {
         for (&ours, &theirs) in self.data.iter().zip(other.data.iter()) {
-            if (ours - theirs).abs() > EPSILON {
+            if (ours - theirs).is_zero() {
                 return true
             }
         }
