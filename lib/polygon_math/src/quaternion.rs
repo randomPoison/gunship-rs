@@ -1,9 +1,9 @@
-use std::ops::Mul;
+use std::ops::{Mul, Sub, Add};
 use std::f32::consts::PI;
 
 use vector::Vector3;
 use matrix::Matrix4;
-use IsZero;
+use super::{IsZero, Clamp};
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct Quaternion {
@@ -63,9 +63,9 @@ impl Quaternion {
             return Quaternion::identity()
         }
 
-        let rotAngle = dot.acos();
-        let rotAxis = Vector3::cross(source, forward).normalized();// source.cross(forward).normalized();
-        return Quaternion::axis_angle(rotAxis, rotAngle)
+        let rot_angle = dot.acos();
+        let rot_axis = Vector3::cross(source, forward).normalized();// source.cross(forward).normalized();
+        return Quaternion::axis_angle(rot_axis, rot_angle)
     }
 
     /// Creates a quaternion from a set of euler angles.
@@ -79,6 +79,74 @@ impl Quaternion {
     pub fn as_matrix(&self) -> Matrix4 {
         Matrix4::from_quaternion(self)
     }
+
+    /// Normalizes the quaternion to unit length.
+    ///
+    /// The quaternion must not have a length of zero when calling this method.
+    pub fn normalize(&mut self) {
+        assert!(!self.is_zero());
+
+        let length = (self.w * self.w
+                    + self.x * self.x
+                    + self.y * self.y
+                    + self.z * self.z).sqrt();
+
+        self.w /= length;
+        self.x /= length;
+        self.y /= length;
+        self.z /= length;
+    }
+
+    /// Creates a normalized copy of the quaternion.
+    ///
+    /// The quaternion must not have a length of zero when calling this method.
+    pub fn normalized(&self) -> Quaternion {
+        let mut temp = *self;
+        temp.normalize();
+        temp
+    }
+
+    /// Determines if the quaternion is normalized (has a length of 1.0).
+    pub fn is_normalized(&self) -> bool {
+        let mag_sqrd = Quaternion::dot(*self, *self);
+        (mag_sqrd - 1.0).is_zero()
+    }
+
+    /// Calculates the dot product of two quaternions.
+    pub fn dot(first: Quaternion, second: Quaternion) -> f32
+    {
+        (first.w * second.w
+       + first.x * second.x
+       + first.y * second.y
+       + first.z * second.z)
+    }
+
+    /// Calculates the spherical linear interpolation between two quaternions.
+    pub fn slerp(first: Quaternion, second: Quaternion, t: f32) -> Quaternion {
+        assert!(first.is_normalized());
+        assert!(second.is_normalized());
+
+        // Compute the cosine of the angle between the two vectors.
+        let dot = Quaternion::dot(first, second);
+
+        const DOT_THRESHOLD: f32 = 0.9995;
+        if dot > DOT_THRESHOLD {
+            // If the inputs are too close for comfort, linearly interpolate
+            // and normalize the result.
+            return (first + t * (second - first)).normalized();
+        }
+
+        dot.clamp(-1.0, 1.0);           // Robustness: Stay within domain of acos()
+        let theta_0 = dot.acos(); // theta_0 = angle between input vectors
+        let theta = theta_0 * t;  // theta = angle between first and result
+
+        let normal = (second - first * dot).normalized(); // { first, normal } is now an orthonormal basis
+
+        // TODO: We shouldn't need to normalize here since both inputs are normalized,
+        //       the result was introducing error. Figure out if there's something else we
+        //       can do to improve accuracy.
+        return (first * theta.cos() + normal * theta.sin()).normalized();
+    }
 }
 
 impl Mul<Quaternion> for Quaternion {
@@ -91,5 +159,61 @@ impl Mul<Quaternion> for Quaternion {
             y: (self.w * rhs.y) - (self.x * rhs.z) + (self.y * rhs.w) + (self.z * rhs.x),
             z: (self.w * rhs.z) + (self.x * rhs.y) - (self.y * rhs.x) + (self.z * rhs.w),
         }
+    }
+}
+
+impl Mul<f32> for Quaternion {
+    type Output = Quaternion;
+
+    fn mul(self, rhs: f32) -> Quaternion {
+        Quaternion {
+            w: self.w * rhs,
+            x: self.x * rhs,
+            y: self.y * rhs,
+            z: self.z * rhs,
+        }
+    }
+}
+
+impl Mul<Quaternion> for f32 {
+    type Output = Quaternion;
+
+    fn mul(self, rhs: Quaternion) -> Quaternion {
+        rhs * self
+    }
+}
+
+impl Sub<Quaternion> for Quaternion {
+    type Output = Quaternion;
+
+    fn sub(self, rhs: Quaternion) -> Quaternion {
+        Quaternion {
+            w: self.w - rhs.w,
+            x: self.x - rhs.x,
+            y: self.y - rhs.y,
+            z: self.z - rhs.z,
+        }
+    }
+}
+
+impl Add<Quaternion> for Quaternion {
+    type Output = Quaternion;
+
+    fn add(self, rhs: Quaternion) -> Quaternion {
+        Quaternion {
+            w: self.w + rhs.w,
+            x: self.x + rhs.x,
+            y: self.y + rhs.y,
+            z: self.z + rhs.z,
+        }
+    }
+}
+
+impl IsZero for Quaternion {
+    fn is_zero(self) -> bool {
+        (self.w * self.w
+       + self.x * self.x
+       + self.y * self.y
+       + self.z * self.z).is_zero()
     }
 }
