@@ -228,6 +228,13 @@ pub fn init() -> Result<AudioSource, String> { unsafe {
         &mut *render_client
     };
 
+    let latency_ms = {
+        let mut latency: REFERENCE_TIME = 0;
+        audio_client.GetStreamLatency(&mut latency);
+        latency as f32 / 10000.0
+    };
+    println!("max audio latency: {}ms", latency_ms);
+
     // let num_channels = format.nChannels;
 
     Ok(AudioSource {
