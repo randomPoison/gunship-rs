@@ -45,6 +45,9 @@ impl Quaternion {
 
     /// Creates a quaternion that rotates an object to look in the specified direction.
     pub fn look_rotation(forward: Vector3, up: Vector3) -> Quaternion {
+        assert!(!forward.is_zero());
+        assert!(!up.is_zero());
+
         let source = Vector3::forward();
         let forward = forward.normalized();
         let up = up.normalized();
@@ -66,6 +69,8 @@ impl Quaternion {
         let rot_angle = dot.acos();
         let rot_axis = Vector3::cross(source, forward).normalized();// source.cross(forward).normalized();
         return Quaternion::axis_angle(rot_axis, rot_angle)
+
+        // TODO: Correctly take the up vector into account.
     }
 
     /// Creates a quaternion from a set of euler angles.
@@ -121,7 +126,31 @@ impl Quaternion {
        + first.z * second.z)
     }
 
+    /// Interpolates linearly between two quaternions.
+    ///
+    /// # Remarks
+    ///
+    /// This method does not necessarily result in a normalized Quaternion, so the result should
+    /// not be used directly to represent a rotation. If you would like to lerp two rotation
+    /// quaternions use `Quaternion::nlerp()`.
+    pub fn lerp(first: Quaternion, second: Quaternion, t: f32) -> Quaternion {
+        first + t * (second - first)
+    }
+
+    /// Interpolates linearly between two quaternions using a normalized lerp.
+    pub fn nlerp(first: Quaternion, second: Quaternion, t: f32) -> Quaternion {
+        Quaternion::lerp(first, second, t).normalized()
+    }
+
     /// Calculates the spherical linear interpolation between two quaternions.
+    ///
+    /// # Remarks
+    ///
+    /// While slerp is generally the go-to method for interpolating quaternions, it's computationaly
+    /// expensive and has some undesirable properties. `Quaternion::nlerp()` is often more appropriate unless it's
+    /// absolutely necessary that the interpolation have a constant velocity. For a better discussion
+    /// of the different methods of interpolating quaternions see [this article by Jonathan Blow]
+    /// (http://number-none.com/product/Understanding%20Slerp,%20Then%20Not%20Using%20It/).
     pub fn slerp(first: Quaternion, second: Quaternion, t: f32) -> Quaternion {
         assert!(first.is_normalized());
         assert!(second.is_normalized());
@@ -133,10 +162,10 @@ impl Quaternion {
         if dot > DOT_THRESHOLD {
             // If the inputs are too close for comfort, linearly interpolate
             // and normalize the result.
-            return (first + t * (second - first)).normalized();
+            return Quaternion::nlerp(first, second, t);
         }
 
-        dot.clamp(-1.0, 1.0);           // Robustness: Stay within domain of acos()
+        dot.clamp(-1.0, 1.0);     // Robustness: Stay within domain of acos()
         let theta_0 = dot.acos(); // theta_0 = angle between input vectors
         let theta = theta_0 * t;  // theta = angle between first and result
 

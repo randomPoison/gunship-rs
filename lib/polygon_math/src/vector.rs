@@ -1,5 +1,7 @@
 use std::ops::{Mul, Div, Neg};
 
+use super::IsZero;
+
 #[repr(C)] #[derive(Debug, Clone, Copy)]
 pub struct Vector3 {
     pub x: f32,
@@ -116,5 +118,11 @@ impl Div<Vector3> for f32 {
 
     fn div(self, rhs: Vector3) -> Vector3 {
         Vector3::new(self / rhs.x, self / rhs.y, self / rhs.z)
+    }
+}
+
+impl IsZero for Vector3 {
+    fn is_zero(self) -> bool {
+        self.dot(self).is_zero()
     }
 }
