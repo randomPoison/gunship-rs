@@ -1,4 +1,4 @@
-use std::ops::{Mul, Div, Neg};
+use std::ops::{Mul, Div, Neg, Add};
 
 use super::IsZero;
 
@@ -56,17 +56,34 @@ impl Vector3 {
         }
     }
 
-    pub fn normalize(&mut self) {
-        let one_over_magnitude = 1.0 / self.magnitude();
-        self.x *= one_over_magnitude;
-        self.y *= one_over_magnitude;
-        self.z *= one_over_magnitude;
+    /// Normalizes the vector, returning the old length.
+    ///
+    /// If the vector is the zero vector it is not altered.
+    pub fn normalize(&mut self) -> f32 {
+        if self.is_zero() {
+            0.0
+        } else {
+            let magnitude = self.magnitude();
+            let one_over_magnitude = 1.0 / magnitude;
+            self.x *= one_over_magnitude;
+            self.y *= one_over_magnitude;
+            self.z *= one_over_magnitude;
+
+            magnitude
+        }
     }
 
+    /// Returns the normalized version of the vector.
+    ///
+    /// If the vector is the zero vector a copy is returned.
     pub fn normalized(&self) -> Vector3 {
-        let mut copy = *self;
-        copy.normalize();
-        copy
+        if self.is_zero() {
+            *self
+        } else {
+            let mut copy = *self;
+            copy.normalize();
+            copy
+        }
     }
 
     pub fn magnitude(&self) -> f32 {
@@ -87,6 +104,18 @@ impl Vector3 {
     //         self.z * rhs.x - self.x * rhs.z,
     //         self.x * rhs.y - self.y * rhs.x)
     // }
+}
+
+impl Add<Vector3> for Vector3 {
+    type Output = Vector3;
+
+    fn add(self, rhs: Vector3) -> Vector3 {
+        Vector3 {
+            x: self.x + rhs.x,
+            y: self.y + rhs.y,
+            z: self.z + rhs.z,
+        }
+    }
 }
 
 impl Mul<f32> for Vector3 {

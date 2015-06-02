@@ -20,7 +20,7 @@ impl<T> StructComponentManager<T> {
         }
     }
 
-    pub fn create(&mut self, entity: Entity, component: T) -> &mut T {
+    pub fn assign(&mut self, entity: Entity, component: T) -> &mut T {
         assert!(!self.indices.contains_key(&entity));
 
         let index = self.components.len();
@@ -28,6 +28,20 @@ impl<T> StructComponentManager<T> {
         self.entities.push(entity);
         self.indices.insert(entity, index);
 
+        &mut self.components[index]
+    }
+
+    pub fn get(&self, entity: Entity) -> &T {
+        assert!(self.indices.contains_key(&entity));
+
+        let index = *self.indices.get(&entity).unwrap();
+        &self.components[index]
+    }
+
+    pub fn get_mut(&mut self, entity: Entity) -> &mut T {
+        assert!(self.indices.contains_key(&entity));
+
+        let index = *self.indices.get(&entity).unwrap();
         &mut self.components[index]
     }
 

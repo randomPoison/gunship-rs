@@ -243,6 +243,11 @@ impl Transform {
         inverse.transpose()
     }
 
+    pub fn translate(&mut self, translation: Vector3) {
+        self.position = self.position + translation;
+        self.out_of_date.set(true);
+    }
+
     pub fn look_at(&mut self, interest: Point, up: Vector3) {
         let forward = interest - self.position;
         self.rotation = Quaternion::look_rotation(forward, up);
