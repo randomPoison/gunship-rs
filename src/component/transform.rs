@@ -248,6 +248,11 @@ impl Transform {
         self.out_of_date.set(true);
     }
 
+    pub fn rotate(&mut self, rotation: Quaternion) {
+        self.rotation = self.rotation * rotation;
+        self.out_of_date.set(true);
+    }
+
     pub fn look_at(&mut self, interest: Point, up: Vector3) {
         let forward = interest - self.position;
         self.rotation = Quaternion::look_rotation(forward, up);

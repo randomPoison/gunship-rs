@@ -142,11 +142,19 @@ impl Neg for Vector3 {
     }
 }
 
+impl Div<f32> for Vector3 {
+    type Output = Vector3;
+
+    fn div(self, rhs: f32) -> Vector3 {
+        Vector3::new(self.x / rhs, self.y / rhs, self.z / rhs)
+    }
+}
+
 impl Div<Vector3> for f32 {
     type Output = Vector3;
 
     fn div(self, rhs: Vector3) -> Vector3 {
-        Vector3::new(self / rhs.x, self / rhs.y, self / rhs.z)
+        rhs / self
     }
 }
 

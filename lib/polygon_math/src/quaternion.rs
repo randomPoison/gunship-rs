@@ -1,4 +1,4 @@
-use std::ops::{Mul, Sub, Add};
+use std::ops::Mul;
 use std::f32::consts::PI;
 
 use vector::Vector3;
@@ -85,6 +85,22 @@ impl Quaternion {
         Matrix4::from_quaternion(self)
     }
 
+    /// Retrieves the rotation represented by the quaternion as a rotation about an axis.
+    ///
+    /// The returned angle will always be normalized.
+    pub fn as_axis_angle(&self) -> (Vector3, f32) {
+        assert!(self.is_normalized());
+
+        let angle = 2.0 * self.w.acos();
+        let s = (1.0 - self.w * self.w).sqrt(); // assuming quaternion normalised then w is less than 1, so term always positive.
+        if s.is_zero() {
+            // If s is 0, axis is arbitrary.
+            (Vector3::new(1.0, 0.0, 0.0), angle)
+        } else {
+            (Vector3::new(self.x / s, self.y / s, self.z / s), angle)
+        }
+    }
+
     /// Normalizes the quaternion to unit length.
     ///
     /// The quaternion must not have a length of zero when calling this method.
@@ -117,6 +133,11 @@ impl Quaternion {
         (mag_sqrd - 1.0).is_zero()
     }
 
+    pub fn repeat(&self, repeat: f32) -> Quaternion {
+        let (axis, angle) = self.as_axis_angle();
+        Quaternion::axis_angle(axis, angle * repeat)
+    }
+
     /// Calculates the dot product of two quaternions.
     pub fn dot(first: Quaternion, second: Quaternion) -> f32
     {
@@ -134,7 +155,8 @@ impl Quaternion {
     /// not be used directly to represent a rotation. If you would like to lerp two rotation
     /// quaternions use `Quaternion::nlerp()`.
     pub fn lerp(first: Quaternion, second: Quaternion, t: f32) -> Quaternion {
-        first + t * (second - first)
+        // first + t * (second - first)
+        second.sub(first).mul(t).add(first)
     }
 
     /// Interpolates linearly between two quaternions using a normalized lerp.
@@ -169,12 +191,40 @@ impl Quaternion {
         let theta_0 = dot.acos(); // theta_0 = angle between input vectors
         let theta = theta_0 * t;  // theta = angle between first and result
 
-        let normal = (second - first * dot).normalized(); // { first, normal } is now an orthonormal basis
+        let normal = (second.sub(first).mul(dot)).normalized(); // { first, normal } is now an orthonormal basis
 
         // TODO: We shouldn't need to normalize here since both inputs are normalized,
         //       the result was introducing error. Figure out if there's something else we
         //       can do to improve accuracy.
-        return (first * theta.cos() + normal * theta.sin()).normalized();
+        //      first *   theta.cos()  +   normal *   theta.sin()
+        return (first.mul(theta.cos()).add(normal.mul(theta.sin()))).normalized();
+    }
+
+    fn mul(self, rhs: f32) -> Quaternion {
+        Quaternion {
+            w: self.w * rhs,
+            x: self.x * rhs,
+            y: self.y * rhs,
+            z: self.z * rhs,
+        }
+    }
+
+    fn sub(self, rhs: Quaternion) -> Quaternion {
+        Quaternion {
+            w: self.w - rhs.w,
+            x: self.x - rhs.x,
+            y: self.y - rhs.y,
+            z: self.z - rhs.z,
+        }
+    }
+
+    fn add(self, rhs: Quaternion) -> Quaternion {
+        Quaternion {
+            w: self.w + rhs.w,
+            x: self.x + rhs.x,
+            y: self.y + rhs.y,
+            z: self.z + rhs.z,
+        }
     }
 }
 
@@ -187,53 +237,6 @@ impl Mul<Quaternion> for Quaternion {
             x: (self.w * rhs.x) + (self.x * rhs.w) + (self.y * rhs.z) - (self.z * rhs.y),
             y: (self.w * rhs.y) - (self.x * rhs.z) + (self.y * rhs.w) + (self.z * rhs.x),
             z: (self.w * rhs.z) + (self.x * rhs.y) - (self.y * rhs.x) + (self.z * rhs.w),
-        }
-    }
-}
-
-impl Mul<f32> for Quaternion {
-    type Output = Quaternion;
-
-    fn mul(self, rhs: f32) -> Quaternion {
-        Quaternion {
-            w: self.w * rhs,
-            x: self.x * rhs,
-            y: self.y * rhs,
-            z: self.z * rhs,
-        }
-    }
-}
-
-impl Mul<Quaternion> for f32 {
-    type Output = Quaternion;
-
-    fn mul(self, rhs: Quaternion) -> Quaternion {
-        rhs * self
-    }
-}
-
-impl Sub<Quaternion> for Quaternion {
-    type Output = Quaternion;
-
-    fn sub(self, rhs: Quaternion) -> Quaternion {
-        Quaternion {
-            w: self.w - rhs.w,
-            x: self.x - rhs.x,
-            y: self.y - rhs.y,
-            z: self.z - rhs.z,
-        }
-    }
-}
-
-impl Add<Quaternion> for Quaternion {
-    type Output = Quaternion;
-
-    fn add(self, rhs: Quaternion) -> Quaternion {
-        Quaternion {
-            w: self.w + rhs.w,
-            x: self.x + rhs.x,
-            y: self.y + rhs.y,
-            z: self.z + rhs.z,
         }
     }
 }
