@@ -86,6 +86,10 @@ impl Vector3 {
         }
     }
 
+    pub fn is_normalized(&self) -> bool {
+        (self.dot(*self) - 1.0).is_zero()
+    }
+
     pub fn magnitude(&self) -> f32 {
         self.magnitude_squared().sqrt()
     }
@@ -115,6 +119,18 @@ impl Add<Vector3> for Vector3 {
             y: self.y + rhs.y,
             z: self.z + rhs.z,
         }
+    }
+}
+
+impl Mul<Vector3> for Vector3 {
+    type Output = Vector3;
+
+    fn mul(self, rhs: Vector3) -> Vector3 {
+        Vector3::new(
+            self.x * rhs.x,
+            self.y * rhs.y,
+            self.z * rhs.z
+        )
     }
 }
 

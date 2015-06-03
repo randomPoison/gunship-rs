@@ -34,13 +34,15 @@ impl Quaternion {
     /// - axis - The axis being used to represent the rotation. This should
     ///   be normalized before being passed into `axis_angle()`.
     pub fn axis_angle(axis: Vector3, angle: f32) -> Quaternion {
+        assert!(axis.is_normalized());
+
         let s = (angle * 0.5).sin();
         Quaternion {
             w: (angle * 0.5).cos(),
             x: s * axis.x,
             y: s * axis.y,
             z: s * axis.z,
-        }
+        }.normalized()
     }
 
     /// Creates a quaternion that rotates an object to look in the specified direction.
@@ -87,18 +89,33 @@ impl Quaternion {
 
     /// Retrieves the rotation represented by the quaternion as a rotation about an axis.
     ///
-    /// The returned angle will always be normalized.
+    /// The returned axis will always be normalized.
     pub fn as_axis_angle(&self) -> (Vector3, f32) {
         assert!(self.is_normalized());
 
         let angle = 2.0 * self.w.acos();
-        let s = (1.0 - self.w * self.w).sqrt(); // assuming quaternion normalised then w is less than 1, so term always positive.
+        let s = (1.0 - self.w * self.w).sqrt();
         if s.is_zero() {
             // If s is 0, axis is arbitrary.
             (Vector3::new(1.0, 0.0, 0.0), angle)
         } else {
-            (Vector3::new(self.x / s, self.y / s, self.z / s), angle)
+            (Vector3::new(self.x / s, self.y / s, self.z / s).normalized(), angle)
         }
+    }
+
+    /// Retrieves the rotation represented by the quaternion as euler angles.
+    pub fn as_eulers(&self) -> Vector3 {
+        assert!(self.is_normalized());
+
+        let x = f32::atan2(
+            2.0 * (self.w * self.x + self.y * self.z),
+            1.0 - 2.0 * (self.x * self.x + self.y * self.y));
+        let y = (2.0 * (self.w * self.y - self.z * self.x)).asin();
+        let z = f32::atan2(
+            2.0 * (self.w * self.z + self.x * self.y),
+            1.0 - 2.0 * (self.y * self.y + self.z * self.z));
+
+        Vector3::new(x, y, z)
     }
 
     /// Normalizes the quaternion to unit length.
@@ -139,8 +156,7 @@ impl Quaternion {
     }
 
     /// Calculates the dot product of two quaternions.
-    pub fn dot(first: Quaternion, second: Quaternion) -> f32
-    {
+    pub fn dot(first: Quaternion, second: Quaternion) -> f32 {
         (first.w * second.w
        + first.x * second.x
        + first.y * second.y
@@ -232,12 +248,15 @@ impl Mul<Quaternion> for Quaternion {
     type Output = Quaternion;
 
     fn mul(self, rhs: Quaternion) -> Quaternion {
+        assert!(self.is_normalized());
+        assert!(rhs.is_normalized());
+
         Quaternion {
             w: (self.w * rhs.w) - (self.x * rhs.x) - (self.y * rhs.y) - (self.z * rhs.z),
             x: (self.w * rhs.x) + (self.x * rhs.w) + (self.y * rhs.z) - (self.z * rhs.y),
             y: (self.w * rhs.y) - (self.x * rhs.z) + (self.y * rhs.w) + (self.z * rhs.x),
             z: (self.w * rhs.z) + (self.x * rhs.y) - (self.y * rhs.x) + (self.z * rhs.w),
-        }
+        }.normalized()
     }
 }
 
