@@ -1,0 +1,11 @@
+[package]
+name = "loader"
+version = "0.0.0"
+authors = ["David LeGare <excaliburhissheath@gmail.com>"]
+
+[[bin]]
+name = "loader"
+
+[dependencies.gunship]
+version = "*"
+path = "../.."

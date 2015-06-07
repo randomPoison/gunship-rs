@@ -27,3 +27,8 @@ pub use self::component::mesh::{MeshManager, Mesh};
 pub use self::component::light::{LightManager, Light, PointLight};
 pub use self::component::audio::{AudioSourceManager, AudioSource};
 pub use self::component::struct_component_manager::StructComponentManager;
+
+#[no_mangle]
+pub fn engine_init() -> Engine {
+    Engine::new()
+}

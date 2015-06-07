@@ -274,8 +274,14 @@ impl GLRender {
 
     /// Clears the current back buffer.
     pub fn clear(&self) {
-        unsafe {
-            gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
+        if !gl::Clear::is_loaded() {
+            println!("gl::Clear isn't loaded!");
+        }
+        else
+        {
+            unsafe {
+                gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
+            }
         }
     }
 

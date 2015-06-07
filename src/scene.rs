@@ -4,6 +4,7 @@ use std::rc::Rc;
 use std::cell::{RefCell, RefMut};
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
+use std::intrinsics;
 
 use bs_audio::AudioSource;
 
@@ -45,7 +46,8 @@ impl Scene {
 
     pub fn register_manager<T: Any + ComponentManager>(&mut self, manager: Box<T>) {
         let manager_id = TypeId::of::<T>();
-        assert!(!self.component_indices.contains_key(&manager_id));
+        assert!(!self.component_indices.contains_key(&manager_id),
+                "Manager {} with ID {:?} already registered", type_name::<T>(), manager_id);
 
         let index = self.component_managers.len();
         self.component_managers.push(Rc::new(RefCell::new(manager)));
@@ -54,11 +56,17 @@ impl Scene {
 
     pub fn get_manager<T: Any + ComponentManager>(&self) -> ManagerHandle<T> {
         let manager_id = TypeId::of::<T>();
-
         let index = *self.component_indices
-            .get(&manager_id).expect("Scene must have the specified manager.");
+            .get(&manager_id)
+            .expect(&format!("Tried to retrieve manager {} with ID {:?} but none exists", type_name::<T>(), manager_id));
         let manager_clone = self.component_managers[index].clone();
         ManagerHandle::new(manager_clone)
+    }
+}
+
+fn type_name<T>() -> &'static str {
+    unsafe {
+        intrinsics::type_name::<T>()
     }
 }
 

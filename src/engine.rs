@@ -103,12 +103,12 @@ impl Engine {
     pub fn main_loop(&mut self) {
         let mut close = false;
         let frequency = time::frequency() as f32;
-        let mut last_time = time::now();
+        // let mut last_time = time::now();
 
         loop {
             let start_time = time::now();
-            let frame_time = (start_time - last_time) as f32 / frequency;
-            last_time = start_time;
+            // let frame_time = (start_time - last_time) as f32 / frequency;
+            // last_time = start_time;
 
             // Block needed to end the borrow of self.scene before the call to draw().
             {
@@ -142,11 +142,11 @@ impl Engine {
 
                 // Update systems.
                 for system in self.systems.iter_mut() {
-                    system.update(scene, frame_time);
+                    system.update(scene, TARGET_FRAME_TIME_SECONDS);
                 }
 
-                self.transform_update.update(scene, frame_time);
-                self.light_update.update(scene, frame_time);
+                self.transform_update.update(scene, TARGET_FRAME_TIME_SECONDS);
+                self.light_update.update(scene, TARGET_FRAME_TIME_SECONDS);
                 self.audio_update.update(scene, TARGET_FRAME_TIME_SECONDS);
             }
 
