@@ -5,6 +5,7 @@ pub struct Entity {
     id: u32
 }
 
+#[derive(Debug)]
 pub struct EntityManager {
     entities: Vec<Entity>,
     id_counter: u32

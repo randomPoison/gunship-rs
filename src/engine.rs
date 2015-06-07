@@ -5,7 +5,7 @@ use std::thread;
 use bootstrap;
 use bootstrap::window::Window;
 use bootstrap::window::Message::*;
-use bootstrap::time;
+use bootstrap::time::Timer;
 
 use bs_audio;
 
@@ -17,6 +17,7 @@ use ecs::System;
 use component::*;
 
 pub const TARGET_FRAME_TIME_SECONDS: f32 = 1.0 / 60.0;
+pub const TARGET_FRAME_TIME_MS: f32 = TARGET_FRAME_TIME_SECONDS * 1000.0;
 
 pub struct Engine {
     window: Box<Window>,
@@ -27,6 +28,8 @@ pub struct Engine {
     light_update: Box<System>,
     audio_update: Box<System>,
     scene: Option<Scene>,
+
+    close: bool,
 }
 
 impl Engine {
@@ -45,6 +48,8 @@ impl Engine {
             light_update: Box::new(LightUpdateSystem),
             audio_update: Box::new(AudioSystem),
             scene: None,
+
+            close: false,
         };
 
         let audio_source = match bs_audio::init() {
@@ -60,6 +65,44 @@ impl Engine {
         engine.scene = Some(Scene::new(&engine.resource_manager, audio_source));
 
         engine
+    }
+
+    pub fn update(&mut self) {
+        let scene = self.scene.as_mut().unwrap();
+
+        scene.input.clear();
+        loop {
+            let message = self.window.next_message(); // TODO: Make this an iterator to simplify this loop.
+            match message {
+                Some(message) => {
+                    match message {
+                        Activate => (),
+                        Close => self.close = true,
+                        Destroy => (),
+                        Paint => (),
+
+                        // Handle inputs.
+                        KeyDown(_)
+                      | KeyUp(_)
+                      | MouseMove(_, _)
+                      | MousePos(_, _)
+                      | MouseButtonPressed(_)
+                      | MouseButtonReleased(_)
+                      | MouseWheel(_) => scene.input.push_input(message),
+                    }
+                },
+                None => break
+            }
+        }
+
+        // Update systems.
+        for system in self.systems.iter_mut() {
+            system.update(scene, TARGET_FRAME_TIME_SECONDS);
+        }
+
+        self.transform_update.update(scene, TARGET_FRAME_TIME_SECONDS);
+        self.light_update.update(scene, TARGET_FRAME_TIME_SECONDS);
+        self.audio_update.update(scene, TARGET_FRAME_TIME_SECONDS);
     }
 
     pub fn draw(&mut self) {
@@ -101,70 +144,30 @@ impl Engine {
     }
 
     pub fn main_loop(&mut self) {
-        let mut close = false;
-        let frequency = time::frequency() as f32;
-        // let mut last_time = time::now();
+        let timer = Timer::new();
 
         loop {
-            let start_time = time::now();
-            // let frame_time = (start_time - last_time) as f32 / frequency;
-            // last_time = start_time;
+            let start_time = timer.now();
 
-            // Block needed to end the borrow of self.scene before the call to draw().
-            {
-                let scene = self.scene.as_mut().unwrap();
+            println!("having window read in messages");
+            self.window.handle_messages();
 
-                self.window.handle_messages();
-                scene.input.clear();
-                loop {
-                    let message = self.window.next_message(); // TODO: Make this an iterator to simplify this loop.
-                    match message {
-                        Some(message) => {
-                            match message {
-                                Activate => (),
-                                Close => close = true,
-                                Destroy => (),
-                                Paint => (),
-
-                                // Handle inputs.
-                                KeyDown(_)
-                              | KeyUp(_)
-                              | MouseMove(_, _)
-                              | MousePos(_, _)
-                              | MouseButtonPressed(_)
-                              | MouseButtonReleased(_)
-                              | MouseWheel(_) => scene.input.push_input(message),
-                            }
-                        },
-                        None => break
-                    }
-                }
-
-                // Update systems.
-                for system in self.systems.iter_mut() {
-                    system.update(scene, TARGET_FRAME_TIME_SECONDS);
-                }
-
-                self.transform_update.update(scene, TARGET_FRAME_TIME_SECONDS);
-                self.light_update.update(scene, TARGET_FRAME_TIME_SECONDS);
-                self.audio_update.update(scene, TARGET_FRAME_TIME_SECONDS);
-            }
-
+            self.update();
             self.draw();
 
-            if close {
+            if self.close {
                 break;
             }
 
-            loop {
-                let end_time = time::now();
-                let elapsed_time = (end_time - start_time) as f32 / frequency;
-                let remaining_time = TARGET_FRAME_TIME_SECONDS - elapsed_time;
-                if remaining_time < 0.0 {
-                    break;
-                } else if remaining_time > 0.001 {
-                    thread::sleep_ms(remaining_time as u32);
-                }
+            // Wait for target frame time.
+            let mut remaining_time_ms = TARGET_FRAME_TIME_MS - timer.elapsed_ms(start_time);
+            while remaining_time_ms > 1.0 {
+                remaining_time_ms = TARGET_FRAME_TIME_MS - timer.elapsed_ms(start_time);
+                thread::sleep_ms(remaining_time_ms as u32);
+            }
+
+            while remaining_time_ms > 0.0 {
+                remaining_time_ms = TARGET_FRAME_TIME_MS - timer.elapsed_ms(start_time);
             }
 
             // TODO: Don't flip buffers until end of frame time?
@@ -182,4 +185,81 @@ impl Engine {
     pub fn scene_mut(&mut self) -> &mut Scene {
         self.scene.as_mut().unwrap()
     }
+
+    pub fn close(&self) -> bool {
+        self.close
+    }
 }
+
+#[no_mangle]
+pub fn engine_init(window: Box<Window>) -> Engine {
+    let renderer = gl_render::init(&window);
+    let resource_manager = Rc::new(RefCell::new(ResourceManager::new(renderer)));
+
+    let mut engine = Engine {
+        window: window,
+        renderer: renderer,
+        resource_manager: resource_manager.clone(),
+        systems: Vec::new(),
+        transform_update: Box::new(TransformUpdateSystem),
+        light_update: Box::new(LightUpdateSystem),
+        audio_update: Box::new(AudioSystem),
+        scene: None,
+
+        close: false,
+    };
+
+    let audio_source = match bs_audio::init() {
+        Ok(audio_source) => {
+            println!("Audio subsystem successfully initialized");
+            audio_source
+        },
+        Err(error) => {
+            panic!("Error while initialzing audio subsystem: {}", error)
+        },
+    };
+
+    let scene = Scene::new(&engine.resource_manager, audio_source);
+    engine.scene = Some(scene);
+
+    engine
+}
+
+#[no_mangle]
+pub fn engine_update_and_render(engine: &mut Engine) {
+    engine.update();
+    engine.draw();
+}
+
+// pub fn with_renderer(renderer: GLRender) -> Engine {
+//     let instance = bootstrap::init();
+//     let window = Window::new("Rust Window", instance);
+//     let resource_manager = Rc::new(RefCell::new(ResourceManager::new(renderer)));
+//
+//     let mut engine = Engine {
+//         window: window,
+//         renderer: renderer,
+//         resource_manager: resource_manager.clone(),
+//         systems: Vec::new(),
+//         transform_update: Box::new(TransformUpdateSystem),
+//         light_update: Box::new(LightUpdateSystem),
+//         audio_update: Box::new(AudioSystem),
+//         scene: None,
+//
+//         close: false,
+//     };
+//
+//     let audio_source = match bs_audio::init() {
+//         Ok(audio_source) => {
+//             println!("Audio subsystem successfully initialized");
+//             audio_source
+//         },
+//         Err(error) => {
+//             panic!("Error while initialzing audio subsystem: {}", error)
+//         },
+//     };
+//
+//     engine.scene = Some(Scene::new(&engine.resource_manager, audio_source));
+//
+//     engine
+// }

@@ -9,3 +9,7 @@ name = "loader"
 [dependencies.gunship]
 version = "*"
 path = "../.."
+
+[dependencies.bootstrap_rs]
+version = "*"
+path = "../bootstrap_rs"

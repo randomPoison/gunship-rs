@@ -8,6 +8,7 @@ use ::libc;
 
 use self::winapi::*;
 
+#[derive(Debug)]
 pub struct AudioSource {
     audio_client: &'static mut IAudioClient,
     render_client: &'static mut IAudioRenderClient,

@@ -28,7 +28,4 @@ pub use self::component::light::{LightManager, Light, PointLight};
 pub use self::component::audio::{AudioSourceManager, AudioSource};
 pub use self::component::struct_component_manager::StructComponentManager;
 
-#[no_mangle]
-pub fn engine_init() -> Engine {
-    Engine::new()
-}
+pub use self::engine::{engine_init, engine_update_and_render};

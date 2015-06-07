@@ -17,6 +17,7 @@ use resource::ResourceManager;
 ///
 /// This is passed into systems in System::update(). It can be used access component
 /// managers and input.
+#[derive(Debug)]
 pub struct Scene {
     pub entity_manager: EntityManager,
     component_managers: Vec<Rc<RefCell<Box<Any>>>>,

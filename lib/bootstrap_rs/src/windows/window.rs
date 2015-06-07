@@ -25,12 +25,6 @@ pub struct Window {
     pub messages: VecDeque<Message>
 }
 
-impl Drop for Window {
-    fn drop(&mut self) {
-        unsafe { winmm::timeEndPeriod(1) };
-    }
-}
-
 impl Window {
     pub fn new(name: &str, instance: HINSTANCE) -> Box<Window> {
         let name_u = name.to_c_u16();
@@ -139,6 +133,12 @@ impl Window {
 
     pub fn next_message(&mut self) -> Option<Message> {
         self.messages.pop_front()
+    }
+}
+
+impl Drop for Window {
+    fn drop(&mut self) {
+        unsafe { winmm::timeEndPeriod(1) };
     }
 }
 
