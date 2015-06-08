@@ -112,20 +112,13 @@ impl Engine {
         self.renderer.clear();
 
         let scene = self.scene.as_mut().unwrap();
-        let mut camera_handle = scene.get_manager::<CameraManager>();
-        let mut camera_manager = camera_handle.get();
-
-        let mut transform_handle = scene.get_manager::<TransformManager>();
-        let mut transform_manager = transform_handle.get();
-
-        let mut mesh_handle = scene.get_manager::<MeshManager>();
-        let mesh_manager = mesh_handle.get();
-
-        let mut light_handle = scene.get_manager::<LightManager>();
-        let light_manager = light_handle.get();
+        let camera_manager = scene.get_manager::<CameraManager>();
+        let transform_manager = scene.get_manager::<TransformManager>();
+        let mesh_manager = scene.get_manager::<MeshManager>();
+        let light_manager = scene.get_manager::<LightManager>();
 
         // Handle rendering for each camera.
-        for (camera, entity) in camera_manager.iter_mut() {
+        for (mut camera, entity) in camera_manager.iter_mut() {
 
             // TODO: Update the camera's bounds in a separate system.
             {
@@ -137,9 +130,14 @@ impl Engine {
 
             // Draw all of the meshes.
             for (mesh, entity) in mesh_manager.iter() {
-                let transform = transform_manager.get_mut(entity);
+                let transform = transform_manager.get(entity);
 
-                self.renderer.draw_mesh(&mesh, transform.derived_matrix(), transform.derived_normal_matrix(), &camera, light_manager.components().as_ref());
+                self.renderer.draw_mesh(
+                    &mesh,
+                    transform.derived_matrix(),
+                    transform.derived_normal_matrix(),
+                    &camera,
+                    &mut light_manager.components().iter().map(|ref_cell| *ref_cell.borrow()));
             }
         }
 

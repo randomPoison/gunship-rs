@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::cell::Cell;
+use std::cell::{Cell, RefCell, Ref, RefMut};
 
 use math::Vector3;
 use math::Matrix4;
@@ -10,7 +10,7 @@ use ecs::{Entity, System, ComponentManager};
 use scene::Scene;
 
 pub struct TransformManager {
-    transforms: Vec<Vec<Transform>>,
+    transforms: Vec<Vec<RefCell<Transform>>>,
     entities: Vec<Vec<Entity>>,
 
     /// A map between the entity owning the transform and the location of the transform.
@@ -33,25 +33,25 @@ impl TransformManager {
         transform_manager
     }
 
-    pub fn create(&mut self, entity: Entity) -> &mut Transform {
+    pub fn assign(&mut self, entity: Entity) -> RefMut<Transform> {
         let index = self.transforms[0].len();
-        self.transforms[0].push(Transform::new());
+        self.transforms[0].push(RefCell::new(Transform::new()));
         self.entities[0].push(entity);
 
         assert!(self.transforms[0].len() == self.entities[0].len());
 
         self.indices.insert(entity, (0, index));
-        &mut self.transforms[0][index]
+        self.transforms[0][index].borrow_mut()
     }
 
-    pub fn get(&self, entity: Entity) -> &Transform {
+    pub fn get(&self, entity: Entity) -> Ref<Transform> {
         let (row, index) = *self.indices.get(&entity).expect("Transform manager does not contain a transform for the given entity.");
-        &self.transforms[row][index]
+        self.transforms[row][index].borrow()
     }
 
-    pub fn get_mut(&mut self, entity: Entity) -> &mut Transform {
+    pub fn get_mut(&self, entity: Entity) -> RefMut<Transform> {
         let (row, index) = *self.indices.get(&entity).expect("Transform manager does not contain a transform for the given entity.");
-        &mut self.transforms[row][index]
+        self.transforms[row][index].borrow_mut()
     }
 
     pub fn set_child(&mut self, parent: Entity, child: Entity) {
@@ -70,7 +70,7 @@ impl TransformManager {
         // Add the child to the correct row.
         transform.parent = Some(parent);
         let child_index = self.transforms[child_row].len();
-        self.transforms[child_row].push(transform);
+        self.transforms[child_row].push(RefCell::new(transform));
         self.entities[child_row].push(child);
 
         // Update the index map.
@@ -79,7 +79,7 @@ impl TransformManager {
 
     pub fn update_single(&self, entity: Entity) {
         let transform = self.get(entity);
-        self.update_transform(transform);
+        self.update_transform(&*transform);
     }
 
     pub fn update_transform(&self, transform: &Transform) {
@@ -91,7 +91,7 @@ impl TransformManager {
                 let parent_transform = self.get(parent);
 
                 if parent_transform.out_of_date.get() {
-                    self.update_transform(parent_transform);
+                    self.update_transform(&*parent_transform);
                 }
 
                 let parent_matrix = parent_transform.matrix_derived.get();
@@ -124,7 +124,7 @@ impl TransformManager {
             self.indices.insert(moved_entity, (row, index));
         }
 
-        transform
+        transform.into_inner()
     }
 }
 
@@ -282,14 +282,13 @@ pub struct TransformUpdateSystem;
 
 impl System for TransformUpdateSystem {
     fn update(&mut self, scene: &mut Scene, _: f32) {
-        let mut transform_handle = scene.get_manager::<TransformManager>();
-        let transform_manager = transform_handle.get();
+        let transform_manager = scene.get_manager::<TransformManager>();
 
         for row in transform_manager.transforms.iter() {
             for transform in row.iter() {
                 // Retrieve the parent's transformation matrix, using the identity
                 // matrix if the transform has no parent.
-                let (parent_matrix, parent_rotation) = match transform.parent {
+                let (parent_matrix, parent_rotation) = match transform.borrow().parent {
                     None => {
                         (Matrix4::identity(), Quaternion::identity())
                     },
@@ -303,7 +302,7 @@ impl System for TransformUpdateSystem {
                     }
                 };
 
-                transform.update(parent_matrix, parent_rotation);
+                transform.borrow().update(parent_matrix, parent_rotation);
             }
         }
     }

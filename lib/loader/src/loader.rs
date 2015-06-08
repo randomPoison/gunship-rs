@@ -68,7 +68,7 @@ fn main() {
         if timer.elapsed(reload_start) > 5.0 {
             println!("time to reload library");
 
-            _lib = None; // Drop the old dll so we can overwrite t.
+            _lib = None; // Drop the old dll so we can overwrite the file.
 
             update_dll();
 
