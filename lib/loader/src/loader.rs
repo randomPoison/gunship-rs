@@ -1,24 +1,33 @@
 #![feature(std_misc)]
 
-extern crate gunship;
 extern crate bootstrap_rs as bootstrap;
+extern crate winapi;
+extern crate kernel32;
 
 use std::dynamic_lib::DynamicLibrary;
 use std::path::Path;
 use std::mem;
 use std::thread;
 use std::ops::DerefMut;
+use std::fs;
 
 use bootstrap::time::Timer;
 use bootstrap::window::Window;
 
-use gunship::*;
-use gunship::engine::TARGET_FRAME_TIME_MS;
+const TARGET_FRAME_TIME_MS: f32 = 1.0 / 60.0 * 1000.0;
 
-type EngineInit = fn (Box<Window>) -> Engine;
-type EngineUpdateAndRender = fn (&mut Engine);
-type EngineReload = fn (Engine) -> Engine;
-type EngineClose = fn (&Engine) -> bool;
+type EngineInit = fn (Box<Window>) -> Box<()>;
+type EngineUpdateAndRender = fn (&mut ());
+type EngineReload = fn (Box<()>) -> Box<()>;
+type EngineClose = fn (&()) -> bool;
+
+const SRC_LIB: &'static str = "gunship-ed06d2369a03ebbb.dll";
+const LIB_PATH: &'static str = "gunship_temp.dll";
+
+fn update_dll() {
+    println!("remove file result: {:?}", fs::remove_file(LIB_PATH));
+    println!("copy result: {:?}", fs::copy(SRC_LIB, LIB_PATH));
+}
 
 fn main() {
     // Statically create a window and load the renderer for the engine.
@@ -27,8 +36,9 @@ fn main() {
     let window_address = window.deref_mut() as *mut Window;
 
     // Open the game as a dynamic library.
-    let (mut engine, mut engine_update_and_render, mut engine_close) = {
-        let lib = DynamicLibrary::open(Some(Path::new("target/debug/deps/gunship-24517baeade73325.dll"))).unwrap();
+    let (mut _lib, mut engine, mut engine_update_and_render, mut engine_close) = {
+        update_dll();
+        let lib = DynamicLibrary::open(Some(Path::new(LIB_PATH))).unwrap();
 
         let engine_init = unsafe {
             mem::transmute::<*mut EngineInit, EngineInit>(lib.symbol("engine_init").unwrap())
@@ -42,9 +52,11 @@ fn main() {
             mem::transmute::<*mut EngineClose, EngineClose>(lib.symbol("engine_close").unwrap())
         };
 
+        println!("calling engine_init()");
         let engine = engine_init(window);
+        println!("done with engine_init()");
 
-        (engine, engine_update_and_render, engine_close)
+        (Some(lib), engine, engine_update_and_render, engine_close)
     };
 
     let timer = Timer::new();
@@ -56,7 +68,11 @@ fn main() {
         if timer.elapsed(reload_start) > 5.0 {
             println!("time to reload library");
 
-            if let Ok(lib) = DynamicLibrary::open(Some(Path::new("target/debug/deps/gunship-24517baeade73325.dll"))) {
+            _lib = None; // Drop the old dll so we can overwrite t.
+
+            update_dll();
+
+            _lib = if let Ok(lib) = DynamicLibrary::open(Some(Path::new(LIB_PATH))) {
                 println!("reloading library");
 
                 let engine_reload = unsafe {
@@ -74,7 +90,11 @@ fn main() {
                 engine = engine_reload(engine);
 
                 reload_start = timer.now();
-            }
+
+                Some(lib)
+            } else {
+                None
+            };
         }
 
         unsafe {

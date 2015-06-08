@@ -69,7 +69,7 @@ impl Engine {
     }
 
     pub fn update(&mut self) {
-        println!("Engine::update() -- now different");
+        println!("Engine::update() -- changed");
 
         let scene = self.scene.as_mut().unwrap();
 
@@ -200,7 +200,7 @@ impl Engine {
 }
 
 #[no_mangle]
-pub fn engine_init(window: Box<Window>) -> Engine {
+pub fn engine_init(window: Box<Window>) -> Box<Engine> {
     let renderer = gl_render::init(&window);
     let resource_manager = Rc::new(RefCell::new(ResourceManager::new(renderer)));
 
@@ -230,7 +230,7 @@ pub fn engine_init(window: Box<Window>) -> Engine {
     let scene = Scene::new(&engine.resource_manager, audio_source);
     engine.scene = Some(scene);
 
-    engine
+    Box::new(engine)
 }
 
 #[no_mangle]
@@ -240,7 +240,7 @@ pub fn engine_update_and_render(engine: &mut Engine) {
 }
 
 #[no_mangle]
-pub fn engine_reload(mut engine: Engine) -> Engine {
+pub fn engine_reload(mut engine: Box<Engine>) -> Box<Engine> {
     engine.reload();
     // The proc loader needs to be set from within the DLL otherwise we don't
     // correctly bind to OpenGL on Windows.
@@ -252,36 +252,3 @@ pub fn engine_reload(mut engine: Engine) -> Engine {
 pub extern fn engine_close(engine: &Engine) -> bool {
     engine.close()
 }
-
-// pub fn with_renderer(renderer: GLRender) -> Engine {
-//     let instance = bootstrap::init();
-//     let window = Window::new("Rust Window", instance);
-//     let resource_manager = Rc::new(RefCell::new(ResourceManager::new(renderer)));
-//
-//     let mut engine = Engine {
-//         window: window,
-//         renderer: renderer,
-//         resource_manager: resource_manager.clone(),
-//         systems: Vec::new(),
-//         transform_update: Box::new(TransformUpdateSystem),
-//         light_update: Box::new(LightUpdateSystem),
-//         audio_update: Box::new(AudioSystem),
-//         scene: None,
-//
-//         close: false,
-//     };
-//
-//     let audio_source = match bs_audio::init() {
-//         Ok(audio_source) => {
-//             println!("Audio subsystem successfully initialized");
-//             audio_source
-//         },
-//         Err(error) => {
-//             panic!("Error while initialzing audio subsystem: {}", error)
-//         },
-//     };
-//
-//     engine.scene = Some(Scene::new(&engine.resource_manager, audio_source));
-//
-//     engine
-// }
