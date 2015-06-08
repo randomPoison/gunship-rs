@@ -6,6 +6,7 @@ use bootstrap;
 use bootstrap::window::Window;
 use bootstrap::window::Message::*;
 use bootstrap::time::Timer;
+use bootstrap::gl_utils;
 
 use bs_audio;
 
@@ -68,6 +69,8 @@ impl Engine {
     }
 
     pub fn update(&mut self) {
+        println!("Engine::update() -- now different");
+
         let scene = self.scene.as_mut().unwrap();
 
         scene.input.clear();
@@ -189,6 +192,11 @@ impl Engine {
     pub fn close(&self) -> bool {
         self.close
     }
+
+    /// Reloads the engine's systems and component managers. Used for live code editing.
+    fn reload(&mut self) {
+        // TODO: Do something.
+    }
 }
 
 #[no_mangle]
@@ -229,6 +237,20 @@ pub fn engine_init(window: Box<Window>) -> Engine {
 pub fn engine_update_and_render(engine: &mut Engine) {
     engine.update();
     engine.draw();
+}
+
+#[no_mangle]
+pub fn engine_reload(mut engine: Engine) -> Engine {
+    engine.reload();
+    // The proc loader needs to be set from within the DLL otherwise we don't
+    // correctly bind to OpenGL on Windows.
+    gl_utils::set_proc_loader();
+    engine
+}
+
+#[no_mangle]
+pub extern fn engine_close(engine: &Engine) -> bool {
+    engine.close()
 }
 
 // pub fn with_renderer(renderer: GLRender) -> Engine {

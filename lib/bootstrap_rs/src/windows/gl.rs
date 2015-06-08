@@ -64,6 +64,12 @@ pub fn create_context(window: &Window) -> HGLRC {
         render_context
     };
 
+    set_proc_loader();
+
+    context
+}
+
+pub fn set_proc_loader() {
     // provide method for loading functions
     gl::load_with(|s| {
         let string = CString::new(s);
@@ -71,8 +77,6 @@ pub fn create_context(window: &Window) -> HGLRC {
             opengl32::wglGetProcAddress(string.unwrap().as_ptr())
         }
     });
-
-    context
 }
 
 pub fn swap_buffers()
