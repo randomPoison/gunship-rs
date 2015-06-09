@@ -22,14 +22,20 @@ type EngineReload = fn (Box<()>) -> Box<()>;
 type EngineClose = fn (&()) -> bool;
 
 const SRC_LIB: &'static str = "gunship-ed06d2369a03ebbb.dll";
-const LIB_PATH: &'static str = "gunship_temp.dll";
 
-fn update_dll() {
-    println!("remove file result: {:?}", fs::remove_file(LIB_PATH));
-    println!("copy result: {:?}", fs::copy(SRC_LIB, LIB_PATH));
+fn update_dll(dest: &str) {
+    // println!("remove file result: {:?}", fs::remove_file(LIB_PATH));
+    println!("copy result: {:?}", fs::copy(SRC_LIB, dest));
 }
 
+/// # TODO
+///
+/// - Copy the complete game runtime into the new DLL's memory space when reloading, then have the old DLL clean
+///   up the old data before releasing it.
+/// - Keep track of the temp files made and then delete them when done running.
 fn main() {
+    let mut counter = 0..;
+
     // Statically create a window and load the renderer for the engine.
     let instance = bootstrap::init();
     let mut window = Window::new("Gunship Game", instance);
@@ -37,8 +43,9 @@ fn main() {
 
     // Open the game as a dynamic library.
     let (mut _lib, mut engine, mut engine_update_and_render, mut engine_close) = {
-        update_dll();
-        let lib = DynamicLibrary::open(Some(Path::new(LIB_PATH))).unwrap();
+        let lib_path = format!("gunship_lib_{}.dll", counter.next().unwrap().to_string());
+        update_dll(&lib_path);
+        let lib = DynamicLibrary::open(Some(Path::new(&lib_path))).unwrap();
 
         let engine_init = unsafe {
             mem::transmute::<*mut EngineInit, EngineInit>(lib.symbol("engine_init").unwrap())
@@ -66,13 +73,13 @@ fn main() {
 
         // Only reload every 5 seconds.
         if timer.elapsed(reload_start) > 5.0 {
+            reload_start = timer.now();
             println!("time to reload library");
 
-            _lib = None; // Drop the old dll so we can overwrite the file.
+            let lib_path = format!("gunship_lib_{}.dll", counter.next().unwrap());
+            update_dll(&lib_path);
 
-            update_dll();
-
-            _lib = if let Ok(lib) = DynamicLibrary::open(Some(Path::new(LIB_PATH))) {
+            if let Ok(lib) = DynamicLibrary::open(Some(Path::new(&lib_path))) {
                 println!("reloading library");
 
                 let engine_reload = unsafe {
@@ -87,14 +94,13 @@ fn main() {
                     mem::transmute::<*mut EngineClose, EngineClose>(lib.symbol("engine_close").unwrap())
                 };
 
+                println!("calling engine_reload()");
                 engine = engine_reload(engine);
+                println!("done with engine_reload()");
 
-                reload_start = timer.now();
-
-                Some(lib)
-            } else {
-                None
-            };
+                // Drop the old dll and load the new one.
+                _lib = Some(lib);
+            }
         }
 
         unsafe {

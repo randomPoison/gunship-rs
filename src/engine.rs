@@ -69,7 +69,7 @@ impl Engine {
     }
 
     pub fn update(&mut self) {
-        println!("Engine::update() -- changed");
+        println!("engine update -- different");
 
         let scene = self.scene.as_mut().unwrap();
 
@@ -103,9 +103,10 @@ impl Engine {
             system.update(scene, TARGET_FRAME_TIME_SECONDS);
         }
 
-        self.transform_update.update(scene, TARGET_FRAME_TIME_SECONDS);
-        self.light_update.update(scene, TARGET_FRAME_TIME_SECONDS);
-        self.audio_update.update(scene, TARGET_FRAME_TIME_SECONDS);
+        // println!("updating internals");
+        // self.transform_update.update(scene, TARGET_FRAME_TIME_SECONDS);
+        // self.light_update.update(scene, TARGET_FRAME_TIME_SECONDS);
+        // self.audio_update.update(scene, TARGET_FRAME_TIME_SECONDS);
     }
 
     pub fn draw(&mut self) {
@@ -190,11 +191,6 @@ impl Engine {
     pub fn close(&self) -> bool {
         self.close
     }
-
-    /// Reloads the engine's systems and component managers. Used for live code editing.
-    fn reload(&mut self) {
-        // TODO: Do something.
-    }
 }
 
 #[no_mangle]
@@ -239,7 +235,7 @@ pub fn engine_update_and_render(engine: &mut Engine) {
 
 #[no_mangle]
 pub fn engine_reload(mut engine: Box<Engine>) -> Box<Engine> {
-    engine.reload();
+    engine.scene.as_mut().unwrap().reload_internal_managers();
     // The proc loader needs to be set from within the DLL otherwise we don't
     // correctly bind to OpenGL on Windows.
     gl_utils::set_proc_loader();

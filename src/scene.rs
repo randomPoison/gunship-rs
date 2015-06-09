@@ -4,6 +4,9 @@ use std::rc::Rc;
 use std::cell::{RefCell};
 use std::ops::{Deref, DerefMut};
 use std::intrinsics;
+use std::boxed;
+use std::mem;
+use std::raw::TraitObject;
 
 use bs_audio::AudioSource;
 
@@ -72,42 +75,54 @@ impl Scene {
         manager.deref_mut().downcast_mut().unwrap()
     }
 
-    // pub fn remove_manager<T: Any + ComponentManager>(&mut self) -> ManagerHandle<T> {
-    //     let manager_id = TypeId::of::<T>();
-    //     let manager = self.component_managers
-    //         .remove(&manager_id)
-    //         .expect(&format!("Tried to remove manager {} with ID {:?} but none exists", type_name::<T>(), manager_id));
-    //
-    //     // TODO: Only do this when hotloading is enabled.
-    //     self.manager_id_by_name.remove(type_name::<T>().into());
-    //
-    //     ManagerHandle::new(manager)
-    // }
-    //
-    // /// TODO: This is only needed if hotloading is enabled.
-    // pub fn remove_by_name<T: Any + ComponentManager>(&mut self) -> ManagerHandle<T> {
-    //     let manager_id = self.manager_id_by_name
-    //         .remove(type_name::<T>().into())
-    //         .expect(&format!("Tried to remove manager {} by name but none exists", type_name::<T>()));
-    //
-    //     let manager = self.component_managers
-    //         .remove(&manager_id)
-    //         .expect(&format!("Tried to remove manager {} with ID {:?} but none exists", type_name::<T>(), manager_id));
-    //
-    //     ManagerHandle::new(manager)
-    // }
-    //
-    // /// TODO: This is only needed if hotloading is enabled.
-    // pub fn reload_internal_managers(&mut self) {
-    //     let transform_handle = self.remove_by_name::<TransformManager>();
-    //     let new_transform = *transform_handle.get();
-    //
-    //     // scene.register_manager(Box::new(TransformManager::new()));
-    //     // scene.register_manager(Box::new(CameraManager::new()));
-    //     // scene.register_manager(Box::new(MeshManager::new(resource_manager.clone())));
-    //     // scene.register_manager(Box::new(LightManager::new()));
-    //     // scene.register_manager(Box::new(AudioSourceManager::new(resource_manager.clone())));
-    // }
+    pub fn remove_manager<T: Any + ComponentManager>(&mut self) -> Box<T> {
+        let manager_id = TypeId::of::<T>();
+        let manager = self.component_managers
+            .remove(&manager_id)
+            .expect(&format!("Tried to remove manager {} with ID {:?} but none exists", type_name::<T>(), manager_id));
+
+        // TODO: Only do this when hotloading is enabled.
+        self.manager_id_by_name.remove(type_name::<T>().into());
+
+        manager.downcast().unwrap()
+    }
+
+    /// TODO: This is only needed if hotloading is enabled.
+    pub fn reload_manager<T: Any + ComponentManager>(&mut self) {
+        let manager_id = self.manager_id_by_name
+            .remove(type_name::<T>())
+            .expect(&format!("Tried to remove manager {} by name but none exists", type_name::<T>()));
+
+        let manager = self.component_managers
+            .remove(&manager_id)
+            .expect(&format!("Tried to remove manager {} with ID {:?} but none exists", type_name::<T>(), manager_id));
+
+        // Manually downcast the manager to its concrete type.
+        // This leaks memory in order to prevent freeing memory across
+        // dll module boundaries, but we don't really care because this is
+        // only used in debug builds.
+        let manager = unsafe {
+            // Get the raw representation of the trait object
+            let raw = boxed::into_raw(manager);
+            let to: TraitObject =
+                mem::transmute::<*mut Any, TraitObject>(raw);
+
+            // Extract the data pointer
+            let new_box = Box::from_raw(to.data as *mut T);
+            mem::forget(to);
+            new_box
+        };
+        self.register_manager(manager);
+    }
+
+    /// TODO: This is only needed if hotloading is enabled.
+    pub fn reload_internal_managers(&mut self) {
+        self.reload_manager::<TransformManager>();
+        self.reload_manager::<CameraManager>();
+        self.reload_manager::<MeshManager>();
+        self.reload_manager::<LightManager>();
+        self.reload_manager::<AudioSourceManager>();
+    }
 }
 
 fn type_name<T>() -> &'static str {
