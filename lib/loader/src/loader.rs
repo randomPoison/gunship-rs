@@ -1,4 +1,4 @@
-#![feature(std_misc)]
+#![feature(std_misc, fs_time)]
 
 extern crate bootstrap_rs as bootstrap;
 extern crate winapi;
@@ -9,7 +9,7 @@ use std::path::Path;
 use std::mem;
 use std::thread;
 use std::ops::DerefMut;
-use std::fs;
+use std::fs::{self, File};
 
 use bootstrap::time::Timer;
 use bootstrap::window::Window;
@@ -23,9 +23,26 @@ type EngineClose = fn (&()) -> bool;
 
 const SRC_LIB: &'static str = "gunship-ed06d2369a03ebbb.dll";
 
-fn update_dll(dest: &str) {
-    // println!("remove file result: {:?}", fs::remove_file(LIB_PATH));
-    println!("copy result: {:?}", fs::copy(SRC_LIB, dest));
+fn update_dll(dest: &str, last_modified: &mut u64) -> bool {
+    if let Ok(file) = File::open(SRC_LIB) {
+        println!("Getting file metadata");
+        let metadata = file.metadata().unwrap();
+        let modified = metadata.modified();
+        println!("last_modified: {}, modified: {}", last_modified, modified);
+
+        if modified > *last_modified {
+            println!("file has been updated");
+            println!("copy result: {:?}", fs::copy(SRC_LIB, dest));
+            *last_modified = modified;
+            true
+        } else {
+            println!("file is the same");
+            false
+        }
+    } else {
+        println!("couldn't open file info");
+        false
+    }
 }
 
 /// # TODO
@@ -42,9 +59,10 @@ fn main() {
     let window_address = window.deref_mut() as *mut Window;
 
     // Open the game as a dynamic library.
+    let mut last_modified = 0;
     let (mut _lib, mut engine, mut engine_update_and_render, mut engine_close) = {
         let lib_path = format!("gunship_lib_{}.dll", counter.next().unwrap().to_string());
-        update_dll(&lib_path);
+        update_dll(&lib_path, &mut last_modified);
         let lib = DynamicLibrary::open(Some(Path::new(&lib_path))).unwrap();
 
         let engine_init = unsafe {
@@ -67,20 +85,15 @@ fn main() {
     };
 
     let timer = Timer::new();
-    let mut reload_start = timer.now();
     loop {
         let start_time = timer.now();
 
-        // Only reload every 5 seconds.
-        if timer.elapsed(reload_start) > 5.0 {
-            reload_start = timer.now();
-            println!("time to reload library");
-
-            let lib_path = format!("gunship_lib_{}.dll", counter.next().unwrap());
-            update_dll(&lib_path);
-
+        // Only reload if file has changed.
+        let lib_path = format!("gunship_lib_{}.dll", counter.next().unwrap());
+        if update_dll(&lib_path, &mut last_modified) {
+            println!("reloading library");
             if let Ok(lib) = DynamicLibrary::open(Some(Path::new(&lib_path))) {
-                println!("reloading library");
+                println!("opened library");
 
                 let engine_reload = unsafe {
                     mem::transmute::<*mut EngineReload, EngineReload>(lib.symbol("engine_reload").unwrap())
