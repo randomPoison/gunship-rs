@@ -50,7 +50,7 @@ impl Debug for ChunkHeader {
 }
 
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FormatChunk {
     pub format:               u16, //1 if uncompressed Microsoft PCM audio
     pub channels:             u16, //Number of channels
@@ -89,7 +89,7 @@ impl FormatChunk {
 }
 
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DataChunk {
     pub samples: Vec<u16>, //16 bit signed data
 }
@@ -133,7 +133,7 @@ impl DataChunk {
 }
 
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Wave {
     pub format: FormatChunk,
     pub data:   DataChunk,

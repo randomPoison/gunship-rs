@@ -27,6 +27,15 @@ impl MeshManager {
         }
     }
 
+    pub fn clone(&self, resource_manager: Rc<RefCell<ResourceManager>>) -> MeshManager {
+        MeshManager {
+            resource_manager: resource_manager,
+            meshes: self.meshes.clone(),
+            entities: self.entities.clone(),
+            indices: self.indices.clone(),
+        }
+    }
+
     pub fn create(&mut self, entity: Entity, path_text: &str) -> &GLMeshData {
         assert!(!self.indices.contains_key(&entity));
 

@@ -1,4 +1,4 @@
-#![feature(core, alloc)]
+#![feature(core)]
 
 extern crate bootstrap_rs as bootstrap;
 extern crate bootstrap_audio as bs_audio;

@@ -8,10 +8,10 @@ use ::libc;
 
 use self::winapi::*;
 
-#[derive(Debug)]
+#[derive(Debug)] #[allow(raw_pointer_derive)]
 pub struct AudioSource {
-    audio_client: &'static mut IAudioClient,
-    render_client: &'static mut IAudioRenderClient,
+    audio_client: *mut IAudioClient,
+    render_client: *mut IAudioRenderClient,
     channels: u32,
     max_frames_in_buffer: u32,
     bytes_per_frame: u32,
@@ -31,9 +31,12 @@ impl AudioSource {
     ///
     /// The number of samples written to the audio buffer.
     pub fn stream<T: Iterator<Item = u16>>(&mut self, data_source: &mut T, max_time: f32) -> usize { unsafe {
+        let audio_client = &mut *self.audio_client;
+        let render_client = &mut *self.render_client;
+
         let frames_available = {
             let mut padding = mem::uninitialized();
-            let hresult = self.audio_client.GetCurrentPadding(&mut padding);
+            let hresult = audio_client.GetCurrentPadding(&mut padding);
             if hresult != S_OK {
                 panic!("IAudioClient::GetCurrentPadding() failed with code 0x{:x}", hresult);
             }
@@ -54,7 +57,7 @@ impl AudioSource {
         let mut buffer = {
             let mut buffer: *mut BYTE = mem::uninitialized();
             let hresult =
-                self.render_client.GetBuffer(
+                render_client.GetBuffer(
                     frames_available,
                     &mut buffer as *mut *mut libc::c_uchar);
             if hresult != S_OK {
@@ -74,21 +77,40 @@ impl AudioSource {
         }
 
         assert!(samples_written % self.channels == 0);
-        let hresult = self.render_client.ReleaseBuffer(samples_written / self.channels, 0);
+        let hresult = render_client.ReleaseBuffer(samples_written / self.channels, 0);
         if hresult != S_OK {
             panic!("IAudioRenderClient::ReleaseBuffer() failed with code 0x{:x}", hresult);
         }
 
-        self.audio_client.Start();
+        audio_client.Start();
 
         samples_written as usize
     } }
 }
 
+impl Clone for AudioSource {
+    fn clone(&self) -> AudioSource {
+        unsafe {
+            (&mut *self.audio_client).AddRef();
+            (&mut *self.render_client).AddRef();
+        }
+
+        AudioSource {
+            audio_client: self.audio_client,
+            render_client: self.render_client,
+            channels: self.channels,
+            max_frames_in_buffer: self.max_frames_in_buffer,
+            bytes_per_frame: self.bytes_per_frame,
+            bytes_per_sample: self.bytes_per_sample,
+            samples_per_second: self.samples_per_second,
+        }
+    }
+}
+
 impl Drop for AudioSource {
     fn drop(&mut self) { unsafe {
-        self.audio_client.Release();
-        self.render_client.Release();
+        (&mut *self.audio_client).Release();
+        (&mut *self.render_client).Release();
     } }
 }
 

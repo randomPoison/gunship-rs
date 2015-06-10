@@ -9,6 +9,7 @@ use math::Quaternion;
 use ecs::{Entity, System, ComponentManager};
 use scene::Scene;
 
+#[derive(Debug, Clone)]
 pub struct TransformManager {
     transforms: Vec<Vec<RefCell<Transform>>>,
     entities: Vec<Vec<Entity>>,
@@ -131,7 +132,7 @@ impl TransformManager {
 impl ComponentManager for TransformManager {
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Transform {
     position:         Point,
     rotation:         Quaternion,

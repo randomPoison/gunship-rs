@@ -16,7 +16,7 @@ use geometry::mesh::{Mesh, VertexAttribute};
 use camera::Camera;
 use light::Light;
 
-#[allow(dead_code)] #[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct GLRender {
     context: GLContext // TODO: do we need to hold onto the context?
 }

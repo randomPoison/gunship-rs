@@ -7,6 +7,7 @@ use ecs::{Entity, ComponentManager, System};
 use resource::ResourceManager;
 use wav::Wave;
 
+#[derive(Debug, Clone)]
 pub struct AudioSource {
     audio_clip: Rc<Wave>,
     offset:     usize,
@@ -59,6 +60,15 @@ impl AudioSourceManager {
         }
     }
 
+    pub fn clone(&self, resource_manager: Rc<RefCell<ResourceManager>>) -> AudioSourceManager {
+        AudioSourceManager {
+            resource_manager: resource_manager,
+            audio_sources:    self.audio_sources.clone(),
+            entities:         self.entities.clone(),
+            indices:          self.indices.clone(),
+        }
+    }
+
     pub fn assign(&mut self, entity: Entity, clip_name: &str) -> &mut AudioSource {
         assert!(!self.indices.contains_key(&entity));
 
@@ -98,7 +108,7 @@ impl ComponentManager for AudioSourceManager {
 pub struct AudioSystem;
 
 impl System for AudioSystem {
-    fn update(&mut self, scene: &mut Scene, delta: f32) {
+    fn update(&mut self, _scene: &mut Scene, _delta: f32) {
         // let audio_source_manager = scene.get_manager::<AudioSourceManager>();
         //
         // let mut audio_sources = &mut audio_source_manager.audio_sources;

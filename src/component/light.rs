@@ -6,6 +6,7 @@ pub use polygon::light::Light;
 pub use polygon::light::PointLight;
 pub type LightManager = StructComponentManager<Light>;
 
+#[derive(Debug, Clone, Copy)]
 pub struct LightUpdateSystem;
 
 impl System for LightUpdateSystem {

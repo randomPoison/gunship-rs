@@ -8,80 +8,86 @@ use std::dynamic_lib::DynamicLibrary;
 use std::path::Path;
 use std::mem;
 use std::thread;
-use std::ops::DerefMut;
 use std::fs::{self, File};
+use std::rc::Rc;
+use std::cell::RefCell;
 
 use bootstrap::time::Timer;
 use bootstrap::window::Window;
 
 const TARGET_FRAME_TIME_MS: f32 = 1.0 / 60.0 * 1000.0;
 
-type EngineInit = fn (Box<Window>) -> Box<()>;
+type EngineInit = fn (Rc<RefCell<Window>>) -> Box<()>;
+type EngineReload = fn (&()) -> Box<()>;
 type EngineUpdateAndRender = fn (&mut ());
-type EngineReload = fn (Box<()>) -> Box<()>;
 type EngineClose = fn (&()) -> bool;
+type EngineDrop = fn(Box<()>);
 
 const SRC_LIB: &'static str = "gunship-ed06d2369a03ebbb.dll";
 
 fn update_dll(dest: &str, last_modified: &mut u64) -> bool {
     if let Ok(file) = File::open(SRC_LIB) {
-        println!("Getting file metadata");
         let metadata = file.metadata().unwrap();
         let modified = metadata.modified();
-        println!("last_modified: {}, modified: {}", last_modified, modified);
 
         if modified > *last_modified {
-            println!("file has been updated");
             println!("copy result: {:?}", fs::copy(SRC_LIB, dest));
             *last_modified = modified;
             true
         } else {
-            println!("file is the same");
             false
         }
     } else {
-        println!("couldn't open file info");
         false
     }
 }
 
+fn load_engine_procs(lib: &DynamicLibrary) -> (EngineUpdateAndRender, EngineClose, EngineDrop) {
+    let engine_update_and_render = unsafe {
+        mem::transmute::<*mut EngineUpdateAndRender, EngineUpdateAndRender>(lib.symbol("engine_update_and_render").unwrap())
+    };
+
+    let engine_close = unsafe {
+        mem::transmute::<*mut EngineClose, EngineClose>(lib.symbol("engine_close").unwrap())
+    };
+
+    let engine_drop = unsafe {
+        mem::transmute::<*mut EngineDrop, EngineDrop>(lib.symbol("engine_drop").unwrap())
+    };
+
+    (engine_update_and_render, engine_close, engine_drop)
+}
+
 /// # TODO
 ///
-/// - Copy the complete game runtime into the new DLL's memory space when reloading, then have the old DLL clean
-///   up the old data before releasing it.
 /// - Keep track of the temp files made and then delete them when done running.
+/// - Support reloading game code.
+/// - Reload the windows message proc when the engine is reloaded.
 fn main() {
     let mut counter = 0..;
 
     // Statically create a window and load the renderer for the engine.
     let instance = bootstrap::init();
-    let mut window = Window::new("Gunship Game", instance);
-    let window_address = window.deref_mut() as *mut Window;
+    let window = Window::new("Gunship Game", instance);
+    let mut temp_paths: Vec<String> = Vec::new();
 
     // Open the game as a dynamic library.
     let mut last_modified = 0;
-    let (mut _lib, mut engine, mut engine_update_and_render, mut engine_close) = {
+    let (mut _lib, mut engine, mut engine_update_and_render, mut engine_close, mut engine_drop) = {
         let lib_path = format!("gunship_lib_{}.dll", counter.next().unwrap().to_string());
         update_dll(&lib_path, &mut last_modified);
         let lib = DynamicLibrary::open(Some(Path::new(&lib_path))).unwrap();
+        temp_paths.push(lib_path);
 
         let engine_init = unsafe {
             mem::transmute::<*mut EngineInit, EngineInit>(lib.symbol("engine_init").unwrap())
         };
 
-        let engine_update_and_render = unsafe {
-            mem::transmute::<*mut EngineUpdateAndRender, EngineUpdateAndRender>(lib.symbol("engine_update_and_render").unwrap())
-        };
+        let (engine_update_and_render, engine_close, engine_drop) = load_engine_procs(&lib);
 
-        let engine_close = unsafe {
-            mem::transmute::<*mut EngineClose, EngineClose>(lib.symbol("engine_close").unwrap())
-        };
+        let engine = engine_init(window.clone());
 
-        println!("calling engine_init()");
-        let engine = engine_init(window);
-        println!("done with engine_init()");
-
-        (Some(lib), engine, engine_update_and_render, engine_close)
+        (lib, engine, engine_update_and_render, engine_close, engine_drop)
     };
 
     let timer = Timer::new();
@@ -91,34 +97,28 @@ fn main() {
         // Only reload if file has changed.
         let lib_path = format!("gunship_lib_{}.dll", counter.next().unwrap());
         if update_dll(&lib_path, &mut last_modified) {
-            println!("reloading library");
             if let Ok(lib) = DynamicLibrary::open(Some(Path::new(&lib_path))) {
-                println!("opened library");
 
                 let engine_reload = unsafe {
                     mem::transmute::<*mut EngineReload, EngineReload>(lib.symbol("engine_reload").unwrap())
                 };
 
-                engine_update_and_render = unsafe {
-                    mem::transmute::<*mut EngineUpdateAndRender, EngineUpdateAndRender>(lib.symbol("engine_update_and_render").unwrap())
-                };
+                let new_engine = engine_reload(&engine);
+                engine_drop(engine);
 
-                engine_close = unsafe {
-                    mem::transmute::<*mut EngineClose, EngineClose>(lib.symbol("engine_close").unwrap())
-                };
+                engine = new_engine;
 
-                println!("calling engine_reload()");
-                engine = engine_reload(engine);
-                println!("done with engine_reload()");
+                // Load procs from the new lib.
+                let procs = load_engine_procs(&lib);
+                engine_update_and_render = procs.0;
+                engine_close = procs.1;
+                engine_drop = procs.2;
 
-                // Drop the old dll and load the new one.
-                _lib = Some(lib);
+                // Drop the old dll and stash the new one to keep it loaded.
+                _lib = lib;
             }
         }
 
-        unsafe {
-            (&mut *window_address).handle_messages();
-        }
         engine_update_and_render(&mut engine);
         if engine_close(&engine) {
             break;

@@ -3,6 +3,8 @@ use std::ptr;
 use std::collections::VecDeque;
 use std::ops::DerefMut;
 use std::num::FromPrimitive;
+use std::rc::Rc;
+use std::cell::RefCell;
 
 use windows::winapi::*;
 use windows::user32;
@@ -19,6 +21,7 @@ use super::input::{register_raw_input, handle_raw_input};
 static CLASS_NAME: &'static str = "bootstrap";
 static WINDOW_PROP: &'static str = "window";
 
+#[derive(Debug, Clone)]
 pub struct Window {
     pub handle: HWND,
     pub dc: HDC,
@@ -26,7 +29,7 @@ pub struct Window {
 }
 
 impl Window {
-    pub fn new(name: &str, instance: HINSTANCE) -> Box<Window> {
+    pub fn new(name: &str, instance: HINSTANCE) -> Rc<RefCell<Window>> {
         let name_u = name.to_c_u16();
         let class_u = CLASS_NAME.to_c_u16();
 
@@ -74,14 +77,12 @@ impl Window {
         };
 
         // give the window a pointer to our Window object
-        let mut window = Box::<Window>::new({
-            Window {
-                handle: handle,
-                dc: dc,
-                messages: VecDeque::new()
-            }
-        });
-        let window_address = (window.deref_mut() as *mut Window) as LPVOID;
+        let window = Rc::new(RefCell::new(Window {
+            handle: handle,
+            dc: dc,
+            messages: VecDeque::new()
+        }));
+        let window_address = (window.borrow_mut().deref_mut() as *mut Window) as LPVOID;
 
         unsafe {
             user32::SetPropW(handle, WINDOW_PROP.to_c_u16().as_ptr(), window_address);
@@ -179,7 +180,8 @@ fn convert_windows_scancode(wParam: WPARAM, lParam: LPARAM) -> ScanCode {
     // Keys in the ascii range get mapped directly.
     let key_code = wParam;// as char;
     if (key_code >= 'A' as WPARAM && key_code <= 'Z' as WPARAM)
-    || (key_code >= '0' as WPARAM && key_code <= '9' as WPARAM) {
+    || (key_code >= '0' as WPARAM && key_code <= '9' as WPARAM)
+    || key_code == 32 {
         return ScanCode::from_u64(wParam).expect("Non-ascii scancode is somehow in ascii range?")
     }
 

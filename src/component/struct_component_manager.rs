@@ -1,18 +1,19 @@
 use std::collections::HashMap;
-use std::slice::{Iter, IterMut};
+use std::slice::Iter;
 use std::cell::{RefCell, Ref, RefMut};
 
 use ecs::{Entity, ComponentManager};
 
 /// A default implementation for a component manager that can be represented
 /// as a single struct.
-pub struct StructComponentManager<T> {
+#[derive(Clone)]
+pub struct StructComponentManager<T: Clone> {
     components: Vec<RefCell<T>>,
     entities: Vec<Entity>,
     indices: HashMap<Entity, usize>,
 }
 
-impl<T> StructComponentManager<T> {
+impl<T: Clone> StructComponentManager<T> {
     pub fn new() -> StructComponentManager<T> {
         StructComponentManager {
             components: Vec::new(),
@@ -69,7 +70,7 @@ impl<T> StructComponentManager<T> {
     }
 }
 
-impl<T> ComponentManager for StructComponentManager<T> {
+impl<T: Clone> ComponentManager for StructComponentManager<T> {
 }
 
 pub struct ComponentIter<'a, T: 'a> {
@@ -77,7 +78,7 @@ pub struct ComponentIter<'a, T: 'a> {
     entity_iter: Iter<'a, Entity>,
 }
 
-impl<'a, T: 'a> Iterator for ComponentIter<'a, T> {
+impl<'a, T: 'a + Clone> Iterator for ComponentIter<'a, T> {
     type Item = (Ref<'a, T>, Entity);
 
     fn next(&mut self) -> Option<(Ref<'a, T>, Entity)> {
@@ -88,13 +89,13 @@ impl<'a, T: 'a> Iterator for ComponentIter<'a, T> {
     }
 }
 
-pub struct ComponentIterMut<'a, T: 'a> {
+pub struct ComponentIterMut<'a, T: 'a + Clone> {
     component_iter: Iter<'a, RefCell<T>>,
     entity_iter: Iter<'a, Entity>,
 }
 
 
-impl<'a, T: 'a> Iterator for ComponentIterMut<'a, T> {
+impl<'a, T: 'a + Clone> Iterator for ComponentIterMut<'a, T> {
     type Item = (RefMut<'a, T>, Entity);
 
     fn next(&mut self) -> Option<(RefMut<'a, T>, Entity)> {
