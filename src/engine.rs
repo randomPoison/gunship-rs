@@ -2,6 +2,7 @@ use std::rc::Rc;
 use std::cell::RefCell;
 use std::thread;
 use std::ops::Deref;
+use std::any::Any;
 
 use bootstrap;
 use bootstrap::window::Window;
@@ -157,8 +158,8 @@ impl Engine {
             // Wait for target frame time.
             let mut remaining_time_ms = TARGET_FRAME_TIME_MS - timer.elapsed_ms(start_time);
             while remaining_time_ms > 1.0 {
-                remaining_time_ms = TARGET_FRAME_TIME_MS - timer.elapsed_ms(start_time);
                 thread::sleep_ms(remaining_time_ms as u32);
+                remaining_time_ms = TARGET_FRAME_TIME_MS - timer.elapsed_ms(start_time);
             }
 
             while remaining_time_ms > 0.0 {
@@ -169,8 +170,8 @@ impl Engine {
         };
     }
 
-    pub fn register_system(&mut self, system: Box<System>) {
-        self.systems.push(system);
+    pub fn register_system<T: Any + System>(&mut self, system: T) {
+        self.systems.push(Box::new(system));
     }
 
     pub fn scene(&self) -> &Scene {
