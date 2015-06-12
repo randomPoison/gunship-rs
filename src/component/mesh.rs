@@ -36,7 +36,7 @@ impl MeshManager {
         }
     }
 
-    pub fn create(&mut self, entity: Entity, path_text: &str) -> &GLMeshData {
+    pub fn assign(&mut self, entity: Entity, path_text: &str) -> &GLMeshData {
         assert!(!self.indices.contains_key(&entity));
 
         let index = self.meshes.len();

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::rc::Rc;
-use std::cell::RefCell;
+use std::cell::{RefCell, Ref, RefMut};
 
 use scene::Scene;
 use ecs::{Entity, ComponentManager, System};
@@ -45,7 +45,7 @@ impl AudioSource {
 
 pub struct AudioSourceManager {
     resource_manager: Rc<RefCell<ResourceManager>>,
-    audio_sources:    Vec<AudioSource>,
+    audio_sources:    Vec<RefCell<AudioSource>>,
     entities:         Vec<Entity>,
     indices:          HashMap<Entity, usize>,
 }
@@ -69,36 +69,36 @@ impl AudioSourceManager {
         }
     }
 
-    pub fn assign(&mut self, entity: Entity, clip_name: &str) -> &mut AudioSource {
+    pub fn assign(&mut self, entity: Entity, clip_name: &str) -> RefMut<AudioSource> {
         assert!(!self.indices.contains_key(&entity));
 
         let mut resource_manager = self.resource_manager.borrow_mut();
         let audio_clip = resource_manager.get_audio_clip(clip_name);
         let index = self.audio_sources.len();
-        self.audio_sources.push(AudioSource {
+        self.audio_sources.push(RefCell::new(AudioSource {
             audio_clip: audio_clip,
             offset:     0,
             is_playing: false,
             looping:    false,
-        });
+        }));
         self.entities.push(entity);
         self.indices.insert(entity, index);
 
-        &mut self.audio_sources[index]
+        self.audio_sources[index].borrow_mut()
     }
 
-    pub fn get(&mut self, entity: Entity) -> &AudioSource {
+    pub fn get(&mut self, entity: Entity) -> Ref<AudioSource> {
         assert!(self.indices.contains_key(&entity));
 
         let index = *self.indices.get(&entity).unwrap();
-        &self.audio_sources[index]
+        self.audio_sources[index].borrow()
     }
 
-    pub fn get_mut(&mut self, entity: Entity) -> &mut AudioSource {
+    pub fn get_mut(&self, entity: Entity) -> RefMut<AudioSource> {
         assert!(self.indices.contains_key(&entity));
 
         let index = *self.indices.get(&entity).unwrap();
-        &mut self.audio_sources[index]
+        self.audio_sources[index].borrow_mut()
     }
 }
 
