@@ -5,7 +5,7 @@ use std::ptr;
 use super::winapi::*;
 use super::kernel32;
 
-pub fn file_modified(path: &str) -> u64 {
+pub fn file_modified(path: &str) -> Result<u64, String> {
     let cstring = CString::new(path).unwrap();
 
     let handle = unsafe {
@@ -20,7 +20,7 @@ pub fn file_modified(path: &str) -> u64 {
     };
 
     if handle == INVALID_HANDLE_VALUE {
-        panic!("Could not get file modified time for {}", path);
+        return Err(format!("Could not open file {}", path));
     }
 
     let mut file_time = FILETIME {
@@ -30,13 +30,13 @@ pub fn file_modified(path: &str) -> u64 {
 
     let result = unsafe {  kernel32::GetFileTime(handle, ptr::null_mut(), ptr::null_mut(), &mut file_time) };
     if result == 0 {
-        panic!("Unable to get modified time for the file {}", path);
+        return Err(format!("Unable to get modified time for the file {}", path));
     }
 
     let result = unsafe { kernel32::CloseHandle(handle) };
     if result == 0 {
-        panic!("Error while closing file handle for {}", path);
+        return Err(format!("Error while closing file handle for {}", path));
     }
 
-    unsafe { mem::transmute(file_time) }
+    Ok(unsafe { mem::transmute(file_time) })
 }

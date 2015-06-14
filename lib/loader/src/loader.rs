@@ -26,10 +26,13 @@ type EngineDrop = fn(Box<()>);
 type GameInit = fn(&mut ());
 type GameReload = fn(&(), &());
 
-const SRC_LIB: &'static str = "fps.dll";
+const SRC_LIB: &'static str = "target/debug/fps.dll";
 
 fn update_dll(dest: &str, last_modified: &mut u64) -> bool {
-    let modified = file_modified(SRC_LIB);
+    let modified = match file_modified(SRC_LIB) {
+        Ok(modified) => modified,
+        Err(_) => return false,
+    };
     if modified > *last_modified {
         println!("copy result: {:?}", fs::copy(SRC_LIB, dest));
         *last_modified = modified;
