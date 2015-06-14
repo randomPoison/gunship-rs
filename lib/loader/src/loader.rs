@@ -22,8 +22,10 @@ type EngineReload = fn (&()) -> Box<()>;
 type EngineUpdateAndRender = fn (&mut ());
 type EngineClose = fn (&()) -> bool;
 type EngineDrop = fn(Box<()>);
+type GameInit = fn(&mut ());
+type GameReload = fn(&(), &());
 
-const SRC_LIB: &'static str = "gunship-ed06d2369a03ebbb.dll";
+const SRC_LIB: &'static str = "main-17f2185aa8fa2cd5.dll";
 
 fn update_dll(dest: &str, last_modified: &mut u64) -> bool {
     if let Ok(file) = File::open(SRC_LIB) {
@@ -44,15 +46,18 @@ fn update_dll(dest: &str, last_modified: &mut u64) -> bool {
 
 fn load_engine_procs(lib: &DynamicLibrary) -> (EngineUpdateAndRender, EngineClose, EngineDrop) {
     let engine_update_and_render = unsafe {
-        mem::transmute::<*mut EngineUpdateAndRender, EngineUpdateAndRender>(lib.symbol("engine_update_and_render").unwrap())
+        let symbol = lib.symbol("engine_update_and_render").unwrap();
+        mem::transmute::<*mut u8, EngineUpdateAndRender>(symbol)
     };
 
     let engine_close = unsafe {
-        mem::transmute::<*mut EngineClose, EngineClose>(lib.symbol("engine_close").unwrap())
+        let symbol = lib.symbol("engine_close").unwrap();
+        mem::transmute::<*mut u8, EngineClose>(symbol)
     };
 
     let engine_drop = unsafe {
-        mem::transmute::<*mut EngineDrop, EngineDrop>(lib.symbol("engine_drop").unwrap())
+        let symbol = lib.symbol("engine_drop").unwrap();
+        mem::transmute::<*mut u8, EngineDrop>(symbol)
     };
 
     (engine_update_and_render, engine_close, engine_drop)
@@ -75,17 +80,29 @@ fn main() {
     let mut last_modified = 0;
     let (mut _lib, mut engine, mut engine_update_and_render, mut engine_close, mut engine_drop) = {
         let lib_path = format!("gunship_lib_{}.dll", counter.next().unwrap().to_string());
-        update_dll(&lib_path, &mut last_modified);
-        let lib = DynamicLibrary::open(Some(Path::new(&lib_path))).unwrap();
+        if !update_dll(&lib_path, &mut last_modified) {
+            panic!("Unable to find library {} for dynamic loading", SRC_LIB);
+        }
+        let lib = match DynamicLibrary::open(Some(Path::new(&lib_path))) {
+            Ok(lib) => lib,
+            Err(error) => panic!("Unable to open DLL {} with error: {}", lib_path, error),
+        };
         temp_paths.push(lib_path);
 
         let engine_init = unsafe {
-            mem::transmute::<*mut EngineInit, EngineInit>(lib.symbol("engine_init").unwrap())
+            let symbol = lib.symbol("engine_init").unwrap();
+            mem::transmute::<*mut u8, EngineInit>(symbol)
+        };
+
+        let game_init = unsafe {
+            let symbol = lib.symbol("game_init").unwrap();
+            mem::transmute::<*mut u8, GameInit>(symbol)
         };
 
         let (engine_update_and_render, engine_close, engine_drop) = load_engine_procs(&lib);
 
-        let engine = engine_init(window.clone());
+        let mut engine = engine_init(window.clone());
+        game_init(&mut engine);
 
         (lib, engine, engine_update_and_render, engine_close, engine_drop)
     };
@@ -100,10 +117,17 @@ fn main() {
             if let Ok(lib) = DynamicLibrary::open(Some(Path::new(&lib_path))) {
 
                 let engine_reload = unsafe {
-                    mem::transmute::<*mut EngineReload, EngineReload>(lib.symbol("engine_reload").unwrap())
+                    let symbol = lib.symbol("engine_reload").unwrap();
+                    mem::transmute::<*mut u8, EngineReload>(symbol)
                 };
 
-                let new_engine = engine_reload(&engine);
+                let game_reload = unsafe {
+                    let symbol = lib.symbol("game_reload").unwrap();
+                    mem::transmute::<*mut u8, GameReload>(symbol)
+                };
+
+                let mut new_engine = engine_reload(&engine);
+                game_reload(&engine, &mut new_engine);
                 engine_drop(engine);
 
                 engine = new_engine;

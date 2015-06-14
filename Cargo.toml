@@ -6,7 +6,6 @@ authors = ["David LeGare <excaliburhissheath@gmail.com>"]
 
 [lib]
 name = "gunship"
-crate-type = ["dylib"]
 
 [dependencies.bootstrap_rs]
 version = "*"

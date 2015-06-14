@@ -2,7 +2,11 @@ use std::rc::Rc;
 use std::cell::RefCell;
 use std::thread;
 use std::ops::Deref;
-use std::any::Any;
+use std::any::{Any, TypeId};
+use std::collections::HashMap;
+use std::intrinsics;
+use std::raw::TraitObject;
+use std::mem;
 
 use bootstrap;
 use bootstrap::window::Window;
@@ -26,7 +30,10 @@ pub struct Engine {
     window: Rc<RefCell<Window>>, // TODO: This doesn't need to be an Rc<RefCell<>> when we're not doing hotloading.
     renderer: GLRender,
     resource_manager: Rc<RefCell<ResourceManager>>,
-    systems: Vec<Box<System>>,
+
+    systems: HashMap<TypeId, Box<System>>,
+    system_names: HashMap<String, TypeId>,
+
     transform_update: Box<System>,
     light_update: Box<System>,
     audio_update: Box<System>,
@@ -56,7 +63,10 @@ impl Engine {
             window: window.clone(),
             renderer: renderer,
             resource_manager: resource_manager.clone(),
-            systems: Vec::new(),
+
+            systems: HashMap::new(),
+            system_names: HashMap::new(),
+
             transform_update: Box::new(TransformUpdateSystem),
             light_update: Box::new(LightUpdateSystem),
             audio_update: Box::new(AudioSystem),
@@ -97,7 +107,7 @@ impl Engine {
         }
 
         // Update systems.
-        for system in self.systems.iter_mut() {
+        for (_, system) in self.systems.iter_mut() {
             system.update(scene, TARGET_FRAME_TIME_SECONDS);
         }
 
@@ -171,7 +181,38 @@ impl Engine {
     }
 
     pub fn register_system<T: Any + System>(&mut self, system: T) {
-        self.systems.push(Box::new(system));
+        let system_id = TypeId::of::<T>();
+        assert!(!self.systems.contains_key(&system_id),
+                "System {} with ID {:?} already registered", type_name::<T>(), system_id);
+
+        self.systems.insert(system_id, Box::new(system));
+        self.system_names.insert(type_name::<T>().into(), system_id);
+    }
+
+    pub fn get_system<T: Any + System>(&self) -> &T {
+        let system_id = TypeId::of::<T>();
+        let system = self.systems.get(&system_id).unwrap().deref();
+
+        unsafe {
+            // Get the raw representation of the trait object.
+            let to: TraitObject = mem::transmute(system);
+
+            // Extract the data pointer.
+            mem::transmute(to.data)
+        }
+    }
+
+    pub fn get_system_by_name<T: Any + System>(&self) -> &T {
+        let system_id = self.system_names.get(type_name::<T>()).unwrap();
+        let system = self.systems.get(&system_id).unwrap().deref();
+
+        unsafe {
+            // Get the raw representation of the trait object.
+            let to: TraitObject = mem::transmute(system);
+
+            // Extract the data pointer.
+            mem::transmute(to.data)
+        }
     }
 
     pub fn scene(&self) -> &Scene {
@@ -195,7 +236,10 @@ impl Clone for Engine {
             window: self.window.clone(),
             renderer: self.renderer.clone(),
             resource_manager: resource_manager.clone(),
-            systems: Vec::new(),
+
+            systems: HashMap::new(),
+            system_names: HashMap::new(),
+
             transform_update: Box::new(TransformUpdateSystem),
             light_update: Box::new(LightUpdateSystem),
             audio_update: Box::new(AudioSystem),
@@ -204,9 +248,13 @@ impl Clone for Engine {
             close: false,
         };
 
-        // TODO: Reload game systems.
-
         engine
+    }
+}
+
+fn type_name<T>() -> &'static str {
+    unsafe {
+        intrinsics::type_name::<T>()
     }
 }
 
@@ -229,7 +277,10 @@ pub fn engine_init(window: Rc<RefCell<Window>>) -> Box<Engine> {
         window: window,
         renderer: renderer,
         resource_manager: resource_manager.clone(),
-        systems: Vec::new(),
+
+        systems: HashMap::new(),
+        system_names: HashMap::new(),
+
         transform_update: Box::new(TransformUpdateSystem),
         light_update: Box::new(LightUpdateSystem),
         audio_update: Box::new(AudioSystem),
