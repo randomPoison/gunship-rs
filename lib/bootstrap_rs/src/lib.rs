@@ -1,9 +1,9 @@
-#![feature(core, collections)]
+#![feature(collections)]
 
 extern crate gl;
 
 #[cfg(target_family = "windows")]
-mod windows;
+pub mod windows;
 
 #[cfg(target_family = "windows")]
 pub use windows::init::init;
@@ -24,9 +24,3 @@ impl<'a> ToCU16Str for &'a str {
         t
     }
 }
-
-// impl ToCU16Str for String {
-//     fn to_c_u16(&self) -> Vec<u16> {
-//         self.as_ref().to_c_u16()
-//     }
-// }

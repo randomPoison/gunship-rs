@@ -1,4 +1,4 @@
-#![feature(std_misc, fs_time)]
+#![feature(std_misc)]
 
 extern crate bootstrap_rs as bootstrap;
 extern crate winapi;
@@ -8,12 +8,13 @@ use std::dynamic_lib::DynamicLibrary;
 use std::path::Path;
 use std::mem;
 use std::thread;
-use std::fs::{self, File};
+use std::fs;
 use std::rc::Rc;
 use std::cell::RefCell;
 
 use bootstrap::time::Timer;
 use bootstrap::window::Window;
+use bootstrap::windows::file::file_modified;
 
 const TARGET_FRAME_TIME_MS: f32 = 1.0 / 60.0 * 1000.0;
 
@@ -25,20 +26,14 @@ type EngineDrop = fn(Box<()>);
 type GameInit = fn(&mut ());
 type GameReload = fn(&(), &());
 
-const SRC_LIB: &'static str = "main-17f2185aa8fa2cd5.dll";
+const SRC_LIB: &'static str = "fps.dll";
 
 fn update_dll(dest: &str, last_modified: &mut u64) -> bool {
-    if let Ok(file) = File::open(SRC_LIB) {
-        let metadata = file.metadata().unwrap();
-        let modified = metadata.modified();
-
-        if modified > *last_modified {
-            println!("copy result: {:?}", fs::copy(SRC_LIB, dest));
-            *last_modified = modified;
-            true
-        } else {
-            false
-        }
+    let modified = file_modified(SRC_LIB);
+    if modified > *last_modified {
+        println!("copy result: {:?}", fs::copy(SRC_LIB, dest));
+        *last_modified = modified;
+        true
     } else {
         false
     }
@@ -74,6 +69,7 @@ fn main() {
     // Statically create a window and load the renderer for the engine.
     let instance = bootstrap::init();
     let window = Window::new("Gunship Game", instance);
+    bootstrap::windows::gl::set_proc_loader();
     let mut temp_paths: Vec<String> = Vec::new();
 
     // Open the game as a dynamic library.

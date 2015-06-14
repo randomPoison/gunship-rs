@@ -2,7 +2,6 @@ use std::mem;
 use std::ptr;
 use std::collections::VecDeque;
 use std::ops::DerefMut;
-use std::num::FromPrimitive;
 use std::rc::Rc;
 use std::cell::RefCell;
 
@@ -14,7 +13,6 @@ use ToCU16Str;
 use window::Message;
 use window::Message::*;
 use input::ScanCode;
-use input::ScanCode::*;
 
 use super::input::{register_raw_input, handle_raw_input};
 
@@ -176,15 +174,23 @@ fn message_callback(
     user32::DefWindowProcW(hwnd, uMsg, wParam, lParam)
 }
 
-fn convert_windows_scancode(wParam: WPARAM, lParam: LPARAM) -> ScanCode {
-    // Keys in the ascii range get mapped directly.
-    let key_code = wParam;// as char;
-    if (key_code >= 'A' as WPARAM && key_code <= 'Z' as WPARAM)
-    || (key_code >= '0' as WPARAM && key_code <= '9' as WPARAM)
-    || key_code == 32 {
-        return ScanCode::from_u64(wParam).expect("Non-ascii scancode is somehow in ascii range?")
-    }
+fn convert_windows_scancode(wParam: WPARAM, _: LPARAM) -> ScanCode {
+    const A: u32 = 'A' as u32;
+    const Z: u32 = 'Z' as u32;
+    const CHAR_0: u32 = '0' as u32;
+    const CHAR_9: u32 = '9' as u32;
 
-    println!("Unrecognized key press: {}", wParam);
-    Unsupported
+    // Keys in the ascii range get mapped directly.
+    let key_code = wParam as u32;
+    match key_code {
+        A ... Z
+      | CHAR_0 ... CHAR_9
+      | 32 => {
+          unsafe { mem::transmute(key_code) }
+        },
+        _ => {
+            println!("Unrecognized key press: {}", wParam);
+            ScanCode::Unsupported
+        }
+    }
 }
