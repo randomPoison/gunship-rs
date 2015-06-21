@@ -1,5 +1,3 @@
-#![feature(str_words)]
-
 extern crate parse_xml as xml;
 
 use std::fs::File;
@@ -478,7 +476,7 @@ impl<'a> ColladaParser<'a> {
             let event = self.next_event();
             match event {
                 TextNode(text) => {
-                    let data = text.words().map(|word| {
+                    let data = text.split_whitespace().map(|word| {
                         let value = match usize::from_str(word) {
                             Err(error) => return panic!("Error while parsing <float_array>: {}", error), // TODO: Return an error instead of panicking.
                             Ok(value) => value
@@ -543,7 +541,7 @@ impl<'a> ColladaParser<'a> {
                 Attribute("digits", _) => (),
                 Attribute("magnitude", _) => (),
                 TextNode(text) => {
-                    let data = text.words().map(|word| {
+                    let data = text.split_whitespace().map(|word| {
                         let value = match f32::from_str(word) {
                             Err(error) => return panic!("Error while parsing <float_array>: {} (value was {})", error, word), // TODO: Return an error instead of panicking.
                             Ok(value) => value

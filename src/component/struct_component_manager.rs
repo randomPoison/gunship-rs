@@ -1,17 +1,19 @@
 use std::collections::HashMap;
-use std::slice::{Iter, IterMut};
+use std::slice::Iter;
+use std::cell::{RefCell, Ref, RefMut};
 
 use ecs::{Entity, ComponentManager};
 
 /// A default implementation for a component manager that can be represented
 /// as a single struct.
-pub struct StructComponentManager<T> {
-    components: Vec<T>,
+#[derive(Clone)]
+pub struct StructComponentManager<T: Clone> {
+    components: Vec<RefCell<T>>,
     entities: Vec<Entity>,
     indices: HashMap<Entity, usize>,
 }
 
-impl<T> StructComponentManager<T> {
+impl<T: Clone> StructComponentManager<T> {
     pub fn new() -> StructComponentManager<T> {
         StructComponentManager {
             components: Vec::new(),
@@ -20,37 +22,33 @@ impl<T> StructComponentManager<T> {
         }
     }
 
-    pub fn assign(&mut self, entity: Entity, component: T) -> &mut T {
+    pub fn assign(&mut self, entity: Entity, component: T) -> RefMut<T> {
         assert!(!self.indices.contains_key(&entity));
 
         let index = self.components.len();
-        self.components.push(component);
+        self.components.push(RefCell::new(component));
         self.entities.push(entity);
         self.indices.insert(entity, index);
 
-        &mut self.components[index]
+        self.components[index].borrow_mut()
     }
 
-    pub fn get(&self, entity: Entity) -> &T {
+    pub fn get(&self, entity: Entity) -> Ref<T> {
         assert!(self.indices.contains_key(&entity));
 
         let index = *self.indices.get(&entity).unwrap();
-        &self.components[index]
+        self.components[index].borrow()
     }
 
-    pub fn get_mut(&mut self, entity: Entity) -> &mut T {
+    pub fn get_mut(&self, entity: Entity) -> RefMut<T> {
         assert!(self.indices.contains_key(&entity));
 
         let index = *self.indices.get(&entity).unwrap();
-        &mut self.components[index]
+        self.components[index].borrow_mut()
     }
 
-    pub fn components(&self) -> &Vec<T> {
+    pub fn components(&self) -> &Vec<RefCell<T>> {
         &self.components
-    }
-
-    pub fn components_mut(&mut self) -> &mut Vec<T> {
-        &mut self.components
     }
 
     pub fn entities(&self) -> &Vec<Entity> {
@@ -64,46 +62,46 @@ impl<T> StructComponentManager<T> {
         }
     }
 
-    pub fn iter_mut(&mut self) -> ComponentIterMut<T> {
+    pub fn iter_mut(&self) -> ComponentIterMut<T> {
         ComponentIterMut {
-            component_iter: self.components.iter_mut(),
+            component_iter: self.components.iter(),
             entity_iter: self.entities.iter(),
         }
     }
 }
 
-impl<T> ComponentManager for StructComponentManager<T> {
+impl<T: Clone> ComponentManager for StructComponentManager<T> {
 }
 
 pub struct ComponentIter<'a, T: 'a> {
-    component_iter: Iter<'a, T>,
+    component_iter: Iter<'a, RefCell<T>>,
     entity_iter: Iter<'a, Entity>,
 }
 
-impl<'a, T: 'a> Iterator for ComponentIter<'a, T> {
-    type Item = (&'a T, Entity);
+impl<'a, T: 'a + Clone> Iterator for ComponentIter<'a, T> {
+    type Item = (Ref<'a, T>, Entity);
 
-    fn next(&mut self) -> Option<(&'a T, Entity)> {
+    fn next(&mut self) -> Option<(Ref<'a, T>, Entity)> {
         match self.component_iter.next() {
             None => None,
-            Some(camera) => Some((camera, *self.entity_iter.next().unwrap()))
+            Some(component) => Some((component.borrow(), *self.entity_iter.next().unwrap()))
         }
     }
 }
 
-pub struct ComponentIterMut<'a, T: 'a> {
-    component_iter: IterMut<'a, T>,
+pub struct ComponentIterMut<'a, T: 'a + Clone> {
+    component_iter: Iter<'a, RefCell<T>>,
     entity_iter: Iter<'a, Entity>,
 }
 
 
-impl<'a, T: 'a> Iterator for ComponentIterMut<'a, T> {
-    type Item = (&'a mut T, Entity);
+impl<'a, T: 'a + Clone> Iterator for ComponentIterMut<'a, T> {
+    type Item = (RefMut<'a, T>, Entity);
 
-    fn next(&mut self) -> Option<(&'a mut T, Entity)> {
+    fn next(&mut self) -> Option<(RefMut<'a, T>, Entity)> {
         match self.component_iter.next() {
             None => None,
-            Some(camera) => Some((camera, *self.entity_iter.next().unwrap()))
+            Some(component) => Some((component.borrow_mut(), *self.entity_iter.next().unwrap()))
         }
     }
 }

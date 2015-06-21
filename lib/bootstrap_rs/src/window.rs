@@ -3,7 +3,7 @@ pub use windows::window::Window;
 
 use input::ScanCode;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum Message {
     Activate,
     Close,

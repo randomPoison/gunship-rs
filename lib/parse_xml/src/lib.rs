@@ -1,14 +1,15 @@
 #![feature(unicode)]
 
-extern crate unicode;
+extern crate rustc_unicode;
+extern crate unicode_segmentation;
 
 #[cfg(test)]
 mod test;
 
 use std::io::prelude::*;
 use std::fs::File;
-use std::str::GraphemeIndices;
-use unicode::str::UnicodeStr;
+use unicode_segmentation::{UnicodeSegmentation, GraphemeIndices};
+use rustc_unicode::str::UnicodeStr;
 
 use XMLEvent::*;
 use XMLElement::*;
@@ -72,7 +73,7 @@ impl XMLParser {
     pub fn parse<'a>(&'a self) -> SAXEvents<'a> {
         SAXEvents {
             parser: self,
-            text_enumerator: self.raw_text.grapheme_indices(true),
+            text_enumerator: UnicodeSegmentation::grapheme_indices(&*self.raw_text, true),
             element_stack: vec![StartDocument]
         }
     }

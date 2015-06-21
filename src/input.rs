@@ -6,6 +6,7 @@ pub use bootstrap::input::ScanCode;
 
 pub const MAX_SUPPORTED_MOUSE_BUTTONS: usize = 5;
 
+#[derive(Debug, Clone)]
 pub struct Input {
     keys_pressed: HashSet<ScanCode>,
     keys_released: HashSet<ScanCode>,

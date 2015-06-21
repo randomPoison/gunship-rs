@@ -27,3 +27,5 @@ pub use self::component::mesh::{MeshManager, Mesh};
 pub use self::component::light::{LightManager, Light, PointLight};
 pub use self::component::audio::{AudioSourceManager, AudioSource};
 pub use self::component::struct_component_manager::StructComponentManager;
+
+pub use self::engine::{engine_init, engine_update_and_render};

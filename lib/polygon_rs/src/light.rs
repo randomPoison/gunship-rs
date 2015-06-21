@@ -1,11 +1,11 @@
 use math::Point;
 
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 pub enum Light {
     Point(PointLight),
 }
 
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct PointLight {
     pub position: Point,
 }

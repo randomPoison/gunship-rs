@@ -16,7 +16,7 @@ use geometry::mesh::{Mesh, VertexAttribute};
 use camera::Camera;
 use light::Light;
 
-#[allow(dead_code)] #[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct GLRender {
     context: GLContext // TODO: do we need to hold onto the context?
 }
@@ -116,7 +116,7 @@ impl GLRender {
         }
     }
 
-    pub fn draw_mesh(&self, mesh: &GLMeshData, model_transform: Matrix4, normal_transform: Matrix4, camera: &Camera, lights: &[Light]) { unsafe {
+    pub fn draw_mesh(&self, mesh: &GLMeshData, model_transform: Matrix4, normal_transform: Matrix4, camera: &Camera, lights: &mut Iterator<Item=Light>) { unsafe {
         let view_transform = camera.view_matrix();
         let model_view_transform = view_transform * model_transform;
         let projection_transform = camera.projection_matrix();
@@ -225,11 +225,9 @@ impl GLRender {
             gl::GetUniformLocation(mesh.shader, CString::new("lightPosition").unwrap().as_ptr());
 
         // Render first light without blending so it overrides any objects behind it.
-        {
-            let light = &lights[0];
-
+        if let Some(light) = lights.next() {
             let light_position = match light {
-                &Light::Point(ref point_light) => point_light.position
+                Light::Point(ref point_light) => point_light.position
             };
             let light_position_view = view_transform * light_position;
 
@@ -250,19 +248,22 @@ impl GLRender {
         let ambient_color = Color::new(0.0, 0.0, 0.0, 1.0);
         gl::Uniform4fv(ambient_location, 1, ambient_color.raw_data());
 
-        for light in lights.iter().skip(1) {
-            let light_position = match light {
-                &Light::Point(ref point_light) => point_light.position
-            };
-            let light_position_view = view_transform * light_position;
+        loop { match lights.next() {
+            Some(light) => {
+                let light_position = match light {
+                    Light::Point(ref point_light) => point_light.position
+                };
+                let light_position_view = view_transform * light_position;
 
-            gl::Uniform4fv(light_position_location, 1, light_position_view.raw_data());
+                gl::Uniform4fv(light_position_location, 1, light_position_view.raw_data());
 
-            gl::DrawElements(gl::TRIANGLES,
-                             mesh.element_count as GLsizei,
-                             gl::UNSIGNED_INT,
-                             0 as *const GLvoid);
-        }
+                gl::DrawElements(gl::TRIANGLES,
+                                 mesh.element_count as GLsizei,
+                                 gl::UNSIGNED_INT,
+                                 0 as *const GLvoid);
+            },
+            None => break,
+        } }
 
         gl::Enable(gl::DEPTH_TEST);
 
@@ -274,8 +275,14 @@ impl GLRender {
 
     /// Clears the current back buffer.
     pub fn clear(&self) {
-        unsafe {
-            gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
+        if !gl::Clear::is_loaded() {
+            println!("gl::Clear isn't loaded!");
+        }
+        else
+        {
+            unsafe {
+                gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
+            }
         }
     }
 

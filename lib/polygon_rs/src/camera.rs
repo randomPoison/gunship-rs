@@ -3,7 +3,7 @@ use math::Matrix4;
 use math::Quaternion;
 
 /// A camera in the scene.
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub struct Camera
 {
     pub fov: f32,

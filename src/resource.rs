@@ -12,6 +12,7 @@ use polygon::geometry::mesh::Mesh;
 
 use wav::Wave;
 
+#[derive(Debug, Clone)]
 pub struct ResourceManager {
     renderer: GLRender,
     meshes: HashMap<String, GLMeshData>,

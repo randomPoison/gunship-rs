@@ -1,0 +1,15 @@
+[package]
+name = "loader"
+version = "0.0.0"
+authors = ["David LeGare <excaliburhissheath@gmail.com>"]
+
+[[bin]]
+name = "loader"
+
+[dependencies.bootstrap_rs]
+version = "*"
+path = "../bootstrap_rs"
+
+[dependencies]
+winapi = "*"
+kernel32-sys = "*"
