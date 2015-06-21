@@ -31,7 +31,8 @@ pub struct Engine {
     renderer: GLRender,
     resource_manager: Rc<RefCell<ResourceManager>>,
 
-    systems: HashMap<TypeId, Box<System>>,
+    systems: Vec<Box<System>>,
+    system_indices: HashMap<TypeId, usize>,
     system_names: HashMap<String, TypeId>,
 
     transform_update: Box<System>,
@@ -64,7 +65,8 @@ impl Engine {
             renderer: renderer,
             resource_manager: resource_manager.clone(),
 
-            systems: HashMap::new(),
+            systems: Vec::new(),
+            system_indices: HashMap::new(),
             system_names: HashMap::new(),
 
             transform_update: Box::new(TransformUpdateSystem),
@@ -107,7 +109,7 @@ impl Engine {
         }
 
         // Update systems.
-        for (_, system) in self.systems.iter_mut() {
+        for system in self.systems.iter_mut() {
             system.update(scene, TARGET_FRAME_TIME_SECONDS);
         }
 
@@ -182,16 +184,21 @@ impl Engine {
 
     pub fn register_system<T: Any + System>(&mut self, system: T) {
         let system_id = TypeId::of::<T>();
-        assert!(!self.systems.contains_key(&system_id),
+        assert!(!self.system_indices.contains_key(&system_id),
                 "System {} with ID {:?} already registered", type_name::<T>(), system_id);
 
-        self.systems.insert(system_id, Box::new(system));
+        let index = self.systems.len();
+        self.systems.push(Box::new(system));
+        self.system_indices.insert(system_id, index);
         self.system_names.insert(type_name::<T>().into(), system_id);
     }
 
     pub fn get_system<T: Any + System>(&self) -> &T {
         let system_id = TypeId::of::<T>();
-        let system = self.systems.get(&system_id).unwrap().deref();
+        let index =
+            *self.system_indices.get(&system_id)
+            .expect(&format!("Trying to retrive system {} but no index found", type_name::<T>()));
+        let system = &*self.systems[index];
 
         unsafe {
             // Get the raw representation of the trait object.
@@ -204,7 +211,10 @@ impl Engine {
 
     pub fn get_system_by_name<T: Any + System>(&self) -> &T {
         let system_id = self.system_names.get(type_name::<T>()).unwrap();
-        let system = self.systems.get(&system_id).unwrap().deref();
+        let index =
+            *self.system_indices.get(system_id)
+            .expect(&format!("Trying to retrive system {} but no index found", type_name::<T>()));
+        let system = &*self.systems[index];
 
         unsafe {
             // Get the raw representation of the trait object.
@@ -237,7 +247,8 @@ impl Clone for Engine {
             renderer: self.renderer.clone(),
             resource_manager: resource_manager.clone(),
 
-            systems: HashMap::new(),
+            systems: Vec::new(),
+            system_indices: HashMap::new(),
             system_names: HashMap::new(),
 
             transform_update: Box::new(TransformUpdateSystem),
@@ -278,7 +289,8 @@ pub fn engine_init(window: Rc<RefCell<Window>>) -> Box<Engine> {
         renderer: renderer,
         resource_manager: resource_manager.clone(),
 
-        systems: HashMap::new(),
+        systems: Vec::new(),
+        system_indices: HashMap::new(),
         system_names: HashMap::new(),
 
         transform_update: Box::new(TransformUpdateSystem),
