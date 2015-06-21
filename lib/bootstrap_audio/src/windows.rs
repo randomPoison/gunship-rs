@@ -30,7 +30,7 @@ impl AudioSource {
     /// # Returns
     ///
     /// The number of samples written to the audio buffer.
-    pub fn stream<T: Iterator<Item = u16>>(&mut self, data_source: &mut T, max_time: f32) -> usize { unsafe {
+    pub fn stream<T: Iterator<Item = u16>>(&self, data_source: &mut T, max_time: f32) -> usize { unsafe {
         let audio_client = &mut *self.audio_client;
         let render_client = &mut *self.render_client;
 

@@ -26,7 +26,7 @@ type EngineDrop = fn(Box<()>);
 type GameInit = fn(&mut ());
 type GameReload = fn(&(), &());
 
-const SRC_LIB: &'static str = "target/debug/fps.dll";
+const SRC_LIB: &'static str = "target/debug/hotload.dll";
 
 fn update_dll(dest: &str, last_modified: &mut u64) -> bool {
     let modified = match file_modified(SRC_LIB) {
