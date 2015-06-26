@@ -2,7 +2,7 @@ pub mod transform;
 pub mod camera;
 pub mod mesh;
 pub mod light;
-pub mod collider;
+// pub mod collider;
 pub mod audio;
 pub mod struct_component_manager;
 

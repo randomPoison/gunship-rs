@@ -1,9 +1,12 @@
-#[cfg(target_family = "windows")]
+#[cfg(target_os = "windows")]
 pub use windows::window::Window;
+
+#[cfg(target_os = "linux")]
+pub use linux::window::Window;
 
 use input::ScanCode;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Message {
     Activate,
     Close,

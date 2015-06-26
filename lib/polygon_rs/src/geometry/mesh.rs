@@ -14,11 +14,11 @@ impl Mesh {
     /// Create a new mesh from existing data passed as slices.
     pub fn from_raw_data(positions_raw: &[f32], normals_raw: &[f32], indices_raw: &[u32]) -> Mesh {
         let mut raw_data: Vec<f32> = Vec::with_capacity(positions_raw.len() + normals_raw.len());
-        raw_data.push_all(positions_raw);
-        raw_data.push_all(normals_raw);
+        raw_data.extend(positions_raw);
+        raw_data.extend(normals_raw);
 
         let mut indices: Vec<u32> = Vec::with_capacity(indices_raw.len());
-        indices.push_all(indices_raw);
+        indices.extend(indices_raw);
 
         Mesh {
             raw_data: raw_data,
