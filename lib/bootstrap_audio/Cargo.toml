@@ -3,7 +3,17 @@ name = "bootstrap_audio"
 version = "0.0.1"
 authors = ["David LeGare <excaliburhissheath@gmail.com>"]
 
-[dependencies]
+[target.i686-pc-windows-gnu.dependencies]
+libc = "*"
+winapi = "*"
+ole32-sys = "*"
+
+[target.x86_64-pc-windows-gnu.dependencies]
+libc = "*"
+winapi = "*"
+ole32-sys = "*"
+
+[target.x86_64-pc-windows-msvc.dependencies]
 libc = "*"
 winapi = "*"
 ole32-sys = "*"
