@@ -4,7 +4,7 @@ pub use windows::gl::{
     init, create_context, swap_buffers, set_proc_loader
 };
 
-#[cfg(linux)]
+#[cfg(unix)]
 pub use linux::gl::{
     GLContext,
     init, create_context, swap_buffers, set_proc_loader

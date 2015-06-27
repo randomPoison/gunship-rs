@@ -8,10 +8,10 @@ pub mod windows;
 #[cfg(windows)]
 pub use windows::init::init;
 
-#[cfg(linux)]
+#[cfg(unix)]
 pub mod linux;
 
-#[cfg(linux)]
+#[cfg(unix)]
 pub use linux::init::init;
 
 pub mod window;

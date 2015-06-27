@@ -1,5 +1,5 @@
 #[cfg(windows)]
 pub use windows::time::Timer;
 
-#[cfg(linux)]
+#[cfg(unix)]
 pub use linux::time::Timer;

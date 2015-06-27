@@ -1,7 +1,7 @@
 #[cfg(windows)]
 pub use windows::window::Window;
 
-#[cfg(linux)]
+#[cfg(unix)]
 pub use linux::window::Window;
 
 use input::ScanCode;

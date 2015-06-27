@@ -2,7 +2,7 @@
 #[path="windows.rs"]
 mod audio_impl;
 
-#[cfg(linux)]
+#[cfg(unix)]
 #[path="linux.rs"]
 mod audio_impl;
 
