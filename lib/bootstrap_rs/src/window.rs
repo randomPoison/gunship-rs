@@ -1,7 +1,7 @@
-#[cfg(target_os = "windows")]
+#[cfg(windows)]
 pub use windows::window::Window;
 
-#[cfg(target_os = "linux")]
+#[cfg(linux)]
 pub use linux::window::Window;
 
 use input::ScanCode;

@@ -1,8 +1,8 @@
-#[cfg(target_family = "windows")]
+#[cfg(windows)]
 #[path="windows.rs"]
 mod audio_impl;
 
-#[cfg(target_os = "linux")]
+#[cfg(linux)]
 #[path="linux.rs"]
 mod audio_impl;
 

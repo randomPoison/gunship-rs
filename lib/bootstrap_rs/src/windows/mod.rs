@@ -1,4 +1,3 @@
-#![feature(collections)]
 #![allow(bad_style)]
 
 extern crate winapi;

@@ -1,5 +1,5 @@
-#[cfg(target_os = "windows")]
+#[cfg(windows)]
 pub use windows::time::Timer;
 
-#[cfg(target_os = "linux")]
+#[cfg(linux)]
 pub use linux::time::Timer;

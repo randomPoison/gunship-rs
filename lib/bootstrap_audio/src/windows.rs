@@ -5,8 +5,6 @@ extern crate ole32;
 use std::ptr;
 use std::mem;
 
-use self::libc;
-
 use self::winapi::*;
 
 #[derive(Debug)] #[allow(raw_pointer_derive)]

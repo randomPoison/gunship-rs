@@ -1,15 +1,17 @@
+#![feature(str_utf16)] // TODO: Only used by windows currently, but has to be specified at root level.
+
 extern crate gl;
 
-#[cfg(target_os = "windows")]
+#[cfg(windows)]
 pub mod windows;
 
-#[cfg(target_os = "windows")]
+#[cfg(windows)]
 pub use windows::init::init;
 
-#[cfg(target_os = "linux")]
+#[cfg(linux)]
 pub mod linux;
 
-#[cfg(target_os = "linux")]
+#[cfg(linux)]
 pub use linux::init::init;
 
 pub mod window;
