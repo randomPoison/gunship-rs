@@ -9,7 +9,7 @@ use windows::winapi::*;
 use windows::user32;
 use windows::kernel32;
 use windows::winmm;
-use ToCU16Str;
+use super::ToCU16Str;
 use window::Message;
 use window::Message::*;
 use input::ScanCode;

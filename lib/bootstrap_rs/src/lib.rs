@@ -1,26 +1,20 @@
-#![feature(collections)]
+#![feature(str_utf16)] // TODO: Only used by windows currently, but has to be specified at root level.
 
 extern crate gl;
 
-#[cfg(target_family = "windows")]
+#[cfg(windows)]
 pub mod windows;
 
-#[cfg(target_family = "windows")]
+#[cfg(windows)]
 pub use windows::init::init;
+
+#[cfg(unix)]
+pub mod linux;
+
+#[cfg(unix)]
+pub use linux::init::init;
 
 pub mod window;
 pub mod gl_utils;
 pub mod input;
 pub mod time;
-
-pub trait ToCU16Str {
-    fn to_c_u16(&self) -> Vec<u16>;
-}
-
-impl<'a> ToCU16Str for &'a str {
-    fn to_c_u16(&self) -> Vec<u16> {
-        let mut t: Vec<u16> = self.utf16_units().collect();
-        t.push(0u16);
-        t
-    }
-}

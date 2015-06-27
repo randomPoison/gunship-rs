@@ -1,10 +1,9 @@
+extern crate libc;
 extern crate winapi;
 extern crate ole32;
 
 use std::ptr;
 use std::mem;
-
-use ::libc;
 
 use self::winapi::*;
 

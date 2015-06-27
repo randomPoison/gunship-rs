@@ -54,7 +54,7 @@ pub fn init(window: &Window) {
     };
 }
 
-pub fn create_context(window: &Window) -> HGLRC {
+pub fn create_context(window: &Window) -> GLContext {
     let device_context = window.dc;
 
     // create context and make it current
@@ -79,8 +79,7 @@ pub fn set_proc_loader() {
     });
 }
 
-pub fn swap_buffers()
-{
+pub fn swap_buffers() {
     unsafe {
         gdi32::SwapBuffers(opengl32::wglGetCurrentDC()); // TODO maybe pass in the DC?
     }
