@@ -1,3 +1,5 @@
+extern crate xlib;
+
 pub mod file;
 pub mod gl;
 pub mod init;

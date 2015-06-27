@@ -14,3 +14,6 @@ winmm-sys = "*"
 
 [dependencies.gl]
 git = "https://github.com/bjz/gl-rs"
+
+[dependencies.xlib]
+git = "https://github.com/excaliburHisSheath/rust-xlib"
