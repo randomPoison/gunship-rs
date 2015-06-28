@@ -83,7 +83,6 @@ impl Engine {
 
         scene.input.clear();
         let mut window = self.window.borrow_mut();
-        window.handle_messages();
         loop {
             let message = window.next_message(); // TODO: Make this an iterator to simplify this loop.
             match message {

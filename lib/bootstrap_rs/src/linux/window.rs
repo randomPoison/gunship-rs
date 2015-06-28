@@ -3,13 +3,17 @@ use std::cell::RefCell;
 use std::ptr;
 use std::mem;
 use std::ffi::CString;
+use std::slice;
 
 use super::xlib;
 
 use window::Message;
 
-#[derive(Debug, Clone, Copy)]
-pub struct Window;
+#[derive(Debug, Clone)]
+#[allow(raw_pointer_derive)]
+pub struct Window {
+    display: *mut xlib::Display,
+}
 
 impl Window {
     pub fn new(_name: &str, _instance: ()) -> Rc<RefCell<Window>> { unsafe {
@@ -22,7 +26,7 @@ impl Window {
         let frame_window = xlib::XCreateWindow(
             display,
             xlib::XRootWindow(display, 0),
-            0, 0, 400, 400, 5, depth,
+            0, 0, 800, 800, 5, depth,
             xlib::InputOutput, visual, xlib::CWBackPixel,
             &mut frame_attributes);
 
@@ -30,15 +34,45 @@ impl Window {
         xlib::XMapWindow(display, frame_window);
         xlib::XFlush(display);
 
-        Rc::new(RefCell::new(Window))
+        xlib::XSelectInput(
+            display,
+            frame_window,
+            (xlib::KeyPressMask | xlib::KeyReleaseMask | xlib::PointerMotionMask).bits());
+
+        Rc::new(RefCell::new(Window {
+            display: display,
+        }))
     } }
 
-    pub fn handle_messages(&mut self) {
-        println!("Window::handle_messages() is not implemented on linux");
-    }
+    pub fn next_message(&mut self) -> Option<Message> { unsafe {
+        let mut event = mem::uninitialized::<xlib::XEvent>();
+        while xlib::XPending(self.display) > 0 {
+            xlib::XNextEvent(self.display, &mut event);
+            match event._type {
+                xlib::KeyPress => {
+                    let key_press_event: &xlib::XKeyPressedEvent = mem::transmute(&event);
 
-    pub fn next_message(&mut self) -> Option<Message> {
-        println!("Window::next_message() is not implemented on linux");
+                    let mut num_syms = 0;
+                    let ptr_key_sym = xlib::XGetKeyboardMapping(self.display, key_press_event.keycode as u8, 1, &mut num_syms);
+                    let syms_slice = slice::from_raw_parts(ptr_key_sym, num_syms as usize);
+
+                    let us_sym = syms_slice[0];
+                    if us_sym >= 'a' as u64 && us_sym <= 'z' as u64 {
+                        return Some(Message::KeyDown(mem::transmute(us_sym as u32)));
+                    } else {
+                        println!("unsupported key press event with keycode {} and us keysym {}", key_press_event.keycode, us_sym);
+                    }
+                }
+                _ => println!("unsupported event type: {}", event._type),
+            }
+        }
+
         None
+    } }
+}
+
+impl Drop for Window {
+    fn drop(&mut self) {
+        unsafe { xlib::XCloseDisplay(self.display); } // TODO: Handle error code?
     }
 }

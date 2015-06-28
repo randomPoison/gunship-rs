@@ -100,18 +100,8 @@ impl Window {
         window
     }
 
-    pub fn handle_messages(&mut self) {
-        let mut message = MSG {
-            hwnd: ptr::null_mut(),
-            message: 0,
-            wParam: 0,
-            lParam: 0,
-            time: 0,
-            pt: POINT {
-                x: 0,
-                y: 0
-            },
-        };
+    pub fn next_message(&mut self) -> Option<Message> {
+        let mut message = mem::uninitialized::<MSG>();
 
         loop {
             let result = unsafe {
@@ -122,15 +112,11 @@ impl Window {
                     user32::TranslateMessage(&message);
                     user32::DispatchMessageW(&message);
                 }
-            }
-            else
-            {
+            } else {
                 break;
             }
         }
-    }
 
-    pub fn next_message(&mut self) -> Option<Message> {
         self.messages.pop_front()
     }
 }
