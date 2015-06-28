@@ -1,4 +1,4 @@
-extern crate xlib;
+extern crate x11;
 
 pub mod file;
 pub mod gl;

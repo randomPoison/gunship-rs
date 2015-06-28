@@ -150,7 +150,7 @@ impl Engine {
             }
         }
 
-        self.renderer.swap_buffers();
+        self.renderer.swap_buffers(self.window.borrow().deref());
     }
 
     pub fn main_loop(&mut self) {

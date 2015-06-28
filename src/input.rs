@@ -46,6 +46,7 @@ impl Input {
     pub fn push_input(&mut self, message: Message) {
         match message {
             KeyDown(key) => {
+                println!("{:?} key pressed", key);
                 self.keys_pressed.insert(key);
                 self.keys_down.insert(key);
             },
