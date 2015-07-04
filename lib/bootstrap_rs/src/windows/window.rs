@@ -101,7 +101,7 @@ impl Window {
     }
 
     pub fn next_message(&mut self) -> Option<Message> {
-        let mut message = mem::uninitialized::<MSG>();
+        let mut message = unsafe { mem::uninitialized::<MSG>() };
 
         loop {
             let result = unsafe {
