@@ -26,6 +26,7 @@ impl Point {
         }
     }
 
+    /// TODO: Implement the `From` trait rather than making a standalone method.
     pub fn from_slice(data: &[f32]) -> Point {
         assert!(data.len() == 3 || data.len() == 4);
 

@@ -1,4 +1,4 @@
-use std::ops::{Mul, Div, Neg, Add};
+use std::ops::{Mul, Div, Neg, Add, Sub};
 
 use super::IsZero;
 
@@ -38,6 +38,7 @@ impl Vector3 {
         Vector3::new(0.0, 0.0, -1.0)
     }
 
+    /// TODO: Implement the `From` trait rather than making a separate method.
     pub fn from_slice(data: &[f32]) -> Vector3 {
         assert!(data.len() == 3);
 
@@ -118,6 +119,18 @@ impl Add<Vector3> for Vector3 {
             x: self.x + rhs.x,
             y: self.y + rhs.y,
             z: self.z + rhs.z,
+        }
+    }
+}
+
+impl Sub<Vector3> for Vector3 {
+    type Output = Vector3;
+
+    fn sub(self, rhs: Vector3) -> Vector3 {
+        Vector3 {
+            x: self.x - rhs.x,
+            y: self.y - rhs.y,
+            z: self.z - rhs.z,
         }
     }
 }

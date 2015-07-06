@@ -132,6 +132,28 @@ impl TransformManager {
 impl ComponentManager for TransformManager {
 }
 
+/// TODO: This should be module-level documentation.
+///
+/// A component representing the total transform (position, orientation,
+/// and scale) of an object in the world.
+///
+/// # Details
+///
+/// The `Transform` component is a fundamental part of the Gunship engine.
+/// It has the dual role of managing each individual entity's local transformation,
+/// as well as representing the individual nodes within the scene hierarchy.
+///
+/// ## Scene hierarchy
+///
+/// Each transform component may have one parent and any number of children. If a transform has
+/// a parent then its world transformation is the concatenation of its local transformation with
+/// its parent's world transformation. Using simple combinations of nested transforms can allow
+/// otherwise complex patterns of movement and positioning to be much easier to represent.
+///
+/// Transforms that have no parent are said to be at the root level and have the property
+/// that their local transformation is also their world transformation. If a transform is
+/// known to be at the root of the hierarchy it is recommended that its local values be modified
+/// directly to achieve best performance.
 #[derive(Debug, Clone)]
 pub struct Transform {
     position:         Point,
@@ -216,6 +238,14 @@ impl Transform {
         self.scale_derived.get()
     }
 
+    /// Retrieves the composite matrix representing the local transform.
+    ///
+    /// # Details
+    ///
+    /// The composite matrix combines the affine matrices representing translation,
+    /// scale, and rotation into a single transformation matrix. The local maxtrix does
+    /// not include the parent's transformation. The local matrix transforms a local point
+    /// into the parent's coordinate system.
     pub fn local_matrix(&self) -> Matrix4 {
         if self.out_of_date.get() {
             let local_matrix =
