@@ -30,7 +30,7 @@ impl EntityManager {
 }
 
 pub trait System {
-    fn update(&mut self, scene: &mut Scene, delta: f32);
+    fn update(&mut self, scene: &Scene, delta: f32);
 }
 
 pub trait ComponentManager {

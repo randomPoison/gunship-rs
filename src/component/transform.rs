@@ -312,7 +312,7 @@ impl Transform {
 pub struct TransformUpdateSystem;
 
 impl System for TransformUpdateSystem {
-    fn update(&mut self, scene: &mut Scene, _: f32) {
+    fn update(&mut self, scene: &Scene, _: f32) {
         let transform_manager = scene.get_manager::<TransformManager>();
 
         for row in transform_manager.transforms.iter() {
