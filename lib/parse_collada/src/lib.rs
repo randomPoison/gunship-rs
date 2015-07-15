@@ -8,94 +8,10 @@ use xml::XMLEvent;
 use xml::XMLEvent::*;
 use xml::SAXEvents;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ColladaData {
     pub library_geometries: LibraryGeometries
 }
-
-#[derive(Debug)]
-pub struct LibraryGeometries {
-    pub id: Option<String>,
-    pub name: Option<String>,
-    pub geometries: Vec<Geometry>
-}
-
-#[derive(Debug)]
-pub struct Geometry {
-    pub id: Option<String>,
-    pub name: Option<String>,
-    pub data: GeometricElement
-}
-
-#[derive(Debug)]
-pub enum GeometricElement {
-    ConvexMesh,
-    Mesh(Mesh),
-    Spline
-}
-
-#[derive(Debug)]
-pub struct Mesh {
-    pub sources: Vec<Source>,
-    pub vertices: Vertices,
-    pub primitives: Vec<PrimitiveType>
-}
-
-#[derive(Debug)]
-pub enum PrimitiveType {
-    Lines,
-    Linestrips,
-    Polygons,
-    Polylist,
-    Triangles(Triangles),
-    Trifans,
-    Tristrips
-}
-
-#[derive(Debug)]
-pub struct Triangles {
-    pub name: Option<String>,
-    pub count: usize,
-    pub material: Option<String>,
-    pub inputs: Vec<Input>,
-    pub primitives: Vec<usize>
-}
-
-#[derive(Debug)]
-pub struct Input {
-    pub offset: u32,
-    pub semantic: String,
-    pub source: String,
-    pub set: Option<u32>
-}
-
-#[derive(Debug)]
-pub struct Source {
-    pub id: Option<String>,
-    pub name: Option<String>,
-    pub array_element: ArrayElement,
-    pub accessor: Accessor
-}
-
-#[derive(Debug)]
-pub enum ArrayElement {
-    IDREF,
-    Name,
-    Bool,
-    Float(Vec<f32>),
-    Int
-}
-
-#[derive(Debug)]
-pub struct Accessor {
-    pub count: usize,
-    pub offset: u32,
-    pub source: String,
-    pub stride: u32
-}
-
-#[derive(Debug)]
-pub struct Vertices;
 
 impl ColladaData {
     pub fn from_file(file: &mut File) -> Result<ColladaData, String> {
@@ -109,6 +25,119 @@ impl ColladaData {
             }
         }
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct LibraryGeometries {
+    pub id: Option<String>,
+    pub name: Option<String>,
+    pub geometries: Vec<Geometry>
+}
+
+#[derive(Debug, Clone)]
+pub struct Geometry {
+    pub id: Option<String>,
+    pub name: Option<String>,
+    pub data: GeometricElement
+}
+
+#[derive(Debug, Clone)]
+pub enum GeometricElement {
+    ConvexMesh,
+    Mesh(Mesh),
+    Spline
+}
+
+#[derive(Debug, Clone)]
+pub struct Mesh {
+    pub sources: Vec<Source>,
+    pub vertices: Vertices,
+    pub primitives: Vec<PrimitiveType>
+}
+
+#[derive(Debug, Clone)]
+pub enum PrimitiveType {
+    Lines,
+    Linestrips,
+    Polygons,
+    Polylist,
+    Triangles(Triangles),
+    Trifans,
+    Tristrips
+}
+
+#[derive(Debug, Clone)]
+pub struct Triangles {
+    pub name: Option<String>,
+    pub count: usize,
+    pub material: Option<String>,
+    pub inputs: Vec<InputShared>,
+    pub primitives: Vec<usize>
+}
+
+#[derive(Debug, Clone)]
+pub struct InputShared {
+    pub offset: u32,
+    pub semantic: String,
+    pub source: String,
+    pub set: Option<u32>
+}
+
+#[derive(Debug, Clone)]
+pub struct InputUnshared {
+    pub semantic: String,
+    pub source: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct Source {
+    pub id: Option<String>,
+    pub name: Option<String>,
+    pub array_element: ArrayElement,
+    pub accessor: Accessor
+}
+
+#[derive(Debug, Clone)]
+pub enum ArrayElement {
+    IDREF,
+    Name,
+    Bool,
+    Float(Vec<f32>),
+    Int
+}
+
+#[derive(Debug, Clone)]
+pub struct Accessor {
+    pub count: usize,
+    pub offset: u32,
+    pub source: String,
+    pub stride: u32,
+    pub params: Vec<Param>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Vertices {
+    pub id: String,
+    pub name: Option<String>,
+    pub inputs: Vec<InputUnshared>,
+}
+
+impl Vertices {
+    pub fn new() -> Vertices {
+        Vertices {
+            id: String::new(),
+            name: None,
+            inputs: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Param {
+    pub name: Option<String>,
+    pub sid: Option<String>,
+    pub data_type: String,
+    pub semantic: Option<String>,
 }
 
 struct ColladaParser<'a> {
@@ -211,9 +240,11 @@ impl<'a> ColladaParser<'a> {
     }
 
     fn parse_mesh(&mut self) -> Result<GeometricElement, String> {
-        let mut sources = Vec::new();
-        let vertices = Vertices;
-        let mut primitives = Vec::new();
+        let mut mesh = Mesh {
+            sources: Vec::new(),
+            vertices: Vertices::new(),
+            primitives: Vec::new(),
+        };
 
         loop {
             let event = self.next_event();
@@ -221,10 +252,12 @@ impl<'a> ColladaParser<'a> {
                 StartElement("source") => match self.parse_source() {
                     Err(error) => return Err(error),
                     Ok(source) => {
-                        sources.push(source);
+                        mesh.sources.push(source);
                     }
                 },
-                StartElement("vertices") => self.parse_vertices(),
+                StartElement("vertices") => {
+                    mesh.vertices = try!(self.parse_vertices());
+                },
                 StartElement("lines") => self.parse_lines(),
                 StartElement("linestrips") => self.parse_linestrips(),
                 StartElement("polygons") => self.parse_polygons(),
@@ -232,7 +265,7 @@ impl<'a> ColladaParser<'a> {
                 StartElement("triangles") => match self.parse_triangles() {
                     Err(error) => return Err(error),
                     Ok(triangles) => {
-                        primitives.push(triangles);
+                        mesh.primitives.push(triangles);
                     }
                 },
                 StartElement("trifans") => self.parse_trifans(),
@@ -243,11 +276,7 @@ impl<'a> ColladaParser<'a> {
             }
         }
 
-        Ok(GeometricElement::Mesh(Mesh {
-            sources: sources,
-            vertices: vertices,
-            primitives: primitives
-        }))
+        Ok(GeometricElement::Mesh(mesh))
     }
 
     fn parse_spline(&mut self) {
@@ -327,7 +356,8 @@ impl<'a> ColladaParser<'a> {
             count: 0,
             offset: 0,
             source: String::new(),
-            stride: 1
+            stride: 1,
+            params: Vec::new(),
         };
 
         loop {
@@ -345,7 +375,10 @@ impl<'a> ColladaParser<'a> {
                 Attribute("stride", stride_str) => {
                     accessor.stride = u32::from_str(stride_str).unwrap();
                 },
-                StartElement("param") => self.parse_param(),
+                StartElement("param") => {
+                    let param = try!(self.parse_param());
+                    accessor.params.push(param);
+                },
                 EndElement("accessor") => break,
                 _ => return Err(format!("Illegal event while parsing <accessor>: {:?}", event))
             }
@@ -354,16 +387,59 @@ impl<'a> ColladaParser<'a> {
         Ok(accessor)
     }
 
-    fn parse_param(&mut self) {
-        println!("Skipping over <param> element");
-        println!("Warning: <param> is not yet supported by parse_collada");
-        self.skip_to_event(EndElement("param"));
+    fn parse_param(&mut self) -> Result<Param, String> {
+        let mut param = Param {
+            name: None,
+            sid: None,
+            data_type: String::new(),
+            semantic: None,
+        };
+
+        loop {
+            let event = self.next_event();
+            match event {
+                Attribute("name", name_str) => {
+                    param.name = Some(String::from(name_str));
+                },
+                Attribute("sid", sid_str) => {
+                    param.sid = Some(String::from(sid_str));
+                },
+                Attribute("type", type_str) => {
+                    param.data_type.push_str(type_str);
+                },
+                Attribute("semantic", semantic_str) => {
+                    param.semantic = Some(String::from(semantic_str));
+                },
+                EndElement("param") => break,
+                _ => return Err(format!("Illegal event while parsing <param>: {:?}", event)),
+            }
+        }
+
+        Ok(param)
     }
 
-    fn parse_vertices(&mut self) {
-        println!("Skipping over <vertices> element");
-        println!("Warning: <vertices> is not yet supported by parse_collada");
-        self.skip_to_event(EndElement("vertices"));
+    fn parse_vertices(&mut self) -> Result<Vertices, String> {
+        let mut vertices = Vertices::new();
+
+        loop {
+            let event = self.next_event();
+            match event {
+                Attribute("id", id_str) => {
+                    vertices.id.push_str(id_str);
+                },
+                Attribute("name", name_str) => {
+                    vertices.name = Some(String::from(name_str));
+                },
+                StartElement("input") => {
+                    let input = try!(self.parse_input_unshared());
+                    vertices.inputs.push(input);
+                },
+                EndElement("vertices") => break,
+                _ => return Err(format!("Illegal event while parsing <vertices>: {:?}", event)),
+            }
+        }
+
+        Ok(vertices)
     }
 
     fn parse_lines(&mut self) {
@@ -394,7 +470,7 @@ impl<'a> ColladaParser<'a> {
         let mut name: Option<String> = None;
         let mut count: usize = 0;
         let mut material: Option<String> = None;
-        let mut inputs: Vec<Input> = Vec::new();
+        let mut inputs: Vec<InputShared> = Vec::new();
         let mut primitives: Option<Vec<usize>> = None;
 
         loop {
@@ -409,7 +485,7 @@ impl<'a> ColladaParser<'a> {
                 Attribute("material", material_str) => {
                     material = Some(material_str.to_string());
                 },
-                StartElement("input") => match self.parse_input() {
+                StartElement("input") => match self.parse_input_shared() {
                     Err(error) => return Err(error),
                     Ok(input) => {
                         inputs.push(input);
@@ -436,8 +512,8 @@ impl<'a> ColladaParser<'a> {
         }))
     }
 
-    fn parse_input(&mut self) -> Result<Input, String> {
-        let mut input = Input {
+    fn parse_input_shared(&mut self) -> Result<InputShared, String> {
+        let mut input = InputShared {
             offset: u32::max_value(),
             semantic: String::new(),
             source: String::new(),
@@ -460,11 +536,37 @@ impl<'a> ColladaParser<'a> {
                     input.set = Some(u32::from_str(set_str).unwrap());
                 },
                 EndElement("input") => break,
-                _ => return Err(format!("Illegal event while parsing <input>: {:?}", event))
+                _ => return Err(format!("Illegal event while parsing <input (shared)>: {:?}", event))
             }
         }
 
         assert!(input.offset != u32::max_value());
+
+        Ok(input)
+    }
+
+    fn parse_input_unshared(&mut self) -> Result<InputUnshared, String> {
+        let mut input = InputUnshared {
+            semantic: String::new(),
+            source: String::new(),
+        };
+
+        loop {
+            let event = self.next_event();
+            match event {
+                Attribute("semantic", semantic_str) => {
+                    input.semantic.push_str(semantic_str);
+                },
+                Attribute("source", source_str) => {
+                    input.source.push_str(source_str);
+                },
+                EndElement("input") => break,
+                _ => return Err(format!("Illegal event while parsing <input (unshared)>: {:?}", event)),
+            }
+        }
+
+        assert!(!input.semantic.is_empty());
+        assert!(!input.source.is_empty());
 
         Ok(input)
     }
@@ -598,12 +700,3 @@ impl<'a> ColladaParser<'a> {
         }
     }
 }
-
-// A "macro" for quickly defining placeholder methods.
-/*
-fn parse_$name(&mut self) {
-    println!("Skipping over <$name> element");
-    println!("Warning: <$name> is not yet supported by parse_collada");
-    self.skip_to_event(EndElement("$name"));
-}
-*/
