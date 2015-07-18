@@ -2,6 +2,7 @@ extern crate parse_xml as xml;
 
 use std::fs::File;
 use std::str::FromStr;
+use std::convert::From;
 
 use xml::XMLParser;
 use xml::XMLEvent;
@@ -67,6 +68,15 @@ pub enum ArrayElement {
 pub struct Asset;
 
 #[derive(Debug, Clone)]
+pub struct BindMaterial;
+
+#[derive(Debug, Clone)]
+pub struct EvaluateScene {
+    pub name: Option<String>,
+    pub renders: Vec<Render>,
+}
+
+#[derive(Debug, Clone)]
 pub struct Extra;
 
 #[derive(Debug, Clone)]
@@ -96,6 +106,30 @@ pub struct InputUnshared {
     pub semantic: String,
     pub source: String,
 }
+
+#[derive(Debug, Clone)]
+pub struct InstanceCamera;
+
+#[derive(Debug, Clone)]
+pub struct InstanceController;
+
+#[derive(Debug, Clone)]
+pub struct InstanceEffect;
+
+#[derive(Debug, Clone)]
+pub struct InstanceGeometry {
+    pub sid: Option<String>,
+    pub name: Option<String>,
+    pub url: String,
+    pub bind_material: Option<BindMaterial>,
+    pub extras: Vec<Extra>,
+}
+
+#[derive(Debug, Clone)]
+pub struct InstanceLight;
+
+#[derive(Debug, Clone)]
+pub struct InstanceNode;
 
 #[derive(Debug, Clone)]
 pub struct LibraryAnimations;
@@ -144,13 +178,62 @@ pub struct LibraryPhysicsModels;
 pub struct LibraryPhysicsScenes;
 
 #[derive(Debug, Clone)]
-pub struct LibraryVisualScenes;
+pub struct LibraryVisualScenes {
+    pub id: Option<String>,
+    pub name: Option<String>,
+    pub asset: Option<Asset>,
+    pub visual_scenes: Vec<VisualScene>,
+    pub extras: Vec<Extra>,
+}
+
+#[derive(Debug, Clone)]
+pub struct LookAt;
+
+#[derive(Debug, Clone)]
+pub struct Matrix {
+    pub sid: Option<String>,
+    pub data: [f32; 16],
+}
 
 #[derive(Debug, Clone)]
 pub struct Mesh {
     pub sources: Vec<Source>,
     pub vertices: Vertices,
     pub primitives: Vec<PrimitiveType>
+}
+
+#[derive(Debug, Clone)]
+pub struct Node {
+    pub id: Option<String>,
+    pub name: Option<String>,
+    pub sid: Option<String>,
+    pub node_type: Option<NodeType>,
+    pub layers: Vec<String>,
+    pub asset: Option<Asset>,
+    pub transformations: Vec<TransformationElement>,
+    pub instance_cameras: Vec<InstanceCamera>,
+    pub instance_controllers: Vec<InstanceController>,
+    pub instance_geometries: Vec<InstanceGeometry>,
+    pub instance_lights: Vec<InstanceLight>,
+    pub instance_nodes: Vec<InstanceNode>,
+    pub nodes: Vec<Node>,
+    pub extras: Vec<Extra>,
+}
+
+#[derive(Debug, Clone)]
+pub enum NodeType {
+    Node,
+    Joint,
+}
+
+impl<'a> From<&'a str> for NodeType {
+    fn from(type_str: &str) -> NodeType {
+        match type_str {
+            "NODE" => NodeType::Node,
+            "JOINT" => NodeType::Joint,
+            _ => panic!("Cannot parse node type from {}", type_str),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -173,7 +256,23 @@ pub enum PrimitiveType {
 }
 
 #[derive(Debug, Clone)]
+pub struct Render {
+    pub camera_node: Option<String>,
+    pub layers: Vec<String>,
+    pub instance_effect: Option<InstanceEffect>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Rotate;
+
+#[derive(Debug, Clone)]
+pub struct Scale;
+
+#[derive(Debug, Clone)]
 pub struct Scene;
+
+#[derive(Debug, Clone)]
+pub struct Skew;
 
 #[derive(Debug, Clone)]
 pub struct Source {
@@ -182,6 +281,19 @@ pub struct Source {
     pub array_element: ArrayElement,
     pub accessor: Accessor
 }
+
+#[derive(Debug, Clone)]
+pub enum TransformationElement {
+    LookAt(LookAt),
+    Matrix(Matrix),
+    Rotate(Rotate),
+    Scale(Scale),
+    Skew(Skew),
+    Translate(Translate),
+}
+
+#[derive(Debug, Clone)]
+pub struct Translate;
 
 #[derive(Debug, Clone)]
 pub struct Triangles {
@@ -207,6 +319,16 @@ impl Vertices {
             inputs: Vec::new(),
         }
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct VisualScene {
+    pub id: Option<String>,
+    pub name: Option<String>,
+    pub asset: Option<Asset>,
+    pub nodes: Vec<Node>,
+    pub evaluations: Vec<EvaluateScene>,
+    pub extras: Vec<Extra>,
 }
 
 struct ColladaParser<'a> {
@@ -275,7 +397,10 @@ impl<'a> ColladaParser<'a> {
                 StartElement("library_physics_materials") => self.parse_library_physics_materials(),
                 StartElement("library_physics_models") => self.parse_library_physics_models(),
                 StartElement("library_physics_scenes") => self.parse_library_physics_scenes(),
-                StartElement("library_visual_scenes") => self.parse_library_visual_scenes(),
+                StartElement("library_visual_scenes") => {
+                    let library_visual_scenes = try!(self.parse_library_visual_scenes());
+                    collada.library_visual_scenes = Some(library_visual_scenes);
+                },
                 StartElement("scene") => self.parse_scene(),
                 StartElement("extra") => self.parse_extra(),
                 EndElement("COLLADA") => break,
@@ -325,25 +450,58 @@ impl<'a> ColladaParser<'a> {
     fn parse_asset(&mut self) {
         println!("Skipping over <asset> element");
         println!("Warning: <asset> is not yet supported by parse_collada");
-        self.skip_to_event(EndElement("asset"));
+        self.skip_to_end_element("asset");
+    }
+
+    fn parse_bind_material(&mut self) -> Result<BindMaterial, String> {
+        println!("Skipping over <bind_material> element");
+        println!("Warning: <bind_material> is not yet supported by parse_collada");
+        self.skip_to_end_element("bind_material");
+
+        Ok(BindMaterial)
     }
 
     fn parse_bool_array(&mut self) {
         println!("Skipping over <bool_array> element");
         println!("Warning: <bool_array> is not yet supported by parse_collada");
-        self.skip_to_event(EndElement("bool_array"));
+        self.skip_to_end_element("bool_array");
     }
 
     fn parse_convex_mesh(&mut self) {
         println!("Skipping over <convex_mesh> tag");
         println!("Warning: <convex_mesh> is not yet supported by parse_collada");
-        self.skip_to_event(EndElement("convex_mesh"));
+        self.skip_to_end_element("convex_mesh");
+    }
+
+    fn parse_evaluate_scene(&mut self) -> Result<EvaluateScene, String> {
+        let mut evaluate_scene = EvaluateScene {
+            name: None,
+            renders: Vec::new(),
+        };
+
+        loop {
+            let event = self.next_event();
+            match event {
+                Attribute("name", name_str) => {
+                    evaluate_scene.name = Some(String::from(name_str));
+                },
+                StartElement("render") => {
+                    let render = try!(self.parse_render());
+                    evaluate_scene.renders.push(render);
+                },
+                EndElement("evaluate_scene") => break,
+                _ => return Err(format!("Illegal event while parsing <evaluate_scene>: {:?}", event)),
+            }
+        }
+
+        assert!(evaluate_scene.renders.len() >= 1);
+        Ok(evaluate_scene)
     }
 
     fn parse_extra(&mut self) {
         println!("Skipping over <extra> element");
         println!("Warning: <extra> is not yet supported by parse_collada");
-        self.skip_to_event(EndElement("extra"));
+        self.skip_to_end_element("extra");
     }
 
     fn parse_float_array(&mut self) -> Result<ArrayElement, String> {
@@ -421,7 +579,7 @@ impl<'a> ColladaParser<'a> {
     fn parse_IDREF_array(&mut self) {
         println!("Skipping over <IDREF_array> element");
         println!("Warning: <IDREF_array> is not yet supported by parse_collada");
-        self.skip_to_event(EndElement("IDREF_array"));
+        self.skip_to_end_element("IDREF_array");
     }
 
     fn parse_input_shared(&mut self) -> Result<InputShared, String> {
@@ -483,46 +641,118 @@ impl<'a> ColladaParser<'a> {
         Ok(input)
     }
 
+    fn parse_instance_camera(&mut self) -> Result<InstanceCamera, String> {
+        println!("Skipping over <instance_camera> element");
+        println!("Warning: <instance_camera> is not yet supported by parse_collada");
+        self.skip_to_end_element("instance_camera");
+
+        Ok(InstanceCamera)
+    }
+
+    fn parse_instance_controller(&mut self) -> Result<InstanceController, String> {
+        println!("Skipping over <instance_controller> element");
+        println!("Warning: <instance_controller> is not yet supported by parse_collada");
+        self.skip_to_end_element("instance_controller");
+
+        Ok(InstanceController)
+    }
+
+    fn parse_instance_effect(&mut self) {
+        println!("Skipping over <instance_effect> element");
+        println!("Warning: <instance_effect> is not yet supported by parse_collada");
+        self.skip_to_end_element("instance_effect");
+    }
+
+    fn parse_instance_geometry(&mut self) -> Result<InstanceGeometry, String> {
+        let mut instance_geometry = InstanceGeometry {
+            sid: None,
+            name: None,
+            url: String::new(),
+            bind_material: None,
+            extras: Vec::new(),
+        };
+
+        loop {
+            let event = self.next_event();
+            match event {
+                Attribute("sid", sid_str) => {
+                    instance_geometry.sid = Some(String::from(sid_str));
+                },
+                Attribute("name", name_str) => {
+                    instance_geometry.name = Some(String::from(name_str));
+                },
+                Attribute("url", url_str) => {
+                    instance_geometry.url.push_str(url_str);
+                },
+                StartElement("bind_material") => {
+                    let bind_material = try!(self.parse_bind_material());
+                    instance_geometry.bind_material = Some(bind_material);
+                },
+                StartElement("extra") => self.parse_extra(),
+                EndElement("instance_geometry") => break,
+                _ => return Err(format!("Illegal event while parsing <instance_geometry>: {:?}", event)),
+            }
+        }
+
+        Ok(instance_geometry)
+    }
+
+    fn parse_instance_light(&mut self) -> Result<InstanceLight, String> {
+        println!("Skipping over <instance_light> element");
+        println!("Warning: <instance_light> is not yet supported by parse_collada");
+        self.skip_to_end_element("instance_light");
+
+        Ok(InstanceLight)
+    }
+
+    fn parse_instance_node(&mut self) -> Result<InstanceNode, String> {
+        println!("Skipping over <instance_node> element");
+        println!("Warning: <instance_node> is not yet supported by parse_collada");
+        self.skip_to_end_element("instance_node");
+
+        Ok(InstanceNode)
+    }
+
     fn parse_int_array(&mut self) {
         println!("Skipping over <int_array> element");
         println!("Warning: <int_array> is not yet supported by parse_collada");
-        self.skip_to_event(EndElement("int_array"));
+        self.skip_to_end_element("int_array");
     }
 
     fn parse_library_animations(&mut self) {
         println!("Skipping over <library_animations> element");
         println!("Warning: <library_animations> is not yet supported by parse_collada");
-        self.skip_to_event(EndElement("library_animations"));
+        self.skip_to_end_element("library_animations");
     }
 
     fn parse_library_animation_clips(&mut self) {
         println!("Skipping over <library_animation_clips> element");
         println!("Warning: <library_animation_clips> is not yet supported by parse_collada");
-        self.skip_to_event(EndElement("library_animation_clips"));
+        self.skip_to_end_element("library_animation_clips");
     }
 
     fn parse_library_cameras(&mut self) {
         println!("Skipping over <library_cameras> element");
         println!("Warning: <library_cameras> is not yet supported by parse_collada");
-        self.skip_to_event(EndElement("library_cameras"));
+        self.skip_to_end_element("library_cameras");
     }
 
     fn parse_library_controllers(&mut self) {
         println!("Skipping over <library_controllers> element");
         println!("Warning: <library_controllers> is not yet supported by parse_collada");
-        self.skip_to_event(EndElement("library_controllers"));
+        self.skip_to_end_element("library_controllers");
     }
 
     fn parse_library_effects(&mut self) {
         println!("Skipping over <library_effects> element");
         println!("Warning: <library_effects> is not yet supported by parse_collada");
-        self.skip_to_event(EndElement("library_effects"));
+        self.skip_to_end_element("library_effects");
     }
 
     fn parse_library_force_fields(&mut self) {
         println!("Skipping over <library_force_fields> element");
         println!("Warning: <library_force_fields> is not yet supported by parse_collada");
-        self.skip_to_event(EndElement("library_force_fields"));
+        self.skip_to_end_element("library_force_fields");
     }
 
     fn parse_library_geometries(&mut self) -> Result<LibraryGeometries, String> {
@@ -542,11 +772,9 @@ impl<'a> ColladaParser<'a> {
                     library_geometries.name = Some(_name.to_string());
                 },
                 StartElement("asset") => self.parse_asset(),
-                StartElement("geometry") => match self.parse_geometry() {
-                    Err(error) => return Err(error),
-                    Ok(geometry) => {
-                        library_geometries.geometries.push(geometry);
-                    }
+                StartElement("geometry") => {
+                    let geometry = try!(self.parse_geometry());
+                    library_geometries.geometries.push(geometry);
                 },
                 StartElement("extra") => self.parse_extra(),
                 EndElement("library_geometries") => break,
@@ -560,61 +788,130 @@ impl<'a> ColladaParser<'a> {
     fn parse_library_images(&mut self) {
         println!("Skipping over <library_images> element");
         println!("Warning: <library_images> is not yet supported by parse_collada");
-        self.skip_to_event(EndElement("library_images"));
+        self.skip_to_end_element("library_images");
     }
 
     fn parse_library_lights(&mut self) {
         println!("Skipping over <library_lights> element");
         println!("Warning: <library_lights> is not yet supported by parse_collada");
-        self.skip_to_event(EndElement("library_lights"));
+        self.skip_to_end_element("library_lights");
     }
 
     fn parse_library_materials(&mut self) {
         println!("Skipping over <library_materials> element");
         println!("Warning: <library_materials> is not yet supported by parse_collada");
-        self.skip_to_event(EndElement("library_materials"));
+        self.skip_to_end_element("library_materials");
     }
 
     fn parse_library_nodes(&mut self) {
         println!("Skipping over <library_nodes> element");
         println!("Warning: <library_nodes> is not yet supported by parse_collada");
-        self.skip_to_event(EndElement("library_nodes"));
+        self.skip_to_end_element("library_nodes");
     }
 
     fn parse_library_physics_materials(&mut self) {
         println!("Skipping over <library_physics_materials> element");
         println!("Warning: <library_physics_materials> is not yet supported by parse_collada");
-        self.skip_to_event(EndElement("library_physics_materials"));
+        self.skip_to_end_element("library_physics_materials");
     }
 
     fn parse_library_physics_models(&mut self) {
         println!("Skipping over <library_physics_models> element");
         println!("Warning: <library_physics_models> is not yet supported by parse_collada");
-        self.skip_to_event(EndElement("library_physics_models"));
+        self.skip_to_end_element("library_physics_models");
     }
 
     fn parse_library_physics_scenes(&mut self) {
         println!("Skipping over <library_physics_scenes> element");
         println!("Warning: <library_physics_scenes> is not yet supported by parse_collada");
-        self.skip_to_event(EndElement("library_physics_scenes"));
+        self.skip_to_end_element("library_physics_scenes");
     }
 
-    fn parse_library_visual_scenes(&mut self) {
-        println!("Skipping over <library_visual_scenes> element");
-        println!("Warning: <library_visual_scenes> is not yet supported by parse_collada");
-        self.skip_to_event(EndElement("library_visual_scenes"));
+    fn parse_library_visual_scenes(&mut self) -> Result<LibraryVisualScenes, String> {
+        let mut library_visual_scenes = LibraryVisualScenes {
+            id: None,
+            name: None,
+            asset: None,
+            visual_scenes: Vec::new(),
+            extras: Vec::new(),
+        };
+
+        loop {
+            let event = self.next_event();
+            match event {
+                Attribute("id", id_str) => {
+                    library_visual_scenes.id = Some(String::from(id_str));
+                },
+                Attribute("name", name_str) => {
+                    library_visual_scenes.name = Some(String::from(name_str));
+                },
+                StartElement("asset") => self.parse_asset(),
+                StartElement("visual_scene") => {
+                    let visual_scene = try!(self.parse_visual_scene());
+                    library_visual_scenes.visual_scenes.push(visual_scene);
+                },
+                StartElement("extra") => self.parse_extra(),
+                EndElement("library_visual_scenes") => break,
+                _ => return Err(format!("Illegal event while parsing <library_visual_scenes>: {:?}", event)),
+            }
+        }
+
+        assert!(library_visual_scenes.visual_scenes.len() >= 1);
+        Ok(library_visual_scenes)
     }
 
     fn parse_lines(&mut self) {
         println!("Skipping over <lines> element");
         println!("Warning: <lines> is not yet supported by parse_collada");
-        self.skip_to_event(EndElement("lines"));
+        self.skip_to_end_element("lines");
     }
 
     fn parse_linestrips(&mut self) {
         println!("Skipping over <linestrips> element");
         println!("Warning: <linestrips> is not yet supported by parse_collada");
-        self.skip_to_event(EndElement("linestrips"));
+        self.skip_to_end_element("linestrips");
+    }
+
+    fn parse_lookat(&mut self) -> Result<LookAt, String> {
+        println!("Skipping over <lookat> element");
+        println!("Warning: <lookat> is not yet supported by parse_collada");
+        self.skip_to_end_element("lookat");
+
+        Ok(LookAt)
+    }
+
+    fn parse_matrix(&mut self) -> Result<Matrix, String> {
+        let mut matrix = Matrix {
+            sid: None,
+            data: [0.0; 16],
+        };
+
+        loop {
+            let event = self.next_event();
+            match event {
+                Attribute("sid", sid_str) => {
+                    matrix.sid = Some(String::from(sid_str));
+                },
+                TextNode(matrix_str) => {
+                    let f32_iter = matrix_str.split_whitespace().map(|word| {
+                        match f32::from_str(word) {
+                            Err(error) => return Err(format!("Error while parsing <float_array>: {} (value was {})", error, word)),
+                            Ok(value) => Ok(value)
+                        }
+                    });
+                    for (data_val, result_f32) in matrix.data.iter_mut().zip(f32_iter) {
+                        match result_f32 {
+                            Ok(val) => *data_val = val,
+                            Err(err_string) => return Err(err_string),
+                        }
+                    }
+                },
+                EndElement("matrix") => break,
+                _ => return Err(format!("Illegal event while parsing <matrix>: {:?}", event)),
+            }
+        }
+
+        Ok(matrix)
     }
 
     fn parse_mesh(&mut self) -> Result<GeometricElement, String> {
@@ -661,7 +958,103 @@ impl<'a> ColladaParser<'a> {
     fn parse_Name_array(&mut self) {
         println!("Skipping over <Name_array> element");
         println!("Warning: <Name_array> is not yet supported by parse_collada");
-        self.skip_to_event(EndElement("Name_array"));
+        self.skip_to_end_element("Name_array");
+    }
+
+    fn parse_node(&mut self) -> Result<Node, String> {
+        let mut node = Node {
+            id: None,
+            name: None,
+            sid: None,
+            node_type: None,
+            layers: Vec::new(),
+            asset: None,
+            transformations: Vec::new(),
+            instance_cameras: Vec::new(),
+            instance_controllers: Vec::new(),
+            instance_geometries: Vec::new(),
+            instance_lights: Vec::new(),
+            instance_nodes: Vec::new(),
+            nodes: Vec::new(),
+            extras: Vec::new(),
+        };
+
+        loop {
+            let event = self.next_event();
+            match event {
+                Attribute("id", id_str) => {
+                    node.id = Some(String::from(id_str));
+                },
+                Attribute("name", name_str) => {
+                    node.name = Some(String::from(name_str));
+                },
+                Attribute("sid", sid_name) => {
+                    node.sid = Some(String::from(sid_name));
+                },
+                Attribute("type", type_str) => {
+                    node.node_type = Some(NodeType::from(type_str));
+                },
+                Attribute("layer", layer_str) => {
+                    for layer in layer_str.split(" ") {
+                        node.layers.push(String::from(layer));
+                    }
+                },
+                StartElement("asset") => self.parse_asset(),
+                StartElement("lookat") => {
+                    let lookat = try!(self.parse_lookat());
+                    node.transformations.push(TransformationElement::LookAt(lookat));
+                },
+                StartElement("matrix") => {
+                    let matrix = try!(self.parse_matrix());
+                    node.transformations.push(TransformationElement::Matrix(matrix));
+                },
+                StartElement("rotate") => {
+                    let rotate = try!(self.parse_rotate());
+                    node.transformations.push(TransformationElement::Rotate(rotate));
+                },
+                StartElement("scale") => {
+                    let scale = try!(self.parse_scale());
+                    node.transformations.push(TransformationElement::Scale(scale));
+                },
+                StartElement("skew") => {
+                    let skew = try!(self.parse_skew());
+                    node.transformations.push(TransformationElement::Skew(skew));
+                },
+                StartElement("translate") => {
+                    let translate = try!(self.parse_translate());
+                    node.transformations.push(TransformationElement::Translate(translate));
+                },
+                StartElement("instance_camera") => {
+                    let instance_camera = try!(self.parse_instance_camera());
+                    node.instance_cameras.push(instance_camera);
+                },
+                StartElement("instance_controller") => {
+                    let instance_controller = try!(self.parse_instance_controller());
+                    node.instance_controllers.push(instance_controller);
+                },
+                StartElement("instance_geometry") => {
+                    let instance_geometry = try!(self.parse_instance_geometry());
+                    node.instance_geometries.push(instance_geometry);
+                },
+                StartElement("instance_light") => {
+                    let instance_light = try!(self.parse_instance_light());
+                    node.instance_lights.push(instance_light);
+                },
+                StartElement("instance_node") => {
+                    let instance_node = try!(self.parse_instance_node());
+                    node.instance_nodes.push(instance_node);
+                },
+                StartElement("node") => {
+                    let child_node = try!(self.parse_node());
+                    node.nodes.push(child_node);
+                },
+                StartElement("extra") => self.parse_extra(),
+                EndElement("node") => break,
+                _ => return Err(format!("Illegal event while parsing <node>: {:?}", event)),
+            }
+        }
+
+        Ok(node)
     }
 
     fn parse_p(&mut self) -> Result<Vec<usize>, String> {
@@ -723,19 +1116,77 @@ impl<'a> ColladaParser<'a> {
     fn parse_polygons(&mut self) {
         println!("Skipping over <polygons> element");
         println!("Warning: <polygons> is not yet supported by parse_collada");
-        self.skip_to_event(EndElement("polygons"));
+        self.skip_to_end_element("polygons");
     }
 
     fn parse_polylist(&mut self) {
         println!("Skipping over <polylist> element");
         println!("Warning: <polylist> is not yet supported by parse_collada");
-        self.skip_to_event(EndElement("polylist"));
+        self.skip_to_end_element("polylist");
+    }
+
+    fn parse_render(&mut self) -> Result<Render, String> {
+        let mut render = Render {
+            camera_node: None,
+            layers: Vec::new(),
+            instance_effect: None,
+        };
+
+        loop {
+            let event = self.next_event();
+            match event {
+                Attribute("camera_node", camera_node_str) => {
+                    render.camera_node = Some(String::from(camera_node_str));
+                },
+                StartElement("layer") => {
+                    if let TextNode(layer_str) = self.next_event() {
+                        render.layers.push(String::from(layer_str));
+                    } else {
+                        return Err(format!("Illegal event while parsing <layer>: {:?}", event));
+                    }
+
+                    let event = self.next_event();
+                    if event != EndElement("layer") {
+                        return Err(format!("Illegal event while parsing <layer>: {:?}", event));
+                    }
+                }
+                StartElement("instance_effect") => self.parse_instance_effect(),
+                EndElement("render") => break,
+                _ => return Err(format!("Illegal event while parsing <render>: {:?}", event)),
+            }
+        }
+
+        Ok(render)
+    }
+
+    fn parse_rotate(&mut self) -> Result<Rotate, String> {
+        println!("Skipping over <rotate> element");
+        println!("Warning: <rotate> is not yet supported by parse_collada");
+        self.skip_to_end_element("rotate");
+
+        Ok(Rotate)
+    }
+
+    fn parse_scale(&mut self) -> Result<Scale, String> {
+        println!("Skipping over <scale> element");
+        println!("Warning: <scale> is not yet supported by parse_collada");
+        self.skip_to_end_element("scale");
+
+        Ok(Scale)
     }
 
     fn parse_scene(&mut self) {
         println!("Skipping over <scene> element");
         println!("Warning: <scene> is not yet supported by parse_collada");
-        self.skip_to_event(EndElement("scene"));
+        self.skip_to_end_element("scene");
+    }
+
+    fn parse_skew(&mut self) -> Result<Skew, String> {
+        println!("Skipping over <skew> element");
+        println!("Warning: <skew> is not yet supported by parse_collada");
+        self.skip_to_end_element("skew");
+
+        Ok(Skew)
     }
 
     fn parse_source(&mut self) -> Result<Source, String> {
@@ -787,7 +1238,13 @@ impl<'a> ColladaParser<'a> {
     fn parse_spline(&mut self) {
         println!("Skipping over <spline> element");
         println!("Warning: <spline> is not yet supported by parse_collada");
-        self.skip_to_event(EndElement("spline"));
+        self.skip_to_end_element("spline");
+    }
+
+    fn parse_technique(&mut self) {
+        println!("Skipping over <technique> element");
+        println!("Warning: <technique> is not yet supported by parse_collada");
+        self.skip_to_end_element("technique");
     }
 
     fn parse_technique_common_source(&mut self) -> Result<Accessor, String> {
@@ -808,6 +1265,14 @@ impl<'a> ColladaParser<'a> {
         }
 
         Ok(accessor.unwrap())
+    }
+
+    fn parse_translate(&mut self) -> Result<Translate, String> {
+        println!("Skipping over <translate> element");
+        println!("Warning: <translate> is not yet supported by parse_collada");
+        self.skip_to_end_element("translate");
+
+        Ok(Translate)
     }
 
     fn parse_triangles(&mut self) -> Result<PrimitiveType, String> {
@@ -859,13 +1324,13 @@ impl<'a> ColladaParser<'a> {
     fn parse_trifans(&mut self) {
         println!("Skipping over <trifans> element");
         println!("Warning: <trifans> is not yet supported by parse_collada");
-        self.skip_to_event(EndElement("trifans"));
+        self.skip_to_end_element("trifans");
     }
 
     fn parse_tristrips(&mut self) {
         println!("Skipping over <tristrips> element");
         println!("Warning: <tristrips> is not yet supported by parse_collada");
-        self.skip_to_event(EndElement("tristrips"));
+        self.skip_to_end_element("tristrips");
     }
 
     fn parse_vertices(&mut self) -> Result<Vertices, String> {
@@ -892,10 +1357,42 @@ impl<'a> ColladaParser<'a> {
         Ok(vertices)
     }
 
-    fn parse_technique(&mut self) {
-        println!("Skipping over <technique> element");
-        println!("Warning: <technique> is not yet supported by parse_collada");
-        self.skip_to_event(EndElement("technique"));
+    fn parse_visual_scene(&mut self) -> Result<VisualScene, String> {
+        let mut visual_scene = VisualScene {
+            id: None,
+            name: None,
+            asset: None,
+            nodes: Vec::new(),
+            evaluations: Vec::new(),
+            extras: Vec::new(),
+        };
+
+        loop {
+            let event = self.next_event();
+            match event {
+                Attribute("id", id_str) => {
+                    visual_scene.id = Some(String::from(id_str));
+                },
+                Attribute("name", name_str) => {
+                    visual_scene.name = Some(String::from(name_str));
+                },
+                StartElement("asset") => self.parse_asset(),
+                StartElement("node") => {
+                    let node = try!(self.parse_node());
+                    visual_scene.nodes.push(node);
+                },
+                StartElement("evaluate_scene") => {
+                    let evaluate_scene = try!(self.parse_evaluate_scene());
+                    visual_scene.evaluations.push(evaluate_scene);
+                },
+                StartElement("extra") => self.parse_extra(),
+                EndElement("visual_scene") => break,
+                _ => return Err(format!("Illegal event while parsing <visual_scene>: {:?}", event)),
+            }
+        }
+
+        assert!(visual_scene.nodes.len() >= 1);
+        Ok(visual_scene)
     }
 
     /// Consumes all events until the desired one is reached.
@@ -903,13 +1400,21 @@ impl<'a> ColladaParser<'a> {
     /// This a placeholder until full support for all COLLADA
     /// features is complete, at which points all events will
     /// be handled in full.
-    fn skip_to_event(&mut self, to_event: XMLEvent) {
+    fn skip_to_end_element(&mut self, element: &str) {
+        let mut depth = 0;
         loop {
-            match self.events.next() {
-                Some(event) => if event == to_event {
-                    break
+            match self.next_event() {
+                StartElement(name) if name == element => {
+                    depth += 1;
                 },
-                None => panic!("Event {:?} not found in file!", to_event)
+                EndElement(name) if name == element => {
+                    if depth == 0 {
+                        return;
+                    } else {
+                        depth -= 1;
+                    }
+                },
+                _ => {},
             }
         }
     }
