@@ -11,7 +11,7 @@ pub fn create_context(window: &Window) -> GLContext {
     GLContext
 }
 
-pub fn swap_buffers() {
+pub fn swap_buffers(window: &Window) {
 
 }
 
