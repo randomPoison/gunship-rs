@@ -12,6 +12,12 @@ opengl32-sys = "*"
 winmm-sys = "*"
 # xinput-sys = "*"
 
+# Begin macos dependencies.
+objc = "*"
+cocoa = "*"
+core-graphics = "*"
+core-foundation = "*"
+
 
 [dependencies.gl]
 git = "https://github.com/bjz/gl-rs"
