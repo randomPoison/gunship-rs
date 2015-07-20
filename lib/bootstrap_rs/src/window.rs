@@ -1,8 +1,11 @@
 #[cfg(windows)]
 pub use windows::window::Window;
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 pub use linux::window::Window;
+
+#[cfg(target_os = "macos")]
+pub use macos::window::Window;
 
 use input::ScanCode;
 
