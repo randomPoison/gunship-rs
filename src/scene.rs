@@ -12,7 +12,7 @@ use bs_audio::AudioSource;
 
 use ecs::{Entity, EntityManager, ComponentManager};
 use input::Input;
-use component::{TransformManager, CameraManager, MeshManager, LightManager, AudioSourceManager};
+use component::{TransformManager, CameraManager, MeshManager, LightManager, AudioSourceManager, AlarmManager};
 use resource::ResourceManager;
 
 /// Contains all the data that defines the current state of the world.
@@ -44,6 +44,7 @@ impl Scene {
         scene.register_manager(LightManager::new());
         scene.register_manager(MeshManager::new(resource_manager.clone()));
         scene.register_manager(AudioSourceManager::new(resource_manager.clone()));
+        scene.register_manager(AlarmManager::new());
 
         scene
     }
@@ -63,6 +64,7 @@ impl Scene {
         scene.register_manager(self.get_manager_by_name::<LightManager>().clone());
         scene.register_manager(self.get_manager_by_name::<MeshManager>().clone(resource_manager.clone()));
         scene.register_manager(self.get_manager_by_name::<AudioSourceManager>().clone(resource_manager.clone()));
+        scene.register_manager(self.get_manager_by_name::<AlarmManager>().clone());
 
         scene
     }

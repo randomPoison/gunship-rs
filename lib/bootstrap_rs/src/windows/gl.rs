@@ -79,7 +79,7 @@ pub fn set_proc_loader() {
     });
 }
 
-pub fn swap_buffers() {
+pub fn swap_buffers(_window: &Window) {
     unsafe {
         gdi32::SwapBuffers(opengl32::wglGetCurrentDC()); // TODO maybe pass in the DC?
     }

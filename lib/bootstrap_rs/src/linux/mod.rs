@@ -1,3 +1,5 @@
+extern crate x11;
+
 pub mod file;
 pub mod gl;
 pub mod init;

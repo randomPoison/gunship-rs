@@ -10,7 +10,7 @@ pub type LightManager = StructComponentManager<Light>;
 pub struct LightUpdateSystem;
 
 impl System for LightUpdateSystem {
-    fn update(&mut self, scene: &mut Scene, _delta: f32) {
+    fn update(&mut self, scene: &Scene, _delta: f32) {
         let light_manager = scene.get_manager::<LightManager>();
         let transform_manager = scene.get_manager::<TransformManager>();
 

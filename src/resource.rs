@@ -5,7 +5,7 @@ use std::path::Path;
 use std::error::Error;
 use std::rc::Rc;
 
-use collada::{self, ColladaData, GeometricElement, ArrayElement, PrimitiveType};
+use collada::{self, COLLADA, GeometricElement, ArrayElement, PrimitiveType};
 
 use polygon::gl_render::{GLRender, GLMeshData};
 use polygon::geometry::mesh::Mesh;
@@ -67,7 +67,7 @@ impl COLLADALoader {
             Err(why) => panic!("couldn't open {}: {}", file_path.display(), Error::description(&why)),
             Ok(file) => file,
         };
-        let collada_data = match ColladaData::from_file(&mut file) {
+        let collada_data = match COLLADA::from_file(&mut file) {
             Err(why) => panic!(why),
             Ok(data) => data
         };
@@ -83,8 +83,8 @@ impl COLLADALoader {
     ///
     /// In order to to this, it reorganizes the normals, UVs, and other vertex attributes to
     /// be in the same order as the vertex positions.
-    fn parse(collada_data: ColladaData) -> Mesh {
-        let mesh = match collada_data.library_geometries.geometries[0].data {
+    fn parse(collada_data: COLLADA) -> Mesh {
+        let mesh = match collada_data.library_geometries.as_ref().unwrap().geometries[0].data {
             GeometricElement::Mesh(ref mesh) => mesh,
             _ => panic!("No mesh found within geometry")
         };

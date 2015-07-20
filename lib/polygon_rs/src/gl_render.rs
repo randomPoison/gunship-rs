@@ -287,8 +287,8 @@ impl GLRender {
     }
 
     /// Swap the front and back buffers for the render system.
-    pub fn swap_buffers(&self) {
-        gl_utils::swap_buffers();
+    pub fn swap_buffers(&self, window: &Window) {
+        gl_utils::swap_buffers(window);
     }
 
     fn compile_shader(src: &str, ty: GLenum) -> GLuint {

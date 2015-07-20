@@ -26,6 +26,8 @@ pub use self::component::camera::{CameraManager, Camera};
 pub use self::component::mesh::{MeshManager, Mesh};
 pub use self::component::light::{LightManager, Light, PointLight};
 pub use self::component::audio::{AudioSourceManager, AudioSource};
+pub use self::component::alarm::{AlarmID, AlarmManager};
 pub use self::component::struct_component_manager::StructComponentManager;
 
+// TODO: These are only needed for hotloading support.
 pub use self::engine::{engine_init, engine_update_and_render};

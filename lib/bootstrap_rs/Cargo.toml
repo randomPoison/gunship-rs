@@ -12,5 +12,10 @@ opengl32-sys = "*"
 winmm-sys = "*"
 # xinput-sys = "*"
 
+
 [dependencies.gl]
 git = "https://github.com/bjz/gl-rs"
+
+[dependencies.x11]
+version = "*"
+features = ["glx", "xlib"]

@@ -108,7 +108,7 @@ impl ComponentManager for AudioSourceManager {
 pub struct AudioSystem;
 
 impl System for AudioSystem {
-    fn update(&mut self, scene: &mut Scene, delta: f32) {
+    fn update(&mut self, scene: &Scene, delta: f32) {
         let audio_source_manager = scene.get_manager::<AudioSourceManager>();
 
         // TODO: Use a better method to filter out audio sources that aren't playing.

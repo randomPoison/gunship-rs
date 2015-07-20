@@ -38,6 +38,7 @@ pub struct Engine {
     transform_update: Box<System>,
     light_update: Box<System>,
     audio_update: Box<System>,
+    alarm_update: Box<System>,
     scene: Scene,
 
     close: bool,
@@ -72,6 +73,7 @@ impl Engine {
             transform_update: Box::new(TransformUpdateSystem),
             light_update: Box::new(LightUpdateSystem),
             audio_update: Box::new(AudioSystem),
+            alarm_update: Box::new(AlarmSystem),
             scene: Scene::new(&resource_manager, audio_source),
 
             close: false,
@@ -83,7 +85,6 @@ impl Engine {
 
         scene.input.clear();
         let mut window = self.window.borrow_mut();
-        window.handle_messages();
         loop {
             let message = window.next_message(); // TODO: Make this an iterator to simplify this loop.
             match message {
@@ -107,6 +108,8 @@ impl Engine {
                 None => break
             }
         }
+
+        self.alarm_update.update(scene, TARGET_FRAME_TIME_SECONDS);
 
         // Update systems.
         for system in self.systems.iter_mut() {
@@ -151,7 +154,7 @@ impl Engine {
             }
         }
 
-        self.renderer.swap_buffers();
+        self.renderer.swap_buffers(self.window.borrow().deref());
     }
 
     pub fn main_loop(&mut self) {
@@ -254,6 +257,7 @@ impl Clone for Engine {
             transform_update: Box::new(TransformUpdateSystem),
             light_update: Box::new(LightUpdateSystem),
             audio_update: Box::new(AudioSystem),
+            alarm_update: Box::new(AlarmSystem),
             scene: self.scene.clone(&resource_manager),
 
             close: false,
@@ -296,6 +300,7 @@ pub fn engine_init(window: Rc<RefCell<Window>>) -> Box<Engine> {
         transform_update: Box::new(TransformUpdateSystem),
         light_update: Box::new(LightUpdateSystem),
         audio_update: Box::new(AudioSystem),
+        alarm_update: Box::new(AlarmSystem),
         scene: Scene::new(&resource_manager, audio_source),
 
         close: false,

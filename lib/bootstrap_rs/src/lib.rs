@@ -1,4 +1,4 @@
-#![feature(str_utf16)] // TODO: Only used by windows currently, but has to be specified at root level.
+#![cfg_attr(windows, feature(str_utf16))]
 
 extern crate gl;
 
