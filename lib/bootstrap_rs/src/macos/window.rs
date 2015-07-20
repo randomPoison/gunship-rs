@@ -1,20 +1,14 @@
 use std::rc::Rc;
 use std::cell::RefCell;
 
-#[macro_use]
-extern crate objc;
-extern crate cocoa;
-extern crate core_graphics;
-extern crate core_foundation;
-
-use cocoa::foundation::*;
-use cocoa::appkit::*;
-use cocoa::base::*;
+use macos::cocoa::foundation::*;
+use macos::cocoa::appkit::*;
+use macos::cocoa::base::*;
 
 use window::Message;
 
 pub struct Window {
-    window: NSWindow
+    window: id
 }
 
 impl Window {
