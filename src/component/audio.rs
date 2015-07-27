@@ -44,14 +44,14 @@ impl AudioSource {
 }
 
 pub struct AudioSourceManager {
-    resource_manager: Rc<RefCell<ResourceManager>>,
+    resource_manager: Rc<ResourceManager>,
     audio_sources:    Vec<RefCell<AudioSource>>,
     entities:         Vec<Entity>,
     indices:          HashMap<Entity, usize>,
 }
 
 impl AudioSourceManager {
-    pub fn new(resource_manager: Rc<RefCell<ResourceManager>>) -> AudioSourceManager {
+    pub fn new(resource_manager: Rc<ResourceManager>) -> AudioSourceManager {
         AudioSourceManager {
             resource_manager: resource_manager,
             audio_sources:    Vec::new(),
@@ -60,7 +60,7 @@ impl AudioSourceManager {
         }
     }
 
-    pub fn clone(&self, resource_manager: Rc<RefCell<ResourceManager>>) -> AudioSourceManager {
+    pub fn clone(&self, resource_manager: Rc<ResourceManager>) -> AudioSourceManager {
         AudioSourceManager {
             resource_manager: resource_manager,
             audio_sources:    self.audio_sources.clone(),
@@ -72,8 +72,7 @@ impl AudioSourceManager {
     pub fn assign(&mut self, entity: Entity, clip_name: &str) -> RefMut<AudioSource> {
         assert!(!self.indices.contains_key(&entity));
 
-        let mut resource_manager = self.resource_manager.borrow_mut();
-        let audio_clip = resource_manager.get_audio_clip(clip_name);
+        let audio_clip = self.resource_manager.get_audio_clip(clip_name);
         let index = self.audio_sources.len();
         self.audio_sources.push(RefCell::new(AudioSource {
             audio_clip: audio_clip,

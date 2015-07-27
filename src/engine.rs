@@ -29,7 +29,7 @@ pub const TARGET_FRAME_TIME_MS: f32 = TARGET_FRAME_TIME_SECONDS * 1000.0;
 pub struct Engine {
     window: Rc<RefCell<Window>>, // TODO: This doesn't need to be an Rc<RefCell<>> when we're not doing hotloading.
     renderer: GLRender,
-    resource_manager: Rc<RefCell<ResourceManager>>,
+    resource_manager: Rc<ResourceManager>,
 
     systems: Vec<Box<System>>,
     system_indices: HashMap<TypeId, usize>,
@@ -49,7 +49,7 @@ impl Engine {
         let instance = bootstrap::init();
         let window = Window::new("Rust Window", instance);
         let renderer = gl_render::init(window.borrow().deref());
-        let resource_manager = Rc::new(RefCell::new(ResourceManager::new(renderer)));
+        let resource_manager = Rc::new(ResourceManager::new(renderer));
 
         let audio_source = match bs_audio::init() {
             Ok(audio_source) => {
@@ -243,7 +243,7 @@ impl Engine {
 
 impl Clone for Engine {
     fn clone(&self) -> Engine {
-        let resource_manager = Rc::new(RefCell::new(self.resource_manager.borrow().deref().clone()));
+        let resource_manager = self.resource_manager.clone();
 
         let engine = Engine {
             window: self.window.clone(),
@@ -276,7 +276,7 @@ fn type_name<T>() -> &'static str {
 #[no_mangle]
 pub fn engine_init(window: Rc<RefCell<Window>>) -> Box<Engine> {
     let renderer = gl_render::init(window.borrow().deref());
-    let resource_manager = Rc::new(RefCell::new(ResourceManager::new(renderer)));
+    let resource_manager = Rc::new(ResourceManager::new(renderer));
 
     let audio_source = match bs_audio::init() {
         Ok(audio_source) => {

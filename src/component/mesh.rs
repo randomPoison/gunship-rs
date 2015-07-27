@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::slice::Iter;
 use std::rc::Rc;
-use std::cell::RefCell;
 
 use polygon::gl_render::GLMeshData;
 
@@ -11,14 +10,14 @@ use resource::ResourceManager;
 pub type Mesh = GLMeshData;
 
 pub struct MeshManager {
-    resource_manager: Rc<RefCell<ResourceManager>>,
+    resource_manager: Rc<ResourceManager>,
     meshes: Vec<GLMeshData>,
     entities: Vec<Entity>,
     indices: HashMap<Entity, usize>,
 }
 
 impl MeshManager {
-    pub fn new(resource_manager: Rc<RefCell<ResourceManager>>) -> MeshManager {
+    pub fn new(resource_manager: Rc<ResourceManager>) -> MeshManager {
         MeshManager {
             resource_manager: resource_manager,
             meshes: Vec::new(),
@@ -27,7 +26,7 @@ impl MeshManager {
         }
     }
 
-    pub fn clone(&self, resource_manager: Rc<RefCell<ResourceManager>>) -> MeshManager {
+    pub fn clone(&self, resource_manager: Rc<ResourceManager>) -> MeshManager {
         MeshManager {
             resource_manager: resource_manager,
             meshes: self.meshes.clone(),
@@ -40,7 +39,7 @@ impl MeshManager {
         assert!(!self.indices.contains_key(&entity));
 
         let index = self.meshes.len();
-        self.meshes.push(self.resource_manager.borrow_mut().get_mesh(path_text));
+        self.meshes.push(self.resource_manager.get_mesh(path_text).unwrap());
         self.entities.push(entity);
         self.indices.insert(entity, index);
         &self.meshes[index]

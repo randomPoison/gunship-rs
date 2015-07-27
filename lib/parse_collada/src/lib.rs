@@ -1,6 +1,7 @@
 extern crate parse_xml as xml;
 
 use std::fs::File;
+use std::path::Path;
 use std::str::FromStr;
 use std::convert::From;
 
@@ -33,8 +34,17 @@ pub struct COLLADA {
 }
 
 impl COLLADA {
-    pub fn from_file(file: &mut File) -> Result<COLLADA, String> {
-        match XMLParser::from_file(file) {
+    pub fn load<P: AsRef<Path>>(path: P) -> Result<COLLADA, String> {
+        let mut file = match File::open(&path) {
+            // The `desc` field of `IoError` is a string that describes the error.
+            Err(why) => return Err(format!(
+                "couldn't open {}: {}",
+                path.as_ref().display(),
+                &why)),
+            Ok(file) => file,
+        };
+
+        match XMLParser::from_file(&mut file) {
             Err(why) => Err(why),
             Ok(xml_parser) => {
                 let mut parser = ColladaParser {

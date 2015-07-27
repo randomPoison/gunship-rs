@@ -27,16 +27,18 @@ pub struct Scene {
     manager_id_by_name: HashMap<String, TypeId>,
     pub input: Input,
     pub audio_source: AudioSource,
+    resource_manager: Rc<ResourceManager>,
 }
 
 impl Scene {
-    pub fn new(resource_manager: &Rc<RefCell<ResourceManager>>, audio_source: AudioSource) -> Scene {
+    pub fn new(resource_manager: &Rc<ResourceManager>, audio_source: AudioSource) -> Scene {
         let mut scene = Scene {
             entity_manager: RefCell::new(EntityManager::new()),
             component_managers: HashMap::new(),
             manager_id_by_name: HashMap::new(),
             input: Input::new(),
             audio_source: audio_source,
+            resource_manager: resource_manager.clone(),
         };
 
         scene.register_manager(TransformManager::new());
@@ -49,13 +51,14 @@ impl Scene {
         scene
     }
 
-    pub fn clone(&self, resource_manager: &Rc<RefCell<ResourceManager>>) -> Scene {
+    pub fn clone(&self, resource_manager: &Rc<ResourceManager>) -> Scene {
         let mut scene = Scene {
             entity_manager: RefCell::new(self.entity_manager.borrow().clone()),
             component_managers: HashMap::new(),
             manager_id_by_name: HashMap::new(),
             input: self.input.clone(),
             audio_source: self.audio_source.clone(),
+            resource_manager: resource_manager.clone(),
         };
 
         // Reload internal component managers.
@@ -118,6 +121,15 @@ impl Scene {
 
     pub fn create_entity(&self) -> Entity {
         self.entity_manager.borrow_mut().create()
+    }
+
+    pub fn resource_manager(&self) -> &ResourceManager {
+        &*self.resource_manager
+    }
+
+    /// Instantiates an instance of the model in the scene, returning the root entity.
+    pub fn instantiate_model(&self, resource: &str) -> Entity {
+        self.resource_manager.clone().instantiate_model(resource, self)
     }
 
     /// TODO: We don't need this if hotloading isn't enabled.
