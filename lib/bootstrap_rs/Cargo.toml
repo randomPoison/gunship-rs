@@ -6,15 +6,9 @@ authors = ["David LeGare <excaliburhissheath@gmail.com>"]
 [dependencies]
 winapi = "*"
 user32-sys = "*"
-gdi32-sys = "*"
 kernel32-sys = "*"
-opengl32-sys = "*"
 winmm-sys = "*"
 # xinput-sys = "*"
-
-
-[dependencies.gl]
-git = "https://github.com/bjz/gl-rs"
 
 [dependencies.x11]
 version = "*"

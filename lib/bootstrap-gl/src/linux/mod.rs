@@ -8,7 +8,7 @@ use super::x11::glx;
 
 use window::Window;
 
-pub type GLContext = glx::GLXContext;
+pub type Context = glx::GLXContext;
 
 pub fn init(_window: &Window) {
     println!("gl::init() is not implemented on linux");

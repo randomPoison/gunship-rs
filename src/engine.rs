@@ -12,7 +12,6 @@ use bootstrap;
 use bootstrap::window::Window;
 use bootstrap::window::Message::*;
 use bootstrap::time::Timer;
-use bootstrap::gl_utils;
 
 use bs_audio;
 
@@ -28,7 +27,7 @@ pub const TARGET_FRAME_TIME_MS: f32 = TARGET_FRAME_TIME_SECONDS * 1000.0;
 
 pub struct Engine {
     window: Rc<RefCell<Window>>, // TODO: This doesn't need to be an Rc<RefCell<>> when we're not doing hotloading.
-    renderer: GLRender,
+    renderer: Rc<GLRender>,
     resource_manager: Rc<ResourceManager>,
 
     systems: Vec<Box<System>>,
@@ -48,8 +47,8 @@ impl Engine {
     pub fn new() -> Engine {
         let instance = bootstrap::init();
         let window = Window::new("Rust Window", instance);
-        let renderer = gl_render::init(window.borrow().deref());
-        let resource_manager = Rc::new(ResourceManager::new(renderer));
+        let renderer = Rc::new(GLRender::new(window.borrow().deref()));
+        let resource_manager = Rc::new(ResourceManager::new(renderer.clone()));
 
         let audio_source = match bs_audio::init() {
             Ok(audio_source) => {
@@ -275,8 +274,8 @@ fn type_name<T>() -> &'static str {
 
 #[no_mangle]
 pub fn engine_init(window: Rc<RefCell<Window>>) -> Box<Engine> {
-    let renderer = gl_render::init(window.borrow().deref());
-    let resource_manager = Rc::new(ResourceManager::new(renderer));
+    let renderer = Rc::new(GLRender::new(window.borrow().deref()));
+    let resource_manager = Rc::new(ResourceManager::new(renderer.clone()));
 
     let audio_source = match bs_audio::init() {
         Ok(audio_source) => {
@@ -310,11 +309,6 @@ pub fn engine_init(window: Rc<RefCell<Window>>) -> Box<Engine> {
 #[no_mangle]
 pub fn engine_reload(engine: &Engine) -> Box<Engine> {
     let new_engine = engine.clone();
-
-    // The proc loader needs to be set from within the DLL otherwise we don't
-    // correctly bind to OpenGL on Windows.
-    gl_utils::set_proc_loader();
-
     Box::new(new_engine)
 }
 
