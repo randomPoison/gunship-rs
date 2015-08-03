@@ -16,15 +16,14 @@ use light::Light;
 
 #[derive(Debug, Clone)]
 pub struct GLRender {
-    context: gl::Context, // TODO: do we need to hold onto the context?
-    loader: gl::Loader,
+    gl: gl::Context,
 }
 
 #[derive(Debug, Clone, Copy)]
 pub struct GLMeshData {
-    array_buffer: gl::UInt,
-    vertex_buffer: gl::UInt,
-    index_buffer: gl::UInt,
+    vertex_array: VertexArrayObject,
+    vertex_buffer: VertexBufferObject,
+    index_buffer: VertexBufferObject,
     shader: gl::UInt,
     pub position_attribute: VertexAttribute,
     pub normal_attribute: VertexAttribute,
@@ -38,9 +37,7 @@ pub struct GLMeshData {
 
 impl GLRender {
     pub fn new(window: &Window) -> GLRender {
-        gl::init(window);
-        let context = gl::create_context(window);
-        let gl = gl::Loader::new();
+        let gl = gl::Context::new(window);
 
         // do some basic configuration stuff
         unsafe {
@@ -53,82 +50,67 @@ impl GLRender {
 
             gl.clear_color(0.3, 0.3, 0.3, 1.0);
 
-            // gl.viewport(0, 0, 800, 800);
+            gl.viewport(0, 0, 800, 800);
         }
 
         GLRender {
-            context: context,
-            loader: gl,
+            gl: gl,
         }
     }
 
     pub fn gen_mesh(&self, mesh: &Mesh, vertex_src: &str, frag_src: &str) -> GLMeshData {
-        // // generate array buffer
-        // let mut array_buffer = 0;
-        // unsafe {
-        //     gl::GenVertexArrays(1, &mut array_buffer);
-        //     gl::BindVertexArray(array_buffer);
-        // }
-        //
-        // // generate vertex buffer, passing the raw data held by the mesh
-        // let mut vertex_buffer = 0;
-        // unsafe {
-        //     gl::GenBuffers(1, &mut vertex_buffer);
-        //     gl::BindBuffer(gl::ARRAY_BUFFER, vertex_buffer);
-        //
-        //     gl::BufferData(gl::ARRAY_BUFFER,
-        //                    (mesh.raw_data.len() * mem::size_of::<f32>()) as GLsizeiptr,
-        //                    mem::transmute(&mesh.raw_data[0]),
-        //                    gl::STATIC_DRAW);
-        // }
-        //
-        // let mut index_buffer = 0;
-        // unsafe {
-        //     gl::GenBuffers(1, &mut index_buffer);
-        //     gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, index_buffer);
-        //
-        //     gl::BufferData(gl::ELEMENT_ARRAY_BUFFER,
-        //                    (mesh.indices.len() * mem::size_of::<u32>()) as GLsizeiptr,
-        //                    mem::transmute(&(mesh.indices[0])),
-        //                    gl::STATIC_DRAW);
-        // }
-        //
-        // // TODO: do some handling of errors here?
-        // let vs = GLRender::compile_shader(vertex_src, gl::VERTEX_SHADER);
-        // let fs = GLRender::compile_shader(frag_src, gl::FRAGMENT_SHADER);
-        // let program = GLRender::link_program(vs, fs);
-        //
-        // // Unbind buffers.
-        // unsafe {
-        //     gl::BindVertexArray(0);
-        //     gl::BindBuffer(gl::ARRAY_BUFFER, 0);
-        //     gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, 0);
-        // }
-        //
-        // GLMeshData {
-        //     array_buffer: array_buffer,
-        //     vertex_buffer: vertex_buffer,
-        //     index_buffer: index_buffer,
-        //     shader: program,
-        //     position_attribute: mesh.position_attribute,
-        //     normal_attribute: mesh.normal_attribute,
-        //     element_count: mesh.indices.len(),
-        // }
+        let gl = &self.gl;
+
+        // generate array buffer
+        let mut vertex_array = VertexArrayObject::null();
+        unsafe {
+            gl.gen_vertex_array(&mut vertex_array);
+            gl.bind_vertex_array(vertex_array);
+        }
+
+        // generate vertex buffer, passing the raw data held by the mesh
+        let mut vertex_buffer = VertexBufferObject::null();
+        unsafe {
+            gl.gen_buffer(&mut vertex_buffer);
+            gl.bind_buffer(BufferTarget::ArrayBuffer, vertex_buffer);
+
+            gl.buffer_data(
+                BufferTarget::ArrayBuffer,
+                &*mesh.raw_data,
+                BufferUsage::StaticDraw);
+        }
+
+        let mut index_buffer = VertexBufferObject::null();
+        unsafe {
+            gl.gen_buffer(&mut index_buffer);
+            gl.bind_buffer(BufferTarget::ElementArrayBuffer, index_buffer);
+
+            gl.buffer_data(
+                BufferTarget::ElementArrayBuffer,
+                &*mesh.indices,
+                BufferUsage::StaticDraw);
+        }
+
+        // TODO: do some handling of errors here?
+        let vs = GLRender::compile_shader(vertex_src, ShaderType::VertexShader);
+        let fs = GLRender::compile_shader(frag_src, ShaderType::FragmentShader);
+        let program = GLRender::link_program(vs, fs);
+
+        // Unbind buffers.
+        unsafe {
+            gl.bind_vertex_array(VertexArrayObject::null());
+            gl.bind_buffer(BufferTarget::ArrayBuffer, VertexBufferObject::null());
+            gl.bind_buffer(BufferTarget::ElementArrayBuffer, VertexBufferObject::null());
+        }
 
         GLMeshData {
-            array_buffer: 0,
-            vertex_buffer: 0,
-            index_buffer: 0,
-            shader: 0,
-            position_attribute: VertexAttribute {
-                stride: 0,
-                offset: 0,
-            },
-            normal_attribute: VertexAttribute {
-                stride: 0,
-                offset: 0,
-            },
-            element_count: 0,
+            vertex_array: vertex_array,
+            vertex_buffer: vertex_buffer,
+            index_buffer: index_buffer,
+            shader: program,
+            position_attribute: mesh.position_attribute,
+            normal_attribute: mesh.normal_attribute,
+            element_count: mesh.indices.len(),
         }
     }
 
@@ -146,9 +128,9 @@ impl GLRender {
         // };
         //
         // // Bind the buffers for the mesh.
-        // gl::BindVertexArray(mesh.array_buffer);
-        // gl::BindBuffer(gl::ARRAY_BUFFER, mesh.vertex_buffer);
-        // gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, mesh.index_buffer);
+        // gl.bind_vertex_array(mesh.vertex_array);
+        // gl.bind_buffer(BufferTarget::ArrayBuffer, mesh.vertex_buffer);
+        // gl.bind_buffer(BufferTarget::ElementArrayBuffer, mesh.index_buffer);
         //
         // // Set the shader to use.
         // gl::UseProgram(mesh.shader);
@@ -284,9 +266,9 @@ impl GLRender {
         // gl::Enable(gl::DEPTH_TEST);
         //
         // // Unbind buffers.
-        // gl::BindVertexArray(0);
-        // gl::BindBuffer(gl::ARRAY_BUFFER, 0);
-        // gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, 0);
+        // gl.bind_vertex_array(0);
+        // gl.bind_buffer(BufferTarget::ArrayBuffer, 0);
+        // gl.bind_buffer(BufferTarget::ElementArrayBuffer, 0);
     } }
 
     /// Clears the current back buffer.
@@ -307,7 +289,7 @@ impl GLRender {
         // gl::swap_buffers(window);
     }
 
-    fn compile_shader(src: &str, ty: gl::Enum) -> gl::UInt {
+    fn compile_shader(src: &str, ty: ShaderType) -> gl::UInt {
         // unsafe {
         //     let shader = gl::CreateShader(ty);
         //

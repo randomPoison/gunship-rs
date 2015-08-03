@@ -13,11 +13,9 @@ use std::mem;
 use std::fmt::{self, Debug, Formatter};
 use std::slice;
 use std::str;
+use std::ops::Deref;
 
-pub use platform::{
-    Context,
-    init, create_context, swap_buffers, proc_loader,
-};
+use bootstrap::window::Window;
 
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -26,7 +24,7 @@ pub enum Boolean {
     True = 1,
 }
 
-pub type Byte = u8;
+pub type Byte = i8;
 pub type UByte = u8;
 pub type Short = i16;
 pub type UShort = u16;
@@ -35,7 +33,7 @@ pub type UInt = u32;
 pub type Fixed = i32;
 pub type Int64 = i64;
 pub type UInt64 = u64;
-pub type SizeI = u32;
+pub type SizeI = i32;
 pub type Enum = u32;
 pub type IntPtr = isize;
 pub type SizeIPtr = usize;
@@ -46,6 +44,28 @@ pub type Float = f32;
 pub type ClampF = f32;
 pub type Double = f64;
 pub type ClampD = f64;
+
+/// TODO: Use NonZero here so that Option<VertexArrayObject>::None can be used instead of 0.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct VertexArrayObject(u32);
+
+impl VertexArrayObject {
+    pub fn null() -> VertexArrayObject {
+        VertexArrayObject(0)
+    }
+}
+
+/// TODO: Use NonZero here so that Option<VertexBufferObject>::None can be used instead of 0.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct VertexBufferObject(u32);
+
+impl VertexBufferObject {
+    pub fn null() -> VertexBufferObject {
+        VertexBufferObject(0)
+    }
+}
 
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -100,85 +120,129 @@ pub enum ErrorCode {
     OutOfMemory      = 0x0505,
 }
 
-pub struct Loader {
-    proc_loader: fn(&str) -> Option<extern "C" fn()>,
-    enable_proc: Cell<Option<extern "C" fn(ServerCapability)>>,
-    clear_color_proc: Cell<Option<extern "C" fn(f32, f32, f32, f32)>>,
-    debug_message_callback_proc: Cell<Option<extern "C" fn(extern "C" fn(DebugSource, DebugType, UInt, DebugSeverity, SizeI, *const u8, *mut ()), *mut ())>>,
-    get_error_proc: Cell<Option<extern "C" fn() -> ErrorCode>>,
+#[derive(Debug, Clone)]
+pub struct Context {
+    pub platform_context: platform::Context,
+    loader: Loader,
 }
 
-impl Loader {
-    pub fn new() -> Loader {
-        Loader {
-            proc_loader: platform::proc_loader,
-            enable_proc: Cell::new(None),
-            clear_color_proc: Cell::new(None),
-            debug_message_callback_proc: Cell::new(None),
-            get_error_proc: Cell::new(None),
+impl Context {
+    pub fn new(window: &Window) -> Context {
+        platform::init(window);
+        let context = platform::create_context(window);
+
+        Context {
+            platform_context: context,
+            loader: Loader::new(),
         }
     }
 
-    pub fn enable(&self, capability: ServerCapability) {
-        if let None = self.enable_proc.get() {
-            println!("loading glEnable() for the first time.");
-
-            let enable_proc = (self.proc_loader)("glEnable");
-            self.enable_proc.set(unsafe {
-                mem::transmute(enable_proc)
-            });
-        }
-        assert!(self.enable_proc.get().is_some());
-
-        println!("calling glEnable({:?})", capability);
-        (self.enable_proc.get().unwrap())(capability);
-        println!("error code: {:?}", self.get_error());
+    pub fn gen_vertex_array(&self, array: &mut VertexArrayObject) {
+        self.loader.gen_vertex_arrays(1, array);
     }
 
-    pub fn clear_color(&self, red: f32, green: f32, blue: f32, alpha: f32) {
-        if let None = self.clear_color_proc.get() {
-            println!("loading glClearColor() for the first time.");
-
-            let clear_color_proc = (self.proc_loader)("glClearColor");
-            self.clear_color_proc.set(unsafe {
-                mem::transmute(clear_color_proc)
-            });
-        }
-        assert!(self.clear_color_proc.get().is_some());
-
-        println!("calling glClearColor()");
-        (self.clear_color_proc.get().unwrap())(red, green, blue, alpha);
-        println!("error code: {:?}", self.get_error());
+    pub fn gen_vertex_arrays(&self, arrays: &mut [VertexArrayObject]) {
+        self.loader.gen_vertex_arrays(
+            arrays.len() as i32,
+            &mut arrays[0],
+        );
     }
 
-    pub fn debug_message_callback(
-        &self,
-        callback: extern "C" fn(DebugSource, DebugType, UInt, DebugSeverity, SizeI, *const u8, *mut ()),
-        user_param: *mut ()) {
-        if let None = self.debug_message_callback_proc.get() {
-            let debug_message_callback_proc = (self.proc_loader)("glDebugMessageCallback");
-            self.debug_message_callback_proc.set(unsafe {
-                mem::transmute(debug_message_callback_proc)
-            });
-        }
-        assert!(self.debug_message_callback_proc.get().is_some());
-
-        println!("calling glDebugMessageCallback()");
-        (self.debug_message_callback_proc.get().unwrap())(callback, user_param);
-        println!("error code: {:?}", self.get_error());
+    pub fn gen_buffer(&self, buffer: &mut VertexBufferObject) {
+        self.loader.gen_buffers(1, buffer);
     }
 
-    pub fn get_error(&self) -> ErrorCode {
-        if let None = self.get_error_proc.get() {
-            let get_error_proc = (self.proc_loader)("glGetError");
-            self.get_error_proc.set(unsafe {
-                mem::transmute(get_error_proc)
-            });
-        }
-        assert!(self.get_error_proc.get().is_some());
-
-        (self.get_error_proc.get().unwrap())()
+    pub fn gen_buffers(&self, buffers: &mut [VertexBufferObject]) {
+        self.loader.gen_buffers(
+            buffers.len() as i32,
+            &mut buffers[0],
+        );
     }
+
+    pub fn buffer_data<T>(&self, target: BufferTarget, data: &[T], usage: BufferUsage) {
+        self.loader.buffer_data(
+            target,
+            (data.len() * mem::size_of::<T>()) as isize,
+            unsafe { mem::transmute(&data[0]) },
+            usage,
+        );
+    }
+}
+
+impl Deref for Context {
+    type Target = Loader;
+
+    fn deref<'a>(&'a self) -> &'a Loader {
+        &self.loader
+    }
+}
+
+macro_rules! gen_proc_loader {
+    ( $( $gl_proc:ident : fn $proc_name:ident( $( $arg:ident : $arg_ty:ty ),* ) $( -> $result:ty )*, )* ) => {
+        pub struct Loader {
+            proc_loader: fn(&str) -> Option<extern "C" fn()>,
+            $(
+                $proc_name: Cell<Option<extern "C" fn( $(
+                    $arg_ty,
+                )* ) $( -> $result )*>>,
+            )*
+        }
+
+        impl Loader {
+            pub fn new() -> Loader {
+                Loader {
+                    proc_loader: platform::proc_loader,
+                    $(
+                        $proc_name: Cell::new(None),
+                    )*
+                }
+            }
+
+            $(
+                pub fn $proc_name(&self, $( $arg: $arg_ty, )* ) $( -> $result )* {
+                    if let None = self.$proc_name.get() {
+                        println!("loading $gl_proc() for the first time.");
+
+                        let $proc_name = (self.proc_loader)(stringify!($gl_proc));
+                        self.$proc_name.set(unsafe {
+                            mem::transmute($proc_name)
+                        });
+                    }
+                    assert!(self.$proc_name.get().is_some());
+
+                    println!(concat!("calling ", stringify!($gl_proc), "()"));
+                    (self.$proc_name.get().unwrap())($( $arg ),*)
+                }
+            )*
+        }
+    }
+}
+
+gen_proc_loader! {
+    glEnable:
+        fn enable(capability: ServerCapability),
+    glClearColor:
+        fn clear_color(red: f32, green: f32, blue: f32, alpha: f32),
+    glDebugMessageCallback:
+        fn debug_message_callback(
+            callback: extern "C" fn(DebugSource, DebugType, UInt, DebugSeverity, SizeI, *const u8, *mut ()),
+            user_param: *mut ()
+        ),
+    glGetError:
+        fn get_error() -> ErrorCode,
+    glViewport:
+        fn viewport(x: i32, y: i32, width: i32, height: i32),
+    glGenVertexArrays:
+        fn gen_vertex_arrays(num_arrays: i32, arrays: *mut VertexArrayObject),
+    glBindVertexArray:
+        fn bind_vertex_array(vao: VertexArrayObject),
+    glGenBuffers:
+        fn gen_buffers(num_buffers: i32, buffers: *mut VertexBufferObject),
+    glBindBuffer:
+        fn bind_buffer(target: BufferTarget, buffer: VertexBufferObject),
+    glBufferData:
+        fn buffer_data(target: BufferTarget, size: isize, data: *const (), usage: BufferUsage),
+
 }
 
 impl Debug for Loader {
@@ -192,6 +256,50 @@ impl Clone for Loader {
     fn clone(&self) -> Loader {
         Loader::new()
     }
+}
+
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BufferTarget {
+    ArrayBuffer             = 0x8892,
+    AtomicCounterBuffer     = 0x92C0,
+    CopyReadBuffer          = 0x8F36,
+    CopyWriteBuffer         = 0x8F37,
+    UniformBuffer           = 0x8A11,
+    DispatchIndirectBuffer  = 0x90EE,
+    DrawIndirectBuffer      = 0x8F3F,
+    ElementArrayBuffer      = 0x8893,
+    PixelPackBuffer         = 0x88EB,
+    PixelUnpackBuffer       = 0x88EC,
+    QueryBuffer             = 0x9192,
+    ShaderStorageBuffer     = 0x90D2,
+    TextureBuffer           = 0x8C2A,
+    TransformFeedbackBuffer = 0x8C8E,
+}
+
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BufferUsage {
+    StreamDraw  = 0x88E0,
+    StreamRead  = 0x88E1,
+    StreamCopy  = 0x88E2,
+    StaticDraw  = 0x88E4,
+    StaticRead  = 0x88E5,
+    StaticCopy  = 0x88E6,
+    DynamicDraw = 0x88E8,
+    DynamicRead = 0x88E9,
+    DynamicCopy = 0x88EA,
+}
+
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ShaderType {
+    ComputeShader        = 0x91B9,
+    FragmentShader       = 0x8B30,
+    VertexShader         = 0x8B31,
+    GeometryShader       = 0x8DD9,
+    TessEvaluationShader = 0x8E87,
+    TessControlShader    = 0x8E88,
 }
 
 #[repr(u32)]
@@ -230,11 +338,11 @@ pub enum DebugType {
 pub extern "C" fn debug_callback(
     source: DebugSource,
     message_type: DebugType,
-    id: UInt,
+    _id: UInt,
     severity: DebugSeverity,
     length: SizeI,
     message: *const u8,
-    user_param: *mut ()) {
+    _user_param: *mut ()) {
     println!(
         "recieved some kind of debug message. source: {:?}, type: {:?}, severity: {:?}, message: {:?}",
         source,
