@@ -1,5 +1,3 @@
-#![feature(convert)]
-
 extern crate polygon_math as math;
 extern crate bootstrap_rs as bootstrap;
 extern crate bootstrap_gl as gl;

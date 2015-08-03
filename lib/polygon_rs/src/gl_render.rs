@@ -39,19 +39,15 @@ impl GLRender {
     pub fn new(window: &Window) -> GLRender {
         let gl = gl::Context::new(window);
 
-        // do some basic configuration stuff
-        unsafe {
-            // Enable depth testing
-            gl.enable(ServerCapability::DebugOutput);
-            gl.debug_message_callback(gl::debug_callback, ptr::null_mut());
+        gl.enable(ServerCapability::DebugOutput);
+        gl.debug_message_callback(gl::debug_callback, ptr::null_mut());
 
-            gl.enable(ServerCapability::DepthTest);
-            gl.enable(ServerCapability::CullFace);
+        gl.enable(ServerCapability::DepthTest);
+        gl.enable(ServerCapability::CullFace);
 
-            gl.clear_color(0.3, 0.3, 0.3, 1.0);
+        gl.clear_color(0.3, 0.3, 0.3, 1.0);
 
-            gl.viewport(0, 0, 800, 800);
-        }
+        gl.viewport(0, 0, 800, 800);
 
         GLRender {
             gl: gl,
@@ -63,45 +59,37 @@ impl GLRender {
 
         // generate array buffer
         let mut vertex_array = VertexArrayObject::null();
-        unsafe {
-            gl.gen_vertex_array(&mut vertex_array);
-            gl.bind_vertex_array(vertex_array);
-        }
+        gl.gen_vertex_array(&mut vertex_array);
+        gl.bind_vertex_array(vertex_array);
 
         // generate vertex buffer, passing the raw data held by the mesh
         let mut vertex_buffer = VertexBufferObject::null();
-        unsafe {
-            gl.gen_buffer(&mut vertex_buffer);
-            gl.bind_buffer(BufferTarget::ArrayBuffer, vertex_buffer);
+        gl.gen_buffer(&mut vertex_buffer);
+        gl.bind_buffer(BufferTarget::ArrayBuffer, vertex_buffer);
 
-            gl.buffer_data(
-                BufferTarget::ArrayBuffer,
-                &*mesh.raw_data,
-                BufferUsage::StaticDraw);
-        }
+        gl.buffer_data(
+            BufferTarget::ArrayBuffer,
+            &*mesh.raw_data,
+            BufferUsage::StaticDraw);
 
         let mut index_buffer = VertexBufferObject::null();
-        unsafe {
-            gl.gen_buffer(&mut index_buffer);
-            gl.bind_buffer(BufferTarget::ElementArrayBuffer, index_buffer);
+        gl.gen_buffer(&mut index_buffer);
+        gl.bind_buffer(BufferTarget::ElementArrayBuffer, index_buffer);
 
-            gl.buffer_data(
-                BufferTarget::ElementArrayBuffer,
-                &*mesh.indices,
-                BufferUsage::StaticDraw);
-        }
+        gl.buffer_data(
+            BufferTarget::ElementArrayBuffer,
+            &*mesh.indices,
+            BufferUsage::StaticDraw);
 
-        // TODO: do some handling of errors here?
-        let vs = GLRender::compile_shader(vertex_src, ShaderType::VertexShader);
-        let fs = GLRender::compile_shader(frag_src, ShaderType::FragmentShader);
-        let program = GLRender::link_program(vs, fs);
+        // TODO: Handle any failure to compile shaders.
+        let vs = self.compile_shader(vertex_src, ShaderType::VertexShader);
+        let fs = self.compile_shader(frag_src, ShaderType::FragmentShader);
+        let program = self.link_program(vs, fs);
 
         // Unbind buffers.
-        unsafe {
-            gl.bind_vertex_array(VertexArrayObject::null());
-            gl.bind_buffer(BufferTarget::ArrayBuffer, VertexBufferObject::null());
-            gl.bind_buffer(BufferTarget::ElementArrayBuffer, VertexBufferObject::null());
-        }
+        gl.bind_vertex_array(VertexArrayObject::null());
+        gl.bind_buffer(BufferTarget::ArrayBuffer, VertexBufferObject::null());
+        gl.bind_buffer(BufferTarget::ElementArrayBuffer, VertexBufferObject::null());
 
         GLMeshData {
             vertex_array: vertex_array,
@@ -273,52 +261,25 @@ impl GLRender {
 
     /// Clears the current back buffer.
     pub fn clear(&self) {
-        // if !gl::Clear::is_loaded() {
-        //     println!("gl::Clear isn't loaded!");
-        // }
-        // else
-        // {
-        //     unsafe {
-        //         gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
-        //     }
-        // }
+        self.gl.clear(ClearBufferMask::Color | ClearBufferMask::Depth);
     }
 
     /// Swap the front and back buffers for the render system.
     pub fn swap_buffers(&self, window: &Window) {
-        // gl::swap_buffers(window);
+        self.gl.swap_buffers(window);
     }
 
-    fn compile_shader(src: &str, ty: ShaderType) -> gl::UInt {
-        // unsafe {
-        //     let shader = gl::CreateShader(ty);
-        //
-        //     // Attempt to compile the shader
-        //     let c_str = CString::new(src.as_bytes());
-        //     gl::ShaderSource(shader, 1, &c_str.unwrap().as_ptr(), ptr::null());
-        //     gl::CompileShader(shader);
-        //
-        //     // Get the compile status
-        //     let mut status = gl::FALSE as GLint;
-        //     gl::GetShaderiv(shader, gl::COMPILE_STATUS, &mut status);
-        //
-        //     // Fail on error
-        //     if status != (gl::TRUE as GLint) {
-        //         let mut len = 0;
-        //         gl::GetShaderiv(shader, gl::INFO_LOG_LENGTH, &mut len);
-        //         let mut buf = Vec::with_capacity(len as usize);
-        //         buf.set_len((len as usize) - 1); // subtract 1 to skip the trailing null character
-        //         gl::GetShaderInfoLog(shader, len, ptr::null_mut(), buf.as_mut_ptr() as *mut GLchar);
-        //         panic!("{}", str::from_utf8(buf.as_slice()).ok().expect("ShaderInfoLog not valid utf8"));
-        //     }
-        //
-        //     shader
-        // }
+    fn compile_shader(&self, shader_source: &str, shader_type: ShaderType) -> ShaderObject {
+        let shader = self.gl.create_shader(shader_type);
 
-        0
+        // Attempt to compile the shader
+        self.gl.shader_source(shader, shader_source);
+        self.gl.compile_shader(shader).unwrap(); // TODO: Propogate errors upwards for better handling.
+
+        shader
     }
 
-    fn link_program(vs: gl::UInt, fs: gl::UInt) -> gl::UInt {
+    fn link_program(&self, vs: ShaderObject, fs: ShaderObject) -> gl::UInt {
         // unsafe {
         //     let program = gl::CreateProgram();
         //     gl::AttachShader(program, vs);

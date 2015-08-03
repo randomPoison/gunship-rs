@@ -1,3 +1,5 @@
+#![feature(convert)]
+
 extern crate bootstrap_rs as bootstrap;
 
 #[cfg(target_os="windows")]
@@ -13,7 +15,8 @@ use std::mem;
 use std::fmt::{self, Debug, Formatter};
 use std::slice;
 use std::str;
-use std::ops::Deref;
+use std::ops::{Deref, BitOr};
+use std::ptr;
 
 use bootstrap::window::Window;
 
@@ -102,14 +105,6 @@ pub enum ServerCapability {
 
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ClearBufferMask {
-    Depth         = 0x00000100,
-    StencilBuffer = 0x00000400,
-    ColorBuffer   = 0x00004000,
-}
-
-#[repr(u32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ErrorCode {
     NoError          = 0,
     InvalidEnum      = 0x0500,
@@ -135,6 +130,10 @@ impl Context {
             platform_context: context,
             loader: Loader::new(),
         }
+    }
+
+    pub fn swap_buffers(&self, window: &Window) {
+        platform::swap_buffers(window);
     }
 
     pub fn gen_vertex_array(&self, array: &mut VertexArrayObject) {
@@ -166,6 +165,53 @@ impl Context {
             unsafe { mem::transmute(&data[0]) },
             usage,
         );
+    }
+
+    pub fn shader_source(&self, shader: ShaderObject, source: &str) {
+        // No need to null terminate because we can tell OpenGL how long the string is.
+        let temp_ptr = &source.as_bytes()[0];
+        self.loader.shader_source(
+            shader,
+            1,
+            unsafe { mem::transmute(&temp_ptr) },
+            source.len() as i32);
+    }
+
+    pub fn get_shader_type(&self, shader: ShaderObject) -> Result<ShaderType, String> {
+        let mut status = 0;
+        self.loader.get_shader_param(shader, ShaderParam::ShaderType, &mut status);
+        if status == 0 {
+            Err(String::from("Failed to get shader type, check that the shader object provided is valid."))
+        } else {
+            Ok(unsafe {
+                mem::transmute(status)
+            })
+        }
+    }
+
+    pub fn compile_shader(&self, shader: ShaderObject) -> Result<(), String> {
+        self.loader.compile_shader(shader);
+
+        let mut status = 0;
+        self.loader.get_shader_param(shader, ShaderParam::CompileStatus, &mut status);
+
+        if status == 0 {
+            let mut len = 0;
+            self.loader.get_shader_param(shader, ShaderParam::InfoLogLength, &mut len);
+            let mut buf = Vec::with_capacity(len as usize);
+            unsafe {
+                // Subtract 1 to skip the trailing null character.
+                buf.set_len((len as usize) - 1);
+            }
+            self.loader.get_shader_info_log(
+                shader,
+                len,
+                ptr::null_mut(),
+                buf.as_mut_ptr());
+            Err(format!("{}", str::from_utf8(buf.as_slice()).ok().expect("ShaderInfoLog not valid utf8")))
+        } else {
+            Ok(())
+        }
     }
 }
 
@@ -242,7 +288,28 @@ gen_proc_loader! {
         fn bind_buffer(target: BufferTarget, buffer: VertexBufferObject),
     glBufferData:
         fn buffer_data(target: BufferTarget, size: isize, data: *const (), usage: BufferUsage),
-
+    glClear:
+        fn clear(mask: ClearBufferMask),
+    glCreateShader:
+        fn create_shader(shader_type: ShaderType) -> ShaderObject,
+    glShaderSource:
+        fn shader_source(
+            shader: ShaderObject,
+            count: i32,
+            strings: *const *const u8,
+            length: i32
+        ),
+    glCompileShader:
+        fn compile_shader(shader: ShaderObject),
+    glGetShaderiv:
+        fn get_shader_param(shader: ShaderObject, param_type: ShaderParam, param_out: *mut i32),
+    glGetShaderInfoLog:
+        fn get_shader_info_log(
+            shader: ShaderObject,
+            max_length: i32,
+            length_out: *mut i32,
+            log_out: *mut u8
+        ),
 }
 
 impl Debug for Loader {
@@ -300,6 +367,38 @@ pub enum ShaderType {
     GeometryShader       = 0x8DD9,
     TessEvaluationShader = 0x8E87,
     TessControlShader    = 0x8E88,
+}
+
+/// TODO: Use NonZero here so that Option<ShaderObject>::None can be used instead of 0.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ShaderObject(u32);
+
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ShaderParam {
+    ShaderType         = 0x8B4F,
+    DeleteStatus       = 0x8B80,
+    CompileStatus      = 0x8B81,
+    InfoLogLength      = 0x8B84,
+    ShaderSourceLength = 0x8B88,
+}
+
+/// TODO: Custom derive for Debug to show which flags are set.
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ClearBufferMask {
+    Depth   = 0x00000100,
+    Stencil = 0x00000400,
+    Color   = 0x00004000,
+}
+
+impl BitOr for ClearBufferMask {
+    type Output = ClearBufferMask;
+
+    fn bitor(self, rhs: ClearBufferMask) -> ClearBufferMask {
+        unsafe { mem::transmute(self as u32 | rhs as u32) }
+    }
 }
 
 #[repr(u32)]
