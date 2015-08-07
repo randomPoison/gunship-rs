@@ -1,23 +1,138 @@
 use std::rc::Rc;
 use std::cell::RefCell;
+use std::ptr;
+use std::mem;
+use std::ffi::CString;
+use std::slice;
+
+use super::x11::xlib;
+use super::x11::glx;
 
 use window::Message;
+use input::ScanCode;
 
-#[derive(Debug, Clone, Copy)]
-pub struct Window;
+#[derive(Debug, Clone)]
+#[allow(raw_pointer_derive)]
+pub struct Window {
+    pub display: *mut xlib::Display,
+    pub window: xlib::Window,
+    // pub visual_info: *mut xlib::XVisualInfo,
+}
 
 impl Window {
-    pub fn new(_name: &str, _instance: ()) -> Rc<RefCell<Window>> {
-        println!("Window::new() is not implemented on linux");
-        Rc::new(RefCell::new(Window))
-    }
+    pub fn new(_name: &str, _instance: ()) -> Rc<RefCell<Window>> { unsafe {
+        let display = xlib::XOpenDisplay(ptr::null_mut());
+        if display.is_null() {
+            panic!("Could not open display on local machine");
+        }
 
-    pub fn handle_messages(&mut self) {
-        println!("Window::handle_messages() is not implemented on linux");
-    }
+        const ATTRIBUTES: [i32; 5] = [glx::GLX_RGBA, glx::GLX_DEPTH_SIZE, 24, glx::GLX_DOUBLEBUFFER, 0];
+        let visual_info = glx::glXChooseVisual(
+            display,
+            xlib::XDefaultScreen(display),
+            ATTRIBUTES.as_mut_ptr());
+        if visual_info.is_null() {
+            panic!("Cannot find visual with desired attributes");
+        }
+        let visual_info = &mut *visual_info;
+        println!("visual info: {:?}", &*visual_info);
+        println!("visual: {:?}", visual_info.visual);
 
-    pub fn next_message(&mut self) -> Option<Message> {
-        println!("Window::next_message() is not implemented on linux");
+        let root_window = xlib::XDefaultRootWindow(display);
+        let colormap = xlib::XCreateColormap(
+            display,
+            root_window,
+            visual_info.visual,
+            xlib::AllocNone);
+
+        let mut frame_attributes = mem::zeroed::<xlib::XSetWindowAttributes>();
+        // frame_attributes.background_pixel = xlib::XWhitePixel(display, 0);
+        frame_attributes.colormap = colormap;
+        frame_attributes.event_mask =
+            xlib::KeyPressMask
+          | xlib::KeyReleaseMask
+          | xlib::PointerMotionMask
+          | xlib::ExposureMask;
+
+        let window = xlib::XCreateWindow(
+            display,
+            root_window,
+            0, 0, 800, 800,    // x, y, width, height
+            0,                 // border width
+            visual_info.depth,
+            xlib::InputOutput,
+            visual_info.visual,
+            xlib::CWColormap | xlib::CWEventMask,
+            &mut frame_attributes);
+
+        let context = glx::glXCreateContext(display, visual_info, ptr::null_mut(), 0);
+        if context.is_null() {
+            panic!("Failed to create OpenGL context");
+        }
+
+        xlib::XStoreName(display, window, mem::transmute(CString::new("Gunship Game").unwrap().as_ptr()));
+        xlib::XMapWindow(display, window);
+        xlib::XFlush(display);
+
+        let context = glx::glXCreateContext(display, visual_info, ptr::null_mut(), 1);
+        glx::glXMakeCurrent(display, window, context);
+
+        Rc::new(RefCell::new(Window {
+            display: display,
+            window: window,
+            // visual_info: visual_info,
+        }))
+    } }
+
+    pub fn next_message(&mut self) -> Option<Message> { unsafe {
+        let mut event = mem::uninitialized::<xlib::XEvent>();
+        while xlib::XPending(self.display) > 0 {
+            xlib::XNextEvent(self.display, &mut event);
+            match event.get_type() {
+                xlib::KeyPress => {
+                    let key_press_event: &xlib::XKeyPressedEvent = mem::transmute(&event);
+
+                    let mut num_syms = 0;
+                    let ptr_key_sym = xlib::XGetKeyboardMapping(self.display, key_press_event.keycode as u8, 1, &mut num_syms);
+                    let syms_slice = slice::from_raw_parts(ptr_key_sym, num_syms as usize);
+
+                    let us_sym = syms_slice[0];
+                    return Some(Message::KeyDown(key_sym_to_scancode(us_sym)));
+                },
+                xlib::KeyRelease => {
+                    let key_release_event: &xlib::XKeyReleasedEvent = mem::transmute(&event);
+
+                    let mut num_syms = 0;
+                    let ptr_key_sym = xlib::XGetKeyboardMapping(self.display, key_release_event.keycode as u8, 1, &mut num_syms);
+                    let syms_slice = slice::from_raw_parts(ptr_key_sym, num_syms as usize);
+
+                    let us_sym = syms_slice[0];
+                    return Some(Message::KeyUp(key_sym_to_scancode(us_sym)));
+                },
+                _ => println!("unsupported event type: {}", event.get_type()),
+            }
+        }
+
         None
+    } }
+}
+
+fn key_sym_to_scancode(key_sym: u64) -> ScanCode {
+    if key_sym >= '0' as u64 && key_sym <= '9' as u64 {
+        unsafe { mem::transmute(key_sym as u32) }
+    } else if key_sym >= 'a' as u64 && key_sym <= 'z' as u64 {
+        const KEY_SYM_CONVERSION: i32 = 'A' as i32 - 'a' as i32;
+
+        let key_sym = (key_sym as i32 + KEY_SYM_CONVERSION) as u32;
+        unsafe { mem::transmute(key_sym) }
+    } else {
+        println!("unsupported key press event with US keysym {}", key_sym);
+        ScanCode::Unsupported
+    }
+}
+
+impl Drop for Window {
+    fn drop(&mut self) {
+        unsafe { xlib::XCloseDisplay(self.display); } // TODO: Handle error code?
     }
 }

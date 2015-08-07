@@ -260,6 +260,8 @@ impl Mul<Quaternion> for Quaternion {
     }
 }
 
+// TODO: impl Mul<Vector3> for Quaternion (or maybe other way around).
+
 impl IsZero for Quaternion {
     fn is_zero(self) -> bool {
         (self.w * self.w

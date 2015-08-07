@@ -1,4 +1,5 @@
 use std::ops::{Sub, Add, Neg};
+use std::mem;
 
 use vector::Vector3;
 
@@ -26,6 +27,7 @@ impl Point {
         }
     }
 
+    /// TODO: Implement the `From` trait rather than making a standalone method.
     pub fn from_slice(data: &[f32]) -> Point {
         assert!(data.len() == 3 || data.len() == 4);
 
@@ -54,8 +56,8 @@ impl Point {
         Vector3::new(self.x, self.y, self.z)
     }
 
-    pub unsafe fn raw_data(&self) -> *const f32 {
-        &self.x
+    pub fn as_array(&self) -> &[f32; 4] {
+        unsafe { mem::transmute(self) }
     }
 }
 

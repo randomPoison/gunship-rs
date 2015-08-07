@@ -12,11 +12,10 @@ use bootstrap;
 use bootstrap::window::Window;
 use bootstrap::window::Message::*;
 use bootstrap::time::Timer;
-use bootstrap::gl_utils;
 
 use bs_audio;
 
-use polygon::gl_render::{self, GLRender};
+use polygon::gl_render::GLRender;
 
 use scene::Scene;
 use resource::ResourceManager;
@@ -28,8 +27,8 @@ pub const TARGET_FRAME_TIME_MS: f32 = TARGET_FRAME_TIME_SECONDS * 1000.0;
 
 pub struct Engine {
     window: Rc<RefCell<Window>>, // TODO: This doesn't need to be an Rc<RefCell<>> when we're not doing hotloading.
-    renderer: GLRender,
-    resource_manager: Rc<RefCell<ResourceManager>>,
+    renderer: Rc<GLRender>,
+    resource_manager: Rc<ResourceManager>,
 
     systems: Vec<Box<System>>,
     system_indices: HashMap<TypeId, usize>,
@@ -38,6 +37,7 @@ pub struct Engine {
     transform_update: Box<System>,
     light_update: Box<System>,
     audio_update: Box<System>,
+    alarm_update: Box<System>,
     scene: Scene,
 
     close: bool,
@@ -47,8 +47,8 @@ impl Engine {
     pub fn new() -> Engine {
         let instance = bootstrap::init();
         let window = Window::new("Rust Window", instance);
-        let renderer = gl_render::init(window.borrow().deref());
-        let resource_manager = Rc::new(RefCell::new(ResourceManager::new(renderer)));
+        let renderer = Rc::new(GLRender::new(window.borrow().deref()));
+        let resource_manager = Rc::new(ResourceManager::new(renderer.clone()));
 
         let audio_source = match bs_audio::init() {
             Ok(audio_source) => {
@@ -72,6 +72,7 @@ impl Engine {
             transform_update: Box::new(TransformUpdateSystem),
             light_update: Box::new(LightUpdateSystem),
             audio_update: Box::new(AudioSystem),
+            alarm_update: Box::new(AlarmSystem),
             scene: Scene::new(&resource_manager, audio_source),
 
             close: false,
@@ -83,7 +84,6 @@ impl Engine {
 
         scene.input.clear();
         let mut window = self.window.borrow_mut();
-        window.handle_messages();
         loop {
             let message = window.next_message(); // TODO: Make this an iterator to simplify this loop.
             match message {
@@ -107,6 +107,8 @@ impl Engine {
                 None => break
             }
         }
+
+        self.alarm_update.update(scene, TARGET_FRAME_TIME_SECONDS);
 
         // Update systems.
         for system in self.systems.iter_mut() {
@@ -151,7 +153,7 @@ impl Engine {
             }
         }
 
-        self.renderer.swap_buffers();
+        self.renderer.swap_buffers(self.window.borrow().deref());
     }
 
     pub fn main_loop(&mut self) {
@@ -240,7 +242,7 @@ impl Engine {
 
 impl Clone for Engine {
     fn clone(&self) -> Engine {
-        let resource_manager = Rc::new(RefCell::new(self.resource_manager.borrow().deref().clone()));
+        let resource_manager = self.resource_manager.clone();
 
         let engine = Engine {
             window: self.window.clone(),
@@ -254,6 +256,7 @@ impl Clone for Engine {
             transform_update: Box::new(TransformUpdateSystem),
             light_update: Box::new(LightUpdateSystem),
             audio_update: Box::new(AudioSystem),
+            alarm_update: Box::new(AlarmSystem),
             scene: self.scene.clone(&resource_manager),
 
             close: false,
@@ -271,8 +274,8 @@ fn type_name<T>() -> &'static str {
 
 #[no_mangle]
 pub fn engine_init(window: Rc<RefCell<Window>>) -> Box<Engine> {
-    let renderer = gl_render::init(window.borrow().deref());
-    let resource_manager = Rc::new(RefCell::new(ResourceManager::new(renderer)));
+    let renderer = Rc::new(GLRender::new(window.borrow().deref()));
+    let resource_manager = Rc::new(ResourceManager::new(renderer.clone()));
 
     let audio_source = match bs_audio::init() {
         Ok(audio_source) => {
@@ -296,6 +299,7 @@ pub fn engine_init(window: Rc<RefCell<Window>>) -> Box<Engine> {
         transform_update: Box::new(TransformUpdateSystem),
         light_update: Box::new(LightUpdateSystem),
         audio_update: Box::new(AudioSystem),
+        alarm_update: Box::new(AlarmSystem),
         scene: Scene::new(&resource_manager, audio_source),
 
         close: false,
@@ -305,11 +309,6 @@ pub fn engine_init(window: Rc<RefCell<Window>>) -> Box<Engine> {
 #[no_mangle]
 pub fn engine_reload(engine: &Engine) -> Box<Engine> {
     let new_engine = engine.clone();
-
-    // The proc loader needs to be set from within the DLL otherwise we don't
-    // correctly bind to OpenGL on Windows.
-    gl_utils::set_proc_loader();
-
     Box::new(new_engine)
 }
 

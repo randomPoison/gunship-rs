@@ -4,8 +4,9 @@ name = "polygon_rs"
 version = "0.0.1"
 authors = ["David LeGare <excaliburhissheath@gmail.com>"]
 
-[dependencies.gl]
-git = "https://github.com/bjz/gl-rs"
+[dependencies.bootstrap-gl]
+version = "*"
+path = "../bootstrap-gl"
 
 [dependencies.polygon_math]
 version = "*"
