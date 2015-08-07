@@ -1,4 +1,5 @@
 use std::ops::{Sub, Add, Neg};
+use std::mem;
 
 use vector::Vector3;
 
@@ -55,8 +56,8 @@ impl Point {
         Vector3::new(self.x, self.y, self.z)
     }
 
-    pub unsafe fn raw_data(&self) -> *const f32 {
-        &self.x
+    pub fn as_array(&self) -> &[f32; 4] {
+        unsafe { mem::transmute(self) }
     }
 }
 

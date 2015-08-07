@@ -157,12 +157,8 @@ impl Matrix4 {
     }
 
     /// Get the matrix data as a raw array.
-    ///
-    /// This is meant to be used for ffi and when passing matrix data to the graphics card,
-    /// it should not be used to directly manipulate the contents of the matrix.
-    pub unsafe fn raw_data(&self) -> *const f32
-    {
-        &self.data[0]
+    pub fn raw_data(&self) -> &[f32; 16] {
+        &self.data
     }
 }
 

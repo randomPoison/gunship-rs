@@ -18,7 +18,7 @@ use ecs::Entity;
 
 #[derive(Debug, Clone)]
 pub struct ResourceManager {
-    renderer: GLRender,
+    renderer: Rc<GLRender>,
     meshes: RefCell<HashMap<String, GLMeshData>>,
     audio_clips: RefCell<HashMap<String, Rc<Wave>>>,
 
@@ -27,7 +27,7 @@ pub struct ResourceManager {
 }
 
 impl ResourceManager {
-    pub fn new(renderer: GLRender) -> ResourceManager {
+    pub fn new(renderer: Rc<GLRender>) -> ResourceManager {
         ResourceManager {
             renderer: renderer,
             meshes: RefCell::new(HashMap::new()),

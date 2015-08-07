@@ -1,3 +1,5 @@
+use std::mem;
+
 #[repr(C)] #[derive(Debug, Clone, Copy)]
 pub struct Color {
     pub r: f32,
@@ -16,7 +18,7 @@ impl Color {
         }
     }
 
-    pub unsafe fn raw_data(&self) -> *const f32 {
-        &self.r
+    pub fn as_array(&self) -> &[f32; 4] {
+        unsafe { mem::transmute(self) }
     }
 }
