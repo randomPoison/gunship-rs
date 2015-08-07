@@ -15,7 +15,7 @@ use bootstrap::time::Timer;
 
 use bs_audio;
 
-use polygon::gl_render::{self, GLRender};
+use polygon::gl_render::GLRender;
 
 use scene::Scene;
 use resource::ResourceManager;

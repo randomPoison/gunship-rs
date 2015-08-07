@@ -17,6 +17,7 @@ use std::slice;
 use std::str;
 use std::ops::{Deref, BitOr};
 use std::ptr;
+use std::ffi::CString;
 
 use bootstrap::window::Window;
 
@@ -47,6 +48,9 @@ pub type Float = f32;
 pub type ClampF = f32;
 pub type Double = f64;
 pub type ClampD = f64;
+
+#[allow(non_camel_case_types)]
+pub type f16 = u16;
 
 /// TODO: Use NonZero here so that Option<VertexArrayObject>::None can be used instead of 0.
 #[repr(C)]
@@ -170,11 +174,12 @@ impl Context {
     pub fn shader_source(&self, shader: ShaderObject, source: &str) {
         // No need to null terminate because we can tell OpenGL how long the string is.
         let temp_ptr = &source.as_bytes()[0];
+        let len = source.len() as i32;
         self.loader.shader_source(
             shader,
             1,
             unsafe { mem::transmute(&temp_ptr) },
-            source.len() as i32);
+            &len);
     }
 
     pub fn get_shader_type(&self, shader: ShaderObject) -> Result<ShaderType, String> {
@@ -208,10 +213,88 @@ impl Context {
                 len,
                 ptr::null_mut(),
                 buf.as_mut_ptr());
-            Err(format!("{}", str::from_utf8(buf.as_slice()).ok().expect("ShaderInfoLog not valid utf8")))
+            Err(String::from(match str::from_utf8(buf.as_slice()) {
+                Err(_) => "Shader info log not valid utf8",
+                Ok(info_log) => info_log,
+            }))
         } else {
             Ok(())
         }
+    }
+
+    pub fn link_program(&self, program: ProgramObject) -> Result<(), String> {
+        self.loader.link_program(program);
+
+        // Get the link status
+        let mut status = 0;
+        self.loader.get_program_param(program, ProgramParam::LinkStatus, &mut status);
+
+        if status == 0 {
+            let mut len = 0;
+            self.loader.get_program_param(program, ProgramParam::InfoLogLength, &mut len);
+            let mut buf = Vec::with_capacity(len as usize);
+            unsafe {
+                buf.set_len((len as usize) - 1); // Subtract 1 to skip the trailing null character.
+            }
+            self.loader.get_program_info_log(
+                program,
+                len,
+                ptr::null_mut(),
+                buf.as_mut_ptr());
+            Err(String::from(match str::from_utf8(buf.as_slice()) {
+                Err(_) => "Program info log not valid utf8",
+                Ok(info_log) => info_log,
+            }))
+        } else {
+            Ok(())
+        }
+    }
+
+    pub fn get_attrib(&self, program: ProgramObject, attrib: &str) -> Option<AttributeLocation> {
+        let attrib_string = CString::new(attrib).unwrap();
+        let attrib_location =
+            self.loader.get_attrib_location(program, attrib_string.as_ptr());
+        if attrib_location == -1 {
+            None
+        } else {
+            Some(AttributeLocation(attrib_location as u32))
+        }
+    }
+
+    pub fn get_uniform(&self, program: ProgramObject, uniform: &str) -> Option<UniformLocation> {
+        let uniform_string = CString::new(uniform).unwrap();
+        let uniform_location =
+            self.loader.get_uniform_location(program, uniform_string.as_ptr());
+        if uniform_location == -1 {
+            None
+        } else {
+            Some(UniformLocation(uniform_location as u32))
+        }
+    }
+
+    pub fn uniform_matrix_4x4(
+        &self,
+        uniform: UniformLocation,
+        transpose: bool,
+        matrix: &[f32; 16])
+    {
+        self.loader.uniform_matrix_4fv(
+            uniform,
+            1,
+            transpose,
+            matrix.as_ptr());
+    }
+
+    pub fn uniform_4f(&self, uniform: UniformLocation, data: &[f32; 4]) {
+        self.loader.uniform_4fv(uniform, 1, data.as_ptr());
+    }
+
+    pub fn unbind_vertex_array(&self) {
+        self.loader.bind_vertex_array(VertexArrayObject::null());
+    }
+
+    pub fn unbind_buffer(&self, target: BufferTarget) {
+        self.loader.bind_buffer(target, VertexBufferObject::null());
     }
 }
 
@@ -223,6 +306,8 @@ impl Deref for Context {
     }
 }
 
+/// TODO: Mark all functions as unsafe? Some of them are safe, though, and we don't want to have
+///       to rewrite the entire interface in Context.
 macro_rules! gen_proc_loader {
     ( $( $gl_proc:ident : fn $proc_name:ident( $( $arg:ident : $arg_ty:ty ),* ) $( -> $result:ty )*, )* ) => {
         pub struct Loader {
@@ -247,7 +332,7 @@ macro_rules! gen_proc_loader {
             $(
                 pub fn $proc_name(&self, $( $arg: $arg_ty, )* ) $( -> $result )* {
                     if let None = self.$proc_name.get() {
-                        println!("loading $gl_proc() for the first time.");
+                        // println!(concat!("loading ", stringify!($gl_proc), "() for the first time."));
 
                         let $proc_name = (self.proc_loader)(stringify!($gl_proc));
                         self.$proc_name.set(unsafe {
@@ -256,7 +341,7 @@ macro_rules! gen_proc_loader {
                     }
                     assert!(self.$proc_name.get().is_some());
 
-                    println!(concat!("calling ", stringify!($gl_proc), "()"));
+                    // println!(concat!("calling ", stringify!($gl_proc), "()"));
                     (self.$proc_name.get().unwrap())($( $arg ),*)
                 }
             )*
@@ -267,6 +352,8 @@ macro_rules! gen_proc_loader {
 gen_proc_loader! {
     glEnable:
         fn enable(capability: ServerCapability),
+    glDisable:
+        fn disable(capability: ServerCapability),
     glClearColor:
         fn clear_color(red: f32, green: f32, blue: f32, alpha: f32),
     glDebugMessageCallback:
@@ -297,8 +384,7 @@ gen_proc_loader! {
             shader: ShaderObject,
             count: i32,
             strings: *const *const u8,
-            length: i32
-        ),
+            length: *const i32),
     glCompileShader:
         fn compile_shader(shader: ShaderObject),
     glGetShaderiv:
@@ -308,8 +394,54 @@ gen_proc_loader! {
             shader: ShaderObject,
             max_length: i32,
             length_out: *mut i32,
-            log_out: *mut u8
-        ),
+            log_out: *mut u8),
+    glCreateProgram:
+        fn create_program() -> ProgramObject,
+    glAttachShader:
+        fn attach_shader(program: ProgramObject, shader: ShaderObject),
+    glLinkProgram:
+        fn link_program(program: ProgramObject),
+    glGetProgramiv:
+        fn get_program_param(
+            program: ProgramObject,
+            param_type: ProgramParam,
+            param_out: *mut i32),
+    glGetProgramInfoLog:
+        fn get_program_info_log(
+            program: ProgramObject,
+            max_length: i32,
+            length_out: *mut i32,
+            log_out: *mut u8),
+    glUseProgram:
+        fn use_program(program: ProgramObject),
+    glGetAttribLocation:
+        fn get_attrib_location(program: ProgramObject, attrib_name: *const i8) -> i32,
+    glVertexAttribPointer:
+        fn vertex_attrib_pointer(
+            attrib: AttributeLocation,
+            size: i32,
+            gl_type: GLType,
+            normalized: bool,
+            stride: i32,
+            offset: usize),
+    glEnableVertexAttribArray:
+        fn enable_vertex_attrib_array(attrib: AttributeLocation),
+    glGetUniformLocation:
+        fn get_uniform_location(program: ProgramObject, uniform_name: *const i8) -> i32,
+    glUniformMatrix4fv:
+        fn uniform_matrix_4fv(
+            uniform: UniformLocation,
+            count: i32,
+            transpose: bool,
+            values: *const f32),
+    glUniform4fv:
+        fn uniform_4fv(uniform: UniformLocation, count: i32, data: *const f32),
+    glDrawElements:
+        fn draw_elements(mode: DrawMode, count: i32, index_type: IndexType, offset: usize),
+    glDepthFunc:
+        fn depth_func(func: Comparison),
+    glBlendFunc:
+        fn blend_func(src_factor: SourceFactor, dest_factor: DestFactor),
 }
 
 impl Debug for Loader {
@@ -374,6 +506,45 @@ pub enum ShaderType {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ShaderObject(u32);
 
+/// TODO: Use NonZero here so that Option<ProgramObject>::None can be used instead of 0.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ProgramObject(u32);
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AttributeLocation(u32);
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct UniformLocation(u32);
+
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GLType {
+    Byte          = 0x1400,
+    UnsignedByte  = 0x1401,
+    Short         = 0x1402,
+    UnsignedShort = 0x1403,
+    Float         = 0x1406,
+    Fixed         = 0x140C,
+    Int           = 0x1404,
+    UnsignedInt   = 0x1405,
+    HalfFloat     = 0x140B,
+    Double        = 0x140A,
+    // GL_INT_2_10_10_10_REV
+    // GL_UNSIGNED_INT_2_10_10_10_REV
+    // GL_UNSIGNED_INT_10F_11F_11F_REV
+}
+
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IndexType {
+    UnsignedByte  = 0x1401,
+    UnsignedShort = 0x1403,
+    UnsignedInt   = 0x1405,
+}
+
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ShaderParam {
@@ -382,6 +553,20 @@ pub enum ShaderParam {
     CompileStatus      = 0x8B81,
     InfoLogLength      = 0x8B84,
     ShaderSourceLength = 0x8B88,
+}
+
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProgramParam {
+    DeleteStatus             = 0x8B80,
+    LinkStatus               = 0x8B82,
+    ValidateStatus           = 0x8B83,
+    InfoLogLength            = 0x8B84,
+    AttachedShaders          = 0x8B85,
+    ActiveUniforms           = 0x8B86,
+    ActiveUniformMaxLength   = 0x8B87,
+    ActiveAttributes         = 0x8B89,
+    ActiveAttributeMaxLength = 0x8B8A,
 }
 
 /// TODO: Custom derive for Debug to show which flags are set.
@@ -399,6 +584,63 @@ impl BitOr for ClearBufferMask {
     fn bitor(self, rhs: ClearBufferMask) -> ClearBufferMask {
         unsafe { mem::transmute(self as u32 | rhs as u32) }
     }
+}
+
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DrawMode {
+    Points        = 0x0000,
+    Lines         = 0x0001,
+    LineLoop      = 0x0002,
+    LineStrip     = 0x0003,
+    Triangles     = 0x0004,
+    TriangleStrip = 0x0005,
+    TriangleFan   = 0x0006,
+    Quads         = 0x0007,
+    // GL_QUAD_STRIP
+    // GL_POLYGON
+}
+
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Comparison {
+    Never                          = 0x0200,
+    Less                           = 0x0201,
+    Equal                          = 0x0202,
+    LEqual                         = 0x0203,
+    Greater                        = 0x0204,
+    NotEqual                       = 0x0205,
+    GEqual                         = 0x0206,
+    Always                         = 0x0207,
+}
+
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DestFactor {
+    Zero             = 0,
+    One              = 1,
+    SrcColor         = 0x0300,
+    OneMinusSrcColor = 0x0301,
+    SrcAlpha         = 0x0302,
+    OneMinusSrcAlpha = 0x0303,
+    DstAlpha         = 0x0304,
+    OneMinusDstAlpha = 0x0305,
+}
+
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SourceFactor {
+    Zero             = 0,
+    One              = 1,
+    SrcColor         = 0x0300,
+    OneMinusSrcColor = 0x0301,
+    SrcAlpha         = 0x0302,
+    OneMinusSrcAlpha = 0x0303,
+    DstAlpha         = 0x0304,
+    OneMinusDstAlpha = 0x0305,
+    DstColor         = 0x0306,
+    OneMinusDstColor = 0x0307,
+    SrcAlphaSaturate = 0x0308,
 }
 
 #[repr(u32)]
