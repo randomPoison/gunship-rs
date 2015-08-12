@@ -90,11 +90,9 @@ impl ResourceManager {
     }
 
     pub fn get_mesh(&self, uri: &str) -> Result<GLMeshData, String> {
-        let mut meshes = self.meshes.borrow_mut();
-
         // Use cached mesh data if possible.
-        if let Some(mesh) = meshes.get(uri) {
-            return Ok(*mesh);
+        if let Some(mesh) = self.get_cached_mesh(uri) {
+            return Ok(mesh);
         }
 
         // Generate mesh data since none has ben created previously.
@@ -151,7 +149,6 @@ impl ResourceManager {
         }
 
         let mesh_data = self.gen_mesh_from_node(node, uri).unwrap();
-        meshes.insert(uri.to_string(), mesh_data);
         Ok(mesh_data)
     }
 
@@ -204,16 +201,21 @@ impl ResourceManager {
         uri.push_str(".");
         uri.push_str(node.id.as_ref().unwrap());
 
-        if let Ok(mesh) = self.get_mesh(&uri) {
-            let entity = scene.create_entity();
-            let mut transform_manager = scene.get_manager_mut::<TransformManager>();
-            transform_manager.assign(entity);
-            scene.get_manager_mut::<MeshManager>().give_mesh(entity, mesh);
+        let mesh_data = if let Some(mesh_data) = self.get_cached_mesh(&uri) {
+            mesh_data
+        } else {
+            match self.gen_mesh_from_node(node, &uri) {
+                Err(message) => return Err(message),
+                Ok(mesh_data) => mesh_data,
+            }
+        };
 
-            return Ok(entity);
-        }
+        let entity = scene.create_entity();
+        let mut transform_manager = scene.get_manager_mut::<TransformManager>();
+        transform_manager.assign(entity);
+        scene.get_manager_mut::<MeshManager>().give_mesh(entity, mesh_data);
 
-        panic!("Why wasn't {} loaded yet?", uri);
+        return Ok(entity);
     }
 
     fn gen_mesh_from_node(&self, node: &collada::Node, uri: &str) -> Result<GLMeshData, String> {
@@ -231,6 +233,23 @@ impl ResourceManager {
 
         let geometries = self.geometries.borrow();
         let geometry = geometries.get(geometry_name).unwrap();
+        self.gen_mesh(geometry, uri)
+    }
+
+    fn has_cached_mesh(&self, uri: &str) -> bool {
+        self.meshes.borrow().contains_key(uri)
+    }
+
+    fn get_cached_mesh(&self, uri: &str) -> Option<GLMeshData> {
+        match self.meshes.borrow().get(uri) {
+            None => None,
+            Some(mesh_ref) => Some(*mesh_ref),
+        }
+    }
+
+    fn gen_mesh(&self, geometry: &Geometry, uri: &str) -> Result<GLMeshData, String> {
+        assert!(!self.has_cached_mesh(uri), "Attempting to create a new mesh for {} when the uri is already in the meshes map", uri);
+
         let mesh = geometry_to_mesh(geometry);
 
         let frag_src = load_file_text("shaders/forward_phong.frag.glsl");
@@ -238,6 +257,7 @@ impl ResourceManager {
 
         let mesh_data =
             self.renderer.gen_mesh(&mesh, vert_src.as_ref(), frag_src.as_ref());
+        self.meshes.borrow_mut().insert(uri.into(), mesh_data);
 
         Ok(mesh_data)
     }
