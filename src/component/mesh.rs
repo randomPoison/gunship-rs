@@ -45,6 +45,15 @@ impl MeshManager {
         &self.meshes[index]
     }
 
+    pub fn give_mesh(&mut self, entity: Entity, mesh: GLMeshData) {
+        assert!(!self.indices.contains_key(&entity));
+
+        let index = self.meshes.len();
+        self.meshes.push(mesh);
+        self.entities.push(entity);
+        self.indices.insert(entity, index);
+    }
+
     pub fn meshes(&self) -> &Vec<GLMeshData> {
         &self.meshes
     }

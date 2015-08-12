@@ -15,6 +15,7 @@ use polygon::geometry::mesh::Mesh;
 use wav::Wave;
 use scene::Scene;
 use ecs::Entity;
+use component::{MeshManager, TransformManager};
 
 #[derive(Debug, Clone)]
 pub struct ResourceManager {
@@ -98,7 +99,6 @@ impl ResourceManager {
 
         // Generate mesh data since none has ben created previously.
         let visual_scenes = self.visual_scenes.borrow();
-        let geometries = self.geometries.borrow();
 
         // TODO: Handle invalid URIs (empty, invalid characters?).
         let mut uri_segments = uri.split(".");
@@ -150,27 +150,7 @@ impl ResourceManager {
             }
         }
 
-        let geometry_name = {
-            if node.instance_geometries.len() == 0 {
-                return Err(format!("No geometry is identified by {}", uri));
-            }
-            if node.instance_geometries.len() > 1 {
-                return Err(format!("More than one geometry is identified by {}", uri));
-            }
-
-            let url = &node.instance_geometries[0].url;
-            &url[1..]
-        };
-
-        let geometry = geometries.get(geometry_name).unwrap();
-        let mesh = geometry_to_mesh(geometry);
-
-        let frag_src = load_file_text("shaders/forward_phong.frag.glsl");
-        let vert_src = load_file_text("shaders/forward_phong.vert.glsl");
-
-        let mesh_data =
-            self.renderer.gen_mesh(&mesh, vert_src.as_ref(), frag_src.as_ref());
-
+        let mesh_data = self.gen_mesh_from_node(node, uri).unwrap();
         meshes.insert(uri.to_string(), mesh_data);
         Ok(mesh_data)
     }
@@ -186,8 +166,80 @@ impl ResourceManager {
         audio_clips.get(path_text).unwrap().clone()
     }
 
-    pub fn instantiate_model(&self, resource: &str, scene: &Scene) -> Entity {
-        panic!("TODO");
+    pub fn instantiate_model(&self, resource: &str, scene: &Scene) -> Result<Entity, String> {
+        if resource.contains(".") {
+            println!("WARNING: ResourceManager::instantiate_model() doesn't yet support fully qualified URIs, only root assets may be instantiated.");
+        }
+
+        let mut uri_segments = resource.split(".");
+        let root = uri_segments.next().unwrap();
+        let visual_scenes = self.visual_scenes.borrow();
+        let visual_scene = {
+            match visual_scenes.get(root) {
+                None => return Err(format!(
+                    "No source file {} found from which to load {}",
+                    root,
+                    resource)),
+                Some(visual_scene) => visual_scene,
+            }
+        };
+
+        let node = {
+            if visual_scene.nodes.len() == 0 {
+                return Err(format!(
+                    "No nodes associated with model {}",
+                    resource));
+            }
+
+            if visual_scene.nodes.len() > 1 {
+                println!(
+                    "WARNING: Model {} has more than one node at the root level. This is not currenlty supported, only the first node will be used.",
+                    resource);
+            }
+
+            &visual_scene.nodes[0]
+        };
+
+        let mut uri = String::from(resource);
+        uri.push_str(".");
+        uri.push_str(node.id.as_ref().unwrap());
+
+        if let Ok(mesh) = self.get_mesh(&uri) {
+            let entity = scene.create_entity();
+            let mut transform_manager = scene.get_manager_mut::<TransformManager>();
+            transform_manager.assign(entity);
+            scene.get_manager_mut::<MeshManager>().give_mesh(entity, mesh);
+
+            return Ok(entity);
+        }
+
+        panic!("Why wasn't {} loaded yet?", uri);
+    }
+
+    fn gen_mesh_from_node(&self, node: &collada::Node, uri: &str) -> Result<GLMeshData, String> {
+        let geometry_name = {
+            if node.instance_geometries.len() == 0 {
+                return Err(format!("No geometry is identified by {}", uri));
+            }
+            if node.instance_geometries.len() > 1 {
+                return Err(format!("More than one geometry is identified by {}", uri));
+            }
+
+            let url = &node.instance_geometries[0].url;
+            &url[1..] // Skip the leading "#" character that starts all URLs.
+        };
+
+        let geometries = self.geometries.borrow();
+        let geometry = geometries.get(geometry_name).unwrap();
+        let mesh = geometry_to_mesh(geometry);
+
+        let frag_src = load_file_text("shaders/forward_phong.frag.glsl");
+        let vert_src = load_file_text("shaders/forward_phong.vert.glsl");
+
+        let mesh_data =
+            self.renderer.gen_mesh(&mesh, vert_src.as_ref(), frag_src.as_ref());
+
+        Ok(mesh_data)
     }
 }
 
@@ -205,8 +257,8 @@ fn geometry_to_mesh(geometry: &Geometry) -> Mesh {
         _ => panic!("No mesh found within geometry")
     };
 
-    let position_data_raw = COLLADALoader::get_raw_positions(&mesh);
-    let normal_data_raw = COLLADALoader::get_normals(&mesh);
+    let position_data_raw = get_raw_positions(&mesh);
+    let normal_data_raw = get_normals(&mesh);
 
     let triangles = match mesh.primitives[0] {
         PrimitiveType::Triangles(ref triangles) => triangles,
@@ -264,30 +316,26 @@ fn geometry_to_mesh(geometry: &Geometry) -> Mesh {
     mesh
 }
 
-struct COLLADALoader;
+fn get_raw_positions(mesh: &collada::Mesh) -> &[f32] {
+    // TODO: Consult the correct element (<triangles> for now) to determine which source has position data.
+    let position_data: &[f32] = match mesh.sources[0].array_element {
+        ArrayElement::Float(ref float_array) => float_array.as_ref(),
+        _ => panic!("Only float arrays supported for vertex position array")
+    };
+    assert!(position_data.len() > 0);
 
-impl COLLADALoader {
-    fn get_raw_positions(mesh: &collada::Mesh) -> &[f32] {
-        // TODO: Consult the correct element (<triangles> for now) to determine which source has position data.
-        let position_data: &[f32] = match mesh.sources[0].array_element {
-            ArrayElement::Float(ref float_array) => float_array.as_ref(),
-            _ => panic!("Only float arrays supported for vertex position array")
-        };
-        assert!(position_data.len() > 0);
+    position_data
+}
 
-        position_data
-    }
+fn get_normals(mesh: &collada::Mesh) -> &[f32] {
+    // TODO: Consult the correct element (<triangles> for now) to determine which source has normal data.
+    let normal_data: &[f32] = match mesh.sources[1].array_element {
+        ArrayElement::Float(ref float_array) => float_array.as_ref(),
+        _ => panic!("Only float arrays supported for vertex normal array")
+    };
+    assert!(normal_data.len() > 0);
 
-    fn get_normals(mesh: &collada::Mesh) -> &[f32] {
-        // TODO: Consult the correct element (<triangles> for now) to determine which source has normal data.
-        let normal_data: &[f32] = match mesh.sources[1].array_element {
-            ArrayElement::Float(ref float_array) => float_array.as_ref(),
-            _ => panic!("Only float arrays supported for vertex normal array")
-        };
-        assert!(normal_data.len() > 0);
-
-        normal_data
-    }
+    normal_data
 }
 
 pub fn load_file_text(path: &str) -> String {

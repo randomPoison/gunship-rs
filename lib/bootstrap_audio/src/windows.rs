@@ -1,4 +1,3 @@
-extern crate libc;
 extern crate winapi;
 extern crate ole32;
 
@@ -58,7 +57,7 @@ impl AudioSource {
             let hresult =
                 render_client.GetBuffer(
                     frames_available,
-                    &mut buffer as *mut *mut libc::c_uchar);
+                    &mut buffer as *mut *mut c_uchar);
             if hresult != S_OK {
                 panic!("IAudioRenderClient::GetBuffer() failed with code 0x{:x}", hresult);
             }
@@ -220,7 +219,7 @@ pub fn init() -> Result<AudioSource, String> { unsafe {
 
         // Free the format created by IsFormatSupported().
         if !format_ptr.is_null() {
-            ole32::CoTaskMemFree(format_ptr as *mut libc::c_void);
+            ole32::CoTaskMemFree(format_ptr as *mut c_void);
         }
 
         match hresult {
