@@ -13,3 +13,4 @@ lib/*/target/
 /bin/
 .cargo/
 Cargo.lock
+lib/bootstrap-gl/gl_src/

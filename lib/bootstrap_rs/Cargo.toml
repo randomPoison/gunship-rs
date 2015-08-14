@@ -10,6 +10,6 @@ kernel32-sys = "*"
 winmm-sys = "*"
 # xinput-sys = "*"
 
-[dependencies.x11]
-version = "*"
-features = ["glx", "xlib"]
+# [dependencies.x11]
+# version = "*"
+# features = ["glx", "xlib"]

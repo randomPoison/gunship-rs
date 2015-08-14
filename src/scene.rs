@@ -129,7 +129,7 @@ impl Scene {
 
     /// Instantiates an instance of the model in the scene, returning the root entity.
     pub fn instantiate_model(&self, resource: &str) -> Entity {
-        self.resource_manager.clone().instantiate_model(resource, self)
+        self.resource_manager.clone().instantiate_model(resource, self).unwrap()
     }
 
     /// TODO: We don't need this if hotloading isn't enabled.
