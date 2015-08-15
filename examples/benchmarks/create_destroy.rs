@@ -6,8 +6,8 @@ use std::f32::consts::PI;
 
 use gunship::*;
 
-const ENTITIES_TO_CREATE: usize = 10;
-const ENTITIES_TO_DESTROY: usize = 1;
+const ENTITIES_TO_CREATE: usize = 1000;
+const ENTITIES_TO_DESTROY: usize = 10;
 
 fn main() {
     let mut engine = Engine::new();
@@ -70,11 +70,18 @@ impl System for CreateDestroySystem {
             let entity = scene.create_entity();
 
             let mut transform = transform_manager.assign(entity);
-            transform.set_position(Point::new(0.0, 0.0, 0.0));
+            transform.set_position(Point::new(rand::random::<f32>() * 30.0 - 15.0, rand::random::<f32>() * 30.0 - 15.0, rand::random::<f32>() * 30.0 - 15.0));
             mesh_manager.assign(entity, "cube.pCube1");
 
             self.entities.push_back(entity);
         }
+
+        for _ in 0..ENTITIES_TO_DESTROY {
+            let entity = self.entities.pop_front().unwrap();
+            // scene.destroy_entity(entity); // SOON...
+
+            mesh_manager.destroy_immediate(entity);
+            transform_manager.destroy_immediate(entity);
+        }
     }
 }
-

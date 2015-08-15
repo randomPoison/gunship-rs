@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::cell::{Cell, RefCell, Ref, RefMut};
 
 use math::Vector3;
@@ -19,6 +19,8 @@ pub struct TransformManager {
     /// The first value of the mapped tuple is the row containing the transform, the
     /// second is the index of the transform within that row.
     indices: HashMap<Entity, (usize, usize)>,
+
+    marked_for_destroy: RefCell<HashSet<Entity>>,
 }
 
 impl TransformManager {
@@ -27,6 +29,7 @@ impl TransformManager {
             transforms: Vec::new(),
             entities: Vec::new(),
             indices: HashMap::new(),
+            marked_for_destroy: RefCell::new(HashSet::new()),
         };
 
         transform_manager.transforms.push(Vec::new());
@@ -105,6 +108,30 @@ impl TransformManager {
         transform.update(parent_matrix, parent_rotation);
     }
 
+    /// Marks the transform associated with the entity for destruction.
+    ///
+    /// # Details
+    ///
+    /// Components marked for destruction are destroyed at the end of every frame. It can be used
+    /// to destroy components without needing a mutable borrow on the component manager.
+    ///
+    /// TODO: Actually support deferred destruction.
+    pub fn destroy(&self, entity: Entity) {
+        let mut marked_for_destroy = self.marked_for_destroy.borrow_mut();
+        marked_for_destroy.insert(entity); // TODO: Warning, error if entity has already been marked?
+    }
+
+    pub fn destroy_immediate(&mut self, entity: Entity) {
+        self.remove(entity);
+
+        // TODO: Destroy children.
+    }
+
+    // Removes and returns the transform associated with the given entity.
+    //
+    // # Details
+    //
+    // NOTE: This does not handle updating/removing children. So be warned.
     fn remove(&mut self, entity: Entity) -> Transform {
         // Retrieve indices of removed entity and the one it's swapped with.
         let (row, index) = *self.indices.get(&entity)
@@ -119,7 +146,7 @@ impl TransformManager {
         self.indices.remove(&entity);
 
         // Update the index mapping for the moved entity, but only if the one we removed
-        // wasn't the only one in the row.
+        // wasn't the only one in the row (or the last one in the row).
         if index != self.entities[row].len() {
             let moved_entity = self.entities[row][index];
             self.indices.insert(moved_entity, (row, index));
