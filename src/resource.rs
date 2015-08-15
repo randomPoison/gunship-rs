@@ -25,6 +25,9 @@ pub struct ResourceManager {
 
     visual_scenes: RefCell<HashMap<String, VisualScene>>,
     geometries: RefCell<HashMap<String, Geometry>>,
+
+    vert_shader: RefCell<String>,
+    frag_shader: RefCell<String>,
 }
 
 impl ResourceManager {
@@ -33,8 +36,12 @@ impl ResourceManager {
             renderer: renderer,
             meshes: RefCell::new(HashMap::new()),
             audio_clips: RefCell::new(HashMap::new()),
+
             visual_scenes: RefCell::new(HashMap::new()),
             geometries: RefCell::new(HashMap::new()),
+
+            vert_shader: RefCell::new(String::from("shaders/forward_phong.frag.glsl")),
+            frag_shader: RefCell::new(String::from("shaders/forward_phong.vert.glsl")),
         }
     }
 
@@ -87,6 +94,36 @@ impl ResourceManager {
         }
 
         Ok(())
+    }
+
+    /// Override the default path to the vertex shader.
+    ///
+    /// # Details
+    ///
+    /// This is a temporary hack to allow the examples to work. Right now the engine has very
+    /// limited shader support. The resource manager can only support a single vertex shader and
+    /// a single fragment shader and it will always look in the same path to load that shader. The
+    /// path was originally hard-coded and games were required to put their shaders at that
+    /// location, this method allows you to override that path.
+    pub fn set_vert_shader_path(&self, path: &str) {
+        let mut vert_shader = self.vert_shader.borrow_mut();
+        vert_shader.clear();
+        vert_shader.push_str(path);
+    }
+
+    /// Override the default path to the fragment shader.
+    ///
+    /// # Details
+    ///
+    /// This is a temporary hack to allow the examples to work. Right now the engine has very
+    /// limited shader support. The resource manager can only support a single vertex shader and
+    /// a single fragment shader and it will always look in the same path to load that shader. The
+    /// path was originally hard-coded and games were required to put their shaders at that
+    /// location, this method allows you to override that path.
+    pub fn set_frag_shader_path(&self, path: &str) {
+        let mut frag_shader = self.frag_shader.borrow_mut();
+        frag_shader.clear();
+        frag_shader.push_str(path);
     }
 
     pub fn get_mesh(&self, uri: &str) -> Result<GLMeshData, String> {
@@ -252,8 +289,8 @@ impl ResourceManager {
 
         let mesh = geometry_to_mesh(geometry);
 
-        let frag_src = load_file_text("shaders/forward_phong.frag.glsl");
-        let vert_src = load_file_text("shaders/forward_phong.vert.glsl");
+        let frag_src = load_file_text(&self.frag_shader.borrow());
+        let vert_src = load_file_text(&self.vert_shader.borrow());
 
         let mesh_data =
             self.renderer.gen_mesh(&mesh, vert_src.as_ref(), frag_src.as_ref());

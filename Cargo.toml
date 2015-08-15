@@ -26,3 +26,10 @@ path = "lib/polygon_rs"
 [dependencies.polygon_math]
 version = "*"
 path = "lib/polygon_math"
+
+[[example]]
+name = "create_destroy"
+path = "examples/benchmarks/create_destroy.rs"
+
+[dev_dependencies.rand]
+version = "*"

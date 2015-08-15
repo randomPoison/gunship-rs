@@ -105,7 +105,7 @@ impl GLRender {
         let view_transform = camera.view_matrix();
         let model_view_transform = view_transform * model_transform;
         let projection_transform = camera.projection_matrix();
-        let model_view_projection = projection_transform * (view_transform * model_transform);
+        let model_view_projection = projection_transform * model_view_transform;
 
         let view_normal_transform = {
             let inverse_model = normal_transform.transpose();
