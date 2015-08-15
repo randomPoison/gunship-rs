@@ -2,7 +2,9 @@ use windows::winapi::*;
 use windows::kernel32;
 
 pub struct Timer {
-    frequency: f32,
+    _frequency: f32,
+    one_over_freq: f32,
+    one_over_freq_ms: f32,
 }
 
 impl Timer {
@@ -14,7 +16,9 @@ impl Timer {
         assert!(result != 0);
 
         Timer {
-            frequency: frequency as f32,
+            _frequency: frequency as f32,
+            one_over_freq: 1.0 / frequency as f32,
+            one_over_freq_ms: 1.0 / frequency as f32 * 1000.0,
         }
     }
 
@@ -31,13 +35,13 @@ impl Timer {
     pub fn elapsed(&self, start: i64) -> f32 {
         let now = self.now();
         let elapsed_cycles = now - start;
-        elapsed_cycles as f32 / self.frequency
+        elapsed_cycles as f32 * self.one_over_freq
     }
 
     /// Calculates the elapsed time, in milliseconds, since the specified start time.
     pub fn elapsed_ms(&self, start: i64) -> f32 {
         let now = self.now();
         let elapsed_cycles = now - start;
-        elapsed_cycles as f32 / self.frequency * 1000.0
+        elapsed_cycles as f32 * self.one_over_freq_ms
     }
 }

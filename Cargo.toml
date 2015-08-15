@@ -27,6 +27,9 @@ path = "lib/polygon_rs"
 version = "*"
 path = "lib/polygon_math"
 
+[profile.release]
+debug = true
+
 [[example]]
 name = "create_destroy"
 path = "examples/benchmarks/create_destroy.rs"

@@ -162,11 +162,17 @@ impl Engine {
         loop {
             let start_time = timer.now();
 
+            let before_update = timer.now();
             self.update();
+            println!("update time: {}ms", timer.elapsed_ms(before_update));
             self.draw();
 
             if self.close {
                 break;
+            }
+
+            if timer.elapsed_ms(start_time) > TARGET_FRAME_TIME_MS {
+                println!("WARNING: Missed frame time. Frame time: {}ms, target frame time: {}ms", timer.elapsed_ms(start_time), TARGET_FRAME_TIME_MS);
             }
 
             // Wait for target frame time.

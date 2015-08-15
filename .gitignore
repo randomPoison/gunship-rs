@@ -17,3 +17,7 @@ lib/bootstrap-gl/gl_src/
 
 # Visual Studio
 *.sln
+
+*.amplxeproj
+*.cfg
+My Amplifier XE Results - create_destroy

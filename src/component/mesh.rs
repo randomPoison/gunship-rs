@@ -41,7 +41,7 @@ impl MeshManager {
     }
 
     pub fn give_mesh(&mut self, entity: Entity, mesh: GLMeshData) -> &GLMeshData {
-        assert!(!self.indices.contains_key(&entity));
+        debug_assert!(!self.indices.contains_key(&entity));
 
         let index = self.meshes.len();
         self.meshes.push(mesh);
