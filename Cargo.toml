@@ -27,6 +27,10 @@ path = "lib/polygon_rs"
 version = "*"
 path = "lib/polygon_math"
 
+[dependencies.stopwatch] # TODO: Make this a dev dependency somehow?
+version = "*"
+path = "lib/stopwatch"
+
 [profile.release]
 debug = true
 

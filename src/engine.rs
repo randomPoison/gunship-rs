@@ -1,3 +1,5 @@
+extern crate stopwatch;
+
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::thread;
@@ -16,6 +18,8 @@ use bootstrap::time::Timer;
 use bs_audio;
 
 use polygon::gl_render::GLRender;
+
+use self::stopwatch::{Collector, Stopwatch};
 
 use scene::Scene;
 use resource::ResourceManager;
@@ -80,6 +84,8 @@ impl Engine {
     }
 
     pub fn update(&mut self) {
+        let _stopwatch = Stopwatch::named("update");
+
         let scene = &mut self.scene;
 
         scene.input.clear();
@@ -121,6 +127,8 @@ impl Engine {
     }
 
     pub fn draw(&mut self) {
+        let _stopwatch = Stopwatch::named("draw");
+
         self.renderer.clear();
 
         let scene = &mut self.scene;
@@ -158,8 +166,11 @@ impl Engine {
 
     pub fn main_loop(&mut self) {
         let timer = Timer::new();
+        let mut collector = Collector::new().unwrap();
 
         loop {
+            let _stopwatch = Stopwatch::named("loop");
+
             let start_time = timer.now();
 
             let before_update = timer.now();
@@ -188,6 +199,8 @@ impl Engine {
 
             // TODO: Don't flip buffers until end of frame time?
         };
+
+        collector.flush_to_file("stopwatch.csv");
     }
 
     pub fn register_system<T: Any + System>(&mut self, system: T) {
