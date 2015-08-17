@@ -105,7 +105,7 @@ impl GLRender {
         let view_transform = camera.view_matrix();
         let model_view_transform = view_transform * model_transform;
         let projection_transform = camera.projection_matrix();
-        let model_view_projection = projection_transform * (view_transform * model_transform);
+        let model_view_projection = projection_transform * model_view_transform;
 
         let view_normal_transform = {
             let inverse_model = normal_transform.transpose();
@@ -123,7 +123,7 @@ impl GLRender {
         gl.use_program(mesh.shader);
 
         // Specify the layout of the vertex data.
-        let possition_attrib = gl.get_attrib(mesh.shader, "vertexPosition")
+        let possition_attrib = gl.get_attrib(mesh.shader, b"vertexPosition\0")
             .expect("Could not get vertexPosition attribute");
         gl.vertex_attrib_pointer(
             possition_attrib,
@@ -134,7 +134,7 @@ impl GLRender {
             mesh.position_attribute.offset * mem::size_of::<f32>());
         gl.enable_vertex_attrib_array(possition_attrib);
 
-        let normal_attrib = gl.get_attrib(mesh.shader, "vertexNormal")
+        let normal_attrib = gl.get_attrib(mesh.shader, b"vertexNormal\0")
             .expect("Could not get vertexNormal attribute");
         gl.vertex_attrib_pointer(
             normal_attrib,
@@ -146,21 +146,21 @@ impl GLRender {
         gl.enable_vertex_attrib_array(normal_attrib);
 
         // Set uniform transforms.
-        if let Some(model_transform_location) = gl.get_uniform(mesh.shader, "modelTransform") {
+        if let Some(model_transform_location) = gl.get_uniform(mesh.shader, b"modelTransform\0") {
             gl.uniform_matrix_4x4(
                 model_transform_location,
                 true,
                 model_transform.raw_data());
         }
 
-        if let Some(normal_transform_location) = gl.get_uniform(mesh.shader, "normalTransform") {
+        if let Some(normal_transform_location) = gl.get_uniform(mesh.shader, b"normalTransform\0") {
             gl.uniform_matrix_4x4(
                 normal_transform_location,
                 true,
                 view_normal_transform.raw_data());
         }
 
-        if let Some(view_transform_location) = gl.get_uniform(mesh.shader, "viewTransform") {
+        if let Some(view_transform_location) = gl.get_uniform(mesh.shader, b"viewTransform\0") {
             gl.uniform_matrix_4x4(
                 view_transform_location,
                 true,
@@ -168,7 +168,7 @@ impl GLRender {
         }
 
         if let Some(model_view_transform_location)
-            = gl.get_uniform(mesh.shader, "modelViewTransform") {
+            = gl.get_uniform(mesh.shader, b"modelViewTransform\0") {
             gl.uniform_matrix_4x4(
                 model_view_transform_location,
                 true,
@@ -176,7 +176,7 @@ impl GLRender {
         }
 
         if let Some(projection_transform_location)
-            = gl.get_uniform(mesh.shader, "projectionTransform") {
+            = gl.get_uniform(mesh.shader, b"projectionTransform\0") {
             gl.uniform_matrix_4x4(
                 projection_transform_location,
                 true,
@@ -184,7 +184,7 @@ impl GLRender {
         }
 
         if let Some(model_view_projection_location)
-            = gl.get_uniform(mesh.shader, "modelViewProjection") {
+            = gl.get_uniform(mesh.shader, b"modelViewProjection\0") {
             gl.uniform_matrix_4x4(
                 model_view_projection_location,
                 true,
@@ -193,16 +193,16 @@ impl GLRender {
 
         // Set uniform colors.
         let ambient_color = Color::new(0.25, 0.25, 0.25, 1.0);
-        let maybe_ambient_location = gl.get_uniform(mesh.shader, "globalAmbient");
+        let maybe_ambient_location = gl.get_uniform(mesh.shader, b"globalAmbient\0");
         if let Some(ambient_location) = maybe_ambient_location {
             gl.uniform_4f(ambient_location, ambient_color.as_array());
         }
 
-        if let Some(camera_position_location) = gl.get_uniform(mesh.shader, "cameraPosition") {
+        if let Some(camera_position_location) = gl.get_uniform(mesh.shader, b"cameraPosition\0") {
             gl.uniform_4f(camera_position_location, camera.position.as_array());
         }
 
-        if let Some(light_position_location) = gl.get_uniform(mesh.shader, "lightPosition") {
+        if let Some(light_position_location) = gl.get_uniform(mesh.shader, b"lightPosition\0") {
             // Render first light without blending so it overrides any objects behind it.
             if let Some(light) = lights.next() {
                 let light_position = match light {

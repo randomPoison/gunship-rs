@@ -17,7 +17,6 @@ use std::slice;
 use std::str;
 use std::ops::{Deref, BitOr};
 use std::ptr;
-use std::ffi::CString;
 
 use bootstrap::window::Window;
 
@@ -250,10 +249,9 @@ impl Context {
         }
     }
 
-    pub fn get_attrib(&self, program: ProgramObject, attrib: &str) -> Option<AttributeLocation> {
-        let attrib_string = CString::new(attrib).unwrap();
+    pub fn get_attrib(&self, program: ProgramObject, attrib: &[u8]) -> Option<AttributeLocation> {
         let attrib_location =
-            self.loader.get_attrib_location(program, attrib_string.as_ptr());
+            self.loader.get_attrib_location(program, attrib.as_ptr() as *const _);
         if attrib_location == -1 {
             None
         } else {
@@ -261,10 +259,9 @@ impl Context {
         }
     }
 
-    pub fn get_uniform(&self, program: ProgramObject, uniform: &str) -> Option<UniformLocation> {
-        let uniform_string = CString::new(uniform).unwrap();
+    pub fn get_uniform(&self, program: ProgramObject, uniform: &[u8]) -> Option<UniformLocation> {
         let uniform_location =
-            self.loader.get_uniform_location(program, uniform_string.as_ptr());
+            self.loader.get_uniform_location(program, uniform.as_ptr() as *const _);
         if uniform_location == -1 {
             None
         } else {

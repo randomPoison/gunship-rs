@@ -36,22 +36,18 @@ impl MeshManager {
     }
 
     pub fn assign(&mut self, entity: Entity, path_text: &str) -> &GLMeshData {
-        assert!(!self.indices.contains_key(&entity));
-
-        let index = self.meshes.len();
-        self.meshes.push(self.resource_manager.get_mesh(path_text).unwrap());
-        self.entities.push(entity);
-        self.indices.insert(entity, index);
-        &self.meshes[index]
+        let mesh = self.resource_manager.get_mesh(path_text).unwrap();
+        self.give_mesh(entity, mesh)
     }
 
-    pub fn give_mesh(&mut self, entity: Entity, mesh: GLMeshData) {
-        assert!(!self.indices.contains_key(&entity));
+    pub fn give_mesh(&mut self, entity: Entity, mesh: GLMeshData) -> &GLMeshData {
+        debug_assert!(!self.indices.contains_key(&entity));
 
         let index = self.meshes.len();
         self.meshes.push(mesh);
         self.entities.push(entity);
         self.indices.insert(entity, index);
+        &self.meshes[index]
     }
 
     pub fn meshes(&self) -> &Vec<GLMeshData> {
@@ -62,6 +58,19 @@ impl MeshManager {
         MeshIter {
             mesh_iter: self.meshes.iter(),
             entity_iter: self.entities.iter()
+        }
+    }
+
+    pub fn destroy_immediate(&mut self, entity: Entity) {
+        let index = self.indices.remove(&entity)
+                    .expect("Could not destroy mesh component because none is associated with the entity");
+        self.meshes.swap_remove(index);
+        let removed_entity = self.entities.swap_remove(index);
+        assert_eq!(removed_entity, entity);
+
+        if self.meshes.len() > 0 {
+            let moved_entity = self.entities[index];
+            self.indices.insert(moved_entity, index);
         }
     }
 }
