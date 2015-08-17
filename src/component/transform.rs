@@ -343,7 +343,7 @@ impl System for TransformUpdateSystem {
         let transform_manager = scene.get_manager::<TransformManager>();
 
         for row in transform_manager.transforms.iter() {
-            for transform in row.iter() {
+            for transform in row.iter().filter(|transform| transform.borrow().out_of_date.get()) {
                 // Retrieve the parent's transformation matrix, using the identity
                 // matrix if the transform has no parent.
                 let (parent_matrix, parent_rotation) = match transform.borrow().parent {
