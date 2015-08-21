@@ -1,4 +1,5 @@
 use matrix::Matrix4;
+use super::test::{Bencher, black_box};
 
 #[test]
 fn matrix_equality()
@@ -55,4 +56,14 @@ fn matrix_translation()
     assert!(translation_2[(1, 3)] == 2.0);
     assert!(translation_2[(2, 3)] == 3.0);
     assert!(translation_2[(3, 3)] == 1.0);
+}
+
+#[bench]
+fn bench_multiply(bencher: &mut Bencher) {
+    let first = Matrix4::identity();
+    let second = Matrix4::identity();
+
+    bencher.iter(|| {
+        black_box(first * second);
+    });
 }

@@ -21,3 +21,5 @@ lib/bootstrap-gl/gl_src/
 *.amplxeproj
 *.cfg
 My Amplifier XE Results - create_destroy
+My Amplifier XE Results - circle_movement
+stopwatch.csv

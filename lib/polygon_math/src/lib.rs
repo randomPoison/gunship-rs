@@ -1,3 +1,5 @@
+#![cfg_attr(test, feature(test))]
+
 pub mod point;
 pub mod vector;
 pub mod matrix;
