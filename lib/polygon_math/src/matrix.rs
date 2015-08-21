@@ -132,28 +132,28 @@ impl Matrix4 {
         for row in 0..4 {
             for col in (row + 1)..4
             {
-                let temp = transpose[(row, col)];
-                transpose[(row, col)] = transpose[(col, row)];
-                transpose[(col, row)] = temp;
+                let temp = transpose[row][col];
+                transpose[row][col] = transpose[col][row];
+                transpose[col][row] = temp;
             }
         }
         transpose
     }
 
     pub fn x_part(&self) -> Vector3 {
-        Vector3::new(self[(0, 0)], self[(1, 0)], self[(2, 0)])
+        Vector3::new(self[0][0], self[1][0], self[2][0])
     }
 
     pub fn y_part(&self) -> Vector3 {
-        Vector3::new(self[(0, 1)], self[(1, 1)], self[(2, 1)])
+        Vector3::new(self[0][1], self[1][1], self[2][1])
     }
 
     pub fn z_part(&self) -> Vector3 {
-        Vector3::new(self[(0, 2)], self[(1, 2)], self[(2, 2)])
+        Vector3::new(self[0][2], self[1][2], self[2][2])
     }
 
     pub fn translation_part(&self) -> Point {
-        Point::new(self[(0, 3)], self[(1, 3)], self[(2, 3)])
+        Point::new(self[0][3], self[1][3], self[2][3])
     }
 
     /// Get the matrix data as a raw array.
@@ -198,24 +198,6 @@ impl IndexMut<usize> for Matrix4 {
     }
 }
 
-impl Index<(usize, usize)> for Matrix4 {
-    type Output = f32;
-
-    fn index(&self, index: (usize, usize)) -> &f32 {
-        let (row, col) = index;
-        assert!(row < 4 && col < 4);
-        &self.data[row][col]
-    }
-}
-
-impl IndexMut<(usize, usize)> for Matrix4 {
-    fn index_mut(&mut self, index: (usize, usize)) -> &mut f32 {
-        let (row, col) = index;
-        assert!(row < 4 && col < 4);
-        &mut self.data[row][col]
-    }
-}
-
 impl Mul<Matrix4> for Matrix4 {
     type Output = Matrix4;
 
@@ -224,12 +206,12 @@ impl Mul<Matrix4> for Matrix4 {
 
         // for row in 0..4 {
         //     for col in 0..4 {
-        //         result[(row, col)] = {
+        //         result[row][col] = {
         //             let mut dot_product = 0.0;
         //             for offset in 0..4 {
         //                 dot_product +=
-        //                     self[(row, offset)] *
-        //                     other[(offset, col)];
+        //                     self[row][offset] *
+        //                     other[offset][col];
         //             }
         //             dot_product
         //         };
@@ -262,10 +244,10 @@ impl Mul<Point> for Matrix4 {
 
     fn mul(self, rhs: Point) -> Point {
         Point {
-            x: self[(0, 0)] * rhs.x + self[(0, 1)] * rhs.y + self[(0, 2)] * rhs.z + self[(0, 3)] * rhs.w,
-            y: self[(1, 0)] * rhs.x + self[(1, 1)] * rhs.y + self[(1, 2)] * rhs.z + self[(1, 3)] * rhs.w,
-            z: self[(2, 0)] * rhs.x + self[(2, 1)] * rhs.y + self[(2, 2)] * rhs.z + self[(2, 3)] * rhs.w,
-            w: self[(3, 0)] * rhs.x + self[(3, 1)] * rhs.y + self[(3, 2)] * rhs.z + self[(3, 3)] * rhs.w,
+            x: self[0][0] * rhs.x + self[0][1] * rhs.y + self[0][2] * rhs.z + self[0][3] * rhs.w,
+            y: self[1][0] * rhs.x + self[1][1] * rhs.y + self[1][2] * rhs.z + self[1][3] * rhs.w,
+            z: self[2][0] * rhs.x + self[2][1] * rhs.y + self[2][2] * rhs.z + self[2][3] * rhs.w,
+            w: self[3][0] * rhs.x + self[3][1] * rhs.y + self[3][2] * rhs.z + self[3][3] * rhs.w,
         }
     }
 }
@@ -276,7 +258,7 @@ impl Debug for Matrix4 {
         for row in 0..4 {
             try!(formatter.write_str("["));
             for col in 0..4 {
-                try!(write!(formatter, "{:>+.8}, ", self[(row, col)]));
+                try!(write!(formatter, "{:>+.8}, ", self[row][col]));
             }
             try!(formatter.write_str("]\n"));
         }
