@@ -50,11 +50,11 @@ impl Camera
         let width = self.aspect * height;
 
         let mut projection = Matrix4::new();
-        projection[(0, 0)] = 2.0 * self.near / width;
-        projection[(1, 1)] = 2.0 * self.near / height;
-        projection[(2, 2)] = -(self.far + self.near) / (self.far - self.near);
-        projection[(2, 3)] = -2.0 * self.far * self.near / (self.far - self.near);
-        projection[(3, 2)] = -1.0;
+        projection[0][0] = 2.0 * self.near / width;
+        projection[1][1] = 2.0 * self.near / height;
+        projection[2][2] = -(self.far + self.near) / (self.far - self.near);
+        projection[2][3] = -2.0 * self.far * self.near / (self.far - self.near);
+        projection[3][2] = -1.0;
         projection
     }
 }
