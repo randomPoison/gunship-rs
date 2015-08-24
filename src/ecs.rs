@@ -1,3 +1,5 @@
+use std::fmt;
+
 use scene::Scene;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -34,4 +36,12 @@ pub trait System {
 }
 
 pub trait ComponentManager {
+    /// Destroy all component data associated with the entity.
+    fn destroy_all(&mut self, Entity);
+}
+
+impl ::std::fmt::Debug for ComponentManager {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.pad("ComponentManager")
+    }
 }

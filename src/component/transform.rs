@@ -157,6 +157,9 @@ impl TransformManager {
 }
 
 impl ComponentManager for TransformManager {
+    fn destroy_all(&mut self, entity: Entity) {
+        self.destroy_immediate(entity);
+    }
 }
 
 /// TODO: This should be module-level documentation.

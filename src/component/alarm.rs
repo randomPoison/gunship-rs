@@ -93,6 +93,9 @@ impl AlarmManager {
 }
 
 impl ComponentManager for AlarmManager {
+    fn destroy_all(&mut self, _entity: Entity) {
+        unimplemented!();
+    }
 }
 
 impl Clone for AlarmManager {

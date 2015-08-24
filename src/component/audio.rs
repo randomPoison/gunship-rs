@@ -102,6 +102,9 @@ impl AudioSourceManager {
 }
 
 impl ComponentManager for AudioSourceManager {
+    fn destroy_all(&mut self, _entity: Entity) {
+        unimplemented!();
+    }
 }
 
 pub struct AudioSystem;

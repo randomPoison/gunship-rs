@@ -22,7 +22,7 @@ use resource::ResourceManager;
 #[derive(Debug)]
 pub struct Scene {
     entity_manager: RefCell<EntityManager>,
-    component_managers: HashMap<TypeId, RefCell<Box<Any>>>,
+    component_managers: HashMap<TypeId, RefCell<Box<ComponentManager>>>,
     /// This value is only needed in debug builds.
     manager_id_by_name: HashMap<String, TypeId>,
     pub input: Input,
@@ -107,18 +107,6 @@ impl Scene {
         }
     }
 
-    pub fn remove_manager<T: Any + ComponentManager>(&mut self) -> Box<T> {
-        let manager_id = TypeId::of::<T>();
-        let manager = self.component_managers
-            .remove(&manager_id)
-            .expect(&format!("Tried to remove manager {} with ID {:?} but none exists", type_name::<T>(), manager_id));
-
-        // TODO: Only do this when hotloading is enabled.
-        self.manager_id_by_name.remove(type_name::<T>().into());
-
-        manager.into_inner().downcast().unwrap()
-    }
-
     pub fn create_entity(&self) -> Entity {
         self.entity_manager.borrow_mut().create()
     }
@@ -147,11 +135,19 @@ impl Scene {
         // by its type, but we can't use `Any::downcast_ref()` because the type id will be
         // different across different DLLs.
         unsafe {
+            // downcast_manager(manager.borrow().deref().deref())
+
             // Get the raw representation of the trait object.
             let to: TraitObject = mem::transmute(manager.borrow().deref().deref());
 
             // Extract the data pointer.
             mem::transmute(to.data)
+        }
+    }
+
+    pub fn destroy_entity(&self, entity: Entity) {
+        for (_, manager) in self.component_managers.iter() {
+            manager.borrow_mut().destroy_all(entity);
         }
     }
 }
@@ -163,7 +159,7 @@ fn type_name<T>() -> &'static str {
 }
 
 pub struct ManagerRef<'a, T: Any + ComponentManager> {
-    manager: Ref<'a, Box<Any>>,
+    manager: Ref<'a, Box<ComponentManager>>,
     _phantom: PhantomData<T>,
 }
 
@@ -171,12 +167,12 @@ impl<'a, T: Any + ComponentManager> Deref for ManagerRef<'a, T> {
     type Target = T;
 
     fn deref<'b>(&'b self) -> &'b T {
-        self.manager.downcast_ref().unwrap()
+        unsafe { downcast_manager(self.manager.deref().deref()) }
     }
 }
 
 pub struct ManagerRefMut<'a, T: Any + ComponentManager> {
-    manager: RefMut<'a, Box<Any>>,
+    manager: RefMut<'a, Box<ComponentManager>>,
     _phantom: PhantomData<T>,
 }
 
@@ -184,12 +180,30 @@ impl<'a, T: Any + ComponentManager> Deref for ManagerRefMut<'a, T> {
     type Target = T;
 
     fn deref<'b>(&'b self) -> &'b T {
-        self.manager.downcast_ref().unwrap()
+        unsafe { downcast_manager(self.manager.deref().deref()) }
     }
 }
 
 impl<'a, T: Any + ComponentManager> DerefMut for ManagerRefMut<'a, T> {
     fn deref_mut<'b>(&'b mut self) -> &'b mut T {
-        self.manager.downcast_mut().unwrap()
+        let manager = self.manager.deref_mut().deref_mut();
+        unsafe { downcast_manager_mut(manager) }
     }
+}
+
+/// Performs an unchecked downcast from the `ComponentManager` trait object to the concrete type.
+unsafe fn downcast_manager<'a, T: ComponentManager>(manager: &'a ComponentManager) -> &'a T {
+    // Get the raw representation of the trait object.
+    let to: TraitObject = mem::transmute(manager);
+
+    // Extract the data pointer.
+    mem::transmute(to.data)
+}
+
+unsafe fn downcast_manager_mut<'a, T: ComponentManager>(manager: &'a mut ComponentManager) -> &'a mut T {
+    // Get the raw representation of the trait object.
+    let to: TraitObject = mem::transmute(manager);
+
+    // Extract the data pointer.
+    mem::transmute(to.data)
 }

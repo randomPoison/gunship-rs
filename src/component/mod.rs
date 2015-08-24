@@ -4,6 +4,7 @@ pub mod mesh;
 pub mod light;
 pub mod audio;
 pub mod alarm;
+pub mod collision;
 pub mod struct_component_manager;
 
 pub use self::struct_component_manager::StructComponentManager;

@@ -76,6 +76,9 @@ impl MeshManager {
 }
 
 impl ComponentManager for MeshManager {
+    fn destroy_all(&mut self, entity: Entity) {
+        self.destroy_immediate(entity);
+    }
 }
 
 pub struct MeshIter<'a> {
