@@ -149,6 +149,8 @@ impl Scene {
         for (_, manager) in self.component_managers.iter() {
             manager.borrow_mut().destroy_all(entity);
         }
+
+        self.entity_manager.borrow_mut().destroy(entity);
     }
 
     pub fn destroy_marked(&self) {
