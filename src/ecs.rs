@@ -37,7 +37,10 @@ pub trait System {
 
 pub trait ComponentManager {
     /// Destroy all component data associated with the entity.
-    fn destroy_all(&mut self, Entity);
+    fn destroy_all(&self, Entity);
+
+    /// Destroy all previously marked components.
+    fn destroy_marked(&mut self);
 }
 
 impl ::std::fmt::Debug for ComponentManager {

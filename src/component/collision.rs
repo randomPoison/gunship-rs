@@ -8,7 +8,11 @@ pub struct ColliderManager {
 }
 
 impl ComponentManager for ColliderManager {
-    fn destroy_all(&mut self, _entity: Entity) {
+    fn destroy_all(&self, _entity: Entity) {
+        unimplemented!();
+    }
+
+    fn destroy_marked(&mut self) {
         unimplemented!();
     }
 }

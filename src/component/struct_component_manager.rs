@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::slice::Iter;
 use std::cell::{RefCell, Ref, RefMut};
 use std::any::Any;
@@ -12,6 +12,8 @@ pub struct StructComponentManager<T: Clone + Any> {
     components: Vec<RefCell<T>>,
     entities: Vec<Entity>,
     indices: HashMap<Entity, usize>,
+
+    marked_for_destroy: RefCell<HashSet<Entity>>,
 }
 
 impl<T: Clone + Any> StructComponentManager<T> {
@@ -20,6 +22,8 @@ impl<T: Clone + Any> StructComponentManager<T> {
             components: Vec::new(),
             entities: Vec::new(),
             indices: HashMap::new(),
+
+            marked_for_destroy: RefCell::new(HashSet::new()),
         }
     }
 
@@ -94,8 +98,19 @@ impl<T: Clone + Any> StructComponentManager<T> {
 }
 
 impl<T: Clone + Any> ComponentManager for StructComponentManager<T> {
-    fn destroy_all(&mut self, entity: Entity) {
-        self.destroy_immediate(entity);
+    fn destroy_all(&self, entity: Entity) {
+        if self.indices.contains_key(&entity) {
+            self.marked_for_destroy.borrow_mut().insert(entity);
+        }
+    }
+
+    fn destroy_marked(&mut self) {
+        let mut marked_for_destroy = RefCell::new(HashSet::new());
+        ::std::mem::swap(&mut marked_for_destroy, &mut self.marked_for_destroy);
+        let mut marked_for_destroy = marked_for_destroy.into_inner();
+        for entity in marked_for_destroy.drain() {
+            self.destroy_immediate(entity);
+        }
     }
 }
 

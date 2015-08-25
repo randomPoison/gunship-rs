@@ -93,8 +93,11 @@ impl AlarmManager {
 }
 
 impl ComponentManager for AlarmManager {
-    fn destroy_all(&mut self, _entity: Entity) {
-        unimplemented!();
+    fn destroy_all(&self, _entity: Entity) {
+        println!("WARNING: AlarmManager::destroy_all() is not yet implemented");
+    }
+
+    fn destroy_marked(&mut self) {
     }
 }
 
@@ -113,30 +116,50 @@ pub struct AlarmSystem;
 
 impl System for AlarmSystem {
     fn update(&mut self, scene: &Scene, delta: f32) {
-        let mut alarm_manager = scene.get_manager_mut::<AlarmManager>();
+        let mut callbacks_to_trigger: Vec<Alarm> = Vec::new();
 
-        let mut remaining_delta = delta;
-        while alarm_manager.alarms.len() > 0 {
-            {
-                let alarm = &mut alarm_manager.alarms[0];
-                if remaining_delta > alarm.remaining_time {
-                    // Alarm is done, invoke the callback and then remove it from the manager.
-                    let entity = alarm.entity;
-                    (alarm.callback)(scene, entity);
-                    remaining_delta -= alarm.remaining_time;
-                } else {
-                    // Not enough delta time to finish the alarm,
-                    // update its remaining time and break.
-                    alarm.remaining_time -= remaining_delta;
-                    break;
+        // The first time we borrow the alarm manager we collect up all the alarms that need
+        // to be triggered, but we need to end our borrow of the alarm manager before triggering
+        // them because the callback might try to borrow the alarm manager too.
+        {
+            let mut alarm_manager = scene.get_manager_mut::<AlarmManager>();
+
+            let mut remaining_delta = delta;
+            while alarm_manager.alarms.len() > 0 {
+                {
+                    let alarm = &mut alarm_manager.alarms[0];
+                    if remaining_delta > alarm.remaining_time {
+                        // Alarm is done, invoke the callback and then remove it from the manager.
+                        remaining_delta -= alarm.remaining_time;
+                    } else {
+                        // Not enough delta time to finish the alarm,
+                        // update its remaining time and break.
+                        alarm.remaining_time -= remaining_delta;
+                        break;
+                    }
                 }
-            }
 
-            // If the alarm shouldn't be removed the loop breaks before this point, so we're good
-            // to remove the first alarm.
-            let alarm = alarm_manager.alarms.remove(0);
-            if alarm.repeating {
-                alarm_manager.insert_alarm(alarm);
+                // If the alarm shouldn't be removed the loop breaks before this point, so we're good
+                // to remove the first alarm.
+                let alarm = alarm_manager.alarms.remove(0);
+                callbacks_to_trigger.push(alarm);
+            }
+        }
+
+        // Do callbacks.
+        for alarm in &callbacks_to_trigger {
+            let entity = alarm.entity;
+            (alarm.callback)(scene, entity);
+        }
+
+        // Once we've done all the callbacks then we can put the repeating alarms back into the
+        // alarm manager.
+        {
+            let mut alarm_manager = scene.get_manager_mut::<AlarmManager>();
+            for alarm in callbacks_to_trigger.drain(0..) {
+                if alarm.repeating {
+                    alarm_manager.insert_alarm(alarm);
+                }
             }
         }
     }

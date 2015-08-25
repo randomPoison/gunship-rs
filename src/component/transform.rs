@@ -157,8 +157,17 @@ impl TransformManager {
 }
 
 impl ComponentManager for TransformManager {
-    fn destroy_all(&mut self, entity: Entity) {
-        self.destroy_immediate(entity);
+    fn destroy_all(&self, entity: Entity) {
+        self.marked_for_destroy.borrow_mut().insert(entity);
+    }
+
+    fn destroy_marked(&mut self) {
+        let mut marked_for_destroy = RefCell::new(HashSet::new());
+        ::std::mem::swap(&mut marked_for_destroy, &mut self.marked_for_destroy);
+        let mut marked_for_destroy = marked_for_destroy.into_inner();
+        for entity in marked_for_destroy.drain() {
+            self.destroy_immediate(entity);
+        }
     }
 }
 
@@ -346,7 +355,7 @@ impl System for TransformUpdateSystem {
         let transform_manager = scene.get_manager::<TransformManager>();
 
         for row in transform_manager.transforms.iter() {
-            for transform in row.iter().filter(|transform| transform.borrow().out_of_date.get()) {
+            for transform in row {
                 // Retrieve the parent's transformation matrix, using the identity
                 // matrix if the transform has no parent.
                 let (parent_matrix, parent_rotation) = match transform.borrow().parent {

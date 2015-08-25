@@ -150,6 +150,12 @@ impl Scene {
             manager.borrow_mut().destroy_all(entity);
         }
     }
+
+    pub fn destroy_marked(&self) {
+        for (_, manager) in self.component_managers.iter() {
+            manager.borrow_mut().destroy_marked();
+        }
+    }
 }
 
 fn type_name<T>() -> &'static str {
