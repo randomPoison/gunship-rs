@@ -124,6 +124,9 @@ impl Engine {
         self.transform_update.update(scene, TARGET_FRAME_TIME_SECONDS);
         self.light_update.update(scene, TARGET_FRAME_TIME_SECONDS);
         self.audio_update.update(scene, TARGET_FRAME_TIME_SECONDS);
+
+        // Cleanup any entities that have been marked for destroy.
+        scene.destroy_marked();
     }
 
     pub fn draw(&mut self) {
@@ -173,9 +176,7 @@ impl Engine {
 
             let start_time = timer.now();
 
-            let before_update = timer.now();
             self.update();
-            println!("update time: {}ms", timer.elapsed_ms(before_update));
             self.draw();
 
             if self.close {

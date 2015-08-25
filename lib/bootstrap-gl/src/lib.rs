@@ -17,6 +17,7 @@ use std::slice;
 use std::str;
 use std::ops::{Deref, BitOr};
 use std::ptr;
+use std::ffi::CStr;
 
 use bootstrap::window::Window;
 
@@ -678,7 +679,7 @@ pub extern "C" fn debug_callback(
     message_type: DebugType,
     _id: UInt,
     severity: DebugSeverity,
-    length: SizeI,
+    _length: SizeI,
     message: *const u8,
     _user_param: *mut ()) {
     println!(
@@ -686,7 +687,5 @@ pub extern "C" fn debug_callback(
         source,
         message_type,
         severity,
-        str::from_utf8(unsafe {
-            slice::from_raw_parts(message, length as usize)
-        }).unwrap());
+        unsafe { CStr::from_ptr(message as *const _) })
 }

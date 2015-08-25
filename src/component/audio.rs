@@ -102,6 +102,12 @@ impl AudioSourceManager {
 }
 
 impl ComponentManager for AudioSourceManager {
+    fn destroy_all(&self, _entity: Entity) {
+        println!("WARNING: AudioSourceManager.destroy_all() is not yet implemented");
+    }
+
+    fn destroy_marked(&mut self) {
+    }
 }
 
 pub struct AudioSystem;

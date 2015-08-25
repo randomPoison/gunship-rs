@@ -40,8 +40,8 @@ impl ResourceManager {
             visual_scenes: RefCell::new(HashMap::new()),
             geometries: RefCell::new(HashMap::new()),
 
-            vert_shader: RefCell::new(String::from("shaders/forward_phong.frag.glsl")),
-            frag_shader: RefCell::new(String::from("shaders/forward_phong.vert.glsl")),
+            vert_shader: RefCell::new(String::from("shaders/forward_phong.vert.glsl")),
+            frag_shader: RefCell::new(String::from("shaders/forward_phong.frag.glsl")),
         }
     }
 

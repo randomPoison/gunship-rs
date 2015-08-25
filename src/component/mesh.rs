@@ -1,6 +1,7 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::slice::Iter;
 use std::rc::Rc;
+use std::cell::RefCell;
 
 use polygon::gl_render::GLMeshData;
 
@@ -14,6 +15,8 @@ pub struct MeshManager {
     meshes: Vec<GLMeshData>,
     entities: Vec<Entity>,
     indices: HashMap<Entity, usize>,
+
+    marked_for_destroy: RefCell<HashSet<Entity>>,
 }
 
 impl MeshManager {
@@ -23,6 +26,8 @@ impl MeshManager {
             meshes: Vec::new(),
             entities: Vec::new(),
             indices: HashMap::new(),
+
+            marked_for_destroy: RefCell::new(HashSet::new()),
         }
     }
 
@@ -32,6 +37,8 @@ impl MeshManager {
             meshes: self.meshes.clone(),
             entities: self.entities.clone(),
             indices: self.indices.clone(),
+
+            marked_for_destroy: self.marked_for_destroy.clone()
         }
     }
 
@@ -68,7 +75,7 @@ impl MeshManager {
         let removed_entity = self.entities.swap_remove(index);
         assert_eq!(removed_entity, entity);
 
-        if self.meshes.len() > 0 {
+        if index != self.meshes.len() {
             let moved_entity = self.entities[index];
             self.indices.insert(moved_entity, index);
         }
@@ -76,6 +83,20 @@ impl MeshManager {
 }
 
 impl ComponentManager for MeshManager {
+    fn destroy_all(&self, entity: Entity) {
+        if self.indices.contains_key(&entity) {
+            self.marked_for_destroy.borrow_mut().insert(entity);
+        }
+    }
+
+    fn destroy_marked(&mut self) {
+        let mut marked_for_destroy = RefCell::new(HashSet::new());
+        ::std::mem::swap(&mut marked_for_destroy, &mut self.marked_for_destroy);
+        let mut marked_for_destroy = marked_for_destroy.into_inner();
+        for entity in marked_for_destroy.drain() {
+            self.destroy_immediate(entity);
+        }
+    }
 }
 
 pub struct MeshIter<'a> {

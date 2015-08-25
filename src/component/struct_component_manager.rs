@@ -1,24 +1,29 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::slice::Iter;
 use std::cell::{RefCell, Ref, RefMut};
+use std::any::Any;
 
 use ecs::{Entity, ComponentManager};
 
 /// A default implementation for a component manager that can be represented
 /// as a single struct.
 #[derive(Clone)]
-pub struct StructComponentManager<T: Clone> {
+pub struct StructComponentManager<T: Clone + Any> {
     components: Vec<RefCell<T>>,
     entities: Vec<Entity>,
     indices: HashMap<Entity, usize>,
+
+    marked_for_destroy: RefCell<HashSet<Entity>>,
 }
 
-impl<T: Clone> StructComponentManager<T> {
+impl<T: Clone + Any> StructComponentManager<T> {
     pub fn new() -> StructComponentManager<T> {
         StructComponentManager {
             components: Vec::new(),
             entities: Vec::new(),
             indices: HashMap::new(),
+
+            marked_for_destroy: RefCell::new(HashSet::new()),
         }
     }
 
@@ -68,9 +73,45 @@ impl<T: Clone> StructComponentManager<T> {
             entity_iter: self.entities.iter(),
         }
     }
+
+    pub fn destroy_immediate(&mut self, entity: Entity) -> T {
+        // Retrieve indices of removed entity and the one it's swapped with.
+        let index = self.indices.remove(&entity).unwrap();
+
+        // Remove transform and the associate entity.
+        let removed_entity = self.entities.swap_remove(index);
+        debug_assert!(removed_entity == entity);
+
+        // Update the index mapping for the moved entity, but only if the one we removed
+        // wasn't the only one in the row (or the last one in the row).
+        if index != self.entities.len() {
+            let moved_entity = self.entities[index];
+            self.indices.insert(moved_entity, index);
+        }
+
+        // Defer removing the transform until the very end to avoid a bunch of memcpys.
+        // Transform is a pretty fat struct so if we remove it, cache it to a variable,
+        // and then return it at the end we wind up with 2 or 3 memcpys. Doing it all at
+        // once at the end (hopefully) means only a single memcpy.
+        self.components.swap_remove(index).into_inner()
+    }
 }
 
-impl<T: Clone> ComponentManager for StructComponentManager<T> {
+impl<T: Clone + Any> ComponentManager for StructComponentManager<T> {
+    fn destroy_all(&self, entity: Entity) {
+        if self.indices.contains_key(&entity) {
+            self.marked_for_destroy.borrow_mut().insert(entity);
+        }
+    }
+
+    fn destroy_marked(&mut self) {
+        let mut marked_for_destroy = RefCell::new(HashSet::new());
+        ::std::mem::swap(&mut marked_for_destroy, &mut self.marked_for_destroy);
+        let mut marked_for_destroy = marked_for_destroy.into_inner();
+        for entity in marked_for_destroy.drain() {
+            self.destroy_immediate(entity);
+        }
+    }
 }
 
 pub struct ComponentIter<'a, T: 'a> {
