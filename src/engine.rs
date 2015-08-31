@@ -42,6 +42,8 @@ pub struct Engine {
     light_update: Box<System>,
     audio_update: Box<System>,
     alarm_update: Box<System>,
+    collision_update: Box<System>,
+
     scene: Scene,
 
     close: bool,
@@ -77,6 +79,8 @@ impl Engine {
             light_update: Box::new(LightUpdateSystem),
             audio_update: Box::new(AudioSystem),
             alarm_update: Box::new(AlarmSystem),
+            collision_update: Box::new(CollisionSystem::new()),
+
             scene: Scene::new(&resource_manager, audio_source),
 
             close: false,
@@ -122,6 +126,7 @@ impl Engine {
         }
 
         self.transform_update.update(scene, TARGET_FRAME_TIME_SECONDS);
+        self.collision_update.update(scene, TARGET_FRAME_TIME_SECONDS);
         self.light_update.update(scene, TARGET_FRAME_TIME_SECONDS);
         self.audio_update.update(scene, TARGET_FRAME_TIME_SECONDS);
 
@@ -277,6 +282,8 @@ impl Clone for Engine {
             light_update: Box::new(LightUpdateSystem),
             audio_update: Box::new(AudioSystem),
             alarm_update: Box::new(AlarmSystem),
+            collision_update: Box::new(CollisionSystem::new()),
+
             scene: self.scene.clone(&resource_manager),
 
             close: false,
@@ -320,6 +327,8 @@ pub fn engine_init(window: Rc<RefCell<Window>>) -> Box<Engine> {
         light_update: Box::new(LightUpdateSystem),
         audio_update: Box::new(AudioSystem),
         alarm_update: Box::new(AlarmSystem),
+        collision_update: Box::new(CollisionSystem::new()),
+
         scene: Scene::new(&resource_manager, audio_source),
 
         close: false,

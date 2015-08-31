@@ -12,7 +12,8 @@ use bs_audio::AudioSource;
 
 use ecs::{Entity, EntityManager, ComponentManager};
 use input::Input;
-use component::{TransformManager, CameraManager, MeshManager, LightManager, AudioSourceManager, AlarmManager};
+use component::{TransformManager, CameraManager, MeshManager, LightManager, AudioSourceManager,
+                AlarmManager, ColliderManager, bounding_volume};
 use resource::ResourceManager;
 
 /// Contains all the data that defines the current state of the world.
@@ -47,6 +48,8 @@ impl Scene {
         scene.register_manager(MeshManager::new(resource_manager.clone()));
         scene.register_manager(AudioSourceManager::new(resource_manager.clone()));
         scene.register_manager(AlarmManager::new());
+        scene.register_manager(ColliderManager::new());
+        scene.register_manager(bounding_volume::BoundingVolumeManager::new());
 
         scene
     }
@@ -68,6 +71,8 @@ impl Scene {
         scene.register_manager(self.get_manager_by_name::<MeshManager>().clone(resource_manager.clone()));
         scene.register_manager(self.get_manager_by_name::<AudioSourceManager>().clone(resource_manager.clone()));
         scene.register_manager(self.get_manager_by_name::<AlarmManager>().clone());
+        scene.register_manager(self.get_manager_by_name::<ColliderManager>().clone());
+        scene.register_manager(self.get_manager_by_name::<bounding_volume::BoundingVolumeManager>().clone());
 
         scene
     }

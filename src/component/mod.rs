@@ -6,6 +6,7 @@ pub mod audio;
 pub mod alarm;
 pub mod collision;
 pub mod struct_component_manager;
+pub mod collider;
 
 pub use self::struct_component_manager::StructComponentManager;
 pub use self::transform::{Transform, TransformManager, TransformUpdateSystem};
@@ -14,3 +15,4 @@ pub use self::mesh::{Mesh, MeshManager};
 pub use self::light::{Light, LightManager, LightUpdateSystem};
 pub use self::audio::{AudioSource, AudioSourceManager, AudioSystem};
 pub use self::alarm::{AlarmID, AlarmManager, AlarmSystem};
+pub use self::collider::{Collider, ColliderManager, CollisionSystem, bounding_volume, grid_collision};

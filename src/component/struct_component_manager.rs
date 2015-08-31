@@ -38,18 +38,20 @@ impl<T: Clone + Any> StructComponentManager<T> {
         self.components[index].borrow_mut()
     }
 
-    pub fn get(&self, entity: Entity) -> Ref<T> {
-        assert!(self.indices.contains_key(&entity));
-
-        let index = *self.indices.get(&entity).unwrap();
-        self.components[index].borrow()
+    pub fn get(&self, entity: Entity) -> Option<Ref<T>> {
+        if let Some(index) = self.indices.get(&entity) {
+            Some(self.components[*index].borrow())
+        } else {
+            None
+        }
     }
 
-    pub fn get_mut(&self, entity: Entity) -> RefMut<T> {
-        assert!(self.indices.contains_key(&entity));
-
-        let index = *self.indices.get(&entity).unwrap();
-        self.components[index].borrow_mut()
+    pub fn get_mut(&self, entity: Entity) -> Option<RefMut<T>> {
+        if let Some(index) = self.indices.get(&entity) {
+            Some(self.components[*index].borrow_mut())
+        } else {
+            None
+        }
     }
 
     pub fn components(&self) -> &Vec<RefCell<T>> {

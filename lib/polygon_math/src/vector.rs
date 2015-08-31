@@ -2,7 +2,7 @@ use std::ops::{Mul, Div, Neg, Add, Sub};
 
 use super::IsZero;
 
-#[repr(C)] #[derive(Debug, Clone, Copy)]
+#[repr(C)] #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Vector3 {
     pub x: f32,
     pub y: f32,
