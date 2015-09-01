@@ -256,9 +256,29 @@ impl ResourceManager {
     }
 
     pub fn get_shader(&self) -> ShaderProgram {
-        let vert_src = load_file_text(self.vert_shader.borrow().as_ref());
-        let frag_src = load_file_text(self.frag_shader.borrow().as_ref());
+        let vert_src = load_file_text(&*self.vert_shader.borrow());
+        let frag_src = load_file_text(&*self.frag_shader.borrow());
         self.renderer.compile_shader_program(vert_src.as_ref(), frag_src.as_ref())
+    }
+
+    pub fn get_combined_shader<P: AsRef<Path>>(
+        &self,
+        shader_path: P
+    ) -> Result<ShaderProgram, ParseShaderError> {
+        let program_src = load_file_text(shader_path);
+
+        let programs = try!(ShaderParser::parse(&*program_src));
+        let vert_src = match programs.iter().find(|program| program.name == "vert") {
+            None => return Err(ParseShaderError::NoVertProgram),
+            Some(program) => program.src,
+        };
+
+        let frag_src = match programs.iter().find(|program| program.name == "frag") {
+            None => return Err(ParseShaderError::NoFragProgram),
+            Some(program) => program.src,
+        };
+
+        Ok(self.renderer.compile_shader_program(vert_src, frag_src))
     }
 
     fn gen_mesh_from_node(&self, node: &collada::Node, uri: &str) -> Result<GLMeshData, String> {
@@ -397,17 +417,109 @@ fn get_normals(mesh: &collada::Mesh) -> &[f32] {
     normal_data
 }
 
-pub fn load_file_text(path: &str) -> String {
-    let file_path = Path::new(path);
+pub fn load_file_text<P: AsRef<Path>>(file_path: P) -> String {
     let mut file = match File::open(&file_path) {
         // The `desc` field of `IoError` is a string that describes the error
-        Err(why) => panic!("couldn't open {}: {}", file_path.display(), Error::description(&why)),
+        Err(why) => panic!("couldn't open {}: {}", file_path.as_ref().display(), Error::description(&why)),
         Ok(file) => file,
     };
     let mut contents = String::new();
     match file.read_to_string(&mut contents) {
-        Err(why) => panic!("couldn't read {}: {}", file_path.display(), Error::description(&why)),
+        Err(why) => panic!("couldn't read {}: {}", file_path.as_ref().display(), Error::description(&why)),
         Ok(_) => ()
     }
     contents
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum ParseShaderError {
+    NoVertProgram,
+    NoFragProgram,
+    MultipleVertShader,
+    MultipleFragShader,
+    ProgramMissingName,
+    UnmatchedBraces,
+    MissingOpeningBrace,
+    CompileError(String),
+    LinkError(String),
+}
+
+#[derive(Debug, Clone)]
+struct ShaderParser;
+
+#[derive(Debug, Clone)]
+struct ShaderProgramSrc<'a> {
+    name: &'a str,
+    src: &'a str,
+}
+
+impl ShaderParser {
+    fn parse(shader_src: &str) -> Result<Vec<ShaderProgramSrc>, ParseShaderError> {
+        let mut programs: Vec<ShaderProgramSrc> = Vec::new();
+        let mut index = 0;
+        loop {
+            let substr = &shader_src[index..];
+            let (program, end_index) = try!(ShaderParser::parse_program(substr));
+            programs.push(program);
+            index = end_index;
+
+            if programs.len() >= 2 {
+                break;
+            }
+        }
+
+        Ok(programs)
+    }
+
+    fn parse_program(src: &str) -> Result<(ShaderProgramSrc, usize), ParseShaderError> {
+        if let Some(index) = src.find("program") {
+            let program_src = src[index..].trim_left();
+            let program_name = match program_src.split_whitespace().nth(1) {
+                Some(name) => name,
+                None => return Err(ParseShaderError::ProgramMissingName),
+            };
+
+            let (program_src, end_index) = match program_src.find('{') {
+                None => return Err(ParseShaderError::MissingOpeningBrace),
+                Some(index) => {
+                    let (src, index) = try!(ShaderParser::parse_braces_contents(&program_src[index..]));
+                    (src.trim(), index)
+                }
+            };
+
+            let program = ShaderProgramSrc {
+                name: program_name,
+                src: program_src,
+            };
+            Ok((program, end_index))
+        } else {
+            return Err(ParseShaderError::NoVertProgram);
+        }
+    }
+
+    /// Parses the contents of a curly brace-delimeted block.
+    ///
+    /// Retuns a substring of the source string that contains the contents of the block without
+    /// the surrounding curly braces. Fails if there is no matching close brace.
+    fn parse_braces_contents(src: &str) -> Result<(&str, usize), ParseShaderError> {
+        assert!(src.starts_with("{"));
+
+        let mut depth = 0;
+        for (index, character) in src.chars().enumerate() {
+            match character {
+                '{' => depth += 1,
+                '}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        // We're at the end.
+                        return Ok((&src[1..index], index));
+                    }
+                },
+                _ => {}
+            }
+        }
+
+        // Uh-oh, we got to the end and never closed the braces.
+        Err(ParseShaderError::UnmatchedBraces)
+    }
 }

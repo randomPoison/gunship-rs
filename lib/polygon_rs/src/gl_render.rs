@@ -115,16 +115,16 @@ impl GLRender {
         shader.set_active(gl);
 
         // Specify the layout of the vertex data.
-        let possition_attrib = shader.vertex_position
+        let position_attrib = shader.vertex_position
             .expect("Could not get vertexPosition attribute");
         gl.vertex_attrib_pointer(
-            possition_attrib,
+            position_attrib,
             3,
             GLType::Float,
             false,
             (mesh.position_attribute.stride * mem::size_of::<f32>()) as i32,
             mesh.position_attribute.offset * mem::size_of::<f32>());
-        gl.enable_vertex_attrib_array(possition_attrib);
+        gl.enable_vertex_attrib_array(position_attrib);
 
         let normal_attrib = shader.vertex_normal
             .expect("Could not get vertexNormal attribute");
@@ -246,7 +246,7 @@ impl GLRender {
         gl.unbind_buffer(BufferTarget::ElementArrayBuffer);
     }
 
-    pub fn draw_line(&self, _camera: &Camera, start: Point, end: Point) {
+    pub fn draw_line(&self, camera: &Camera, shader: &ShaderProgram, start: Point, end: Point) {
         let gl = &self.gl;
         let buffer = gl.gen_buffer();
         gl.bind_buffer(BufferTarget::ArrayBuffer, buffer);
@@ -255,6 +255,37 @@ impl GLRender {
             BufferTarget::ArrayBuffer,
             &[start.x, start.y, start.z, end.x, end.y, end.z],
             BufferUsage::StaticDraw);
+
+        shader.set_active(gl);
+
+        let position_attrib = shader.vertex_position
+            .expect("Could not get vertexPosition attribute");
+        gl.vertex_attrib_pointer(
+            position_attrib,
+            3,
+            GLType::Float,
+            false,
+            (3 * mem::size_of::<f32>()) as i32,
+            0 * mem::size_of::<f32>());
+        gl.enable_vertex_attrib_array(position_attrib);
+
+        let view_transform = camera.view_matrix();
+        let projection_transform = camera.projection_matrix();
+        let view_projection = projection_transform * view_transform;
+        if let Some(model_view_projection_location) = shader.model_view_projection {
+            gl.uniform_matrix_4x4(
+                model_view_projection_location,
+                true,
+                view_projection.raw_data());
+        }
+
+        if let Some(surface_color_location) = shader.surface_color {
+            gl.uniform_4f(surface_color_location, Color::new(1.0, 1.0, 1.0, 1.0).as_array());
+        }
+
+        gl.draw_arrays(DrawMode::Lines, 0, 6);
+
+        gl.unbind_buffer(BufferTarget::ArrayBuffer);
     }
 
     /// Clears the current back buffer.

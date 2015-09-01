@@ -6,3 +6,7 @@ pub mod geometry;
 pub mod gl_render;
 pub mod camera;
 pub mod light;
+
+pub use camera::Camera;
+pub use light::{Light, PointLight};
+pub use gl_render::{GLRender, ShaderProgram};

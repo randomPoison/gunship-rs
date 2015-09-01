@@ -78,7 +78,7 @@ impl Engine {
             light_update: Box::new(LightUpdateSystem),
             audio_update: Box::new(AudioSystem),
             alarm_update: Box::new(AlarmSystem),
-            scene: Scene::new(&resource_manager, audio_source, DebugDraw::new(renderer.clone())),
+            scene: Scene::new(&resource_manager, audio_source, DebugDraw::new(renderer.clone(), resource_manager.clone())),
 
             close: false,
         }
@@ -164,6 +164,8 @@ impl Engine {
                     &camera,
                     &mut light_manager.components().iter().map(|ref_cell| *ref_cell.borrow()));
             }
+
+            scene.debug_draw.borrow_mut().flush_commands(&*camera);
         }
 
         self.renderer.swap_buffers(self.window.borrow().deref());
@@ -322,7 +324,7 @@ pub fn engine_init(window: Rc<RefCell<Window>>) -> Box<Engine> {
         light_update: Box::new(LightUpdateSystem),
         audio_update: Box::new(AudioSystem),
         alarm_update: Box::new(AlarmSystem),
-        scene: Scene::new(&resource_manager, audio_source, DebugDraw::new(renderer.clone())),
+        scene: Scene::new(&resource_manager, audio_source, DebugDraw::new(renderer.clone(), resource_manager.clone())),
 
         close: false,
     })

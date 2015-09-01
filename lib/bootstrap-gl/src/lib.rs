@@ -445,6 +445,8 @@ gen_proc_loader! {
         fn uniform_4fv(uniform: UniformLocation, count: i32, data: *const f32),
     glDrawElements:
         fn draw_elements(mode: DrawMode, count: i32, index_type: IndexType, offset: usize),
+    glDrawArrays:
+        fn draw_arrays(mode: DrawMode, first: i32, count: i32),
     glDepthFunc:
         fn depth_func(func: Comparison),
     glBlendFunc:
