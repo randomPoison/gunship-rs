@@ -5,8 +5,7 @@ use bootstrap::window::Window;
 use gl;
 use gl::*;
 
-use math::Matrix4;
-use math::Color;
+use math::*;
 
 use geometry::mesh::{Mesh, VertexAttribute};
 use camera::Camera;
@@ -22,16 +21,10 @@ pub struct GLMeshData {
     vertex_array: VertexArrayObject,
     vertex_buffer: VertexBufferObject,
     index_buffer: VertexBufferObject,
-    shader: ProgramObject,
     pub position_attribute: VertexAttribute,
     pub normal_attribute: VertexAttribute,
     element_count: usize,
 }
-
-// TODO: This should be Drop for GLRender.
-// pub fn tear_down(renderer: &GLRender) {
-//     gl::destroy_context(renderer.context);
-// }
 
 impl GLRender {
     pub fn new(window: &Window) -> GLRender {
@@ -52,17 +45,15 @@ impl GLRender {
         }
     }
 
-    pub fn gen_mesh(&self, mesh: &Mesh, vertex_src: &str, frag_src: &str) -> GLMeshData {
+    pub fn gen_mesh(&self, mesh: &Mesh) -> GLMeshData {
         let gl = &self.gl;
 
-        // generate array buffer
-        let mut vertex_array = VertexArrayObject::null();
-        gl.gen_vertex_array(&mut vertex_array);
+        // Generate array buffer.
+        let vertex_array = gl.gen_vertex_array();
         gl.bind_vertex_array(vertex_array);
 
-        // generate vertex buffer, passing the raw data held by the mesh
-        let mut vertex_buffer = VertexBufferObject::null();
-        gl.gen_buffer(&mut vertex_buffer);
+        // Generate vertex buffer, passing the raw data held by the mesh.
+        let vertex_buffer = gl.gen_buffer();
         gl.bind_buffer(BufferTarget::ArrayBuffer, vertex_buffer);
 
         gl.buffer_data(
@@ -70,19 +61,13 @@ impl GLRender {
             &*mesh.raw_data,
             BufferUsage::StaticDraw);
 
-        let mut index_buffer = VertexBufferObject::null();
-        gl.gen_buffer(&mut index_buffer);
+        let index_buffer = gl.gen_buffer();
         gl.bind_buffer(BufferTarget::ElementArrayBuffer, index_buffer);
 
         gl.buffer_data(
             BufferTarget::ElementArrayBuffer,
             &*mesh.indices,
             BufferUsage::StaticDraw);
-
-        // TODO: Handle any failure to compile shaders.
-        let vs = self.compile_shader(vertex_src, ShaderType::VertexShader);
-        let fs = self.compile_shader(frag_src, ShaderType::FragmentShader);
-        let program = self.link_program(vs, fs);
 
         // Unbind buffers.
         gl.bind_vertex_array(VertexArrayObject::null());
@@ -93,14 +78,21 @@ impl GLRender {
             vertex_array: vertex_array,
             vertex_buffer: vertex_buffer,
             index_buffer: index_buffer,
-            shader: program,
             position_attribute: mesh.position_attribute,
             normal_attribute: mesh.normal_attribute,
             element_count: mesh.indices.len(),
         }
     }
 
-    pub fn draw_mesh(&self, mesh: &GLMeshData, model_transform: Matrix4, normal_transform: Matrix4, camera: &Camera, lights: &mut Iterator<Item=Light>) {
+    pub fn draw_mesh(
+        &self,
+        mesh: &GLMeshData,
+        shader: &ShaderProgram,
+        model_transform: Matrix4,
+        normal_transform: Matrix4,
+        camera: &Camera,
+        lights: &mut Iterator<Item=Light>
+    ) {
         let gl = &self.gl;
         let view_transform = camera.view_matrix();
         let model_view_transform = view_transform * model_transform;
@@ -120,10 +112,10 @@ impl GLRender {
         gl.bind_buffer(BufferTarget::ElementArrayBuffer, mesh.index_buffer);
 
         // Set the shader to use.
-        gl.use_program(mesh.shader);
+        shader.set_active(gl);
 
         // Specify the layout of the vertex data.
-        let possition_attrib = gl.get_attrib(mesh.shader, b"vertexPosition\0")
+        let possition_attrib = shader.vertex_position
             .expect("Could not get vertexPosition attribute");
         gl.vertex_attrib_pointer(
             possition_attrib,
@@ -134,7 +126,7 @@ impl GLRender {
             mesh.position_attribute.offset * mem::size_of::<f32>());
         gl.enable_vertex_attrib_array(possition_attrib);
 
-        let normal_attrib = gl.get_attrib(mesh.shader, b"vertexNormal\0")
+        let normal_attrib = shader.vertex_normal
             .expect("Could not get vertexNormal attribute");
         gl.vertex_attrib_pointer(
             normal_attrib,
@@ -146,45 +138,42 @@ impl GLRender {
         gl.enable_vertex_attrib_array(normal_attrib);
 
         // Set uniform transforms.
-        if let Some(model_transform_location) = gl.get_uniform(mesh.shader, b"modelTransform\0") {
+        if let Some(model_transform_location) = shader.model_transform {
             gl.uniform_matrix_4x4(
                 model_transform_location,
                 true,
                 model_transform.raw_data());
         }
 
-        if let Some(normal_transform_location) = gl.get_uniform(mesh.shader, b"normalTransform\0") {
+        if let Some(normal_transform_location) = shader.normal_transform {
             gl.uniform_matrix_4x4(
                 normal_transform_location,
                 true,
                 view_normal_transform.raw_data());
         }
 
-        if let Some(view_transform_location) = gl.get_uniform(mesh.shader, b"viewTransform\0") {
+        if let Some(view_transform_location) = shader.view_transform {
             gl.uniform_matrix_4x4(
                 view_transform_location,
                 true,
                 view_transform.raw_data());
         }
 
-        if let Some(model_view_transform_location)
-            = gl.get_uniform(mesh.shader, b"modelViewTransform\0") {
+        if let Some(model_view_transform_location) = shader.model_view_transform {
             gl.uniform_matrix_4x4(
                 model_view_transform_location,
                 true,
                 model_view_transform.raw_data());
         }
 
-        if let Some(projection_transform_location)
-            = gl.get_uniform(mesh.shader, b"projectionTransform\0") {
+        if let Some(projection_transform_location) = shader.projection_transform {
             gl.uniform_matrix_4x4(
                 projection_transform_location,
                 true,
                 projection_transform.raw_data());
         }
 
-        if let Some(model_view_projection_location)
-            = gl.get_uniform(mesh.shader, b"modelViewProjection\0") {
+        if let Some(model_view_projection_location) = shader.model_view_projection {
             gl.uniform_matrix_4x4(
                 model_view_projection_location,
                 true,
@@ -193,16 +182,15 @@ impl GLRender {
 
         // Set uniform colors.
         let ambient_color = Color::new(0.25, 0.25, 0.25, 1.0);
-        let maybe_ambient_location = gl.get_uniform(mesh.shader, b"globalAmbient\0");
-        if let Some(ambient_location) = maybe_ambient_location {
+        if let Some(ambient_location) = shader.global_ambient {
             gl.uniform_4f(ambient_location, ambient_color.as_array());
         }
 
-        if let Some(camera_position_location) = gl.get_uniform(mesh.shader, b"cameraPosition\0") {
+        if let Some(camera_position_location) = shader.camera_position {
             gl.uniform_4f(camera_position_location, camera.position.as_array());
         }
 
-        if let Some(light_position_location) = gl.get_uniform(mesh.shader, b"lightPosition\0") {
+        if let Some(light_position_location) = shader.light_position {
             // Render first light without blending so it overrides any objects behind it.
             if let Some(light) = lights.next() {
                 let light_position = match light {
@@ -226,7 +214,7 @@ impl GLRender {
             gl.blend_func(SourceFactor::One, DestFactor::One);
 
             let ambient_color = Color::new(0.0, 0.0, 0.0, 1.0);
-            if let Some(ambient_location) = maybe_ambient_location {
+            if let Some(ambient_location) = shader.global_ambient {
                 gl.uniform_4f(ambient_location, ambient_color.as_array());
             }
 
@@ -258,6 +246,17 @@ impl GLRender {
         gl.unbind_buffer(BufferTarget::ElementArrayBuffer);
     }
 
+    pub fn draw_line(&self, _camera: &Camera, start: Point, end: Point) {
+        let gl = &self.gl;
+        let buffer = gl.gen_buffer();
+        gl.bind_buffer(BufferTarget::ArrayBuffer, buffer);
+
+        gl.buffer_data(
+            BufferTarget::ArrayBuffer,
+            &[start.x, start.y, start.z, end.x, end.y, end.z],
+            BufferUsage::StaticDraw);
+    }
+
     /// Clears the current back buffer.
     pub fn clear(&self) {
         self.gl.clear(ClearBufferMask::Color | ClearBufferMask::Depth);
@@ -266,6 +265,14 @@ impl GLRender {
     /// Swap the front and back buffers for the render system.
     pub fn swap_buffers(&self, window: &Window) {
         self.gl.swap_buffers(window);
+    }
+
+    pub fn compile_shader_program(&self, vert_shader: &str, frag_shader: &str) -> ShaderProgram {
+        // TODO: Handle any failure to compile shaders.
+        let vs = self.compile_shader(vert_shader, ShaderType::VertexShader);
+        let fs = self.compile_shader(frag_shader, ShaderType::FragmentShader);
+        let program = self.link_program(vs, fs);
+        ShaderProgram::new(program, &self.gl)
     }
 
     fn compile_shader(&self, shader_source: &str, shader_type: ShaderType) -> ShaderObject {
@@ -286,5 +293,52 @@ impl GLRender {
         self.gl.link_program(program).unwrap();
 
         program
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ShaderProgram {
+    program_object: ProgramObject,
+
+    vertex_position:       Option<AttributeLocation>,
+    vertex_normal:         Option<AttributeLocation>,
+
+    model_transform:       Option<UniformLocation>,
+    view_transform:        Option<UniformLocation>,
+    model_view_transform:  Option<UniformLocation>,
+    projection_transform:  Option<UniformLocation>,
+    model_view_projection: Option<UniformLocation>,
+    view_normal_transform: Option<UniformLocation>,
+    normal_transform:      Option<UniformLocation>,
+    light_position:        Option<UniformLocation>,
+    camera_position:       Option<UniformLocation>,
+    surface_color:         Option<UniformLocation>,
+    global_ambient:        Option<UniformLocation>,
+}
+
+impl ShaderProgram {
+    fn new(program_object: ProgramObject, gl: &gl::Context) -> ShaderProgram {
+        ShaderProgram {
+            program_object: program_object,
+
+            vertex_position:       gl.get_attrib(program_object, b"vertexPosition\0"),
+            vertex_normal:         gl.get_attrib(program_object, b"vertexNormal\0"),
+
+            model_transform:       gl.get_uniform(program_object, b"modelTransform\0"),
+            view_transform:        gl.get_uniform(program_object, b"viewTransform\0"),
+            model_view_transform:  gl.get_uniform(program_object, b"modelViewTransform\0"),
+            projection_transform:  gl.get_uniform(program_object, b"projectionTransform\0"),
+            model_view_projection: gl.get_uniform(program_object, b"modelViewProjection\0"),
+            view_normal_transform: gl.get_uniform(program_object, b"viewNormalTransform\0"),
+            normal_transform:      gl.get_uniform(program_object, b"normalTransform\0"),
+            camera_position:       gl.get_uniform(program_object, b"cameraPosition\0"),
+            light_position:        gl.get_uniform(program_object, b"lightPosition\0"),
+            surface_color:         gl.get_uniform(program_object, b"surfaceColor\0"),
+            global_ambient:        gl.get_uniform(program_object, b"globalAmbient\0"),
+        }
+    }
+
+    pub fn set_active(&self, gl: &gl::Context) {
+        gl.use_program(self.program_object);
     }
 }

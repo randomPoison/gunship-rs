@@ -3,16 +3,20 @@ use std::slice::Iter;
 use std::rc::Rc;
 use std::cell::RefCell;
 
-use polygon::gl_render::GLMeshData;
+use polygon::gl_render::{GLMeshData, ShaderProgram};
 
 use ecs::{Entity, ComponentManager};
 use resource::ResourceManager;
 
-pub type Mesh = GLMeshData;
+#[derive(Debug, Clone)]
+pub struct Mesh {
+    pub gl_mesh: GLMeshData,
+    pub shader: ShaderProgram,
+}
 
 pub struct MeshManager {
     resource_manager: Rc<ResourceManager>,
-    meshes: Vec<GLMeshData>,
+    meshes: Vec<Mesh>,
     entities: Vec<Entity>,
     indices: HashMap<Entity, usize>,
 
@@ -42,22 +46,26 @@ impl MeshManager {
         }
     }
 
-    pub fn assign(&mut self, entity: Entity, path_text: &str) -> &GLMeshData {
+    pub fn assign(&mut self, entity: Entity, path_text: &str) -> &Mesh {
         let mesh = self.resource_manager.get_mesh(path_text).unwrap();
         self.give_mesh(entity, mesh)
     }
 
-    pub fn give_mesh(&mut self, entity: Entity, mesh: GLMeshData) -> &GLMeshData {
+    pub fn give_mesh(&mut self, entity: Entity, mesh: GLMeshData) -> &Mesh {
         debug_assert!(!self.indices.contains_key(&entity));
 
         let index = self.meshes.len();
-        self.meshes.push(mesh);
+        let shader = self.resource_manager.get_shader();
+        self.meshes.push(Mesh {
+            gl_mesh: mesh,
+            shader: shader,
+        });
         self.entities.push(entity);
         self.indices.insert(entity, index);
         &self.meshes[index]
     }
 
-    pub fn meshes(&self) -> &Vec<GLMeshData> {
+    pub fn meshes(&self) -> &Vec<Mesh> {
         &self.meshes
     }
 
@@ -100,14 +108,14 @@ impl ComponentManager for MeshManager {
 }
 
 pub struct MeshIter<'a> {
-    mesh_iter: Iter<'a, GLMeshData>,
+    mesh_iter: Iter<'a, Mesh>,
     entity_iter: Iter<'a, Entity>,
 }
 
 impl<'a> Iterator for MeshIter<'a> {
-    type Item = (&'a GLMeshData, Entity);
+    type Item = (&'a Mesh, Entity);
 
-    fn next(&mut self) -> Option<(&'a GLMeshData, Entity)> {
+    fn next(&mut self) -> Option<(&'a Mesh, Entity)> {
         match self.mesh_iter.next() {
             None => None,
             Some(mesh) => Some((mesh, *self.entity_iter.next().unwrap()))

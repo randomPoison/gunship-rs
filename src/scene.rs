@@ -14,6 +14,7 @@ use ecs::{Entity, EntityManager, ComponentManager};
 use input::Input;
 use component::{TransformManager, CameraManager, MeshManager, LightManager, AudioSourceManager, AlarmManager};
 use resource::ResourceManager;
+use debug_draw::DebugDraw;
 
 /// Contains all the data that defines the current state of the world.
 ///
@@ -28,10 +29,11 @@ pub struct Scene {
     pub input: Input,
     pub audio_source: AudioSource,
     resource_manager: Rc<ResourceManager>,
+    pub debug_draw: RefCell<DebugDraw>,
 }
 
 impl Scene {
-    pub fn new(resource_manager: &Rc<ResourceManager>, audio_source: AudioSource) -> Scene {
+    pub fn new(resource_manager: &Rc<ResourceManager>, audio_source: AudioSource, debug_draw: DebugDraw) -> Scene {
         let mut scene = Scene {
             entity_manager: RefCell::new(EntityManager::new()),
             component_managers: HashMap::new(),
@@ -39,6 +41,7 @@ impl Scene {
             input: Input::new(),
             audio_source: audio_source,
             resource_manager: resource_manager.clone(),
+            debug_draw: RefCell::new(debug_draw),
         };
 
         scene.register_manager(TransformManager::new());
@@ -59,6 +62,7 @@ impl Scene {
             input: self.input.clone(),
             audio_source: self.audio_source.clone(),
             resource_manager: resource_manager.clone(),
+            debug_draw: self.debug_draw.clone(),
         };
 
         // Reload internal component managers.

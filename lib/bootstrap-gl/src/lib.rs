@@ -13,7 +13,6 @@ pub mod platform;
 use std::cell::Cell;
 use std::mem;
 use std::fmt::{self, Debug, Formatter};
-use std::slice;
 use std::str;
 use std::ops::{Deref, BitOr};
 use std::ptr;
@@ -140,8 +139,10 @@ impl Context {
         platform::swap_buffers(window);
     }
 
-    pub fn gen_vertex_array(&self, array: &mut VertexArrayObject) {
-        self.loader.gen_vertex_arrays(1, array);
+    pub fn gen_vertex_array(&self) -> VertexArrayObject {
+        let mut array = VertexArrayObject::null();
+        self.loader.gen_vertex_arrays(1, &mut array);
+        array
     }
 
     pub fn gen_vertex_arrays(&self, arrays: &mut [VertexArrayObject]) {
@@ -151,8 +152,10 @@ impl Context {
         );
     }
 
-    pub fn gen_buffer(&self, buffer: &mut VertexBufferObject) {
-        self.loader.gen_buffers(1, buffer);
+    pub fn gen_buffer(&self) -> VertexBufferObject {
+        let mut buffer = VertexBufferObject::null();
+        self.loader.gen_buffers(1, &mut buffer);
+        buffer
     }
 
     pub fn gen_buffers(&self, buffers: &mut [VertexBufferObject]) {
@@ -293,6 +296,12 @@ impl Context {
 
     pub fn unbind_buffer(&self, target: BufferTarget) {
         self.loader.bind_buffer(target, VertexBufferObject::null());
+    }
+}
+
+impl Drop for Context {
+    fn drop(&mut self) {
+        platform::destroy_context(self.platform_context);
     }
 }
 
@@ -602,14 +611,14 @@ pub enum DrawMode {
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Comparison {
-    Never                          = 0x0200,
-    Less                           = 0x0201,
-    Equal                          = 0x0202,
-    LEqual                         = 0x0203,
-    Greater                        = 0x0204,
-    NotEqual                       = 0x0205,
-    GEqual                         = 0x0206,
-    Always                         = 0x0207,
+    Never    = 0x0200,
+    Less     = 0x0201,
+    Equal    = 0x0202,
+    LEqual   = 0x0203,
+    Greater  = 0x0204,
+    NotEqual = 0x0205,
+    GEqual   = 0x0206,
+    Always   = 0x0207,
 }
 
 #[repr(u32)]

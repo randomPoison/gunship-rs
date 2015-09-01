@@ -9,7 +9,7 @@ use std::cell::RefCell;
 use collada::{self, COLLADA, GeometricElement, ArrayElement, PrimitiveType, VisualScene, Geometry,
               Node};
 
-use polygon::gl_render::{GLRender, GLMeshData};
+use polygon::gl_render::{GLRender, GLMeshData, ShaderProgram};
 use polygon::geometry::mesh::Mesh;
 
 use wav::Wave;
@@ -255,6 +255,12 @@ impl ResourceManager {
         return Ok(entity);
     }
 
+    pub fn get_shader(&self) -> ShaderProgram {
+        let vert_src = load_file_text(self.vert_shader.borrow().as_ref());
+        let frag_src = load_file_text(self.frag_shader.borrow().as_ref());
+        self.renderer.compile_shader_program(vert_src.as_ref(), frag_src.as_ref())
+    }
+
     fn gen_mesh_from_node(&self, node: &collada::Node, uri: &str) -> Result<GLMeshData, String> {
         let geometry_name = {
             if node.instance_geometries.len() == 0 {
@@ -289,11 +295,7 @@ impl ResourceManager {
 
         let mesh = geometry_to_mesh(geometry);
 
-        let frag_src = load_file_text(&self.frag_shader.borrow());
-        let vert_src = load_file_text(&self.vert_shader.borrow());
-
-        let mesh_data =
-            self.renderer.gen_mesh(&mesh, vert_src.as_ref(), frag_src.as_ref());
+        let mesh_data = self.renderer.gen_mesh(&mesh);
         self.meshes.borrow_mut().insert(uri.into(), mesh_data);
 
         Ok(mesh_data)

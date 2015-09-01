@@ -25,6 +25,7 @@ use scene::Scene;
 use resource::ResourceManager;
 use ecs::System;
 use component::*;
+use debug_draw::DebugDraw;
 
 pub const TARGET_FRAME_TIME_SECONDS: f32 = 1.0 / 60.0;
 pub const TARGET_FRAME_TIME_MS: f32 = TARGET_FRAME_TIME_SECONDS * 1000.0;
@@ -66,7 +67,7 @@ impl Engine {
 
         Engine {
             window: window.clone(),
-            renderer: renderer,
+            renderer: renderer.clone(),
             resource_manager: resource_manager.clone(),
 
             systems: Vec::new(),
@@ -77,7 +78,7 @@ impl Engine {
             light_update: Box::new(LightUpdateSystem),
             audio_update: Box::new(AudioSystem),
             alarm_update: Box::new(AlarmSystem),
-            scene: Scene::new(&resource_manager, audio_source),
+            scene: Scene::new(&resource_manager, audio_source, DebugDraw::new(renderer.clone())),
 
             close: false,
         }
@@ -156,7 +157,8 @@ impl Engine {
                 let transform = transform_manager.get(entity);
 
                 self.renderer.draw_mesh(
-                    &mesh,
+                    &mesh.gl_mesh,
+                    &mesh.shader,
                     transform.derived_matrix(),
                     transform.derived_normal_matrix(),
                     &camera,
@@ -309,7 +311,7 @@ pub fn engine_init(window: Rc<RefCell<Window>>) -> Box<Engine> {
 
     Box::new(Engine {
         window: window,
-        renderer: renderer,
+        renderer: renderer.clone(),
         resource_manager: resource_manager.clone(),
 
         systems: Vec::new(),
@@ -320,7 +322,7 @@ pub fn engine_init(window: Rc<RefCell<Window>>) -> Box<Engine> {
         light_update: Box::new(LightUpdateSystem),
         audio_update: Box::new(AudioSystem),
         alarm_update: Box::new(AlarmSystem),
-        scene: Scene::new(&resource_manager, audio_source),
+        scene: Scene::new(&resource_manager, audio_source, DebugDraw::new(renderer.clone())),
 
         close: false,
     })
