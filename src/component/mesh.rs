@@ -55,7 +55,7 @@ impl MeshManager {
         debug_assert!(!self.indices.contains_key(&entity));
 
         let index = self.meshes.len();
-        let shader = self.resource_manager.get_shader();
+        let shader = self.resource_manager.get_shader("shaders/forward_phong.glsl").unwrap();
         self.meshes.push(Mesh {
             gl_mesh: mesh,
             shader: shader,

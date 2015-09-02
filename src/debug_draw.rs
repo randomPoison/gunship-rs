@@ -16,7 +16,7 @@ impl DebugDraw {
     pub fn new(renderer: Rc<GLRender>, resource_manager: Rc<ResourceManager>) -> DebugDraw {
         DebugDraw {
             renderer: renderer,
-            shader: resource_manager.get_combined_shader("shaders/debug_draw.glsl").unwrap(),
+            shader: resource_manager.get_shader("shaders/debug_draw.glsl").unwrap(),
             command_buffer: Vec::new(),
         }
     }

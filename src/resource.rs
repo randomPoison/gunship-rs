@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::io::prelude::*;
 use std::fs::{self, File};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::error::Error;
 use std::rc::Rc;
 use std::cell::RefCell;
@@ -26,8 +26,7 @@ pub struct ResourceManager {
     visual_scenes: RefCell<HashMap<String, VisualScene>>,
     geometries: RefCell<HashMap<String, Geometry>>,
 
-    vert_shader: RefCell<String>,
-    frag_shader: RefCell<String>,
+    resource_path: RefCell<PathBuf>,
 }
 
 impl ResourceManager {
@@ -40,8 +39,7 @@ impl ResourceManager {
             visual_scenes: RefCell::new(HashMap::new()),
             geometries: RefCell::new(HashMap::new()),
 
-            vert_shader: RefCell::new(String::from("shaders/forward_phong.vert.glsl")),
-            frag_shader: RefCell::new(String::from("shaders/forward_phong.frag.glsl")),
+            resource_path: RefCell::new(PathBuf::new()),
         }
     }
 
@@ -50,23 +48,24 @@ impl ResourceManager {
         let mut visual_scenes = self.visual_scenes.borrow_mut();
         let mut geometries = self.geometries.borrow_mut();
 
-        let path_ref = path.as_ref();
-        let metadata = match fs::metadata(path_ref) {
+        let mut full_path = self.resource_path.borrow().clone();
+        full_path.push(path);
+        let metadata = match fs::metadata(&full_path) {
             Err(why) => return Err(format!(
                 "Unable to read metadata for {}, either it doesn't exist or the user lacks permissions, {}",
-                path_ref.display(),
+                full_path.display(),
                 &why)),
             Ok(metadata) => metadata,
         };
         if !metadata.is_file() {
             return Err(format!(
                 "{} could not be loaded because it is not a file",
-                path_ref.display()));
+                full_path.display()));
         }
-        let collada_data = match COLLADA::load(path_ref) {
+        let collada_data = match COLLADA::load(&full_path) {
             Err(why) => return Err(format!(
                 "couldn't open {}: {}",
-                path_ref.display(),
+                full_path.display(),
                 &why)),
             Ok(data) => data,
         };
@@ -76,7 +75,7 @@ impl ResourceManager {
             let id = match visual_scene.id {
                 None => return Err(format!(
                     "COLLADA file {} contained a <visual_scene> with no \"id\" attribute, this is unsupported.",
-                    path_ref.display())),
+                    full_path.display())),
                 Some(ref id) => id.clone(),
             };
             visual_scenes.insert(id, visual_scene.clone());
@@ -87,7 +86,7 @@ impl ResourceManager {
             let id = match geometry.id {
                 None => return Err(format!(
                     "COLLADA file {} contained a <geometry> with no \"id\" attribute, this is unsupported",
-                    path_ref.display())),
+                    full_path.display())),
                 Some(ref id) => id.clone(),
             };
             geometries.insert(id, geometry.clone());
@@ -96,34 +95,16 @@ impl ResourceManager {
         Ok(())
     }
 
-    /// Override the default path to the vertex shader.
+    /// Sets the path to the resources director.
     ///
     /// # Details
     ///
-    /// This is a temporary hack to allow the examples to work. Right now the engine has very
-    /// limited shader support. The resource manager can only support a single vertex shader and
-    /// a single fragment shader and it will always look in the same path to load that shader. The
-    /// path was originally hard-coded and games were required to put their shaders at that
-    /// location, this method allows you to override that path.
-    pub fn set_vert_shader_path(&self, path: &str) {
-        let mut vert_shader = self.vert_shader.borrow_mut();
-        vert_shader.clear();
-        vert_shader.push_str(path);
-    }
-
-    /// Override the default path to the fragment shader.
-    ///
-    /// # Details
-    ///
-    /// This is a temporary hack to allow the examples to work. Right now the engine has very
-    /// limited shader support. The resource manager can only support a single vertex shader and
-    /// a single fragment shader and it will always look in the same path to load that shader. The
-    /// path was originally hard-coded and games were required to put their shaders at that
-    /// location, this method allows you to override that path.
-    pub fn set_frag_shader_path(&self, path: &str) {
-        let mut frag_shader = self.frag_shader.borrow_mut();
-        frag_shader.clear();
-        frag_shader.push_str(path);
+    /// The resource manager is configured to look in the specified directory when loading
+    /// resources such as meshes and shaders.
+    pub fn set_resource_path<P: AsRef<Path>>(&self, path: P) {
+        let mut resource_path = self.resource_path.borrow_mut();
+        *resource_path = PathBuf::new();
+        resource_path.push(path);
     }
 
     pub fn get_mesh(&self, uri: &str) -> Result<GLMeshData, String> {
@@ -255,17 +236,13 @@ impl ResourceManager {
         return Ok(entity);
     }
 
-    pub fn get_shader(&self) -> ShaderProgram {
-        let vert_src = load_file_text(&*self.vert_shader.borrow());
-        let frag_src = load_file_text(&*self.frag_shader.borrow());
-        self.renderer.compile_shader_program(vert_src.as_ref(), frag_src.as_ref())
-    }
-
-    pub fn get_combined_shader<P: AsRef<Path>>(
+    pub fn get_shader<P: AsRef<Path>>(
         &self,
         shader_path: P
     ) -> Result<ShaderProgram, ParseShaderError> {
-        let program_src = load_file_text(shader_path);
+        let mut full_path = self.resource_path.borrow().clone();
+        full_path.push(shader_path);
+        let program_src = load_file_text(full_path);
 
         let programs = try!(ShaderParser::parse(&*program_src));
         let vert_src = match programs.iter().find(|program| program.name == "vert") {
