@@ -19,7 +19,11 @@ use bs_audio;
 
 use polygon::gl_render::GLRender;
 
+#[cfg(feature = "timing")]
 use self::stopwatch::{Collector, Stopwatch};
+
+#[cfg(not(feature = "timing"))]
+use self::stopwatch::null::{Collector, Stopwatch};
 
 use scene::Scene;
 use resource::ResourceManager;
