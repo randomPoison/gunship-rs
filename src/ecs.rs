@@ -44,7 +44,7 @@ pub trait System {
     fn update(&mut self, scene: &Scene, delta: f32);
 }
 
-pub trait ComponentManager {
+pub trait ComponentManager: ::std::any::Any {
     /// Destroy all component data associated with the entity.
     fn destroy_all(&self, Entity);
 

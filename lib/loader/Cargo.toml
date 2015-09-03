@@ -3,7 +3,7 @@ name = "loader"
 version = "0.0.0"
 authors = ["David LeGare <excaliburhissheath@gmail.com>"]
 
-[[bin]]
+[lib]
 name = "loader"
 
 [dependencies.bootstrap_rs]
