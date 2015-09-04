@@ -1,4 +1,5 @@
 use std::rc::Rc;
+use std::ptr;
 
 use math::*;
 use polygon::Camera;
@@ -6,25 +7,16 @@ use polygon::gl_render::{GLRender, ShaderProgram, GLMeshData};
 use polygon::geometry::Mesh;
 use resource::ResourceManager;
 
+static mut instance: *mut DebugDrawInner = 0 as *mut DebugDrawInner;
+
 #[derive(Debug)]
 pub struct DebugDraw {
     renderer: Rc<GLRender>,
-    command_buffer: Vec<DebugDrawCommand>,
 
     shader: ShaderProgram,
     unit_cube: GLMeshData,
-}
 
-impl Clone for DebugDraw {
-    fn clone(&self) -> DebugDraw {
-        DebugDraw {
-            renderer: self.renderer.clone(),
-            command_buffer: self.command_buffer.clone(),
-
-            shader: self.shader.clone(),
-            unit_cube: build_mesh(&*self.renderer, &CUBE_VERTS, &CUBE_INDICES)
-        }
-    }
+    inner: Box<DebugDrawInner>,
 }
 
 static CUBE_VERTS: [f32; 32] =
@@ -51,44 +43,29 @@ static CUBE_INDICES: [u32; 24] =
      3, 7,];
 
 impl DebugDraw {
-    pub fn new(renderer: Rc<GLRender>, resource_manager: Rc<ResourceManager>) -> DebugDraw {
+    pub fn new(renderer: Rc<GLRender>, resource_manager: &ResourceManager) -> DebugDraw {
+        assert!(unsafe { instance.is_null() }, "Cannot create more than one instance of DebugDraw at a time");
+
+        let mut inner = Box::new(DebugDrawInner {
+            command_buffer: Vec::new(),
+        });
+
+        unsafe {
+            instance = &mut *inner;
+        }
+
         DebugDraw {
             renderer: renderer.clone(),
+
             shader: resource_manager.get_shader("shaders/debug_draw.glsl").unwrap(),
-            command_buffer: Vec::new(),
             unit_cube: build_mesh(&*renderer, &CUBE_VERTS, &CUBE_INDICES),
+
+            inner: inner,
         }
     }
 
-    pub fn draw_command(&mut self, command: DebugDrawCommand) {
-        self.command_buffer.push(command);
-    }
-
-    pub fn draw_line(&mut self, start: Point, end: Point) {
-        self.draw_command(DebugDrawCommand::Line {
-            start: start,
-            end: end,
-        });
-    }
-
-    pub fn draw_box_min_max(&mut self, min: Point, max: Point) {
-        let diff = max - min;
-
-        self.draw_command(DebugDrawCommand::Box {
-            center: min + diff  * 0.5,
-            widths: diff,
-        });
-    }
-
-    pub fn draw_box_center_widths(&mut self, center: Point, widths: Vector3) {
-        self.draw_command(DebugDrawCommand::Box {
-            center: center,
-            widths: widths,
-        });
-    }
-
     pub fn flush_commands(&mut self, camera: &Camera) {
-        for command in &self.command_buffer {
+        for command in &self.inner.command_buffer {
             match command {
                 &DebugDrawCommand::Line { start, end } => {
                     self.renderer.draw_line(camera, &self.shader, start, end);
@@ -101,7 +78,15 @@ impl DebugDraw {
             }
         }
 
-        self.command_buffer.clear();
+        self.inner.command_buffer.clear();
+    }
+}
+
+impl Drop for DebugDraw {
+    fn drop(&mut self) {
+        unsafe {
+            instance = ptr::null_mut();
+        }
     }
 }
 
@@ -121,4 +106,38 @@ pub enum DebugDrawCommand {
         center: Point,
         widths: Vector3,
     }
+}
+
+#[derive(Debug)]
+struct DebugDrawInner {
+    command_buffer: Vec<DebugDrawCommand>,
+}
+
+pub fn draw_command(command: DebugDrawCommand) {
+    debug_assert!(unsafe { !instance.is_null() }, "Cannot use debug drawing if there is no instance");
+
+    let inner = unsafe { &mut *instance };
+    inner.command_buffer.push(command);
+}
+
+pub fn draw_line(start: Point, end: Point) {
+    draw_command(DebugDrawCommand::Line {
+        start: start,
+        end: end,
+    });
+}
+
+pub fn draw_box_min_max(min: Point, max: Point) {
+    let diff = max - min;
+    draw_command(DebugDrawCommand::Box {
+        center: min + diff  * 0.5,
+        widths: diff,
+    });
+}
+
+pub fn draw_box_center_widths(center: Point, widths: Vector3) {
+    draw_command(DebugDrawCommand::Box {
+        center: center,
+        widths: widths,
+    });
 }
