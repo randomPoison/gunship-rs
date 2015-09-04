@@ -367,7 +367,8 @@ fn geometry_to_mesh(geometry: &Geometry) -> Mesh {
         indices.push(vertex_index);
     }
 
-    let mesh = Mesh::from_raw_data(position_data.as_ref(), normal_data.as_ref(), indices.as_ref());
+    let mut mesh = Mesh::from_raw_data(position_data.as_ref(), indices.as_ref());
+    mesh.add_normals(normal_data.as_ref());
 
     mesh
 }

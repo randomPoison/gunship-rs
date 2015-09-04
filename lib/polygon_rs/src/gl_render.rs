@@ -22,7 +22,7 @@ pub struct GLMeshData {
     vertex_buffer: VertexBufferObject,
     index_buffer: VertexBufferObject,
     pub position_attribute: VertexAttribute,
-    pub normal_attribute: VertexAttribute,
+    pub normal_attribute: Option<VertexAttribute>,
     element_count: usize,
 }
 
@@ -133,8 +133,8 @@ impl GLRender {
             3,
             GLType::Float,
             false,
-            (mesh.normal_attribute.stride * mem::size_of::<f32>()) as i32,
-            mesh.normal_attribute.offset * mem::size_of::<f32>());
+            (mesh.normal_attribute.unwrap().stride * mem::size_of::<f32>()) as i32,
+            mesh.normal_attribute.unwrap().offset * mem::size_of::<f32>());
         gl.enable_vertex_attrib_array(normal_attrib);
 
         // Set uniform transforms.
@@ -286,6 +286,83 @@ impl GLRender {
         gl.draw_arrays(DrawMode::Lines, 0, 6);
 
         gl.unbind_buffer(BufferTarget::ArrayBuffer);
+    }
+
+    pub fn draw_wireframe(
+        &self,
+        camera: &Camera,
+        shader: &ShaderProgram,
+        mesh: &GLMeshData,
+        model_transform: Matrix4
+    ) {
+        let gl = &self.gl;
+        let view_transform = camera.view_matrix();
+        let model_view_transform = view_transform * model_transform;
+        let projection_transform = camera.projection_matrix();
+        let model_view_projection = projection_transform * model_view_transform;
+
+        // Bind the buffers for the mesh.
+        gl.bind_vertex_array(mesh.vertex_array);
+        gl.bind_buffer(BufferTarget::ArrayBuffer, mesh.vertex_buffer);
+        gl.bind_buffer(BufferTarget::ElementArrayBuffer, mesh.index_buffer);
+
+        // Specify the layout of the vertex data.
+        let position_attrib = shader.vertex_position
+            .expect("Could not get vertexPosition attribute");
+        gl.vertex_attrib_pointer(
+            position_attrib,
+            3,
+            GLType::Float,
+            false,
+            (mesh.position_attribute.stride * mem::size_of::<f32>()) as i32,
+            mesh.position_attribute.offset * mem::size_of::<f32>());
+        gl.enable_vertex_attrib_array(position_attrib);
+
+        // Set uniform transforms.
+        if let Some(model_transform_location) = shader.model_transform {
+            gl.uniform_matrix_4x4(
+                model_transform_location,
+                true,
+                model_transform.raw_data());
+        }
+
+        if let Some(view_transform_location) = shader.view_transform {
+            gl.uniform_matrix_4x4(
+                view_transform_location,
+                true,
+                view_transform.raw_data());
+        }
+
+        if let Some(model_view_transform_location) = shader.model_view_transform {
+            gl.uniform_matrix_4x4(
+                model_view_transform_location,
+                true,
+                model_view_transform.raw_data());
+        }
+
+        if let Some(projection_transform_location) = shader.projection_transform {
+            gl.uniform_matrix_4x4(
+                projection_transform_location,
+                true,
+                projection_transform.raw_data());
+        }
+
+        if let Some(model_view_projection_location) = shader.model_view_projection {
+            gl.uniform_matrix_4x4(
+                model_view_projection_location,
+                true,
+                model_view_projection.raw_data());
+        }
+
+        gl.draw_elements(
+            DrawMode::Lines,
+            mesh.element_count as i32,
+            IndexType::UnsignedInt,
+            0);
+
+        gl.unbind_vertex_array();
+        gl.unbind_buffer(BufferTarget::ArrayBuffer);
+        gl.unbind_buffer(BufferTarget::ElementArrayBuffer);
     }
 
     /// Clears the current back buffer.
