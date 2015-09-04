@@ -12,6 +12,7 @@ pub mod input;
 pub mod resource;
 pub mod ecs;
 pub mod component;
+pub mod debug_draw;
 
 mod wav;
 

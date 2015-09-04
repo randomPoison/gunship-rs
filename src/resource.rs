@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::io::prelude::*;
 use std::fs::{self, File};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::error::Error;
 use std::rc::Rc;
 use std::cell::RefCell;
@@ -9,7 +9,7 @@ use std::cell::RefCell;
 use collada::{self, COLLADA, GeometricElement, ArrayElement, PrimitiveType, VisualScene, Geometry,
               Node};
 
-use polygon::gl_render::{GLRender, GLMeshData};
+use polygon::gl_render::{GLRender, GLMeshData, ShaderProgram};
 use polygon::geometry::mesh::Mesh;
 
 use wav::Wave;
@@ -26,8 +26,7 @@ pub struct ResourceManager {
     visual_scenes: RefCell<HashMap<String, VisualScene>>,
     geometries: RefCell<HashMap<String, Geometry>>,
 
-    vert_shader: RefCell<String>,
-    frag_shader: RefCell<String>,
+    resource_path: RefCell<PathBuf>,
 }
 
 impl ResourceManager {
@@ -40,8 +39,7 @@ impl ResourceManager {
             visual_scenes: RefCell::new(HashMap::new()),
             geometries: RefCell::new(HashMap::new()),
 
-            vert_shader: RefCell::new(String::from("shaders/forward_phong.vert.glsl")),
-            frag_shader: RefCell::new(String::from("shaders/forward_phong.frag.glsl")),
+            resource_path: RefCell::new(PathBuf::new()),
         }
     }
 
@@ -50,23 +48,24 @@ impl ResourceManager {
         let mut visual_scenes = self.visual_scenes.borrow_mut();
         let mut geometries = self.geometries.borrow_mut();
 
-        let path_ref = path.as_ref();
-        let metadata = match fs::metadata(path_ref) {
+        let mut full_path = self.resource_path.borrow().clone();
+        full_path.push(path);
+        let metadata = match fs::metadata(&full_path) {
             Err(why) => return Err(format!(
                 "Unable to read metadata for {}, either it doesn't exist or the user lacks permissions, {}",
-                path_ref.display(),
+                full_path.display(),
                 &why)),
             Ok(metadata) => metadata,
         };
         if !metadata.is_file() {
             return Err(format!(
                 "{} could not be loaded because it is not a file",
-                path_ref.display()));
+                full_path.display()));
         }
-        let collada_data = match COLLADA::load(path_ref) {
+        let collada_data = match COLLADA::load(&full_path) {
             Err(why) => return Err(format!(
                 "couldn't open {}: {}",
-                path_ref.display(),
+                full_path.display(),
                 &why)),
             Ok(data) => data,
         };
@@ -76,7 +75,7 @@ impl ResourceManager {
             let id = match visual_scene.id {
                 None => return Err(format!(
                     "COLLADA file {} contained a <visual_scene> with no \"id\" attribute, this is unsupported.",
-                    path_ref.display())),
+                    full_path.display())),
                 Some(ref id) => id.clone(),
             };
             visual_scenes.insert(id, visual_scene.clone());
@@ -87,7 +86,7 @@ impl ResourceManager {
             let id = match geometry.id {
                 None => return Err(format!(
                     "COLLADA file {} contained a <geometry> with no \"id\" attribute, this is unsupported",
-                    path_ref.display())),
+                    full_path.display())),
                 Some(ref id) => id.clone(),
             };
             geometries.insert(id, geometry.clone());
@@ -96,34 +95,16 @@ impl ResourceManager {
         Ok(())
     }
 
-    /// Override the default path to the vertex shader.
+    /// Sets the path to the resources director.
     ///
     /// # Details
     ///
-    /// This is a temporary hack to allow the examples to work. Right now the engine has very
-    /// limited shader support. The resource manager can only support a single vertex shader and
-    /// a single fragment shader and it will always look in the same path to load that shader. The
-    /// path was originally hard-coded and games were required to put their shaders at that
-    /// location, this method allows you to override that path.
-    pub fn set_vert_shader_path(&self, path: &str) {
-        let mut vert_shader = self.vert_shader.borrow_mut();
-        vert_shader.clear();
-        vert_shader.push_str(path);
-    }
-
-    /// Override the default path to the fragment shader.
-    ///
-    /// # Details
-    ///
-    /// This is a temporary hack to allow the examples to work. Right now the engine has very
-    /// limited shader support. The resource manager can only support a single vertex shader and
-    /// a single fragment shader and it will always look in the same path to load that shader. The
-    /// path was originally hard-coded and games were required to put their shaders at that
-    /// location, this method allows you to override that path.
-    pub fn set_frag_shader_path(&self, path: &str) {
-        let mut frag_shader = self.frag_shader.borrow_mut();
-        frag_shader.clear();
-        frag_shader.push_str(path);
+    /// The resource manager is configured to look in the specified directory when loading
+    /// resources such as meshes and shaders.
+    pub fn set_resource_path<P: AsRef<Path>>(&self, path: P) {
+        let mut resource_path = self.resource_path.borrow_mut();
+        *resource_path = PathBuf::new();
+        resource_path.push(path);
     }
 
     pub fn get_mesh(&self, uri: &str) -> Result<GLMeshData, String> {
@@ -255,6 +236,28 @@ impl ResourceManager {
         return Ok(entity);
     }
 
+    pub fn get_shader<P: AsRef<Path>>(
+        &self,
+        shader_path: P
+    ) -> Result<ShaderProgram, ParseShaderError> {
+        let mut full_path = self.resource_path.borrow().clone();
+        full_path.push(shader_path);
+        let program_src = load_file_text(full_path);
+
+        let programs = try!(ShaderParser::parse(&*program_src));
+        let vert_src = match programs.iter().find(|program| program.name == "vert") {
+            None => return Err(ParseShaderError::NoVertProgram),
+            Some(program) => program.src,
+        };
+
+        let frag_src = match programs.iter().find(|program| program.name == "frag") {
+            None => return Err(ParseShaderError::NoFragProgram),
+            Some(program) => program.src,
+        };
+
+        Ok(self.renderer.compile_shader_program(vert_src, frag_src))
+    }
+
     fn gen_mesh_from_node(&self, node: &collada::Node, uri: &str) -> Result<GLMeshData, String> {
         let geometry_name = {
             if node.instance_geometries.len() == 0 {
@@ -289,11 +292,7 @@ impl ResourceManager {
 
         let mesh = geometry_to_mesh(geometry);
 
-        let frag_src = load_file_text(&self.frag_shader.borrow());
-        let vert_src = load_file_text(&self.vert_shader.borrow());
-
-        let mesh_data =
-            self.renderer.gen_mesh(&mesh, vert_src.as_ref(), frag_src.as_ref());
+        let mesh_data = self.renderer.gen_mesh(&mesh);
         self.meshes.borrow_mut().insert(uri.into(), mesh_data);
 
         Ok(mesh_data)
@@ -368,7 +367,8 @@ fn geometry_to_mesh(geometry: &Geometry) -> Mesh {
         indices.push(vertex_index);
     }
 
-    let mesh = Mesh::from_raw_data(position_data.as_ref(), normal_data.as_ref(), indices.as_ref());
+    let mut mesh = Mesh::from_raw_data(position_data.as_ref(), indices.as_ref());
+    mesh.add_normals(normal_data.as_ref());
 
     mesh
 }
@@ -395,17 +395,109 @@ fn get_normals(mesh: &collada::Mesh) -> &[f32] {
     normal_data
 }
 
-pub fn load_file_text(path: &str) -> String {
-    let file_path = Path::new(path);
+pub fn load_file_text<P: AsRef<Path>>(file_path: P) -> String {
     let mut file = match File::open(&file_path) {
         // The `desc` field of `IoError` is a string that describes the error
-        Err(why) => panic!("couldn't open {}: {}", file_path.display(), Error::description(&why)),
+        Err(why) => panic!("couldn't open {}: {}", file_path.as_ref().display(), Error::description(&why)),
         Ok(file) => file,
     };
     let mut contents = String::new();
     match file.read_to_string(&mut contents) {
-        Err(why) => panic!("couldn't read {}: {}", file_path.display(), Error::description(&why)),
+        Err(why) => panic!("couldn't read {}: {}", file_path.as_ref().display(), Error::description(&why)),
         Ok(_) => ()
     }
     contents
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum ParseShaderError {
+    NoVertProgram,
+    NoFragProgram,
+    MultipleVertShader,
+    MultipleFragShader,
+    ProgramMissingName,
+    UnmatchedBraces,
+    MissingOpeningBrace,
+    CompileError(String),
+    LinkError(String),
+}
+
+#[derive(Debug, Clone)]
+struct ShaderParser;
+
+#[derive(Debug, Clone)]
+struct ShaderProgramSrc<'a> {
+    name: &'a str,
+    src: &'a str,
+}
+
+impl ShaderParser {
+    fn parse(shader_src: &str) -> Result<Vec<ShaderProgramSrc>, ParseShaderError> {
+        let mut programs: Vec<ShaderProgramSrc> = Vec::new();
+        let mut index = 0;
+        loop {
+            let substr = &shader_src[index..];
+            let (program, end_index) = try!(ShaderParser::parse_program(substr));
+            programs.push(program);
+            index = end_index;
+
+            if programs.len() >= 2 {
+                break;
+            }
+        }
+
+        Ok(programs)
+    }
+
+    fn parse_program(src: &str) -> Result<(ShaderProgramSrc, usize), ParseShaderError> {
+        if let Some(index) = src.find("program") {
+            let program_src = src[index..].trim_left();
+            let program_name = match program_src.split_whitespace().nth(1) {
+                Some(name) => name,
+                None => return Err(ParseShaderError::ProgramMissingName),
+            };
+
+            let (program_src, end_index) = match program_src.find('{') {
+                None => return Err(ParseShaderError::MissingOpeningBrace),
+                Some(index) => {
+                    let (src, index) = try!(ShaderParser::parse_braces_contents(&program_src[index..]));
+                    (src.trim(), index)
+                }
+            };
+
+            let program = ShaderProgramSrc {
+                name: program_name,
+                src: program_src,
+            };
+            Ok((program, end_index))
+        } else {
+            return Err(ParseShaderError::NoVertProgram);
+        }
+    }
+
+    /// Parses the contents of a curly brace-delimeted block.
+    ///
+    /// Retuns a substring of the source string that contains the contents of the block without
+    /// the surrounding curly braces. Fails if there is no matching close brace.
+    fn parse_braces_contents(src: &str) -> Result<(&str, usize), ParseShaderError> {
+        assert!(src.starts_with("{"));
+
+        let mut depth = 0;
+        for (index, character) in src.chars().enumerate() {
+            match character {
+                '{' => depth += 1,
+                '}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        // We're at the end.
+                        return Ok((&src[1..index], index));
+                    }
+                },
+                _ => {}
+            }
+        }
+
+        // Uh-oh, we got to the end and never closed the braces.
+        Err(ParseShaderError::UnmatchedBraces)
+    }
 }

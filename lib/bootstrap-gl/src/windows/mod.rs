@@ -64,6 +64,12 @@ pub fn create_context(window: &Window) -> Context {
     context
 }
 
+pub fn destroy_context(context: Context) {
+    unsafe {
+        opengl32::wglDeleteContext(context);
+    }
+}
+
 pub fn proc_loader(proc_name: &str) -> Option<extern "C" fn()> {
     let string = CString::new(proc_name);
     Some(unsafe {
