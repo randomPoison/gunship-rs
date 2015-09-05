@@ -84,6 +84,14 @@ impl GLRender {
         }
     }
 
+    /// SUPER BAD LACK OF SAFETY, should be using RAII and some proper resource management, but
+    /// that will have to wait until we get a real rendering system.
+    pub fn delete_mesh(&self, mesh: GLMeshData) {
+        self.gl.delete_buffer(mesh.vertex_buffer);
+        self.gl.delete_buffer(mesh.index_buffer);
+        self.gl.delete_vertex_array(mesh.vertex_array);
+    }
+
     pub fn draw_mesh(
         &self,
         mesh: &GLMeshData,
@@ -301,6 +309,8 @@ impl GLRender {
         let projection_transform = camera.projection_matrix();
         let model_view_projection = projection_transform * model_view_transform;
 
+        shader.set_active(gl);
+
         // Bind the buffers for the mesh.
         gl.bind_vertex_array(mesh.vertex_array);
         gl.bind_buffer(BufferTarget::ArrayBuffer, mesh.vertex_buffer);
@@ -352,6 +362,10 @@ impl GLRender {
                 model_view_projection_location,
                 true,
                 model_view_projection.raw_data());
+        }
+
+        if let Some(surface_color_location) = shader.surface_color {
+            gl.uniform_4f(surface_color_location, Color::new(1.0, 1.0, 1.0, 1.0).as_array());
         }
 
         gl.draw_elements(

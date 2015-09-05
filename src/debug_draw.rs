@@ -17,6 +17,11 @@ pub struct DebugDraw {
     unit_cube: GLMeshData,
 
     inner: Box<DebugDrawInner>,
+
+    // Vecs used for dynamically reconstructing meshes.
+    line_vertices: Vec<f32>,
+    line_indices: Vec<u32>,
+
 }
 
 static CUBE_VERTS: [f32; 32] =
@@ -61,6 +66,9 @@ impl DebugDraw {
             unit_cube: build_mesh(&*renderer, &CUBE_VERTS, &CUBE_INDICES),
 
             inner: inner,
+
+            line_vertices: Vec::new(),
+            line_indices: Vec::new(),
         }
     }
 
@@ -68,7 +76,8 @@ impl DebugDraw {
         for command in &self.inner.command_buffer {
             match command {
                 &DebugDrawCommand::Line { start, end } => {
-                    self.renderer.draw_line(camera, &self.shader, start, end);
+                    self.line_vertices.extend(start.as_array());
+                    self.line_vertices.extend(end.as_array());
                 },
                 &DebugDrawCommand::Box { center, widths } => {
                     let model_transform =
@@ -78,7 +87,18 @@ impl DebugDraw {
             }
         }
 
+        if !self.line_vertices.is_empty() {
+            for index in 0..self.line_vertices.len() / 4 {
+                self.line_indices.push(index as u32);
+            }
+            let line_mesh = build_mesh(&*self.renderer, &self.line_vertices, &self.line_indices);
+            self.renderer.draw_wireframe(camera, &self.shader, &line_mesh, Matrix4::identity());
+            self.renderer.delete_mesh(line_mesh);
+        }
+
         self.inner.command_buffer.clear();
+        self.line_vertices.clear();
+        self.line_indices.clear();
     }
 }
 

@@ -165,6 +165,14 @@ impl Context {
         );
     }
 
+    pub fn delete_buffer(&self, buffer: VertexBufferObject) {
+        self.loader.delete_buffers(1, &buffer);
+    }
+
+    pub fn delete_vertex_array(&self, array: VertexArrayObject) {
+        self.loader.delete_vertex_arrays(1, &array);
+    }
+
     pub fn buffer_data<T>(&self, target: BufferTarget, data: &[T], usage: BufferUsage) {
         self.loader.buffer_data(
             target,
@@ -368,6 +376,10 @@ gen_proc_loader! {
             callback: extern "C" fn(DebugSource, DebugType, UInt, DebugSeverity, SizeI, *const u8, *mut ()),
             user_param: *mut ()
         ),
+    glDeleteBuffers:
+        fn delete_buffers(num_buffers: i32, buffers: *const VertexBufferObject),
+    glDeleteVertexArrays:
+        fn delete_vertex_arrays(num_arrays: i32, arrays: *const VertexArrayObject),
     glGetError:
         fn get_error() -> ErrorCode,
     glViewport:
