@@ -4,12 +4,14 @@ use component::{TransformManager, StructComponentManager};
 use scene::*;
 use ecs::*;
 use super::{CachedCollider, Collider, ColliderManager};
+use debug_draw;
 
 // TODO: Build a custom BVH manager that automatically constructs hierarchy.
 pub type BoundingVolumeManager = StructComponentManager<BoundingVolumeHierarchy>;
 
 #[derive(Debug, Clone)]
 pub struct BoundingVolumeHierarchy {
+    pub entity: Entity,
     pub root: BoundingVolumeNode,
 }
 
@@ -23,6 +25,10 @@ impl BoundingVolumeHierarchy {
     /// Tests if `other` collides with this BVH.
     pub fn test(&self, _other: &BoundingVolumeHierarchy) -> bool {
         true // TODO: Actually test the collision.
+    }
+
+    pub fn debug_draw(&self) {
+        self.root.debug_draw();
     }
 }
 
@@ -50,6 +56,17 @@ impl BoundingVolumeNode {
                 cached_collider.orientation = transform.rotation_derived();
                 cached_collider.scale = transform.scale_derived();
             },
+        }
+    }
+
+    pub fn debug_draw(&self) {
+        match self {
+            &BoundingVolumeNode::Node { ref volume, left_child: _, right_child: _ } => {
+                volume.debug_draw();
+            },
+            &BoundingVolumeNode::Leaf(_) => {
+                unimplemented!();
+            }
         }
     }
 }
@@ -99,6 +116,20 @@ impl BoundingVolume {
             }
         }
     }
+
+    pub fn debug_draw(&self) {
+        match self {
+            &BoundingVolume::Sphere { center: _, radius: _ } => {
+                unimplemented!();
+            },
+            &BoundingVolume::AABB { min, max } => {
+                debug_draw::box_min_max(min, max);
+            },
+            &BoundingVolume::OBB { center: _, axes: _, half_widths: _ } => {
+                unimplemented!();
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -123,6 +154,7 @@ impl System for BoundingVolumeUpdateSystem {
 
             if let Some(mut bvh) = bvh_manager.get_mut(entity) {
                 bvh.update(&*transform_manager);
+                bvh.debug_draw();
                 continue;
             }
 
@@ -139,6 +171,7 @@ impl System for BoundingVolumeUpdateSystem {
                 };
 
                 bvh_manager.assign(entity, BoundingVolumeHierarchy {
+                    entity: entity,
                     root: root,
                 });
             }

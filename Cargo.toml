@@ -50,3 +50,7 @@ version = "*"
 [[example]]
 name = "circle_movement"
 path = "examples/benchmarks/circle_movement.rs"
+
+[[example]]
+name = "circle_collision"
+path = "examples/benchmarks/circle_collision.rs"

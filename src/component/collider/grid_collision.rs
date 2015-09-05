@@ -5,6 +5,7 @@ use math::*;
 use scene::Scene;
 use ecs::System;
 use super::bounding_volume::*;
+use debug_draw;
 
 /// A collision processor that partitions the space into a regular grid.
 ///
@@ -37,6 +38,12 @@ impl GridCollisionSystem {
 
 impl System for GridCollisionSystem {
     fn update(&mut self, scene: &Scene, _delta: f32) {
+        // Clear out grid contents from previous frame, start each frame with an empty grid an
+        // rebuilt it rather than trying to update the grid as objects move.
+        for (_, mut cell) in &mut self.grid {
+            cell.clear();
+        }
+
         let bvh_manager = scene.get_manager::<BoundingVolumeManager>();
 
         for (bvh, _entity) in bvh_manager.iter() {
@@ -61,7 +68,7 @@ impl System for GridCollisionSystem {
                     for other_bvh in cell {
                         if bvh.test(other_bvh) {
                             // Woo, we have a collison.
-                            println!("legit collision between {:?} and {:?}", bvh, other_bvh);
+                            println!("legit collision between {:?} and {:?}", bvh.entity, other_bvh.entity);
                         }
                     }
                 }
@@ -82,6 +89,17 @@ impl System for GridCollisionSystem {
             {
                 self.grid.insert(grid_cell, vec![bvh.clone()]);
             }
+        }
+
+        // Debug draw the grid.
+        for i in -50..50 {
+            let offset = i as f32;
+            debug_draw::line(
+                Point::new(offset * self.cell_size, -50.0 * self.cell_size, 0.0),
+                Point::new(offset * self.cell_size,  50.0 * self.cell_size, 0.0));
+            debug_draw::line(
+                Point::new(-50.0 * self.cell_size, offset * self.cell_size, 0.0),
+                Point::new( 50.0 * self.cell_size, offset * self.cell_size, 0.0));
         }
     }
 }

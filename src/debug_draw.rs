@@ -120,14 +120,14 @@ pub fn draw_command(command: DebugDrawCommand) {
     inner.command_buffer.push(command);
 }
 
-pub fn draw_line(start: Point, end: Point) {
+pub fn line(start: Point, end: Point) {
     draw_command(DebugDrawCommand::Line {
         start: start,
         end: end,
     });
 }
 
-pub fn draw_box_min_max(min: Point, max: Point) {
+pub fn box_min_max(min: Point, max: Point) {
     let diff = max - min;
     draw_command(DebugDrawCommand::Box {
         center: min + diff  * 0.5,
@@ -135,7 +135,7 @@ pub fn draw_box_min_max(min: Point, max: Point) {
     });
 }
 
-pub fn draw_box_center_widths(center: Point, widths: Vector3) {
+pub fn box_center_widths(center: Point, widths: Vector3) {
     draw_command(DebugDrawCommand::Box {
         center: center,
         widths: widths,

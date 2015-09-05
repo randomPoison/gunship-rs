@@ -28,6 +28,7 @@ pub use self::component::mesh::{MeshManager, Mesh};
 pub use self::component::light::{LightManager, Light, PointLight};
 pub use self::component::audio::{AudioSourceManager, AudioSource};
 pub use self::component::alarm::{AlarmID, AlarmManager};
+pub use self::component::collider::{ColliderManager, Collider};
 pub use self::component::struct_component_manager::StructComponentManager;
 
 // TODO: These are only needed for hotloading support.
