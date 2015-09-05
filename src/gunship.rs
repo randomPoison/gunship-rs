@@ -3,7 +3,7 @@
 extern crate bootstrap_rs as bootstrap;
 extern crate bootstrap_audio as bs_audio;
 extern crate parse_collada as collada;
-extern crate polygon_rs as polygon;
+extern crate polygon;
 extern crate polygon_math as math;
 
 pub mod engine;
@@ -12,6 +12,7 @@ pub mod input;
 pub mod resource;
 pub mod ecs;
 pub mod component;
+pub mod debug_draw;
 
 mod wav;
 

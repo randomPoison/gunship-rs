@@ -8,6 +8,8 @@ use std::io::Write;
 
 use bootstrap::time::Timer;
 
+pub mod null;
+
 /// A global access point for collecting logs. This allows client code to create stopwatches
 /// anywhere without having to pass the Collector around.
 static mut COLLECTOR: *mut Collector = 0 as *mut Collector;

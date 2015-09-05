@@ -19,9 +19,8 @@ fn main() {
 fn setup_scene(scene: &mut Scene) {
     scene.register_manager(CircleMovementManager::new());
 
-    scene.resource_manager().set_vert_shader_path("examples/shaders/forward_phong.vert.glsl");
-    scene.resource_manager().set_frag_shader_path("examples/shaders/forward_phong.frag.glsl");
-    scene.resource_manager().load_model("examples/meshes/cube.dae").unwrap();
+    scene.resource_manager().set_resource_path("examples/");
+    scene.resource_manager().load_model("meshes/cube.dae").unwrap();
 
     let mut transform_manager = scene.get_manager_mut::<TransformManager>();
     let mut camera_manager = scene.get_manager_mut::<CameraManager>();

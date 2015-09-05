@@ -7,6 +7,12 @@ authors = ["David LeGare <excaliburhissheath@gmail.com>"]
 [lib]
 name = "gunship"
 
+[features]
+default = []
+
+timing = []
+hotloading = []
+
 [dependencies.bootstrap_rs]
 version = "*"
 path = "lib/bootstrap_rs"
@@ -19,7 +25,7 @@ path = "lib/bootstrap_audio"
 version = "*"
 path = "lib/parse_collada"
 
-[dependencies.polygon_rs]
+[dependencies.polygon]
 version = "*"
 path = "lib/polygon_rs"
 
