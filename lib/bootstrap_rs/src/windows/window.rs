@@ -171,7 +171,9 @@ fn convert_windows_scancode(wParam: WPARAM, _: LPARAM) -> ScanCode {
     match key_code {
         A ... Z
       | CHAR_0 ... CHAR_9
-      | 32 => {
+      | 32
+      | 192
+      | 120 ... 122 => {
           unsafe { mem::transmute(key_code) }
         },
         _ => {
