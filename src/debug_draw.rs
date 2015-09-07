@@ -72,7 +72,9 @@ impl DebugDraw {
         }
     }
 
-    pub fn flush_commands(&mut self, camera: &Camera) {
+    // TODO: Better handle the case where we don't want to clear commands between frames,
+    // i.e. better handle debug drawing while debug paused.
+    pub fn flush_commands(&mut self, camera: &Camera, clear_commands: bool) {
         for command in &self.inner.command_buffer {
             match command {
                 &DebugDrawCommand::Line { start, end } => {
@@ -96,9 +98,12 @@ impl DebugDraw {
             self.renderer.delete_mesh(line_mesh);
         }
 
-        self.inner.command_buffer.clear();
         self.line_vertices.clear();
         self.line_indices.clear();
+
+        if clear_commands {
+            self.inner.command_buffer.clear();
+        }
     }
 }
 

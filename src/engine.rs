@@ -11,6 +11,7 @@ use std::raw::TraitObject;
 use std::mem;
 
 use bootstrap;
+use bootstrap::input::ScanCode;
 use bootstrap::window::Window;
 use bootstrap::window::Message::*;
 use bootstrap::time::Timer;
@@ -54,6 +55,7 @@ pub struct Engine {
     debug_draw: DebugDraw,
 
     close: bool,
+    debug_pause: bool,
 }
 
 impl Engine {
@@ -93,6 +95,7 @@ impl Engine {
             debug_draw: DebugDraw::new(renderer.clone(), &*resource_manager),
 
             close: false,
+            debug_pause: false,
         }
     }
 
@@ -127,20 +130,32 @@ impl Engine {
             }
         }
 
-        self.alarm_update.update(scene, TARGET_FRAME_TIME_SECONDS);
+        // TODO: More efficient handling of debug pause (i.e. something that doesn't have any
+        // overhead when doing a release build).
+        if !self.debug_pause || scene.input.key_pressed(ScanCode::F11) {
+            self.alarm_update.update(scene, TARGET_FRAME_TIME_SECONDS);
 
-        // Update systems.
-        for system in self.systems.iter_mut() {
-            system.update(scene, TARGET_FRAME_TIME_SECONDS);
+            // Update systems.
+            for system in self.systems.iter_mut() {
+                system.update(scene, TARGET_FRAME_TIME_SECONDS);
+            }
+
+            self.transform_update.update(scene, TARGET_FRAME_TIME_SECONDS);
+            self.collision_update.update(scene, TARGET_FRAME_TIME_SECONDS);
+            self.light_update.update(scene, TARGET_FRAME_TIME_SECONDS);
+            self.audio_update.update(scene, TARGET_FRAME_TIME_SECONDS);
+
+            // Cleanup any entities that have been marked for destroy.
+            scene.destroy_marked();
         }
 
-        self.transform_update.update(scene, TARGET_FRAME_TIME_SECONDS);
-        self.collision_update.update(scene, TARGET_FRAME_TIME_SECONDS);
-        self.light_update.update(scene, TARGET_FRAME_TIME_SECONDS);
-        self.audio_update.update(scene, TARGET_FRAME_TIME_SECONDS);
+        if scene.input.key_pressed(ScanCode::F9) {
+            self.debug_pause = !self.debug_pause;
+        }
 
-        // Cleanup any entities that have been marked for destroy.
-        scene.destroy_marked();
+        if scene.input.key_pressed(ScanCode::F11) {
+            self.debug_pause = true;
+        }
     }
 
     pub fn draw(&mut self) {
@@ -178,7 +193,7 @@ impl Engine {
                     &mut light_manager.components().iter().map(|ref_cell| *ref_cell.borrow()));
             }
 
-            self.debug_draw.flush_commands(&*camera);
+            self.debug_draw.flush_commands(&*camera, !self.debug_pause);
         }
 
         self.renderer.swap_buffers(self.window.borrow().deref());
@@ -301,6 +316,7 @@ impl Clone for Engine {
             debug_draw: DebugDraw::new(self.renderer.clone(), &*resource_manager),
 
             close: false,
+            debug_pause: false,
         };
 
         engine
@@ -348,6 +364,7 @@ pub fn engine_init(window: Rc<RefCell<Window>>) -> Box<Engine> {
         debug_draw: DebugDraw::new(renderer.clone(), &*resource_manager),
 
         close: false,
+        debug_pause: false,
     })
 }
 
