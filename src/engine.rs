@@ -133,6 +133,8 @@ impl Engine {
         // TODO: More efficient handling of debug pause (i.e. something that doesn't have any
         // overhead when doing a release build).
         if !self.debug_pause || scene.input.key_pressed(ScanCode::F11) {
+            self.debug_draw.clear_buffer();
+
             self.alarm_update.update(scene, TARGET_FRAME_TIME_SECONDS);
 
             // Update systems.
@@ -193,7 +195,7 @@ impl Engine {
                     &mut light_manager.components().iter().map(|ref_cell| *ref_cell.borrow()));
             }
 
-            self.debug_draw.flush_commands(&*camera, !self.debug_pause);
+            self.debug_draw.flush_commands(&*camera);
         }
 
         self.renderer.swap_buffers(self.window.borrow().deref());
