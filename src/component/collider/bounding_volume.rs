@@ -19,12 +19,29 @@ impl BoundingVolumeHierarchy {
     /// Traverses the hierarchy and updates the bounding volumes to match any changes
     /// in the root colliders.
     pub fn update(&mut self, _transform_manager: &TransformManager) {
+        // TODO: Update the bvh.
         // self.root.update(transform_manager);
     }
 
     /// Tests if `other` collides with this BVH.
-    pub fn test(&self, _other: &BoundingVolumeHierarchy) -> bool {
-        true // TODO: Actually test the collision.
+    pub fn test(&self, other: &BoundingVolumeHierarchy) -> bool {
+        let our_volume = match &self.root {
+            &BoundingVolumeNode::Node { ref volume, left_child: _, right_child: _ } => {
+                volume
+            },
+            &BoundingVolumeNode::Leaf(_) =>
+                unimplemented!(),
+        };
+
+        let other_volume = match &other.root {
+            &BoundingVolumeNode::Node { ref volume, left_child: _, right_child: _ } => {
+                volume
+            },
+            &BoundingVolumeNode::Leaf(_) =>
+                unimplemented!(),
+        };
+
+        our_volume.test(other_volume)
     }
 
     pub fn debug_draw(&self) {
@@ -117,6 +134,26 @@ impl BoundingVolume {
         }
     }
 
+    pub fn test(&self, other: &BoundingVolume) -> bool {
+        let (self_min, self_max) = match self {
+            &BoundingVolume::AABB { min, max } => {
+                (min, max)
+            },
+            _ => unimplemented!(),
+        };
+
+        let (other_min, other_max) = match other {
+            &BoundingVolume::AABB { min, max } => {
+                (min, max)
+            },
+            _ => unimplemented!(),
+        };
+
+        test_ranges((self_min.x, self_max.x), (other_min.x, other_max.x))
+     && test_ranges((self_min.y, self_max.y), (other_min.y, other_max.y))
+     && test_ranges((self_min.z, self_max.z), (other_min.z, other_max.z))
+    }
+
     pub fn debug_draw(&self) {
         match self {
             &BoundingVolume::Sphere { center: _, radius: _ } => {
@@ -177,4 +214,14 @@ impl System for BoundingVolumeUpdateSystem {
             }
         }
     }
+}
+
+fn test_ranges(first: (f32, f32), second: (f32, f32)) -> bool {
+    let (min_a, max_a) = first;
+    let (min_b, max_b) = second;
+
+    !( min_a > max_b
+    || min_b > max_a
+    || max_a < min_b
+    || max_b < min_a)
 }
