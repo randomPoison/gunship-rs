@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use math::*;
 
 use scene::Scene;
-use ecs::System;
+use ecs::{System, Entity};
 use super::bounding_volume::*;
 use debug_draw;
 
@@ -14,7 +14,7 @@ use debug_draw;
 /// - Do something to configure the size of the grid.
 #[derive(Debug, Clone)]
 pub struct GridCollisionSystem {
-    grid: HashMap<GridCell, Vec<BoundingVolumeHierarchy>>,
+    grid: HashMap<GridCell, Vec<Entity>>,
     cell_size: f32,
 }
 
@@ -38,6 +38,8 @@ impl GridCollisionSystem {
 
 impl System for GridCollisionSystem {
     fn update(&mut self, scene: &Scene, _delta: f32) {
+        println!("GridCollisionSystem::update()");
+
         // Clear out grid contents from previous frame, start each frame with an empty grid an
         // rebuilt it rather than trying to update the grid as objects move.
         for (_, mut cell) in &mut self.grid {
@@ -46,7 +48,9 @@ impl System for GridCollisionSystem {
 
         let bvh_manager = scene.get_manager::<BoundingVolumeManager>();
 
-        for (bvh, _entity) in bvh_manager.iter() {
+        for (bvh, entity) in bvh_manager.iter() {
+            println!("grid collision test for {:?}", entity);
+
             let (min, max) = match bvh.root {
                 BoundingVolumeNode::Node { ref volume, left_child: _, right_child: _ } => {
                     match volume {
@@ -61,24 +65,38 @@ impl System for GridCollisionSystem {
 
             let grid_cell = self.world_to_grid(min);
             let max_cell = self.world_to_grid(max);
+            println!("min cell: {:?}, max cell: {:?}", grid_cell, max_cell);
 
             // Collide against any existing volumes in the
             for test_cell in grid_cell.iter_to(max_cell) {
-                if let Some(cell) = self.grid.get(&test_cell) {
-                    for other_bvh in cell {
-                        if bvh.test(other_bvh) {
+                println!("testing {:?} in cell {:?}", entity, test_cell);
+                if let Some(mut cell) = self.grid.get_mut(&test_cell) {
+                    // Check against other volumes.
+                    for other_entity in cell.iter() {
+                        let other_bvh = bvh_manager.get(*other_entity).unwrap();
+                        println!("{:?} and {:?} in the same cell, testing bvhs for collision", bvh.entity, other_entity);
+                        if bvh.test(&*other_bvh) {
                             // Woo, we have a collison.
                             println!("legit collision between {:?} and {:?}", bvh.entity, other_bvh.entity);
                         }
                     }
+
+                    // Add to cell.
+                    cell.push(entity);
+                    continue;
                 }
+
+                // This block should be an else branch on the above if block, but the borrow
+                // checker isn't smart enough to tell that the borrow on grid has ended. We do a
+                // continue at the end of the previous block so we know if we get here we need to
+                // add the cell.
+                let cell = vec![entity];
+                self.grid.insert(test_cell, cell);
             }
 
             if let Some(mut cell) = self.grid.get_mut(&grid_cell) {
-                // Collide against stuffs.
-
-
-                cell.push(bvh.clone());
+                cell.push(entity);
+                println!("Adding {:?} to cell {:?}", entity, grid_cell);
                 continue;
             }
 
@@ -87,7 +105,8 @@ impl System for GridCollisionSystem {
             // the end of the if block so we can assume if we get here that the cell is not in the
             // grid.
             {
-                self.grid.insert(grid_cell, vec![bvh.clone()]);
+                println!("Creating new cell at {:?} for {:?}", grid_cell, entity);
+                self.grid.insert(grid_cell, vec![entity]);
             }
         }
 
@@ -152,11 +171,11 @@ impl Iterator for GridIter {
         let to = self.to;
         let mut next = self.next;
 
-        if next.z > to.z {
+        if next.z >= to.z {
             next.z = from.z;
-            if next.y > to.y {
+            if next.y >= to.y {
                 next.y = from.y;
-                if next.x > to.x {
+                if next.x >= to.x {
                     return None;
                 } else {
                     next.x += 1;
