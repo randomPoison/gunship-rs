@@ -1,9 +1,9 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use math::*;
 
 use scene::Scene;
-use ecs::{System, Entity};
+use ecs::Entity;
 use super::bounding_volume::*;
 use debug_draw;
 
@@ -26,25 +26,27 @@ impl GridCollisionSystem {
         }
     }
 
-    /// Converts a point in world space to its grid cell.
-    fn world_to_grid(&self, point: Point) -> GridCell {
-        GridCell {
-            x: (point.x / self.cell_size).floor() as isize,
-            y: (point.y / self.cell_size).floor() as isize,
-            z: (point.z / self.cell_size).floor() as isize,
-        }
-    }
-}
-
-impl System for GridCollisionSystem {
-    fn update(&mut self, scene: &Scene, _delta: f32) {
+    pub fn update(&mut self, scene: &Scene, _delta: f32) -> HashSet<(Entity, Entity)> {
         println!("GridCollisionSystem::update()");
+
+        // Debug draw the grid.
+        for i in -50..50 {
+            let offset = i as f32;
+            debug_draw::line(
+                Point::new(offset * self.cell_size, -50.0 * self.cell_size, 0.0),
+                Point::new(offset * self.cell_size,  50.0 * self.cell_size, 0.0));
+            debug_draw::line(
+                Point::new(-50.0 * self.cell_size, offset * self.cell_size, 0.0),
+                Point::new( 50.0 * self.cell_size, offset * self.cell_size, 0.0));
+        }
 
         // Clear out grid contents from previous frame, start each frame with an empty grid an
         // rebuilt it rather than trying to update the grid as objects move.
         for (_, mut cell) in &mut self.grid {
             cell.clear();
         }
+
+        let mut collisions = HashSet::<(Entity, Entity)>::new();
 
         let bvh_manager = scene.get_manager::<BoundingVolumeManager>();
 
@@ -78,6 +80,7 @@ impl System for GridCollisionSystem {
                         if bvh.test(&*other_bvh) {
                             // Woo, we have a collison.
                             println!("legit collision between {:?} and {:?}", bvh.entity, other_bvh.entity);
+                            collisions.insert((entity, *other_entity));
                         }
                     }
 
@@ -110,15 +113,15 @@ impl System for GridCollisionSystem {
             }
         }
 
-        // Debug draw the grid.
-        for i in -50..50 {
-            let offset = i as f32;
-            debug_draw::line(
-                Point::new(offset * self.cell_size, -50.0 * self.cell_size, 0.0),
-                Point::new(offset * self.cell_size,  50.0 * self.cell_size, 0.0));
-            debug_draw::line(
-                Point::new(-50.0 * self.cell_size, offset * self.cell_size, 0.0),
-                Point::new( 50.0 * self.cell_size, offset * self.cell_size, 0.0));
+        collisions
+    }
+
+    /// Converts a point in world space to its grid cell.
+    fn world_to_grid(&self, point: Point) -> GridCell {
+        GridCell {
+            x: (point.x / self.cell_size).floor() as isize,
+            y: (point.y / self.cell_size).floor() as isize,
+            z: (point.z / self.cell_size).floor() as isize,
         }
     }
 }

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::cell::{RefCell, Ref};
 use std::iter::*;
 use std::slice::Iter;
@@ -56,6 +56,8 @@ pub struct ColliderManager {
     colliders: Vec<RefCell<Collider>>,
     entities:  Vec<Entity>,
     indices:   HashMap<Entity, usize>,
+
+    callback_manager: CollisionCallbackManager,
 }
 
 impl ColliderManager {
@@ -64,6 +66,8 @@ impl ColliderManager {
             colliders: Vec::new(),
             entities:  Vec::new(),
             indices:   HashMap::new(),
+
+            callback_manager: CollisionCallbackManager::new(),
         }
     }
 
@@ -76,8 +80,13 @@ impl ColliderManager {
         self.indices.insert(entity, index);
     }
 
+    pub fn register_callback<T: CollisionCallback + 'static>(&mut self, entity: Entity, callback: T) {
+        self.callback_manager.register(entity, callback);
+    }
+
+    // TODO: Eeeeeewwwwww, clean this up when abstract return types are added to Rust.
     pub fn iter(&self) -> Zip<Cloned<Iter<Entity>>, Map<Iter<RefCell<Collider>>, fn (&RefCell<Collider>) -> Ref<Collider>>> {
-            fn unwrap(refcell_collider: &RefCell<Collider>) -> Ref<Collider> {
+        fn unwrap(refcell_collider: &RefCell<Collider>) -> Ref<Collider> {
             refcell_collider.borrow()
         }
 
@@ -129,6 +138,95 @@ impl CollisionSystem {
 impl System for CollisionSystem {
     fn update(&mut self, scene: &Scene, delta: f32) {
         self.bvh_system.update(scene, delta);
-        self.grid_system.update(scene, delta);
+        let collisions = self.grid_system.update(scene, delta);
+        let mut collider_manager = scene.get_manager_mut::<ColliderManager>();
+        collider_manager.callback_manager.process_collisions(scene, collisions);
+    }
+}
+
+pub trait CollisionCallback {
+    fn invoke(&mut self, scene: &Scene, first: Entity, second: Entity);
+}
+
+impl<T: ?Sized + 'static> CollisionCallback for T where T: FnMut(&Scene, Entity, Entity) {
+    fn invoke(&mut self, scene: &Scene, first: Entity, second: Entity) {
+        self.call_mut((scene, first, second));
+    }
+}
+
+impl ::std::fmt::Debug for CollisionCallback {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+        f.pad("CollisionCallback")
+    }
+}
+
+type CallbackId = u64;
+
+fn callback_id<T: CollisionCallback + 'static>() -> CallbackId {
+    unsafe { ::std::intrinsics::type_id::<T>() }
+}
+
+#[derive(Debug)]
+pub struct CollisionCallbackManager {
+    callbacks: HashMap<CallbackId, Box<CollisionCallback>>,
+    entity_callbacks: HashMap<Entity, Vec<CallbackId>>,
+}
+
+impl CollisionCallbackManager {
+    pub fn new() -> CollisionCallbackManager {
+        CollisionCallbackManager {
+            callbacks: HashMap::new(),
+            entity_callbacks: HashMap::new(),
+        }
+    }
+
+    pub fn register<T: CollisionCallback + 'static>(&mut self, entity: Entity, callback: T) {
+        let callback_id = callback_id::<T>();
+        if !self.callbacks.contains_key(&callback_id) {
+            self.callbacks.insert(callback_id, Box::new(callback));
+        }
+
+        // TODO: Should we allow an entity to be registered with the same callback more than once?
+        //       For now I'm going to say no since it seems like that's most likely a logic error.
+        if let Some(mut entity_callbacks) = self.entity_callbacks.get_mut(&entity) {
+            entity_callbacks.push(callback_id);
+            return;
+        }
+
+        // TODO: Make this block an else block on the previous if block once non-lexical scopes are
+        // added to Rust.
+        {
+            let entity_callbacks = vec![callback_id];
+            self.entity_callbacks.insert(entity, entity_callbacks);
+        }
+    }
+
+    /// For a pair of colliding entities A and B, we assume that there is either an entry (A, B) or
+    /// (B, A), but not both. We manually invoke the callback for both colliding entities.
+    pub fn process_collisions(&mut self, scene: &Scene, collisions: HashSet<(Entity, Entity)>) {
+        for pair in collisions {
+            if let Some(callback_ids) = self.entity_callbacks.get(&pair.0) {
+                for callback_id in callback_ids.iter() {
+                    let mut callback = self.callbacks.get_mut(callback_id).unwrap();
+                    callback.invoke(scene, pair.0, pair.1);
+                }
+            }
+
+            if let Some(callback_ids) = self.entity_callbacks.get(&pair.1) {
+                for callback_id in callback_ids.iter() {
+                    let mut callback = self.callbacks.get_mut(callback_id).unwrap();
+                    callback.invoke(scene, pair.1, pair.0);
+                }
+            }
+        }
+    }
+}
+
+impl Clone for CollisionCallbackManager {
+    fn clone(&self) -> CollisionCallbackManager {
+        CollisionCallbackManager {
+            callbacks: HashMap::new(),
+            entity_callbacks: self.entity_callbacks.clone(),
+        }
     }
 }

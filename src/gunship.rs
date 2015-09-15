@@ -1,4 +1,4 @@
-#![feature(core_intrinsics, raw, drain)]
+#![feature(core, core_intrinsics, raw, drain, unboxed_closures)]
 
 extern crate bootstrap_rs as bootstrap;
 extern crate bootstrap_audio as bs_audio;

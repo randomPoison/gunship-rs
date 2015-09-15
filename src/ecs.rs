@@ -44,6 +44,12 @@ pub trait System {
     fn update(&mut self, scene: &Scene, delta: f32);
 }
 
+impl<T: ?Sized> System for T where T: FnMut(&Scene, f32) {
+    fn update(&mut self, scene: &Scene, delta: f32) {
+        self.call_mut((scene, delta));
+    }
+}
+
 pub trait ComponentManager: ::std::any::Any {
     /// Destroy all component data associated with the entity.
     fn destroy_all(&self, Entity);
