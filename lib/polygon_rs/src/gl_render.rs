@@ -30,8 +30,18 @@ impl GLRender {
     pub fn new(window: &Window) -> GLRender {
         let gl = gl::Context::new(window);
 
+        let version_str = gl.get_string(StringName::Version);
+        println!("OpenGL Version: {:?}", version_str);
+
         gl.enable(ServerCapability::DebugOutput);
-        gl.debug_message_callback(gl::debug_callback, ptr::null_mut());
+
+        let major_version = gl.get_integer(IntegerName::MajorVersion);
+        let minor_version = gl.get_integer(IntegerName::MinorVersion);
+
+        if major_version >= 4 && minor_version >= 3 {
+            // TODO: Also check if the extension is available for older versions.
+            gl.debug_message_callback(gl::debug_callback, ptr::null_mut());
+        }
 
         gl.enable(ServerCapability::DepthTest);
         gl.enable(ServerCapability::CullFace);
