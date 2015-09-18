@@ -1,4 +1,4 @@
-use std::mem::size_of;
+use std::mem::{self, size_of};
 use std::ptr;
 
 use windows::winapi::*;
@@ -62,25 +62,8 @@ pub fn handle_raw_input(window: &mut Window, lParam: LPARAM) {
             size_of::<RAWINPUTHEADER>() as u32);
     }
 
-    let mut raw = RAWINPUT {
-        header: RAWINPUTHEADER {
-            dwType: 0,
-            dwSize: 0,
-            hDevice: ptr::null_mut(),
-            wParam: 0,
-        },
-        mouse: RAWMOUSE {
-            usFlags: 0,
-            usButtonFlags: 0,
-            usButtonData: 0,
-            ulRawButtons: 0,
-            lLastX: 0,
-            lLastY: 0,
-            ulExtraInformation: 0,
-        }
-    };
-
-    unsafe {
+    let raw = unsafe {
+        let mut raw = mem::uninitialized::<RAWINPUT>();
         assert!(
             user32::GetRawInputData(
                 lParam as HRAWINPUT,
@@ -89,7 +72,8 @@ pub fn handle_raw_input(window: &mut Window, lParam: LPARAM) {
                 &mut size,
                 size_of::<RAWINPUTHEADER>() as u32)
             == size);
-    }
+        raw
+    };
 
     assert!(raw.header.dwType == RIM_TYPEMOUSE);
     assert!(raw.mouse.usFlags == MOUSE_MOVE_RELATIVE);

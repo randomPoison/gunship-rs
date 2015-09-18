@@ -205,6 +205,17 @@ impl Context {
         }
     }
 
+    pub fn get_integer(&self, name: IntegerName) -> i32 {
+        let mut result: i32 = 0;
+        self.loader.get_integers(name, &mut result);
+        result
+    }
+
+    pub fn get_string(&self, name: StringName) -> &'static CStr {
+        let raw_str = self.loader.get_string(name);
+        unsafe { CStr::from_ptr(raw_str) }
+    }
+
     pub fn compile_shader(&self, shader: ShaderObject) -> Result<(), String> {
         self.loader.compile_shader(shader);
 
@@ -347,17 +358,16 @@ macro_rules! gen_proc_loader {
             $(
                 pub fn $proc_name(&self, $( $arg: $arg_ty, )* ) $( -> $result )* {
                     if let None = self.$proc_name.get() {
-                        // println!(concat!("loading ", stringify!($gl_proc), "() for the first time."));
-
                         let $proc_name = (self.proc_loader)(stringify!($gl_proc));
                         self.$proc_name.set(unsafe {
                             mem::transmute($proc_name)
                         });
                     }
-                    assert!(self.$proc_name.get().is_some());
 
-                    // println!(concat!("calling ", stringify!($gl_proc), "()"));
-                    (self.$proc_name.get().unwrap())($( $arg ),*)
+                    match self.$proc_name.get() {
+                        Some(proc_ptr) => proc_ptr($( $arg ),*),
+                        None => panic!("Failed to load gl proc for {}", stringify!($gl_proc)),
+                    }
                 }
             )*
         }
@@ -382,6 +392,10 @@ gen_proc_loader! {
         fn delete_vertex_arrays(num_arrays: i32, arrays: *const VertexArrayObject),
     glGetError:
         fn get_error() -> ErrorCode,
+    glGetIntegerv:
+        fn get_integers(name: IntegerName, params: *mut i32),
+    glGetString:
+        fn get_string(name: StringName) -> *const i8,
     glViewport:
         fn viewport(x: i32, y: i32, width: i32, height: i32),
     glGenVertexArrays:
@@ -662,6 +676,24 @@ pub enum SourceFactor {
     DstColor         = 0x0306,
     OneMinusDstColor = 0x0307,
     SrcAlphaSaturate = 0x0308,
+}
+
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StringName {
+    Vendor                 = 0x1F00,
+    Renderer               = 0x1F01,
+    Version                = 0x1F02,
+    ShadingLanguageVersion = 0x8B8C,
+}
+
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IntegerName {
+    // Version 3.0
+    MajorVersion  = 0x821B,
+    MinorVersion  = 0x821C,
+    NumExtensions = 0x821D,
 }
 
 #[repr(u32)]
