@@ -8,6 +8,7 @@ use math::Quaternion;
 
 use ecs::{Entity, System, ComponentManager};
 use scene::Scene;
+use super::{EntityMap, EntitySet};
 
 #[derive(Debug, Clone)]
 pub struct TransformManager {
@@ -18,9 +19,9 @@ pub struct TransformManager {
     ///
     /// The first value of the mapped tuple is the row containing the transform, the
     /// second is the index of the transform within that row.
-    indices: HashMap<Entity, (usize, usize)>,
+    indices: EntityMap<(usize, usize)>,
 
-    marked_for_destroy: RefCell<HashSet<Entity>>,
+    marked_for_destroy: RefCell<EntitySet>,
 }
 
 impl TransformManager {
@@ -28,8 +29,8 @@ impl TransformManager {
         let mut transform_manager = TransformManager {
             transforms: Vec::new(),
             entities: Vec::new(),
-            indices: HashMap::new(),
-            marked_for_destroy: RefCell::new(HashSet::new()),
+            indices: HashMap::default(),
+            marked_for_destroy: RefCell::new(HashSet::default()),
         };
 
         transform_manager.transforms.push(Vec::new());
@@ -162,7 +163,7 @@ impl ComponentManager for TransformManager {
     }
 
     fn destroy_marked(&mut self) {
-        let mut marked_for_destroy = RefCell::new(HashSet::new());
+        let mut marked_for_destroy = RefCell::new(HashSet::default());
         ::std::mem::swap(&mut marked_for_destroy, &mut self.marked_for_destroy);
         let mut marked_for_destroy = marked_for_destroy.into_inner();
         for entity in marked_for_destroy.drain() {

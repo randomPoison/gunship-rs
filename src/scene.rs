@@ -88,9 +88,12 @@ impl Scene {
 
     pub fn get_manager<T: ComponentManager>(&self) -> ManagerRef<T> {
         let manager_id = manager_id::<T>();
-        let manager = self.component_managers
-            .get(&manager_id)
-            .expect(&format!("Tried to retrieve manager {} with ID {:?} but none exists", type_name::<T>(), manager_id));
+        let manager = match self.component_managers.get(&manager_id) {
+            Some(manager) => manager,
+            None => panic!("Tried to retrieve manager {} with ID {:?} but none exists",
+                           type_name::<T>(),
+                           manager_id),
+        };
 
         ManagerRef {
             manager: manager.borrow(),
@@ -100,9 +103,12 @@ impl Scene {
 
     pub fn get_manager_mut<T: ComponentManager>(&self) -> ManagerRefMut<T> {
         let manager_id = manager_id::<T>();
-        let manager = self.component_managers
-            .get(&manager_id)
-            .expect(&format!("Tried to retrieve manager {} with ID {:?} but none exists", type_name::<T>(), manager_id));
+        let manager = match self.component_managers.get(&manager_id) {
+            Some(manager) => manager,
+            None => panic!("Tried to retrieve manager {} with ID {:?} but none exists",
+                           type_name::<T>(),
+                           manager_id),
+        };
 
         ManagerRefMut {
             manager: manager.borrow_mut(),

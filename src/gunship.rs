@@ -1,10 +1,11 @@
-#![feature(core, core_intrinsics, raw, drain, unboxed_closures)]
+#![feature(core, core_intrinsics, raw, drain, unboxed_closures, hashmap_hasher)]
 
 extern crate bootstrap_rs as bootstrap;
 extern crate bootstrap_audio as bs_audio;
 extern crate parse_collada as collada;
 extern crate polygon;
 extern crate polygon_math as math;
+extern crate fnv;
 
 pub mod engine;
 pub mod scene;

@@ -3,17 +3,18 @@ use std::slice::Iter;
 use std::cell::{RefCell, Ref, RefMut};
 use std::any::Any;
 
+use super::{EntityMap, EntitySet};
+
 use ecs::{Entity, ComponentManager};
 
-/// A default implementation for a component manager that can be represented
-/// as a single struct.
-#[derive(Clone)]
+/// A default manager for component types that can be represented as a single struct.
+#[derive(Debug, Clone)]
 pub struct StructComponentManager<T: Clone + Any> {
     components: Vec<RefCell<T>>,
     entities: Vec<Entity>,
-    indices: HashMap<Entity, usize>,
+    indices: EntityMap<usize>,
 
-    marked_for_destroy: RefCell<HashSet<Entity>>,
+    marked_for_destroy: RefCell<EntitySet>,
 }
 
 impl<T: Clone + Any> StructComponentManager<T> {
@@ -21,9 +22,9 @@ impl<T: Clone + Any> StructComponentManager<T> {
         StructComponentManager {
             components: Vec::new(),
             entities: Vec::new(),
-            indices: HashMap::new(),
+            indices: HashMap::default(),
 
-            marked_for_destroy: RefCell::new(HashSet::new()),
+            marked_for_destroy: RefCell::new(HashSet::default()),
         }
     }
 
@@ -107,7 +108,7 @@ impl<T: Clone + Any> ComponentManager for StructComponentManager<T> {
     }
 
     fn destroy_marked(&mut self) {
-        let mut marked_for_destroy = RefCell::new(HashSet::new());
+        let mut marked_for_destroy = RefCell::new(HashSet::default());
         ::std::mem::swap(&mut marked_for_destroy, &mut self.marked_for_destroy);
         let mut marked_for_destroy = marked_for_destroy.into_inner();
         for entity in marked_for_destroy.drain() {
