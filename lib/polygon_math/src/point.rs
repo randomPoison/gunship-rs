@@ -1,5 +1,7 @@
 use std::ops::{Sub, Add, Neg};
+use std::cmp::{PartialOrd, Ord, Ordering};
 use std::mem;
+use std::f32;
 
 use vector::Vector3;
 
@@ -9,7 +11,8 @@ use vector::Vector3;
 /// with an `x`, `y`, and `z` position, as well as
 /// a `w` homogeneous coordinate for the purposes
 /// of linear algebra calculations.
-#[repr(C)] #[derive(Debug, Clone, Copy)]
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub struct Point {
     pub x: f32,
     pub y: f32,
@@ -50,6 +53,14 @@ impl Point {
             z: 0.0,
             w: 1.0,
         }
+    }
+
+    pub fn min() -> Point {
+        Point::new(f32::MIN, f32::MIN, f32::MIN)
+    }
+
+    pub fn max() -> Point {
+        Point::new(f32::MAX, f32::MAX, f32::MAX)
     }
 
     pub fn as_vector3(&self) -> Vector3 {
@@ -105,5 +116,25 @@ impl Neg for Point {
             z: -self.z,
             w: 1.0,
         }
+    }
+}
+
+/// We lie about Point being Eq because it's needed for Ord. For our purposes we don't
+/// care that it's not technically true according to the spec.
+impl Eq for Point {}
+
+impl Ord for Point {
+    /// Super bad-nasty implementation of Ord for Point.
+    ///
+    /// This is so that we can use cmp::min() and cmp::max() with Point, but we have to settle
+    /// for panicking when a strict ordering can't be determined. We could also choose to define
+    /// an arbitrary ordering for NaN elements, but if a point has NaN coordinates something has
+    /// likely gone wrong so panicking will help even stranger bugs from appearing.
+    fn cmp(&self, other: &Point) -> Ordering {
+        PartialOrd::partial_cmp(self, other)
+        .expect(&*format!(
+            "Trying to compare points {:?} and {:?} where one as NaN coordinates",
+            self,
+            other))
     }
 }

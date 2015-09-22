@@ -5,7 +5,7 @@ use std::f32::consts::PI;
 
 use gunship::*;
 
-const TOTAL_CUBES: usize = 2;
+const TOTAL_CUBES: usize = 1000;
 
 fn main() {
     let mut engine = Engine::new();
@@ -64,45 +64,22 @@ fn setup_scene(scene: &mut Scene) {
     }
 
     // Create some amount of cubes.
-    // for _ in 0..TOTAL_CUBES {
-
-    // Create first cube.
-    {
+    for _ in 0..TOTAL_CUBES {
         let entity = scene.create_entity();
         let mut transform = transform_manager.assign(entity);
         transform.set_position(Point::new(
-            0.0,
-            0.0,
+            rand::random::<f32>() * 10.0 - 5.0,
+            rand::random::<f32>() * 10.0 - 5.0,
             0.0));
-        // circle_movement_manager.assign(entity, CircleMovement::new());
+        circle_movement_manager.assign(entity, CircleMovement::new());
         collider_manager.assign(entity, Collider::Sphere {
             offset: Vector3::zero(),
             radius: 0.5,
         });
         collider_manager.register_callback(entity, visualize_collision);
-        collider_manager.register_callback(entity, |_scene: &Scene, _entity, _other_entity| {
-            println!("collision with the first entity");
-        });
-        mesh_manager.assign(entity, "cube.pCube1");
-    }
-
-    // Create second cube
-    {
-        let entity = scene.create_entity();
-        let mut transform = transform_manager.assign(entity);
-        transform.set_position(Point::new(
-            0.5,
-            0.5,
-            0.0));
-        // circle_movement_manager.assign(entity, CircleMovement::new());
-        collider_manager.assign(entity, Collider::Sphere {
-            offset: Vector3::zero(),
-            radius: 0.5,
-        });
-        collider_manager.register_callback(entity, visualize_collision);
-        collider_manager.register_callback(entity, |_scene: &Scene, _entity, _other_entity| {
-            println!("collision with the second entity");
-        });
+        // collider_manager.register_callback(entity, |_scene: &Scene, _entity, _other_entity| {
+        //     println!("collision with the first entity");
+        // });
         mesh_manager.assign(entity, "cube.pCube1");
     }
 }
@@ -118,9 +95,12 @@ struct CircleMovement {
 impl CircleMovement {
     fn new() -> CircleMovement {
         CircleMovement {
-            center: Point::new(rand::random::<f32>() * 30.0 - 15.0, rand::random::<f32>() * 30.0 - 15.0, 0.0),
+            center: Point::new(
+                rand::random::<f32>() * 10.0 - 5.0,
+                rand::random::<f32>() * 10.0 - 5.0,
+                0.0),
             radius: rand::random::<f32>() * 4.0 + 1.0,
-            period: rand::random::<f32>() * 4.0 + 1.0,
+            period: rand::random::<f32>() * 1.0 + 4.0,
             offset: 0.0,
         }
     }
@@ -146,7 +126,7 @@ fn circle_movement_update(scene: &Scene, delta: f32) {
     }
 }
 
-fn visualize_collision(scene: &Scene, entity: Entity, other: Entity) {
+fn visualize_collision(scene: &Scene, entity: Entity, _other: Entity) {
     let transform_manager = scene.get_manager::<TransformManager>();
     let transform = transform_manager.get(entity);
     let center = transform.position() + Vector3::new(0.0, 0.0, 0.5);

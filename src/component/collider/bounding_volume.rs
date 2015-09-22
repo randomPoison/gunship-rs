@@ -1,3 +1,5 @@
+use std::cmp;
+
 use math::*;
 
 use component::{TransformManager, StructComponentManager};
@@ -16,13 +18,6 @@ pub struct BoundingVolumeHierarchy {
 }
 
 impl BoundingVolumeHierarchy {
-    /// Traverses the hierarchy and updates the bounding volumes to match any changes
-    /// in the root colliders.
-    pub fn update(&mut self, _transform_manager: &TransformManager) {
-        // TODO: Update the bvh.
-        // self.root.update(transform_manager);
-    }
-
     /// Tests if `other` collides with this BVH.
     pub fn test(&self, other: &BoundingVolumeHierarchy) -> bool {
         let our_volume = match &self.root {
@@ -62,9 +57,21 @@ pub enum BoundingVolumeNode {
 impl BoundingVolumeNode {
     pub fn update(&mut self, transform_manager: &TransformManager) {
         match self {
-            &mut BoundingVolumeNode::Node { volume: _, left_child: _, right_child: _ } => {
-                // uhhh
-                unimplemented!();
+            &mut BoundingVolumeNode::Node { ref mut volume, ref mut left_child, ref mut right_child } => {
+                // First update children, then self.
+                if let &mut Some(ref mut child) = left_child {
+                    child.update(transform_manager);
+                }
+                if let &mut Some(ref mut child) = right_child {
+                    child.update(transform_manager);
+                }
+
+                match volume {
+                    &mut BoundingVolume::AABB(ref mut aabb) => {
+                        aabb.update_to_children(left_child, right_child);
+                    },
+                    _ => unimplemented!(),
+                }
             },
             &mut BoundingVolumeNode::Leaf(ref mut cached_collider) => {
                 // Just update cached collider.
@@ -88,31 +95,111 @@ impl BoundingVolumeNode {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum BoundingVolume {
     /// Bounding sphere.
-    Sphere {
-        center: Point,
-        radius: f32,
-    },
+    Sphere(BoundingSphere),
 
     /// Axis-aligned bounding box.
-    AABB {
-        min: Point,
-        max: Point,
-    },
+    AABB(AABB),
 
     /// Oriented boudning box.
-    OBB {
-        center: Point,
-        axes: [Vector3; 3],
-        half_widths: Vector3,
-    },
+    OBB(OBB),
 }
 
 impl BoundingVolume {
+    pub fn test(&self, other: &BoundingVolume) -> bool {
+        let bounds = match self {
+            &BoundingVolume::AABB(aabb) => {
+                aabb
+            },
+            _ => unimplemented!(),
+        };
+
+        let other_bounds = match other {
+            &BoundingVolume::AABB(aabb) => {
+                aabb
+            },
+            _ => unimplemented!(),
+        };
+
+        test_ranges((bounds.min.x, bounds.max.x), (other_bounds.min.x, other_bounds.max.x))
+     && test_ranges((bounds.min.y, bounds.max.y), (other_bounds.min.y, other_bounds.max.y))
+     && test_ranges((bounds.min.z, bounds.max.z), (other_bounds.min.z, other_bounds.max.z))
+    }
+
+    pub fn debug_draw(&self) {
+        match self {
+            &BoundingVolume::Sphere(_) => {
+                unimplemented!();
+            },
+            &BoundingVolume::AABB(aabb) => {
+                debug_draw::box_min_max(aabb.min, aabb.max);
+            },
+            &BoundingVolume::OBB(_) => {
+                unimplemented!();
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct BoundingSphere {
+    pub center: Point,
+    pub radius: f32,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct AABB {
+    pub min: Point,
+    pub max: Point,
+}
+
+impl AABB {
+    /// Updates the AABB so that it completely bounds its children.
+    ///
+    /// # Details
+    ///
+    /// This function assumes that left and right children have already been updated.
+    pub fn update_to_children(
+        &mut self,
+        left: &Option<Box<BoundingVolumeNode>>,
+        right: &Option<Box<BoundingVolumeNode>>
+    ) {
+        // If both children are None then something went wrong.
+        debug_assert!(left.is_some() || right.is_some());
+
+        let left = left.as_ref().map(aabb_from_node);
+        let right = right.as_ref().map(aabb_from_node);
+
+        // We assume that only one will ever need to be defaulted, so we use Point::min for max and
+        // Point::max for min to ensure that the other value's bounds are automatically used.
+        let left = left.unwrap_or(AABB {
+            min: Point::max(),
+            max: Point::min(),
+        });
+        let right = right.unwrap_or(AABB {
+            min: Point::max(),
+            max: Point::min(),
+        });
+
+        self.min = cmp::min(left.min, right.min);
+        self.max = cmp::max(left.max, right.max);
+
+        fn aabb_from_node(node: &Box<BoundingVolumeNode>) -> AABB {
+            match &**node {
+                &BoundingVolumeNode::Node { ref volume, left_child: _, right_child: _ } => {
+                    AABB::from_bounding_volume(volume)
+                },
+                &BoundingVolumeNode::Leaf(ref collider) => {
+                    AABB::from_collider(collider)
+                },
+            }
+        }
+    }
+
     /// Given a cached collider generate an AABB that bounds it.
-    pub fn generate_aabb(cached_collider: &CachedCollider) -> BoundingVolume {
+    pub fn from_collider(cached_collider: &CachedCollider) -> AABB {
         match cached_collider.collider {
             Collider::Sphere { offset, radius } => {
                 let center = cached_collider.position + offset;
@@ -120,7 +207,7 @@ impl BoundingVolume {
                 let min = center - half_width;
                 let max = center + half_width;
 
-                BoundingVolume::AABB {
+                AABB {
                     min: min,
                     max: max,
                 }
@@ -134,39 +221,29 @@ impl BoundingVolume {
         }
     }
 
-    pub fn test(&self, other: &BoundingVolume) -> bool {
-        let (self_min, self_max) = match self {
-            &BoundingVolume::AABB { min, max } => {
-                (min, max)
+    pub fn from_bounding_volume(volume: &BoundingVolume) -> AABB {
+        match volume {
+            &BoundingVolume::AABB(aabb) => {
+                aabb
+            },
+            &BoundingVolume::Sphere(BoundingSphere { center, radius }) => {
+                let min = center - Vector3::new(radius, radius, radius);
+                let max = center + Vector3::new(radius, radius, radius);
+                AABB {
+                    min: min,
+                    max: max,
+                }
             },
             _ => unimplemented!(),
-        };
-
-        let (other_min, other_max) = match other {
-            &BoundingVolume::AABB { min, max } => {
-                (min, max)
-            },
-            _ => unimplemented!(),
-        };
-
-        test_ranges((self_min.x, self_max.x), (other_min.x, other_max.x))
-     && test_ranges((self_min.y, self_max.y), (other_min.y, other_max.y))
-     && test_ranges((self_min.z, self_max.z), (other_min.z, other_max.z))
-    }
-
-    pub fn debug_draw(&self) {
-        match self {
-            &BoundingVolume::Sphere { center: _, radius: _ } => {
-                unimplemented!();
-            },
-            &BoundingVolume::AABB { min, max } => {
-                debug_draw::box_min_max(min, max);
-            },
-            &BoundingVolume::OBB { center: _, axes: _, half_widths: _ } => {
-                unimplemented!();
-            }
         }
     }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct OBB {
+    pub center: Point,
+    pub axes: [Vector3; 3],
+    pub half_widths: Vector3,
 }
 
 #[derive(Debug, Clone)]
@@ -189,8 +266,10 @@ impl System for BoundingVolumeUpdateSystem {
                 entity: entity,
             };
 
+            // TODO: We can avoid branching here if we create the BVH when the collider is created,
+            // or at least do something to ensure that they already exist by the time we get here.
             if let Some(mut bvh) = bvh_manager.get_mut(entity) {
-                bvh.update(&*transform_manager);
+                bvh.root.update(&*transform_manager);
                 bvh.debug_draw();
                 continue;
             }
@@ -202,7 +281,7 @@ impl System for BoundingVolumeUpdateSystem {
             {
                 // Create and insert new bounding volumes.
                 let root = BoundingVolumeNode::Node {
-                    volume: BoundingVolume::generate_aabb(&cached_collider),
+                    volume: BoundingVolume::AABB(AABB::from_collider(&cached_collider)),
                     left_child: Some(Box::new(BoundingVolumeNode::Leaf(cached_collider))),
                     right_child: None,
                 };
