@@ -21,6 +21,7 @@ use component::{MeshManager, TransformManager};
 pub struct ResourceManager {
     renderer: Rc<GLRender>,
     meshes: RefCell<HashMap<String, GLMeshData>>,
+    shaders: RefCell<HashMap<String, ShaderProgram>>,
     audio_clips: RefCell<HashMap<String, Rc<Wave>>>,
 
     visual_scenes: RefCell<HashMap<String, VisualScene>>,
@@ -34,6 +35,7 @@ impl ResourceManager {
         ResourceManager {
             renderer: renderer,
             meshes: RefCell::new(HashMap::new()),
+            shaders: RefCell::new(HashMap::new()),
             audio_clips: RefCell::new(HashMap::new()),
 
             visual_scenes: RefCell::new(HashMap::new()),
@@ -236,26 +238,49 @@ impl ResourceManager {
         return Ok(entity);
     }
 
-    pub fn get_shader<P: AsRef<Path>>(
+    pub fn get_shader<P: AsRef<Path> + ::std::fmt::Debug>(
         &self,
         shader_path: P
     ) -> Result<ShaderProgram, ParseShaderError> {
-        let mut full_path = self.resource_path.borrow().clone();
-        full_path.push(shader_path);
-        let program_src = load_file_text(full_path);
+        {
+            let path_str = shader_path.as_ref().to_str().expect(&*format!(
+                "shader path {:?} contains invalid unicode characters",
+                shader_path));
+            if let Some(shader) = self.shaders.borrow().get(path_str) {
+                return Ok(shader.clone());
+            }
+        }
 
-        let programs = try!(ShaderParser::parse(&*program_src));
-        let vert_src = match programs.iter().find(|program| program.name == "vert") {
-            None => return Err(ParseShaderError::NoVertProgram),
-            Some(program) => program.src,
-        };
+        // This should be an else block on the above if block, but that doesn't work until MIR has
+        // dropped, so for now we have to settle for manual case analysis.
+        {
+            let path_string: String = shader_path.as_ref()
+                .to_str()
+                .expect(&*format!(
+                    "shader path {:?} contains invalid unicode characters",
+                    shader_path))
+                .into();
 
-        let frag_src = match programs.iter().find(|program| program.name == "frag") {
-            None => return Err(ParseShaderError::NoFragProgram),
-            Some(program) => program.src,
-        };
+            let mut full_path = self.resource_path.borrow().clone();
+            full_path.push(shader_path);
+            let program_src = load_file_text(full_path);
 
-        Ok(self.renderer.compile_shader_program(vert_src, frag_src))
+            let programs = try!(ShaderParser::parse(&*program_src));
+            let vert_src = match programs.iter().find(|program| program.name == "vert") {
+                None => return Err(ParseShaderError::NoVertProgram),
+                Some(program) => program.src,
+            };
+
+            let frag_src = match programs.iter().find(|program| program.name == "frag") {
+                None => return Err(ParseShaderError::NoFragProgram),
+                Some(program) => program.src,
+            };
+
+            let shader = self.renderer.compile_shader_program(vert_src, frag_src);
+            self.shaders.borrow_mut().insert(path_string, shader.clone());
+
+            Ok(shader)
+        }
     }
 
     fn gen_mesh_from_node(&self, node: &collada::Node, uri: &str) -> Result<GLMeshData, String> {
