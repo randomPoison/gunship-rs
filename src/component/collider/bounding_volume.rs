@@ -5,7 +5,7 @@ use std::iter::Zip;
 
 use math::*;
 
-use component::{TransformManager, StructComponentManager, EntityMap, EntitySet};
+use component::{TransformManager, EntityMap, EntitySet};
 use scene::*;
 use ecs::*;
 use super::{CachedCollider, Collider, ColliderManager};

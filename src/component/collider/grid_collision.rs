@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use math::*;
+use fnv::FnvHashState;
 
 use scene::Scene;
 use ecs::Entity;
@@ -14,26 +15,21 @@ use debug_draw;
 /// - Do something to configure the size of the grid.
 #[derive(Debug, Clone)]
 pub struct GridCollisionSystem {
-    grid: HashMap<GridCell, Vec<*const BoundingVolumeHierarchy>, ::std::collections::hash_state::DefaultState<::fnv::FnvHasher>>,
-    cell_size: f32,
+    pub grid: HashMap<GridCell, Vec<*const BoundingVolumeHierarchy>, FnvHashState>,
+    pub collisions: HashSet<(Entity, Entity), FnvHashState>,
+    pub cell_size: f32,
 }
 
 impl GridCollisionSystem {
     pub fn new() -> GridCollisionSystem {
         GridCollisionSystem {
             grid: HashMap::default(),
+            collisions: HashSet::default(),
             cell_size: 1.0,
         }
     }
 
-    pub fn update(&mut self, scene: &Scene, _delta: f32)
-    -> HashSet<
-        (Entity, Entity),
-        ::std::collections::hash_state::DefaultState<::fnv::FnvHasher>
-    > {
-        let mut _collision_tests = 0;
-        // println!("GridCollisionSystem::update()");
-
+    pub fn update(&mut self, scene: &Scene, _delta: f32) {
         // Debug draw the grid.
         for i in -50..50 {
             let offset = i as f32;
@@ -45,24 +41,20 @@ impl GridCollisionSystem {
                 Point::new( 50.0 * self.cell_size, offset * self.cell_size, 0.0));
         }
 
-        let mut collisions =
-            HashSet::<
-                (Entity, Entity),
-                ::std::collections::hash_state::DefaultState<::fnv::FnvHasher>
-            >::default();
-
         let bvh_manager = scene.get_manager::<BoundingVolumeManager>();
+        self.collisions.clear();
 
         for (bvh, entity) in bvh_manager.iter() {
-            // println!("grid collision test for {:?}", entity);
+            let entity = *entity;
 
+            // Retrieve the AABB at the root of the BVH.
             let aabb = match bvh.root {
                 BoundingVolumeNode::Node { ref volume, left_child: _, right_child: _ } => {
                     match volume {
                         &BoundingVolume::AABB(aabb) => {
                             aabb
                         },
-                        _ => panic!("Bounding volume hierarchy for entity {:?} does not have an AABB at its root, grid collision is only suported with hierarchies that have an AABB at the root"),
+                        _ => panic!("Bounding volume hierarchy for entity {:?} does not have an AABB at its root, grid collision is only suported with hierarchies that have an AABB at the root", entity),
                     }
                 },
                 BoundingVolumeNode::Leaf(_) => panic!("The root of the bounding volume was a leaf node, which is bad and not okay (and probably shouldn't even be possible :sideeye:)"),
@@ -70,20 +62,15 @@ impl GridCollisionSystem {
 
             let grid_cell = self.world_to_grid(aabb.min);
             let max_cell = self.world_to_grid(aabb.max);
-            // println!("min cell: {:?}, max cell: {:?}", grid_cell, max_cell);
 
             // Collide against any existing volumes in the
             for test_cell in grid_cell.iter_to(max_cell) {
-                // println!("testing {:?} in cell {:?}", entity, test_cell);
                 if let Some(mut cell) = self.grid.get_mut(&test_cell) {
                     // Check against other volumes.
-                    for other_bvh in cell.iter().map(|bvh_ptr| -> &BoundingVolumeHierarchy { unsafe { &**bvh_ptr } } ) {
-                        _collision_tests += 1;
-                        // println!("{:?} and {:?} in the same cell, testing bvhs for collision", bvh.entity, other_entity);
+                    for other_bvh in cell.iter().cloned().map(|bvh_ptr| -> &BoundingVolumeHierarchy { unsafe { &*bvh_ptr } }) {
                         if bvh.test(other_bvh) {
                             // Woo, we have a collison.
-                            // println!("legit collision between {:?} and {:?}", bvh.entity, other_bvh.entity);
-                            collisions.insert((*entity, other_bvh.entity));
+                            self.collisions.insert((entity, other_bvh.entity));
                         }
                     }
 
@@ -102,7 +89,6 @@ impl GridCollisionSystem {
 
             if let Some(mut cell) = self.grid.get_mut(&grid_cell) {
                 cell.push(bvh);
-                // println!("Adding {:?} to cell {:?}", entity, grid_cell);
                 continue;
             }
 
@@ -111,20 +97,15 @@ impl GridCollisionSystem {
             // the end of the if block so we can assume if we get here that the cell is not in the
             // grid.
             {
-                println!("Creating new cell at {:?} for {:?}", grid_cell, entity);
                 self.grid.insert(grid_cell, vec![bvh as *const _]);
             }
         }
-
-        // println!("collision tests: {}", _collision_tests);
 
         // Clear out grid contents from previous frame, start each frame with an empty grid an
         // rebuilt it rather than trying to update the grid as objects move.
         for (_, mut cell) in &mut self.grid {
             cell.clear();
         }
-
-        collisions
     }
 
     /// Converts a point in world space to its grid cell.

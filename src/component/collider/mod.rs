@@ -1,4 +1,5 @@
 use std::collections::{HashMap, HashSet};
+use std::collections::hash_state::HashState;
 use std::cell::{RefCell, Ref};
 use std::iter::*;
 use std::slice::Iter;
@@ -138,9 +139,9 @@ impl CollisionSystem {
 impl System for CollisionSystem {
     fn update(&mut self, scene: &Scene, delta: f32) {
         self.bvh_system.update(scene, delta);
-        let collisions = self.grid_system.update(scene, delta);
+        self.grid_system.update(scene, delta);
         let mut collider_manager = scene.get_manager_mut::<ColliderManager>();
-        collider_manager.callback_manager.process_collisions(scene, collisions);
+        collider_manager.callback_manager.process_collisions(scene, &self.grid_system.collisions);
     }
 }
 
@@ -203,7 +204,11 @@ impl CollisionCallbackManager {
 
     /// For a pair of colliding entities A and B, we assume that there is either an entry (A, B) or
     /// (B, A), but not both. We manually invoke the callback for both colliding entities.
-    pub fn process_collisions<H: ::std::collections::hash_state::HashState>(&mut self, scene: &Scene, collisions: HashSet<(Entity, Entity), H>) {
+    pub fn process_collisions<H>(
+        &mut self,
+        scene: &Scene,
+        collisions: &HashSet<(Entity, Entity), H>
+    ) where H: HashState {
         for pair in collisions {
             if let Some(callback_ids) = self.entity_callbacks.get(&pair.0) {
                 for callback_id in callback_ids.iter() {

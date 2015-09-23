@@ -17,11 +17,10 @@ pub use self::alarm::{AlarmID, AlarmManager, AlarmSystem};
 pub use self::collider::{Collider, ColliderManager, CollisionSystem, bounding_volume, grid_collision};
 
 use std::collections::{HashMap, HashSet};
-use std::collections::hash_state::DefaultState;
 
-use fnv::FnvHasher;
+use fnv::*;
 
 use ecs::Entity;
 
-pub type EntityMap<T> = HashMap<Entity, T, DefaultState<FnvHasher>>;
-pub type EntitySet = HashSet<Entity, DefaultState<FnvHasher>>;
+pub type EntityMap<T> = HashMap<Entity, T, FnvHashState>;
+pub type EntitySet = HashSet<Entity, FnvHashState>;
