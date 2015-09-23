@@ -14,19 +14,23 @@ use debug_draw;
 /// - Do something to configure the size of the grid.
 #[derive(Debug, Clone)]
 pub struct GridCollisionSystem {
-    grid: HashMap<GridCell, Vec<Entity>>,
+    grid: HashMap<GridCell, Vec<*const BoundingVolumeHierarchy>, ::std::collections::hash_state::DefaultState<::fnv::FnvHasher>>,
     cell_size: f32,
 }
 
 impl GridCollisionSystem {
     pub fn new() -> GridCollisionSystem {
         GridCollisionSystem {
-            grid: HashMap::new(),
+            grid: HashMap::default(),
             cell_size: 1.0,
         }
     }
 
-    pub fn update(&mut self, scene: &Scene, _delta: f32) -> HashSet<(Entity, Entity)> {
+    pub fn update(&mut self, scene: &Scene, _delta: f32)
+    -> HashSet<
+        (Entity, Entity),
+        ::std::collections::hash_state::DefaultState<::fnv::FnvHasher>
+    > {
         let mut _collision_tests = 0;
         // println!("GridCollisionSystem::update()");
 
@@ -41,13 +45,11 @@ impl GridCollisionSystem {
                 Point::new( 50.0 * self.cell_size, offset * self.cell_size, 0.0));
         }
 
-        // Clear out grid contents from previous frame, start each frame with an empty grid an
-        // rebuilt it rather than trying to update the grid as objects move.
-        for (_, mut cell) in &mut self.grid {
-            cell.clear();
-        }
-
-        let mut collisions = HashSet::<(Entity, Entity)>::new();
+        let mut collisions =
+            HashSet::<
+                (Entity, Entity),
+                ::std::collections::hash_state::DefaultState<::fnv::FnvHasher>
+            >::default();
 
         let bvh_manager = scene.get_manager::<BoundingVolumeManager>();
 
@@ -75,19 +77,18 @@ impl GridCollisionSystem {
                 // println!("testing {:?} in cell {:?}", entity, test_cell);
                 if let Some(mut cell) = self.grid.get_mut(&test_cell) {
                     // Check against other volumes.
-                    for other_entity in cell.iter() {
+                    for other_bvh in cell.iter().map(|bvh_ptr| -> &BoundingVolumeHierarchy { unsafe { &**bvh_ptr } } ) {
                         _collision_tests += 1;
-                        let other_bvh = bvh_manager.get(*other_entity).unwrap();
                         // println!("{:?} and {:?} in the same cell, testing bvhs for collision", bvh.entity, other_entity);
-                        if bvh.test(&*other_bvh) {
+                        if bvh.test(other_bvh) {
                             // Woo, we have a collison.
                             // println!("legit collision between {:?} and {:?}", bvh.entity, other_bvh.entity);
-                            collisions.insert((entity, *other_entity));
+                            collisions.insert((*entity, other_bvh.entity));
                         }
                     }
 
                     // Add to cell.
-                    cell.push(entity);
+                    cell.push(bvh);
                     continue;
                 }
 
@@ -95,12 +96,12 @@ impl GridCollisionSystem {
                 // checker isn't smart enough to tell that the borrow on grid has ended. We do a
                 // continue at the end of the previous block so we know if we get here we need to
                 // add the cell.
-                let cell = vec![entity];
+                let cell = vec![bvh as *const _];
                 self.grid.insert(test_cell, cell);
             }
 
             if let Some(mut cell) = self.grid.get_mut(&grid_cell) {
-                cell.push(entity);
+                cell.push(bvh);
                 // println!("Adding {:?} to cell {:?}", entity, grid_cell);
                 continue;
             }
@@ -111,11 +112,17 @@ impl GridCollisionSystem {
             // grid.
             {
                 println!("Creating new cell at {:?} for {:?}", grid_cell, entity);
-                self.grid.insert(grid_cell, vec![entity]);
+                self.grid.insert(grid_cell, vec![bvh as *const _]);
             }
         }
 
         // println!("collision tests: {}", _collision_tests);
+
+        // Clear out grid contents from previous frame, start each frame with an empty grid an
+        // rebuilt it rather than trying to update the grid as objects move.
+        for (_, mut cell) in &mut self.grid {
+            cell.clear();
+        }
 
         collisions
     }

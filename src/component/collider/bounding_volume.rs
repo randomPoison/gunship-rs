@@ -1,15 +1,116 @@
 use std::cmp;
+use std::cell::RefCell;
+use std::slice::Iter;
+use std::iter::Zip;
 
 use math::*;
 
-use component::{TransformManager, StructComponentManager};
+use component::{TransformManager, StructComponentManager, EntityMap, EntitySet};
 use scene::*;
 use ecs::*;
 use super::{CachedCollider, Collider, ColliderManager};
 use debug_draw;
 
 // TODO: Build a custom BVH manager that automatically constructs hierarchy.
-pub type BoundingVolumeManager = StructComponentManager<BoundingVolumeHierarchy>;
+/// A default manager for component types that can be represented as a single struct.
+#[derive(Debug, Clone)]
+pub struct BoundingVolumeManager {
+    components: Vec<BoundingVolumeHierarchy>,
+    entities: Vec<Entity>,
+    indices: EntityMap<usize>,
+
+    marked_for_destroy: RefCell<EntitySet>,
+}
+
+impl BoundingVolumeManager {
+    pub fn new() -> BoundingVolumeManager {
+        BoundingVolumeManager {
+            components: Vec::new(),
+            entities: Vec::new(),
+            indices: EntityMap::default(),
+
+            marked_for_destroy: RefCell::new(EntitySet::default()),
+        }
+    }
+
+    pub fn assign(&mut self, entity: Entity, component: BoundingVolumeHierarchy) -> &mut BoundingVolumeHierarchy {
+        assert!(!self.indices.contains_key(&entity));
+
+        let index = self.components.len();
+        self.components.push(component);
+        self.entities.push(entity);
+        self.indices.insert(entity, index);
+
+        &mut self.components[index]
+    }
+
+    pub fn get(&self, entity: Entity) -> Option<&BoundingVolumeHierarchy> {
+        if let Some(index) = self.indices.get(&entity) {
+            Some(&self.components[*index])
+        } else {
+            None
+        }
+    }
+
+    pub fn get_mut(&mut self, entity: Entity) -> Option<&mut BoundingVolumeHierarchy> {
+        if let Some(index) = self.indices.get(&entity) {
+            Some(&mut self.components[*index])
+        } else {
+            None
+        }
+    }
+
+    pub fn components(&self) -> &Vec<BoundingVolumeHierarchy> {
+        &self.components
+    }
+
+    pub fn entities(&self) -> &Vec<Entity> {
+        &self.entities
+    }
+
+    pub fn iter(&self) -> Zip<Iter<BoundingVolumeHierarchy>, Iter<Entity>> {
+        self.components.iter().zip(self.entities.iter())
+    }
+
+    pub fn destroy_immediate(&mut self, entity: Entity) -> BoundingVolumeHierarchy {
+        // Retrieve indices of removed entity and the one it's swapped with.
+        let index = self.indices.remove(&entity).unwrap();
+
+        // Remove transform and the associate entity.
+        let removed_entity = self.entities.swap_remove(index);
+        debug_assert!(removed_entity == entity);
+
+        // Update the index mapping for the moved entity, but only if the one we removed
+        // wasn't the only one in the row (or the last one in the row).
+        if index != self.entities.len() {
+            let moved_entity = self.entities[index];
+            self.indices.insert(moved_entity, index);
+        }
+
+        // Defer removing the transform until the very end to avoid a bunch of memcpys.
+        // Transform is a pretty fat struct so if we remove it, cache it to a variable,
+        // and then return it at the end we wind up with 2 or 3 memcpys. Doing it all at
+        // once at the end (hopefully) means only a single memcpy.
+        self.components.swap_remove(index)
+    }
+}
+
+impl ComponentManager for BoundingVolumeManager {
+    fn destroy_all(&self, entity: Entity) {
+        if self.indices.contains_key(&entity) {
+            self.marked_for_destroy.borrow_mut().insert(entity);
+        }
+    }
+
+    fn destroy_marked(&mut self) {
+        let mut marked_for_destroy = RefCell::new(EntitySet::default());
+        ::std::mem::swap(&mut marked_for_destroy, &mut self.marked_for_destroy);
+        let mut marked_for_destroy = marked_for_destroy.into_inner();
+        for entity in marked_for_destroy.drain() {
+            self.destroy_immediate(entity);
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct BoundingVolumeHierarchy {

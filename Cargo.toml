@@ -8,10 +8,14 @@ authors = ["David LeGare <excaliburhissheath@gmail.com>"]
 name = "gunship"
 
 [features]
-default = []
+default = ["timing"]
 
 timing = []
 hotloading = []
+
+[dependencies.fnv]
+version = "*"
+path = "lib/fnv"
 
 [dependencies.bootstrap_rs]
 version = "*"
@@ -37,8 +41,8 @@ path = "lib/polygon_math"
 version = "*"
 path = "lib/stopwatch"
 
-# [profile.release]
-# debug = true
+[profile.release]
+debug = true
 
 [[example]]
 name = "create_destroy"

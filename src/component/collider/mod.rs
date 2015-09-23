@@ -203,7 +203,7 @@ impl CollisionCallbackManager {
 
     /// For a pair of colliding entities A and B, we assume that there is either an entry (A, B) or
     /// (B, A), but not both. We manually invoke the callback for both colliding entities.
-    pub fn process_collisions(&mut self, scene: &Scene, collisions: HashSet<(Entity, Entity)>) {
+    pub fn process_collisions<H: ::std::collections::hash_state::HashState>(&mut self, scene: &Scene, collisions: HashSet<(Entity, Entity), H>) {
         for pair in collisions {
             if let Some(callback_ids) = self.entity_callbacks.get(&pair.0) {
                 for callback_id in callback_ids.iter() {
