@@ -68,6 +68,11 @@ impl GridCollisionSystem {
                 if let Some(mut cell) = self.grid.get_mut(&test_cell) {
                     // Check against other volumes.
                     for other_bvh in cell.iter().cloned().map(|bvh_ptr| -> &BoundingVolumeHierarchy { unsafe { &*bvh_ptr } }) {
+                        if self.collisions.contains(&(entity, other_bvh.entity)) {
+                            // Collision already detected, no need to check again.
+                            continue;
+                        }
+
                         if bvh.test(other_bvh) {
                             // Woo, we have a collison.
                             self.collisions.insert((entity, other_bvh.entity));

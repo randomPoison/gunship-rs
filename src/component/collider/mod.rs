@@ -5,8 +5,11 @@ use std::iter::*;
 use std::slice::Iter;
 
 use math::*;
+use fnv::FnvHashState;
+
 use ecs::*;
 use scene::Scene;
+use super::EntityMap;
 use self::grid_collision::GridCollisionSystem;
 use self::bounding_volume::BoundingVolumeUpdateSystem;
 
@@ -91,7 +94,11 @@ impl ColliderManager {
             refcell_collider.borrow()
         }
 
-        self.entities.iter().cloned().zip(self.colliders.iter().map(unwrap as fn (&RefCell<Collider>) -> Ref<Collider>))
+        self.entities.iter()
+            .cloned()
+            .zip(self.colliders
+                .iter()
+                .map(unwrap as fn (&RefCell<Collider>) -> Ref<Collider>))
     }
 }
 
@@ -169,15 +176,15 @@ fn callback_id<T: CollisionCallback + 'static>() -> CallbackId {
 
 #[derive(Debug)]
 pub struct CollisionCallbackManager {
-    callbacks: HashMap<CallbackId, Box<CollisionCallback>>,
-    entity_callbacks: HashMap<Entity, Vec<CallbackId>>,
+    callbacks: HashMap<CallbackId, Box<CollisionCallback>, FnvHashState>,
+    entity_callbacks: EntityMap<Vec<CallbackId>>,
 }
 
 impl CollisionCallbackManager {
     pub fn new() -> CollisionCallbackManager {
         CollisionCallbackManager {
-            callbacks: HashMap::new(),
-            entity_callbacks: HashMap::new(),
+            callbacks: HashMap::default(),
+            entity_callbacks: EntityMap::default(),
         }
     }
 
@@ -228,9 +235,10 @@ impl CollisionCallbackManager {
 }
 
 impl Clone for CollisionCallbackManager {
+    // TODO: Handle re-registering callbacks when cloning.
     fn clone(&self) -> CollisionCallbackManager {
         CollisionCallbackManager {
-            callbacks: HashMap::new(),
+            callbacks: HashMap::default(),
             entity_callbacks: self.entity_callbacks.clone(),
         }
     }
