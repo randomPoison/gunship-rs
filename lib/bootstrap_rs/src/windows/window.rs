@@ -123,7 +123,10 @@ impl Window {
 
 impl Drop for Window {
     fn drop(&mut self) {
-        unsafe { winmm::timeEndPeriod(1) };
+        unsafe {
+            winmm::timeEndPeriod(1);
+            user32::DestroyWindow(self.handle);
+        }
     }
 }
 

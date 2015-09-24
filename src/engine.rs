@@ -391,3 +391,10 @@ pub fn engine_close(engine: &Engine) -> bool {
 pub fn engine_drop(engine: Box<Engine>) {
     drop(engine);
 }
+
+#[cfg(test)]
+pub fn do_collision_update(engine: &mut Engine) {
+    let scene = &mut engine.scene;
+    engine.transform_update.update(scene, TARGET_FRAME_TIME_SECONDS);
+    engine.collision_update.update(scene, TARGET_FRAME_TIME_SECONDS);
+}
