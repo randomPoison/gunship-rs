@@ -1,7 +1,8 @@
 use std::collections::{HashMap, HashSet};
 
-use math::*;
 use fnv::FnvHashState;
+use math::*;
+use stopwatch::Stopwatch;
 
 use scene::Scene;
 use ecs::Entity;
@@ -15,7 +16,7 @@ use debug_draw;
 /// - Do something to configure the size of the grid.
 #[derive(Debug, Clone)]
 pub struct GridCollisionSystem {
-    pub grid: HashMap<GridCell, Vec<*const BoundingVolumeHierarchy>, FnvHashState>,
+    pub grid: HashMap<GridCell, Vec<(Entity, *const BoundingVolumeHierarchy)>, FnvHashState>,
     pub collisions: HashSet<(Entity, Entity), FnvHashState>,
     pub cell_size: f32,
 }
@@ -30,6 +31,8 @@ impl GridCollisionSystem {
     }
 
     pub fn update(&mut self, scene: &Scene, _delta: f32) {
+        let _stopwatch = Stopwatch::new("Grid Collision System");
+
         // Debug draw the grid.
         for i in -50..50 {
             let offset = i as f32;
@@ -41,11 +44,11 @@ impl GridCollisionSystem {
                 Point::new( 50.0 * self.cell_size, offset * self.cell_size, 0.0));
         }
 
-        let bvh_manager = scene.get_manager::<BoundingVolumeManager>();
         self.collisions.clear();
+        let bvh_manager = scene.get_manager::<BoundingVolumeManager>();
 
-        for (bvh, entity) in bvh_manager.iter() {
-            let entity = *entity;
+        for bvh in bvh_manager.components() {
+            let entity = bvh.entity;
 
             // Retrieve the AABB at the root of the BVH.
             let aabb = match bvh.root {
@@ -67,20 +70,23 @@ impl GridCollisionSystem {
             for test_cell in grid_cell.iter_to(max_cell) {
                 if let Some(mut cell) = self.grid.get_mut(&test_cell) {
                     // Check against other volumes.
-                    for other_bvh in cell.iter().cloned().map(|bvh_ptr| -> &BoundingVolumeHierarchy { unsafe { &*bvh_ptr } }) {
-                        if self.collisions.contains(&(entity, other_bvh.entity)) {
+                    for (other_entity, other_bvh) in cell.iter().cloned() {
+                        let other_bvh = unsafe { &*other_bvh };
+                        let collision_pair = (entity, other_entity);
+
+                        if self.collisions.contains(&collision_pair) {
                             // Collision already detected, no need to check again.
                             continue;
                         }
 
                         if bvh.test(other_bvh) {
                             // Woo, we have a collison.
-                            self.collisions.insert((entity, other_bvh.entity));
+                            self.collisions.insert(collision_pair);
                         }
                     }
 
                     // Add to cell.
-                    cell.push(bvh);
+                    cell.push((entity, bvh));
                     continue;
                 }
 
@@ -88,12 +94,12 @@ impl GridCollisionSystem {
                 // checker isn't smart enough to tell that the borrow on grid has ended. We do a
                 // continue at the end of the previous block so we know if we get here we need to
                 // add the cell.
-                let cell = vec![bvh as *const _];
+                let cell = vec![(entity, bvh as *const _)];
                 self.grid.insert(test_cell, cell);
             }
 
             if let Some(mut cell) = self.grid.get_mut(&grid_cell) {
-                cell.push(bvh);
+                cell.push((entity, bvh));
                 continue;
             }
 
@@ -102,7 +108,7 @@ impl GridCollisionSystem {
             // the end of the if block so we can assume if we get here that the cell is not in the
             // grid.
             {
-                self.grid.insert(grid_cell, vec![bvh as *const _]);
+                self.grid.insert(grid_cell, vec![(entity, bvh as *const _)]);
             }
         }
 

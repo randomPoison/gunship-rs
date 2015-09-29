@@ -4,14 +4,15 @@ use std::cell::{RefCell, Ref};
 use std::iter::*;
 use std::slice::Iter;
 
-use math::*;
 use fnv::FnvHashState;
+use math::*;
+use stopwatch::Stopwatch;
 
 use ecs::*;
 use scene::Scene;
 use super::EntityMap;
 use self::grid_collision::GridCollisionSystem;
-use self::bounding_volume::BoundingVolumeUpdateSystem;
+use self::bounding_volume::bvh_update;
 
 pub mod grid_collision;
 pub mod bounding_volume;
@@ -131,21 +132,21 @@ pub struct CachedCollider {
 #[derive(Debug, Clone)]
 pub struct CollisionSystem {
     grid_system: GridCollisionSystem,
-    bvh_system:  BoundingVolumeUpdateSystem,
 }
 
 impl CollisionSystem {
     pub fn new() -> CollisionSystem {
         CollisionSystem {
             grid_system: GridCollisionSystem::new(),
-            bvh_system: BoundingVolumeUpdateSystem,
         }
     }
 }
 
 impl System for CollisionSystem {
     fn update(&mut self, scene: &Scene, delta: f32) {
-        self.bvh_system.update(scene, delta);
+        let _stopwatch = Stopwatch::new("collision system");
+
+        bvh_update(scene, delta);
         self.grid_system.update(scene, delta);
         let mut collider_manager = scene.get_manager_mut::<ColliderManager>();
         collider_manager.callback_manager.process_collisions(scene, &self.grid_system.collisions);

@@ -8,7 +8,7 @@ pub mod struct_component_manager;
 pub mod collider;
 
 pub use self::struct_component_manager::StructComponentManager;
-pub use self::transform::{Transform, TransformManager, TransformUpdateSystem};
+pub use self::transform::{Transform, TransformManager, transform_update};
 pub use self::camera::{Camera, CameraManager};
 pub use self::mesh::{Mesh, MeshManager};
 pub use self::light::{Light, LightManager, LightUpdateSystem};

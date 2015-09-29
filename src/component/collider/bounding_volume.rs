@@ -4,6 +4,7 @@ use std::slice::Iter;
 use std::iter::Zip;
 
 use math::*;
+use stopwatch::Stopwatch;
 
 use component::{TransformManager, EntityMap, EntitySet};
 use scene::*;
@@ -347,51 +348,48 @@ pub struct OBB {
     pub half_widths: Vector3,
 }
 
-#[derive(Debug, Clone)]
-pub struct BoundingVolumeUpdateSystem;
+pub fn bvh_update(scene: &Scene, _delta: f32) {
+    let _stopwatch = Stopwatch::new("BVH Update");
 
-impl System for BoundingVolumeUpdateSystem {
-    fn update(&mut self, scene: &Scene, _delta: f32) {
-        let collider_manager = scene.get_manager::<ColliderManager>();
-        let transform_manager = scene.get_manager::<TransformManager>();
-        let mut bvh_manager = scene.get_manager_mut::<BoundingVolumeManager>();
+    let collider_manager = scene.get_manager::<ColliderManager>();
+    let transform_manager = scene.get_manager::<TransformManager>();
+    let mut bvh_manager = scene.get_manager_mut::<BoundingVolumeManager>();
 
-        for (entity, collider) in collider_manager.iter() {
-            let transform = transform_manager.get(entity);
+    for (entity, collider) in collider_manager.iter() {
+        let transform = transform_manager.get(entity);
 
-            let cached_collider = CachedCollider {
-                position: transform.position_derived(),
-                orientation: transform.rotation_derived(),
-                scale: transform.scale_derived(),
-                collider: *collider,
-                entity: entity,
+        let cached_collider = CachedCollider {
+            position: transform.position_derived(),
+            orientation: transform.rotation_derived(),
+            scale: transform.scale_derived(),
+            collider: *collider,
+            entity: entity,
+        };
+
+        // TODO: We can avoid branching here if we create the BVH when the collider is created,
+        // or at least do something to ensure that they already exist by the time we get here.
+        if let Some(mut bvh) = bvh_manager.get_mut(entity) {
+            bvh.root.update(&*transform_manager);
+            bvh.debug_draw();
+            continue;
+        }
+
+        // This block should be an `else` branch on the previous if block, but the borrow
+        // checker isn't smart enough yet to tell that bvh_manager isn't borrowed anymore. We
+        // `continue` at the end of the if block so if we get here we know the bvh isn't in
+        // the bvh manager yet.
+        {
+            // Create and insert new bounding volumes.
+            let root = BoundingVolumeNode::Node {
+                volume: BoundingVolume::AABB(AABB::from_collider(&cached_collider)),
+                left_child: Some(Box::new(BoundingVolumeNode::Leaf(cached_collider))),
+                right_child: None,
             };
 
-            // TODO: We can avoid branching here if we create the BVH when the collider is created,
-            // or at least do something to ensure that they already exist by the time we get here.
-            if let Some(mut bvh) = bvh_manager.get_mut(entity) {
-                bvh.root.update(&*transform_manager);
-                bvh.debug_draw();
-                continue;
-            }
-
-            // This block should be an `else` branch on the previous if block, but the borrow
-            // checker isn't smart enough yet to tell that bvh_manager isn't borrowed anymore. We
-            // `continue` at the end of the if block so if we get here we know the bvh isn't in
-            // the bvh manager yet.
-            {
-                // Create and insert new bounding volumes.
-                let root = BoundingVolumeNode::Node {
-                    volume: BoundingVolume::AABB(AABB::from_collider(&cached_collider)),
-                    left_child: Some(Box::new(BoundingVolumeNode::Leaf(cached_collider))),
-                    right_child: None,
-                };
-
-                bvh_manager.assign(entity, BoundingVolumeHierarchy {
-                    entity: entity,
-                    root: root,
-                });
-            }
+            bvh_manager.assign(entity, BoundingVolumeHierarchy {
+                entity: entity,
+                root: root,
+            });
         }
     }
 }

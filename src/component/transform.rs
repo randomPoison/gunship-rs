@@ -5,6 +5,7 @@ use math::Vector3;
 use math::Matrix4;
 use math::Point;
 use math::Quaternion;
+use stopwatch::Stopwatch;
 
 use ecs::{Entity, System, ComponentManager};
 use scene::Scene;
@@ -349,32 +350,30 @@ impl Transform {
     }
 }
 
-pub struct TransformUpdateSystem;
+pub fn transform_update(scene: &Scene, _: f32) {
+    let _stopwatch = Stopwatch::new("transform update");
 
-impl System for TransformUpdateSystem {
-    fn update(&mut self, scene: &Scene, _: f32) {
-        let transform_manager = scene.get_manager::<TransformManager>();
+    let transform_manager = scene.get_manager::<TransformManager>();
 
-        for row in transform_manager.transforms.iter() {
-            for transform in row {
-                // Retrieve the parent's transformation matrix, using the identity
-                // matrix if the transform has no parent.
-                let (parent_matrix, parent_rotation) = match transform.borrow().parent {
-                    None => {
-                        (Matrix4::identity(), Quaternion::identity())
-                    },
-                    Some(parent) => {
-                        let parent_transform = transform_manager.get(parent);
+    for row in transform_manager.transforms.iter() {
+        for transform in row {
+            // Retrieve the parent's transformation matrix, using the identity
+            // matrix if the transform has no parent.
+            let (parent_matrix, parent_rotation) = match transform.borrow().parent {
+                None => {
+                    (Matrix4::identity(), Quaternion::identity())
+                },
+                Some(parent) => {
+                    let parent_transform = transform_manager.get(parent);
 
-                        let parent_matrix = parent_transform.derived_matrix();
-                        let parent_rotation = parent_transform.rotation_derived();
+                    let parent_matrix = parent_transform.derived_matrix();
+                    let parent_rotation = parent_transform.rotation_derived();
 
-                        (parent_matrix, parent_rotation)
-                    }
-                };
+                    (parent_matrix, parent_rotation)
+                }
+            };
 
-                transform.borrow().update(parent_matrix, parent_rotation);
-            }
+            transform.borrow().update(parent_matrix, parent_rotation);
         }
     }
 }

@@ -1,5 +1,3 @@
-extern crate stopwatch;
-
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::thread;
@@ -21,7 +19,7 @@ use bs_audio;
 use polygon::gl_render::GLRender;
 
 #[cfg(feature = "timing")]
-use self::stopwatch::{Collector, Stopwatch};
+use stopwatch::{Collector, Stopwatch};
 
 #[cfg(not(feature = "timing"))]
 use self::stopwatch::null::{Collector, Stopwatch};
@@ -84,7 +82,7 @@ impl Engine {
             system_indices: HashMap::new(),
             system_names: HashMap::new(),
 
-            transform_update: Box::new(TransformUpdateSystem),
+            transform_update: Box::new(transform_update),
             light_update: Box::new(LightUpdateSystem),
             audio_update: Box::new(AudioSystem),
             alarm_update: Box::new(AlarmSystem),
@@ -100,7 +98,7 @@ impl Engine {
     }
 
     pub fn update(&mut self) {
-        let _stopwatch = Stopwatch::named("update");
+        let _stopwatch = Stopwatch::new("update");
 
         let scene = &mut self.scene;
 
@@ -161,7 +159,7 @@ impl Engine {
     }
 
     pub fn draw(&mut self) {
-        let _stopwatch = Stopwatch::named("draw");
+        let _stopwatch = Stopwatch::new("draw");
 
         self.renderer.clear();
 
@@ -206,7 +204,7 @@ impl Engine {
         let mut collector = Collector::new().unwrap();
 
         loop {
-            let _stopwatch = Stopwatch::named("loop");
+            let _stopwatch = Stopwatch::new("loop");
 
             let start_time = timer.now();
 
@@ -307,7 +305,7 @@ impl Clone for Engine {
             system_indices: HashMap::new(),
             system_names: HashMap::new(),
 
-            transform_update: Box::new(TransformUpdateSystem),
+            transform_update: Box::new(transform_update),
             light_update: Box::new(LightUpdateSystem),
             audio_update: Box::new(AudioSystem),
             alarm_update: Box::new(AlarmSystem),
@@ -355,7 +353,7 @@ pub fn engine_init(window: Rc<RefCell<Window>>) -> Box<Engine> {
         system_indices: HashMap::new(),
         system_names: HashMap::new(),
 
-        transform_update: Box::new(TransformUpdateSystem),
+        transform_update: Box::new(transform_update),
         light_update: Box::new(LightUpdateSystem),
         audio_update: Box::new(AudioSystem),
         alarm_update: Box::new(AlarmSystem),

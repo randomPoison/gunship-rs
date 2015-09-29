@@ -29,6 +29,7 @@ fn collision_bench(bencher: &mut Bencher) {
                 offset: Vector3::zero(),
                 radius: 0.5,
             });
+            collider_manager.register_callback(entity, callback);
         }
     }
 
@@ -36,3 +37,5 @@ fn collision_bench(bencher: &mut Bencher) {
         engine::do_collision_update(&mut engine);
     });
 }
+
+fn callback(_scene: &Scene, _entity: Entity, _other: Entity) {}

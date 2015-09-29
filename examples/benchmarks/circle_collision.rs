@@ -5,7 +5,7 @@ use std::f32::consts::PI;
 
 use gunship::*;
 
-const TOTAL_CUBES: usize = 1000;
+const TOTAL_CUBES: usize = 10_000;
 
 fn main() {
     let mut engine = Engine::new();
@@ -66,11 +66,7 @@ fn setup_scene(scene: &mut Scene) {
     // Create some amount of cubes.
     for _ in 0..TOTAL_CUBES {
         let entity = scene.create_entity();
-        let mut transform = transform_manager.assign(entity);
-        transform.set_position(Point::new(
-            rand::random::<f32>() * 10.0 - 5.0,
-            rand::random::<f32>() * 10.0 - 5.0,
-            0.0));
+        transform_manager.assign(entity);
         circle_movement_manager.assign(entity, CircleMovement::new());
         collider_manager.assign(entity, Collider::Sphere {
             offset: Vector3::zero(),
@@ -96,8 +92,8 @@ impl CircleMovement {
     fn new() -> CircleMovement {
         CircleMovement {
             center: Point::new(
-                rand::random::<f32>() * 10.0 - 5.0,
-                rand::random::<f32>() * 10.0 - 5.0,
+                rand::random::<f32>() * 100.0 - 50.0,
+                rand::random::<f32>() * 100.0 - 50.0,
                 0.0),
             radius: rand::random::<f32>() * 4.0 + 1.0,
             period: rand::random::<f32>() * 1.0 + 4.0,

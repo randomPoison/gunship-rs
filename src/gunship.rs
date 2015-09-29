@@ -7,6 +7,7 @@ extern crate parse_collada as collada;
 extern crate polygon;
 extern crate polygon_math as math;
 extern crate fnv;
+extern crate stopwatch;
 
 pub mod engine;
 pub mod scene;
