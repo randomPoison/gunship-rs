@@ -5,8 +5,9 @@ use std::mem;
 use std::ffi::CString;
 use std::slice;
 
-use super::x11::xlib;
+use super::x11::xlib::{self, BadRequest};
 use super::x11::glx;
+use super::x11::xinput;
 
 use window::Message;
 use input::ScanCode;
@@ -16,7 +17,7 @@ use input::ScanCode;
 pub struct Window {
     pub display: *mut xlib::Display,
     pub window: xlib::Window,
-    // pub visual_info: *mut xlib::XVisualInfo,
+    pub visual_info: *mut xlib::XVisualInfo,
 }
 
 impl Window {
@@ -46,7 +47,6 @@ impl Window {
             xlib::AllocNone);
 
         let mut frame_attributes = mem::zeroed::<xlib::XSetWindowAttributes>();
-        // frame_attributes.background_pixel = xlib::XWhitePixel(display, 0);
         frame_attributes.colormap = colormap;
         frame_attributes.event_mask =
             xlib::KeyPressMask
@@ -65,22 +65,38 @@ impl Window {
             xlib::CWColormap | xlib::CWEventMask,
             &mut frame_attributes);
 
-        let context = glx::glXCreateContext(display, visual_info, ptr::null_mut(), 0);
-        if context.is_null() {
-            panic!("Failed to create OpenGL context");
-        }
-
         xlib::XStoreName(display, window, mem::transmute(CString::new("Gunship Game").unwrap().as_ptr()));
         xlib::XMapWindow(display, window);
         xlib::XFlush(display);
 
-        let context = glx::glXCreateContext(display, visual_info, ptr::null_mut(), 1);
-        glx::glXMakeCurrent(display, window, context);
+        // ======================
+        // XInput2 Initialization
+        // ======================
+        let mut opcode = 0;
+        let mut event = 0;
+        let mut error = 0;
+        let result = xlib::XQueryExtension(
+            display,
+            CString::new("XInputExtension").unwrap().as_ptr(),
+            &mut opcode,
+            &mut event,
+            &mut error);
+        if result == 0 {
+            panic!("Could not load XInputExtenxion");
+        }
+
+        let mut major = 2;
+        let mut minor = 0;
+        let result = xinput::XIQueryVersion(display, &mut major, &mut minor);
+        if result == BadRequest {
+            println!("XI2 not available. Server supports {}.{}", major, minor);
+        }
+        println!("supported version: {}.{}", major, minor);
 
         Rc::new(RefCell::new(Window {
             display: display,
             window: window,
-            // visual_info: visual_info,
+            visual_info: visual_info,
         }))
     } }
 
@@ -108,6 +124,10 @@ impl Window {
 
                     let us_sym = syms_slice[0];
                     return Some(Message::KeyUp(key_sym_to_scancode(us_sym)));
+                },
+                xlib::MotionNotify => {
+                    let pointer_motion_event: &xlib::XPointerMovedEvent = mem::transmute(&event);
+                    println!("pointer motion: {:?}", pointer_motion_event);
                 },
                 _ => println!("unsupported event type: {}", event.get_type()),
             }

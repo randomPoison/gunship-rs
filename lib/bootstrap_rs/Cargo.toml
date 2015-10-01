@@ -2,6 +2,7 @@
 name = "bootstrap_rs"
 version = "0.0.0"
 authors = ["David LeGare <excaliburhissheath@gmail.com>"]
+build = "build.rs"
 
 [dependencies]
 winapi = "*"
@@ -11,7 +12,6 @@ kernel32-sys = "*"
 opengl32-sys = "*"
 winmm-sys = "*"
 # xinput-sys = "*"
-
 
 [dependencies.gl]
 git = "https://github.com/bjz/gl-rs"
