@@ -7,7 +7,16 @@ extern crate parse_collada as collada;
 extern crate polygon;
 extern crate polygon_math as math;
 extern crate fnv;
-extern crate stopwatch;
+
+pub mod stopwatch {
+    extern crate stopwatch;
+
+    #[cfg(feature="timing")]
+    pub use self::stopwatch::{Collector, Stopwatch};
+
+    #[cfg(not(feature="timing"))]
+    pub use self::stopwatch::null::{Collector, Stopwatch};
+}
 
 pub mod engine;
 pub mod scene;

@@ -19,11 +19,7 @@ impl Drop for Collector {
 pub struct Stopwatch;
 
 impl Stopwatch {
-    pub fn new() -> Stopwatch {
-        Stopwatch
-    }
-
-    pub fn named(_name: &str) -> Stopwatch {
+    pub fn new(_name: &'static str) -> Stopwatch {
         Stopwatch
     }
 }

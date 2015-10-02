@@ -13,16 +13,9 @@ use bootstrap::input::ScanCode;
 use bootstrap::window::Window;
 use bootstrap::window::Message::*;
 use bootstrap::time::Timer;
-
 use bs_audio;
-
 use polygon::gl_render::GLRender;
-
-#[cfg(feature = "timing")]
 use stopwatch::{Collector, Stopwatch};
-
-#[cfg(not(feature = "timing"))]
-use self::stopwatch::null::{Collector, Stopwatch};
 
 use scene::Scene;
 use resource::ResourceManager;
