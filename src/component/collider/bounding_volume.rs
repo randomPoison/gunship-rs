@@ -117,6 +117,7 @@ impl ComponentManager for BoundingVolumeManager {
 pub struct BoundingVolumeHierarchy {
     pub entity: Entity,
     pub root: BoundingVolumeNode,
+    pub aabb: AABB,
 }
 
 impl BoundingVolumeHierarchy {
@@ -380,8 +381,9 @@ pub fn bvh_update(scene: &Scene, _delta: f32) {
         // the bvh manager yet.
         {
             // Create and insert new bounding volumes.
+            let aabb = AABB::from_collider(&cached_collider);
             let root = BoundingVolumeNode::Node {
-                volume: BoundingVolume::AABB(AABB::from_collider(&cached_collider)),
+                volume: BoundingVolume::AABB(aabb),
                 left_child: Some(Box::new(BoundingVolumeNode::Leaf(cached_collider))),
                 right_child: None,
             };
@@ -389,6 +391,7 @@ pub fn bvh_update(scene: &Scene, _delta: f32) {
             bvh_manager.assign(entity, BoundingVolumeHierarchy {
                 entity: entity,
                 root: root,
+                aabb: aabb,
             });
         }
     }

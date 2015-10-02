@@ -51,17 +51,7 @@ impl GridCollisionSystem {
             let entity = bvh.entity;
 
             // Retrieve the AABB at the root of the BVH.
-            let aabb = match bvh.root {
-                BoundingVolumeNode::Node { ref volume, left_child: _, right_child: _ } => {
-                    match volume {
-                        &BoundingVolume::AABB(aabb) => {
-                            aabb
-                        },
-                        _ => panic!("Bounding volume hierarchy for entity {:?} does not have an AABB at its root, grid collision is only suported with hierarchies that have an AABB at the root", entity),
-                    }
-                },
-                BoundingVolumeNode::Leaf(_) => panic!("The root of the bounding volume was a leaf node, which is bad and not okay (and probably shouldn't even be possible :sideeye:)"),
-            };
+            let aabb = bvh.aabb;
 
             let grid_cell = self.world_to_grid(aabb.min);
             let max_cell = self.world_to_grid(aabb.max);

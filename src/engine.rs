@@ -215,7 +215,8 @@ impl Engine {
                 break;
             }
 
-            if timer.elapsed_ms(start_time) > TARGET_FRAME_TIME_MS {
+            if !cfg!(feature="timing")
+            && timer.elapsed_ms(start_time) > TARGET_FRAME_TIME_MS {
                 println!("WARNING: Missed frame time. Frame time: {}ms, target frame time: {}ms", timer.elapsed_ms(start_time), TARGET_FRAME_TIME_MS);
             }
 

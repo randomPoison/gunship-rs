@@ -217,6 +217,8 @@ impl CollisionCallbackManager {
         scene: &Scene,
         collisions: &HashSet<(Entity, Entity), H>
     ) where H: HashState {
+        let _stopwatch = Stopwatch::new("process collision callbacks");
+
         for pair in collisions {
             if let Some(callback_ids) = self.entity_callbacks.get(&pair.0) {
                 for callback_id in callback_ids.iter() {
