@@ -1,5 +1,3 @@
-#![feature(hashmap_hasher)]
-
 use std::hash::Hasher;
 use std::collections::hash_state::DefaultState;
 

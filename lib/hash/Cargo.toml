@@ -1,0 +1,8 @@
+[package]
+
+name = "hash"
+version = "0.0.1"
+authors = []
+
+[dependencies]
+twox-hash = "*"

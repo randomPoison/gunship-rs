@@ -4,7 +4,7 @@ use std::cell::{RefCell, Ref};
 use std::iter::*;
 use std::slice::Iter;
 
-use fnv::FnvHashState;
+use hash::FnvHashState;
 use math::*;
 use stopwatch::Stopwatch;
 

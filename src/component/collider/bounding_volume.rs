@@ -116,34 +116,20 @@ impl ComponentManager for BoundingVolumeManager {
 #[derive(Debug, Clone)]
 pub struct BoundingVolumeHierarchy {
     pub entity: Entity,
-    pub root: BoundingVolumeNode,
     pub aabb: AABB,
+    pub collider: CachedCollider,
 }
 
 impl BoundingVolumeHierarchy {
     /// Tests if `other` collides with this BVH.
     pub fn test(&self, other: &BoundingVolumeHierarchy) -> bool {
-        let our_volume = match &self.root {
-            &BoundingVolumeNode::Node { ref volume, left_child: _, right_child: _ } => {
-                volume
-            },
-            &BoundingVolumeNode::Leaf(_) =>
-                unimplemented!(),
-        };
+        self.aabb.test_aabb(&other.aabb)
 
-        let other_volume = match &other.root {
-            &BoundingVolumeNode::Node { ref volume, left_child: _, right_child: _ } => {
-                volume
-            },
-            &BoundingVolumeNode::Leaf(_) =>
-                unimplemented!(),
-        };
-
-        our_volume.test(other_volume)
+        // TODO: Also test the actual collider.
     }
 
     pub fn debug_draw(&self) {
-        self.root.debug_draw();
+        debug_draw::box_min_max(self.aabb.min, self.aabb.max);
     }
 }
 
@@ -340,6 +326,12 @@ impl AABB {
             _ => unimplemented!(),
         }
     }
+
+    pub fn test_aabb(&self, other: &AABB) -> bool {
+        test_ranges((self.min.x, self.max.x), (other.min.x, other.max.x))
+     && test_ranges((self.min.y, self.max.y), (other.min.y, other.max.y))
+     && test_ranges((self.min.z, self.max.z), (other.min.z, other.max.z))
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -366,32 +358,21 @@ pub fn bvh_update(scene: &Scene, _delta: f32) {
             collider: *collider,
             entity: entity,
         };
+        let aabb = AABB::from_collider(&cached_collider);
 
         // TODO: We can avoid branching here if we create the BVH when the collider is created,
         // or at least do something to ensure that they already exist by the time we get here.
         if let Some(mut bvh) = bvh_manager.get_mut(entity) {
-            bvh.root.update(&*transform_manager);
-            bvh.debug_draw();
+            bvh.collider = cached_collider;
+            bvh.aabb = aabb;
             continue;
         }
-
-        // This block should be an `else` branch on the previous if block, but the borrow
-        // checker isn't smart enough yet to tell that bvh_manager isn't borrowed anymore. We
-        // `continue` at the end of the if block so if we get here we know the bvh isn't in
-        // the bvh manager yet.
+        // else
         {
-            // Create and insert new bounding volumes.
-            let aabb = AABB::from_collider(&cached_collider);
-            let root = BoundingVolumeNode::Node {
-                volume: BoundingVolume::AABB(aabb),
-                left_child: Some(Box::new(BoundingVolumeNode::Leaf(cached_collider))),
-                right_child: None,
-            };
-
             bvh_manager.assign(entity, BoundingVolumeHierarchy {
                 entity: entity,
-                root: root,
                 aabb: aabb,
+                collider: cached_collider,
             });
         }
     }

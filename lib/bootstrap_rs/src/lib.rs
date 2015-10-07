@@ -1,3 +1,4 @@
+#![feature(op_assign_traits)]
 #![cfg_attr(windows, feature(str_utf16))]
 
 #[cfg(windows)]

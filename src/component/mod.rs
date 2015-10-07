@@ -18,7 +18,7 @@ pub use self::collider::{Collider, ColliderManager, CollisionSystem, bounding_vo
 
 use std::collections::{HashMap, HashSet};
 
-use fnv::*;
+use hash::*;
 
 use ecs::Entity;
 

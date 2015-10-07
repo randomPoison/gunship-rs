@@ -13,9 +13,9 @@ default = ["timing"]
 timing = []
 hotloading = []
 
-[dependencies.fnv]
+[dependencies.hash]
 version = "*"
-path = "lib/fnv"
+path = "lib/hash"
 
 [dependencies.bootstrap_rs]
 version = "*"

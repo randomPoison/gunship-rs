@@ -1,4 +1,4 @@
-#![feature(core, core_intrinsics, raw, drain, unboxed_closures, hashmap_hasher)]
+#![feature(core, core_intrinsics, raw, drain, unboxed_closures, hashmap_hasher, augmented_assignments)]
 #![cfg_attr(test, feature(test))]
 
 extern crate bootstrap_rs as bootstrap;
@@ -6,7 +6,7 @@ extern crate bootstrap_audio as bs_audio;
 extern crate parse_collada as collada;
 extern crate polygon;
 extern crate polygon_math as math;
-extern crate fnv;
+extern crate hash;
 
 pub mod stopwatch {
     extern crate stopwatch;

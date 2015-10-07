@@ -132,8 +132,11 @@ impl Engine {
             for system in self.systems.iter_mut() {
                 system.update(scene, TARGET_FRAME_TIME_SECONDS);
             }
+        }
 
-            self.transform_update.update(scene, TARGET_FRAME_TIME_SECONDS);
+        self.transform_update.update(scene, TARGET_FRAME_TIME_SECONDS);
+
+        if !self.debug_pause || scene.input.key_pressed(ScanCode::F11) {
             self.collision_update.update(scene, TARGET_FRAME_TIME_SECONDS);
             self.light_update.update(scene, TARGET_FRAME_TIME_SECONDS);
             self.audio_update.update(scene, TARGET_FRAME_TIME_SECONDS);
