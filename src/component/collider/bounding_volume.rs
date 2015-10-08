@@ -130,6 +130,7 @@ impl BoundingVolumeHierarchy {
 
     pub fn debug_draw(&self) {
         debug_draw::box_min_max(self.aabb.min, self.aabb.max);
+        self.collider.debug_draw();
     }
 }
 
@@ -365,6 +366,7 @@ pub fn bvh_update(scene: &Scene, _delta: f32) {
         if let Some(mut bvh) = bvh_manager.get_mut(entity) {
             bvh.collider = cached_collider;
             bvh.aabb = aabb;
+            bvh.debug_draw();
             continue;
         }
         // else

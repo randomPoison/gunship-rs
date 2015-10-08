@@ -10,6 +10,7 @@ use stopwatch::Stopwatch;
 
 use ecs::*;
 use scene::Scene;
+use debug_draw;
 use super::EntityMap;
 use self::grid_collision::GridCollisionSystem;
 use self::bounding_volume::bvh_update;
@@ -127,6 +128,18 @@ pub struct CachedCollider {
     scale: Vector3,
     collider: Collider,
     entity: Entity,
+}
+
+impl CachedCollider {
+    pub fn debug_draw(&self) {
+        match self.collider {
+            Collider::Sphere { offset, radius } => {
+                debug_draw::sphere(self.position + offset, radius);
+            },
+            Collider::Box { offset: _, width: _ } => unimplemented!(),
+            Collider::Mesh => unimplemented!(),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
