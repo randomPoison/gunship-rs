@@ -14,6 +14,7 @@ use debug_draw;
 use super::EntityMap;
 use self::grid_collision::GridCollisionSystem;
 use self::bounding_volume::bvh_update;
+use component::transform::Transform;
 
 pub mod grid_collision;
 pub mod bounding_volume;
@@ -122,24 +123,48 @@ impl ComponentManager for ColliderManager {
 /// course of a single processing pass, so it is valueable to only have to retrieve the position
 /// data for a collider once and cache off those results.
 #[derive(Debug, Clone, Copy)]
-pub struct CachedCollider {
-    position: Point,
-    orientation: Quaternion,
-    scale: Vector3,
-    collider: Collider,
-    entity: Entity,
+pub enum CachedCollider {
+    Sphere(Sphere),
+    Box(OBB),
+    Mesh,
 }
 
 impl CachedCollider {
-    pub fn debug_draw(&self) {
-        match self.collider {
-            Collider::Sphere { offset, radius } => {
-                debug_draw::sphere(self.position + offset, radius);
+    pub fn from_collider_transform(collider: &Collider, transform: &Transform) -> CachedCollider {
+        match collider {
+            &Collider::Sphere { offset, radius } => {
+                CachedCollider::Sphere(Sphere {
+                    center: transform.position_derived() + offset,
+                    radius: radius,
+                })
             },
-            Collider::Box { offset: _, width: _ } => unimplemented!(),
-            Collider::Mesh => unimplemented!(),
+            &Collider::Box { offset: _, width: _ } => unimplemented!(),
+            &Collider::Mesh => unimplemented!(),
         }
     }
+
+    pub fn debug_draw(&self) {
+        match self {
+            &CachedCollider::Sphere(Sphere { center, radius }) => {
+                debug_draw::sphere(center, radius);
+            },
+            &CachedCollider::Box(_) => unimplemented!(),
+            &CachedCollider::Mesh => unimplemented!(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct Sphere {
+    pub center: Point,
+    pub radius: f32,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct OBB {
+    pub center: Point,
+    pub axes: [Vector3; 3],
+    pub half_widths: Vector3,
 }
 
 #[derive(Debug, Clone)]

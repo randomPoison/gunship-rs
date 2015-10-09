@@ -1,4 +1,3 @@
-use std::cmp;
 use std::cell::RefCell;
 use std::slice::Iter;
 use std::iter::Zip;
@@ -9,14 +8,14 @@ use stopwatch::Stopwatch;
 use component::{TransformManager, EntityMap, EntitySet};
 use scene::*;
 use ecs::*;
-use super::{CachedCollider, Collider, ColliderManager};
+use super::{CachedCollider, ColliderManager, Sphere};
 use debug_draw;
 
 // TODO: Build a custom BVH manager that automatically constructs hierarchy.
 /// A default manager for component types that can be represented as a single struct.
 #[derive(Debug, Clone)]
 pub struct BoundingVolumeManager {
-    components: Vec<BoundingVolumeHierarchy>,
+    components: Vec<BoundVolume>,
     entities: Vec<Entity>,
     indices: EntityMap<usize>,
 
@@ -34,7 +33,7 @@ impl BoundingVolumeManager {
         }
     }
 
-    pub fn assign(&mut self, entity: Entity, component: BoundingVolumeHierarchy) -> &mut BoundingVolumeHierarchy {
+    pub fn assign(&mut self, entity: Entity, component: BoundVolume) -> &mut BoundVolume {
         assert!(!self.indices.contains_key(&entity));
 
         let index = self.components.len();
@@ -45,7 +44,7 @@ impl BoundingVolumeManager {
         &mut self.components[index]
     }
 
-    pub fn get(&self, entity: Entity) -> Option<&BoundingVolumeHierarchy> {
+    pub fn get(&self, entity: Entity) -> Option<&BoundVolume> {
         if let Some(index) = self.indices.get(&entity) {
             Some(&self.components[*index])
         } else {
@@ -53,7 +52,7 @@ impl BoundingVolumeManager {
         }
     }
 
-    pub fn get_mut(&mut self, entity: Entity) -> Option<&mut BoundingVolumeHierarchy> {
+    pub fn get_mut(&mut self, entity: Entity) -> Option<&mut BoundVolume> {
         if let Some(index) = self.indices.get(&entity) {
             Some(&mut self.components[*index])
         } else {
@@ -61,7 +60,7 @@ impl BoundingVolumeManager {
         }
     }
 
-    pub fn components(&self) -> &Vec<BoundingVolumeHierarchy> {
+    pub fn components(&self) -> &Vec<BoundVolume> {
         &self.components
     }
 
@@ -69,11 +68,11 @@ impl BoundingVolumeManager {
         &self.entities
     }
 
-    pub fn iter(&self) -> Zip<Iter<BoundingVolumeHierarchy>, Iter<Entity>> {
+    pub fn iter(&self) -> Zip<Iter<BoundVolume>, Iter<Entity>> {
         self.components.iter().zip(self.entities.iter())
     }
 
-    pub fn destroy_immediate(&mut self, entity: Entity) -> BoundingVolumeHierarchy {
+    pub fn destroy_immediate(&mut self, entity: Entity) -> BoundVolume {
         // Retrieve indices of removed entity and the one it's swapped with.
         let index = self.indices.remove(&entity).unwrap();
 
@@ -114,15 +113,15 @@ impl ComponentManager for BoundingVolumeManager {
 }
 
 #[derive(Debug, Clone)]
-pub struct BoundingVolumeHierarchy {
+pub struct BoundVolume {
     pub entity: Entity,
     pub aabb: AABB,
     pub collider: CachedCollider,
 }
 
-impl BoundingVolumeHierarchy {
+impl BoundVolume {
     /// Tests if `other` collides with this BVH.
-    pub fn test(&self, other: &BoundingVolumeHierarchy) -> bool {
+    pub fn test(&self, other: &BoundVolume) -> bool {
         self.aabb.test_aabb(&other.aabb)
 
         // TODO: Also test the actual collider.
@@ -134,111 +133,6 @@ impl BoundingVolumeHierarchy {
     }
 }
 
-#[derive(Debug, Clone)]
-pub enum BoundingVolumeNode {
-    Node {
-        volume: BoundingVolume,
-        left_child: Option<Box<BoundingVolumeNode>>,
-        right_child: Option<Box<BoundingVolumeNode>>,
-    },
-    Leaf(CachedCollider),
-}
-
-impl BoundingVolumeNode {
-    pub fn update(&mut self, transform_manager: &TransformManager) {
-        match self {
-            &mut BoundingVolumeNode::Node { ref mut volume, ref mut left_child, ref mut right_child } => {
-                // First update children, then self.
-                if let &mut Some(ref mut child) = left_child {
-                    child.update(transform_manager);
-                }
-                if let &mut Some(ref mut child) = right_child {
-                    child.update(transform_manager);
-                }
-
-                match volume {
-                    &mut BoundingVolume::AABB(ref mut aabb) => {
-                        aabb.update_to_children(left_child, right_child);
-                    },
-                    _ => unimplemented!(),
-                }
-            },
-            &mut BoundingVolumeNode::Leaf(ref mut cached_collider) => {
-                // Just update cached collider.
-                let transform = transform_manager.get(cached_collider.entity);
-                cached_collider.position = transform.position_derived();
-                cached_collider.orientation = transform.rotation_derived();
-                cached_collider.scale = transform.scale_derived();
-            },
-        }
-    }
-
-    pub fn debug_draw(&self) {
-        match self {
-            &BoundingVolumeNode::Node { ref volume, left_child: _, right_child: _ } => {
-                volume.debug_draw();
-            },
-            &BoundingVolumeNode::Leaf(_) => {
-                unimplemented!();
-            }
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum BoundingVolume {
-    /// Bounding sphere.
-    Sphere(BoundingSphere),
-
-    /// Axis-aligned bounding box.
-    AABB(AABB),
-
-    /// Oriented boudning box.
-    OBB(OBB),
-}
-
-impl BoundingVolume {
-    pub fn test(&self, other: &BoundingVolume) -> bool {
-        let bounds = match self {
-            &BoundingVolume::AABB(aabb) => {
-                aabb
-            },
-            _ => unimplemented!(),
-        };
-
-        let other_bounds = match other {
-            &BoundingVolume::AABB(aabb) => {
-                aabb
-            },
-            _ => unimplemented!(),
-        };
-
-        test_ranges((bounds.min.x, bounds.max.x), (other_bounds.min.x, other_bounds.max.x))
-     && test_ranges((bounds.min.y, bounds.max.y), (other_bounds.min.y, other_bounds.max.y))
-     && test_ranges((bounds.min.z, bounds.max.z), (other_bounds.min.z, other_bounds.max.z))
-    }
-
-    pub fn debug_draw(&self) {
-        match self {
-            &BoundingVolume::Sphere(_) => {
-                unimplemented!();
-            },
-            &BoundingVolume::AABB(aabb) => {
-                debug_draw::box_min_max(aabb.min, aabb.max);
-            },
-            &BoundingVolume::OBB(_) => {
-                unimplemented!();
-            }
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct BoundingSphere {
-    pub center: Point,
-    pub radius: f32,
-}
-
 #[derive(Debug, Clone, Copy)]
 pub struct AABB {
     pub min: Point,
@@ -246,53 +140,10 @@ pub struct AABB {
 }
 
 impl AABB {
-    /// Updates the AABB so that it completely bounds its children.
-    ///
-    /// # Details
-    ///
-    /// This function assumes that left and right children have already been updated.
-    pub fn update_to_children(
-        &mut self,
-        left: &Option<Box<BoundingVolumeNode>>,
-        right: &Option<Box<BoundingVolumeNode>>
-    ) {
-        // If both children are None then something went wrong.
-        debug_assert!(left.is_some() || right.is_some());
-
-        let left = left.as_ref().map(aabb_from_node);
-        let right = right.as_ref().map(aabb_from_node);
-
-        // We assume that only one will ever need to be defaulted, so we use Point::min for max and
-        // Point::max for min to ensure that the other value's bounds are automatically used.
-        let left = left.unwrap_or(AABB {
-            min: Point::max(),
-            max: Point::min(),
-        });
-        let right = right.unwrap_or(AABB {
-            min: Point::max(),
-            max: Point::min(),
-        });
-
-        self.min = cmp::min(left.min, right.min);
-        self.max = cmp::max(left.max, right.max);
-
-        fn aabb_from_node(node: &Box<BoundingVolumeNode>) -> AABB {
-            match &**node {
-                &BoundingVolumeNode::Node { ref volume, left_child: _, right_child: _ } => {
-                    AABB::from_bounding_volume(volume)
-                },
-                &BoundingVolumeNode::Leaf(ref collider) => {
-                    AABB::from_collider(collider)
-                },
-            }
-        }
-    }
-
     /// Given a cached collider generate an AABB that bounds it.
     pub fn from_collider(cached_collider: &CachedCollider) -> AABB {
-        match cached_collider.collider {
-            Collider::Sphere { offset, radius } => {
-                let center = cached_collider.position + offset;
+        match cached_collider {
+            &CachedCollider::Sphere(Sphere { center, radius }) => {
                 let half_width = Vector3::new(radius, radius, radius);
                 let min = center - half_width;
                 let max = center + half_width;
@@ -302,29 +153,8 @@ impl AABB {
                     max: max,
                 }
             },
-            Collider::Box { offset: _, width: _ } => {
-                unimplemented!();
-            },
-            Collider::Mesh => {
-                unimplemented!();
-            }
-        }
-    }
-
-    pub fn from_bounding_volume(volume: &BoundingVolume) -> AABB {
-        match volume {
-            &BoundingVolume::AABB(aabb) => {
-                aabb
-            },
-            &BoundingVolume::Sphere(BoundingSphere { center, radius }) => {
-                let min = center - Vector3::new(radius, radius, radius);
-                let max = center + Vector3::new(radius, radius, radius);
-                AABB {
-                    min: min,
-                    max: max,
-                }
-            },
-            _ => unimplemented!(),
+            &CachedCollider::Box(_) => unimplemented!(),
+            &CachedCollider::Mesh => unimplemented!(),
         }
     }
 
@@ -333,13 +163,6 @@ impl AABB {
      && test_ranges((self.min.y, self.max.y), (other.min.y, other.max.y))
      && test_ranges((self.min.z, self.max.z), (other.min.z, other.max.z))
     }
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct OBB {
-    pub center: Point,
-    pub axes: [Vector3; 3],
-    pub half_widths: Vector3,
 }
 
 pub fn bvh_update(scene: &Scene, _delta: f32) {
@@ -352,13 +175,7 @@ pub fn bvh_update(scene: &Scene, _delta: f32) {
     for (entity, collider) in collider_manager.iter() {
         let transform = transform_manager.get(entity);
 
-        let cached_collider = CachedCollider {
-            position: transform.position_derived(),
-            orientation: transform.rotation_derived(),
-            scale: transform.scale_derived(),
-            collider: *collider,
-            entity: entity,
-        };
+        let cached_collider = CachedCollider::from_collider_transform(&*collider, &*transform);
         let aabb = AABB::from_collider(&cached_collider);
 
         // TODO: We can avoid branching here if we create the BVH when the collider is created,
@@ -371,7 +188,7 @@ pub fn bvh_update(scene: &Scene, _delta: f32) {
         }
         // else
         {
-            bvh_manager.assign(entity, BoundingVolumeHierarchy {
+            bvh_manager.assign(entity, BoundVolume {
                 entity: entity,
                 aabb: aabb,
                 collider: cached_collider,

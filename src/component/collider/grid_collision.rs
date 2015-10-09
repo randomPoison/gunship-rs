@@ -17,7 +17,7 @@ use debug_draw;
 #[derive(Debug)]
 #[allow(raw_pointer_derive)]
 pub struct GridCollisionSystem {
-    pub grid: HashMap<GridCell, Vec<(Entity, *const BoundingVolumeHierarchy)>, FnvHashState>,
+    pub grid: HashMap<GridCell, Vec<(Entity, *const BoundVolume)>, FnvHashState>,
     pub collisions: HashSet<(Entity, Entity), FnvHashState>,
     pub cell_size: f32,
 }
