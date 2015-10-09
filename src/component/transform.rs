@@ -89,25 +89,17 @@ impl TransformManager {
     }
 
     pub fn update_transform(&self, transform: &Transform) {
-        let (parent_matrix, parent_rotation) = match transform.parent {
+        match transform.parent {
             None => {
-                (Matrix4::identity(), Quaternion::identity())
+                DUMMY_TRANSFORM.with(|parent| {
+                    transform.update(parent);
+                })
             },
             Some(parent) => {
                 let parent_transform = self.get(parent);
-
-                if parent_transform.out_of_date.get() {
-                    self.update_transform(&*parent_transform);
-                }
-
-                let parent_matrix = parent_transform.matrix_derived.get();
-                let parent_rotation = parent_transform.rotation_derived.get();
-
-                (parent_matrix, parent_rotation)
+                transform.update(&*parent_transform);
             }
-        };
-
-        transform.update(parent_matrix, parent_rotation);
+        }
     }
 
     /// Marks the transform associated with the entity for destruction.
@@ -172,6 +164,8 @@ impl ComponentManager for TransformManager {
         }
     }
 }
+
+thread_local!(static DUMMY_TRANSFORM: Transform = Transform::new());
 
 /// TODO: This should be module-level documentation.
 ///
@@ -337,14 +331,15 @@ impl Transform {
     }
 
     /// Updates the local and derived matrices for the transform.
-    fn update(&self, parent_matrix: Matrix4, parent_rotation: Quaternion) {
+    fn update(&self, parent: &Transform) {
         let local_matrix = self.local_matrix();
 
-        let derived_matrix = parent_matrix * local_matrix;
+        let derived_matrix = parent.derived_matrix() * local_matrix;
         self.matrix_derived.set(derived_matrix);
 
         self.position_derived.set(derived_matrix.translation_part());
-        self.rotation_derived.set(parent_rotation * self.rotation);
+        self.rotation_derived.set(parent.rotation_derived() * self.rotation);
+        self.scale_derived.set(self.scale * parent.scale_derived());
 
         self.out_of_date.set(false);
     }
@@ -359,21 +354,17 @@ pub fn transform_update(scene: &Scene, _: f32) {
         for transform in row {
             // Retrieve the parent's transformation matrix, using the identity
             // matrix if the transform has no parent.
-            let (parent_matrix, parent_rotation) = match transform.borrow().parent {
+            match transform.borrow().parent {
                 None => {
-                    (Matrix4::identity(), Quaternion::identity())
+                    DUMMY_TRANSFORM.with(|parent| {
+                        transform.borrow().update(parent);
+                    });
                 },
                 Some(parent) => {
                     let parent_transform = transform_manager.get(parent);
-
-                    let parent_matrix = parent_transform.derived_matrix();
-                    let parent_rotation = parent_transform.rotation_derived();
-
-                    (parent_matrix, parent_rotation)
+                    transform.borrow().update(&*parent_transform);
                 }
             };
-
-            transform.borrow().update(parent_matrix, parent_rotation);
         }
     }
 }
