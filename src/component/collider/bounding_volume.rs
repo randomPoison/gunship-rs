@@ -152,7 +152,180 @@ impl AABB {
                     max: max,
                 }
             },
-            &CachedCollider::Box(_) => unimplemented!(),
+            &CachedCollider::Box(obb) => {
+                // Check the 8 vertices that define the OBB and find the min/max.
+                // start with (+, +, +)
+                let (mut min, mut max) = {
+                    let vert = obb.center + obb.half_widths * obb.orientation;
+                    (vert, vert)
+                };
+
+                // (+, +, -)
+                {
+                    let vert = obb.center + (obb.half_widths * Vector3::new(1.0, 1.0, -1.0)) * obb.orientation;
+
+                    if vert.x < min.x {
+                        min.x = vert.x;
+                    } else if vert.x > max.x {
+                        max.x = vert.x;
+                    }
+
+                    if vert.y < min.y {
+                        min.y = vert.y;
+                    } else if vert.y > max.y {
+                        max.y = vert.y;
+                    }
+
+                    if vert.z < min.z {
+                        min.z = vert.z;
+                    } else if vert.z > max.z {
+                        max.z = vert.z
+                    }
+                }
+
+                // (+, -, +)
+                {
+                    let vert = obb.center + (obb.half_widths * Vector3::new(1.0, -1.0, 1.0)) * obb.orientation;
+
+                    if vert.x < min.x {
+                        min.x = vert.x;
+                    } else if vert.x > max.x {
+                        max.x = vert.x;
+                    }
+
+                    if vert.y < min.y {
+                        min.y = vert.y;
+                    } else if vert.y > max.y {
+                        max.y = vert.y;
+                    }
+
+                    if vert.z < min.z {
+                        min.z = vert.z;
+                    } else if vert.z > max.z {
+                        max.z = vert.z
+                    }
+                }
+
+                // (+, -, -)
+                {
+                    let vert = obb.center + (obb.half_widths * Vector3::new(1.0, -1.0, -1.0)) * obb.orientation;
+
+                    if vert.x < min.x {
+                        min.x = vert.x;
+                    } else if vert.x > max.x {
+                        max.x = vert.x;
+                    }
+
+                    if vert.y < min.y {
+                        min.y = vert.y;
+                    } else if vert.y > max.y {
+                        max.y = vert.y;
+                    }
+
+                    if vert.z < min.z {
+                        min.z = vert.z;
+                    } else if vert.z > max.z {
+                        max.z = vert.z
+                    }
+                }
+
+                // (-, +, +)
+                {
+                    let vert = obb.center + (obb.half_widths * Vector3::new(-1.0, 1.0, 1.0)) * obb.orientation;
+
+                    if vert.x < min.x {
+                        min.x = vert.x;
+                    } else if vert.x > max.x {
+                        max.x = vert.x;
+                    }
+
+                    if vert.y < min.y {
+                        min.y = vert.y;
+                    } else if vert.y > max.y {
+                        max.y = vert.y;
+                    }
+
+                    if vert.z < min.z {
+                        min.z = vert.z;
+                    } else if vert.z > max.z {
+                        max.z = vert.z
+                    }
+                }
+
+                // (-, +, -)
+                {
+                    let vert = obb.center + (obb.half_widths * Vector3::new(-1.0, 1.0, -1.0)) * obb.orientation;
+
+                    if vert.x < min.x {
+                        min.x = vert.x;
+                    } else if vert.x > max.x {
+                        max.x = vert.x;
+                    }
+
+                    if vert.y < min.y {
+                        min.y = vert.y;
+                    } else if vert.y > max.y {
+                        max.y = vert.y;
+                    }
+
+                    if vert.z < min.z {
+                        min.z = vert.z;
+                    } else if vert.z > max.z {
+                        max.z = vert.z
+                    }
+                }
+
+                // (-, -, +)
+                {
+                    let vert = obb.center + (obb.half_widths * Vector3::new(-1.0, -1.0, 1.0)) * obb.orientation;
+
+                    if vert.x < min.x {
+                        min.x = vert.x;
+                    } else if vert.x > max.x {
+                        max.x = vert.x;
+                    }
+
+                    if vert.y < min.y {
+                        min.y = vert.y;
+                    } else if vert.y > max.y {
+                        max.y = vert.y;
+                    }
+
+                    if vert.z < min.z {
+                        min.z = vert.z;
+                    } else if vert.z > max.z {
+                        max.z = vert.z
+                    }
+                }
+
+                // (-, -, -)
+                {
+                    let vert = obb.center + (obb.half_widths * Vector3::new(-1.0, -1.0, -1.0)) * obb.orientation;
+
+                    if vert.x < min.x {
+                        min.x = vert.x;
+                    } else if vert.x > max.x {
+                        max.x = vert.x;
+                    }
+
+                    if vert.y < min.y {
+                        min.y = vert.y;
+                    } else if vert.y > max.y {
+                        max.y = vert.y;
+                    }
+
+                    if vert.z < min.z {
+                        min.z = vert.z;
+                    } else if vert.z > max.z {
+                        max.z = vert.z
+                    }
+                }
+
+                AABB {
+                    min: min,
+                    max: max,
+                }
+            },
             &CachedCollider::Mesh => unimplemented!(),
         }
     }

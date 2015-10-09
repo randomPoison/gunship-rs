@@ -14,7 +14,7 @@ use vector::Vector3;
 /// a `w` homogeneous coordinate for the purposes
 /// of linear algebra calculations.
 #[repr(C)]
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Point {
     pub x: f32,
     pub y: f32,
@@ -132,6 +132,34 @@ impl Neg for Point {
 /// care that it's not technically true according to the spec.
 impl Eq for Point {}
 
+impl PartialOrd for Point {
+
+    /// Ordering for points is defined by ordering the ordering precedence as x > y > z.
+    ///
+    /// TODO: Elaborate on ordering for points in vectors in the module documentation?
+    fn partial_cmp(&self, other: &Point) -> Option<Ordering> {
+        debug_assert!(self.w == 1.0 && other.w == 1.0, "Points must be normalized before comparison");
+
+        if self.x < other.x {
+            Some(Ordering::Less)
+        } else if self.x > other.x {
+            Some(Ordering::Greater)
+        } else if self.y < other.y {
+            Some(Ordering::Less)
+        } else if self.y > other.y {
+            Some(Ordering::Greater)
+        } else if self.z < other.z {
+            Some(Ordering::Less)
+        } else if self.z > other.z {
+            Some(Ordering::Greater)
+        } else if self.x == other.x && self.y == other.y && self.z == other.z {
+            Some(Ordering::Equal)
+        } else {
+            None
+        }
+    }
+}
+
 impl Ord for Point {
     /// Super bad-nasty implementation of Ord for Point.
     ///
@@ -140,10 +168,12 @@ impl Ord for Point {
     /// an arbitrary ordering for NaN elements, but if a point has NaN coordinates something has
     /// likely gone wrong so panicking will help even stranger bugs from appearing.
     fn cmp(&self, other: &Point) -> Ordering {
-        PartialOrd::partial_cmp(self, other)
-        .expect(&*format!(
-            "Trying to compare points {:?} and {:?} where one as NaN coordinates",
-            self,
-            other))
+        match PartialOrd::partial_cmp(self, other) {
+            Some(ordering) => ordering,
+            None => panic!(
+                "Trying to compare points {:?} and {:?} when one as NaN coordinates",
+                self,
+                other),
+        }
     }
 }

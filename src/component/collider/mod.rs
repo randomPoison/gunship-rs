@@ -50,7 +50,7 @@ pub enum Collider {
     /// Represents a box collider oriented to the entity's local coordinate system.
     Box {
         offset: Vector3,
-        width:  Vector3,
+        widths:  Vector3,
     },
 
     /// Represents a collision geometry derived from mesh data.
@@ -138,7 +138,18 @@ impl CachedCollider {
                     radius: radius,
                 })
             },
-            &Collider::Box { offset: _, width: _ } => unimplemented!(),
+            &Collider::Box { offset, widths } => {
+                let half_widths = widths * transform.scale_derived() * 0.5;
+                let center = transform.position_derived() + offset;
+                let orientation = Matrix3::from_quaternion(transform.rotation_derived());
+
+                let obb = OBB {
+                    center: center,
+                    orientation: orientation,
+                    half_widths: half_widths,
+                };
+                CachedCollider::Box(obb)
+            },
             &Collider::Mesh => unimplemented!(),
         }
     }
@@ -148,7 +159,10 @@ impl CachedCollider {
             &CachedCollider::Sphere(sphere) => {
                 sphere.test_collider(other)
             },
-            &CachedCollider::Box(_) => unimplemented!(),
+            &CachedCollider::Box(_) => {
+                // TODO
+                false
+            },
             &CachedCollider::Mesh => unimplemented!(),
         }
     }
@@ -158,7 +172,13 @@ impl CachedCollider {
             &CachedCollider::Sphere(Sphere { center, radius }) => {
                 debug_draw::sphere(center, radius);
             },
-            &CachedCollider::Box(_) => unimplemented!(),
+            &CachedCollider::Box(obb) => {
+                let transform =
+                    Matrix4::from_point(obb.center)
+                  * Matrix4::from_matrix3(obb.orientation)
+                  * Matrix4::from_scale_vector(obb.half_widths * 2.0);
+                debug_draw::box_matrix(transform);
+            },
             &CachedCollider::Mesh => unimplemented!(),
         }
     }
@@ -187,7 +207,7 @@ impl Sphere {
 #[derive(Debug, Clone, Copy)]
 pub struct OBB {
     pub center: Point,
-    pub axes: [Vector3; 3],
+    pub orientation: Matrix3,
     pub half_widths: Vector3,
 }
 

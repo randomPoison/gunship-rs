@@ -34,11 +34,11 @@ impl Camera
     /// The view transform the matrix that converts from world coordinates
     /// to camera coordinates.
     pub fn view_matrix(&self) -> Matrix4 {
-        self.rotation.as_matrix().transpose() * Matrix4::translation(-self.position.x, -self.position.y, -self.position.z)
+        self.rotation.as_matrix4().transpose() * Matrix4::translation(-self.position.x, -self.position.y, -self.position.z)
     }
 
     pub fn inverse_view_matrix(&self) -> Matrix4 {
-        Matrix4::from_point(self.position) * self.rotation.as_matrix()
+        Matrix4::from_point(self.position) * self.rotation.as_matrix4()
     }
 
     /// Calculates the projection matrix for the camera.

@@ -291,7 +291,7 @@ impl Transform {
         if self.out_of_date.get() {
             let local_matrix =
                 Matrix4::from_point(self.position)
-                * (self.rotation.as_matrix() * Matrix4::from_scale_vector(self.scale));
+                * (self.rotation.as_matrix4() * Matrix4::from_scale_vector(self.scale));
             self.local_matrix.set(local_matrix);
         }
 
@@ -309,7 +309,7 @@ impl Transform {
 
         let inverse =
             Matrix4::from_scale_vector(1.0 / self.scale_derived.get())
-          * (self.rotation_derived.get().as_matrix().transpose()
+          * (self.rotation_derived.get().as_matrix4().transpose()
           *  Matrix4::from_point(-self.position_derived.get()));
 
         inverse.transpose()

@@ -214,7 +214,7 @@ impl GLRender {
                 let light_position = match light {
                     Light::Point(ref point_light) => point_light.position
                 };
-                let light_position_view = view_transform * light_position;
+                let light_position_view = light_position * view_transform;
 
                 gl.uniform_4f(light_position_location, light_position_view.as_array());
 
@@ -242,7 +242,7 @@ impl GLRender {
                     let light_position = match light {
                         Light::Point(ref point_light) => point_light.position
                     };
-                    let light_position_view = view_transform * light_position;
+                    let light_position_view = light_position * view_transform;
 
                     gl.uniform_4f(light_position_location, light_position_view.as_array());
 

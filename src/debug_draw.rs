@@ -120,10 +120,8 @@ impl DebugDraw {
                     self.line_vertices.extend(start.as_array());
                     self.line_vertices.extend(end.as_array());
                 },
-                &DebugDrawCommand::Box { center, widths } => {
-                    let model_transform =
-                        Matrix4::from_point(center) * Matrix4::from_scale_vector(widths);
-                    self.renderer.draw_wireframe(camera, &self.shader, &self.unit_cube, model_transform);
+                &DebugDrawCommand::Box { transform } => {
+                    self.renderer.draw_wireframe(camera, &self.shader, &self.unit_cube, transform);
                 },
                 &DebugDrawCommand::Sphere { center, radius } => {
                     let model_transform =
@@ -174,8 +172,7 @@ pub enum DebugDrawCommand {
         end: Point,
     },
     Box {
-        center: Point,
-        widths: Vector3,
+        transform: Matrix4,
     },
     Sphere {
         center: Point,
@@ -203,17 +200,24 @@ pub fn line(start: Point, end: Point) {
 }
 
 pub fn box_min_max(min: Point, max: Point) {
-    let diff = max - min;
+    let offset = max - min;
+    let center = min + offset * 0.5;
+    let transform = Matrix4::from_point(center) * Matrix4::from_scale_vector(offset);
     draw_command(DebugDrawCommand::Box {
-        center: min + diff  * 0.5,
-        widths: diff,
+        transform: transform,
     });
 }
 
 pub fn box_center_widths(center: Point, widths: Vector3) {
+    let transform = Matrix4::from_point(center) * Matrix4::from_scale_vector(widths);
     draw_command(DebugDrawCommand::Box {
-        center: center,
-        widths: widths,
+        transform: transform,
+    });
+}
+
+pub fn box_matrix(transform: Matrix4) {
+    draw_command(DebugDrawCommand::Box {
+        transform: transform,
     });
 }
 
