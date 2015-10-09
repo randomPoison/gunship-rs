@@ -143,6 +143,16 @@ impl CachedCollider {
         }
     }
 
+    pub fn test(&self, other: &CachedCollider) -> bool {
+        match self {
+            &CachedCollider::Sphere(sphere) => {
+                sphere.test_collider(other)
+            },
+            &CachedCollider::Box(_) => unimplemented!(),
+            &CachedCollider::Mesh => unimplemented!(),
+        }
+    }
+
     pub fn debug_draw(&self) {
         match self {
             &CachedCollider::Sphere(Sphere { center, radius }) => {
@@ -158,6 +168,20 @@ impl CachedCollider {
 pub struct Sphere {
     pub center: Point,
     pub radius: f32,
+}
+
+impl Sphere {
+    fn test_collider(&self, other: &CachedCollider) -> bool {
+        match other {
+            &CachedCollider::Sphere(sphere) => {
+                let dist_sqr = (self.center - sphere.center).magnitude_squared();
+                let max_dist_sqr = (self.radius + sphere.radius) * (self.radius + sphere.radius);
+                dist_sqr < max_dist_sqr
+            },
+            &CachedCollider::Box(_) => unimplemented!(),
+            &CachedCollider::Mesh => unimplemented!(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]

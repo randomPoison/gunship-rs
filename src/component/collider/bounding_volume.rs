@@ -122,9 +122,8 @@ pub struct BoundVolume {
 impl BoundVolume {
     /// Tests if `other` collides with this BVH.
     pub fn test(&self, other: &BoundVolume) -> bool {
-        self.aabb.test_aabb(&other.aabb)
-
-        // TODO: Also test the actual collider.
+        self.aabb.test_aabb(&other.aabb);
+        self.collider.test(&other.collider)
     }
 
     pub fn debug_draw(&self) {

@@ -70,13 +70,10 @@ fn setup_scene(scene: &mut Scene) {
         circle_movement_manager.assign(entity, CircleMovement::new());
         collider_manager.assign(entity, Collider::Sphere {
             offset: Vector3::zero(),
-            radius: 0.5,
+            radius: rand::random::<f32>() * 1.0 + 0.5,
         });
         collider_manager.register_callback(entity, visualize_collision);
-        // collider_manager.register_callback(entity, |_scene: &Scene, _entity, _other_entity| {
-        //     println!("collision with the first entity");
-        // });
-        mesh_manager.assign(entity, "cube.pCube1");
+        // mesh_manager.assign(entity, "cube.pCube1");
     }
 }
 
