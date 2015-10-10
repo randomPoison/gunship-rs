@@ -159,9 +159,8 @@ impl CachedCollider {
             &CachedCollider::Sphere(sphere) => {
                 sphere.test_collider(other)
             },
-            &CachedCollider::Box(_) => {
-                // TODO
-                false
+            &CachedCollider::Box(obb) => {
+                obb.test_collider(other)
             },
             &CachedCollider::Mesh => unimplemented!(),
         }
@@ -209,6 +208,151 @@ pub struct OBB {
     pub center: Point,
     pub orientation: Matrix3,
     pub half_widths: Vector3,
+}
+
+impl OBB {
+    fn test_collider(&self, other: &CachedCollider) -> bool {
+        match other {
+            &CachedCollider::Sphere(_) => unimplemented!(),
+            &CachedCollider::Box(ref obb) => self.test_obb(obb),
+            &CachedCollider::Mesh => unimplemented!(),
+        }
+    }
+
+    fn test_obb(&self, b: &OBB) -> bool {
+        // Compute rotation matrix expressing b in a's coordinate frame.
+        let r = {
+            let mut r: Matrix3 = unsafe { ::std::mem::uninitialized() };
+            for row in 0..3 {
+                for col in 0..3 {
+                    r[row][col] = self.orientation.col(row).dot(b.orientation.col(col));
+                }
+            }
+            r
+        };
+
+        // Compute translation vector `t`.
+        let t = b.center - self.center;
+
+        // Bring translation into a's coordinate frame.
+        let t = t * self.orientation.transpose();
+
+        // Compute common subexpressions. Add in an epsilon term to counteract arithmetic errors
+        // when two edges are parallel and their cross product is (near) null.
+        let abs_r = {
+            let mut abs_r: Matrix3 = unsafe { ::std::mem::uninitialized() };
+            for row in 0..3 {
+                for col in 0..3 {
+                    abs_r[row][col] = r[row][col].abs() + EPSILON;
+                }
+            }
+            abs_r
+        };
+
+        // Test axes L = A0, L = A1, L = A2.
+        for i in 0..3 {
+            let ra = self.half_widths[i];
+            let rb = b.half_widths.dot(abs_r[i]);
+
+            if t[i].abs() > ra + rb {
+                return false;
+            }
+        }
+
+        // Test axes L = B0, L = B1, L = B2.
+        for i in 0..3 {
+            let ra = self.half_widths.dot(abs_r.col(i));
+            let rb = b.half_widths[i];
+
+            if t.dot(r.col(i)).abs() > ra + rb {
+                return false;
+            }
+        }
+
+        // Test axis L = A0 x B0.
+        {
+            let ra = self.half_widths[1] * abs_r[2][0] + self.half_widths[2] * abs_r[1][0];
+            let rb =    b.half_widths[1] * abs_r[0][2] +    b.half_widths[2] * abs_r[0][1];
+            if (t[2] * r[1][0] - t[1] * r[2][0]).abs() > ra + rb {
+                return false;
+            }
+        }
+
+        // Test axis L = A0 x B1.
+        {
+            let ra = self.half_widths[1] * abs_r[2][1] + self.half_widths[2] * abs_r[1][1];
+            let rb =    b.half_widths[0] * abs_r[0][2] +    b.half_widths[2] * abs_r[0][0];
+            if (t[2] * r[1][1] - t[1] * r[2][1]).abs() > ra + rb {
+                return false;
+            }
+        }
+
+        // Test axis L = A0 x B2.
+        {
+            let ra = self.half_widths[1] * abs_r[2][2] + self.half_widths[2] * abs_r[1][2];
+            let rb =    b.half_widths[0] * abs_r[0][1] +    b.half_widths[1] * abs_r[0][0];
+            if (t[2] * r[1][2] - t[1] * r[2][2]).abs() > ra + rb {
+                return false;
+            }
+        }
+
+        // Test axis L = A1 x B0.
+        {
+            let ra = self.half_widths[0] * abs_r[2][0] + self.half_widths[2] * abs_r[0][0];
+            let rb =    b.half_widths[1] * abs_r[1][2] +    b.half_widths[2] * abs_r[1][1];
+            if (t[0] * r[2][0] - t[2] * r[0][0]).abs() > ra + rb {
+                return false;
+            }
+        }
+
+        // Test axis L = A1 x B1.
+        {
+            let ra = self.half_widths[0] * abs_r[2][1] + self.half_widths[2] * abs_r[0][1];
+            let rb =    b.half_widths[0] * abs_r[1][2] +    b.half_widths[2] * abs_r[1][0];
+            if (t[0] * r[2][1] - t[2] * r[0][1]).abs() > ra + rb {
+                return false;
+            }
+        }
+
+        // Test axis L = A1 x B2.
+        {
+            let ra = self.half_widths[0] * abs_r[2][2] + self.half_widths[2] * abs_r[0][2];
+            let rb =    b.half_widths[0] * abs_r[1][1] +    b.half_widths[1] * abs_r[1][0];
+            if (t[0] * r[2][2] - t[2] * r[0][2]).abs() > ra + rb {
+                return false;
+            }
+        }
+
+        // Test axis L = A2 x B0.
+        {
+            let ra = self.half_widths[0] * abs_r[1][0] + self.half_widths[1] * abs_r[0][0];
+            let rb =    b.half_widths[1] * abs_r[2][2] +    b.half_widths[2] * abs_r[2][1];
+            if (t[1] * r[0][0] - t[0] * r[1][0]).abs() > ra + rb {
+                return false;
+            }
+        }
+
+        // Test axis L = A2 x B1.
+        {
+            let ra = self.half_widths[0] * abs_r[1][1] + self.half_widths[1] * abs_r[0][1];
+            let rb =    b.half_widths[0] * abs_r[2][2] +    b.half_widths[2] * abs_r[2][0];
+            if (t[1] * r[0][1] - t[0] * r[1][1]).abs() > ra + rb {
+                return false;
+            }
+        }
+
+        // Test axis L = A2 x B2.
+        {
+            let ra = self.half_widths[0] * abs_r[1][2] + self.half_widths[1] * abs_r[0][2];
+            let rb =    b.half_widths[0] * abs_r[2][1] +    b.half_widths[1] * abs_r[2][0];
+            if (t[1] * r[0][2] - t[0] * r[1][2]).abs() > ra + rb {
+                return false;
+            }
+        }
+
+        // Since no separating axis found, the OBBs must be intersecting.
+        true
+    }
 }
 
 #[derive(Debug, Clone)]

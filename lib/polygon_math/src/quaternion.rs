@@ -3,7 +3,7 @@ use std::f32::consts::PI;
 
 use vector::Vector3;
 use matrix::*;
-use super::{IsZero, Clamp};
+use super::{IsZero, Clamp, Dot};
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct Quaternion {

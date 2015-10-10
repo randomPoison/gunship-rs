@@ -5,7 +5,7 @@ use std::cmp::PartialEq;
 use vector::Vector3;
 use point::Point;
 use quaternion::Quaternion;
-use IsZero;
+use super::{IsZero, Dot};
 
 /// A 4x4 matrix that can be used to represent a combination of translation, rotation, and scale.
 ///
@@ -304,6 +304,23 @@ impl Matrix3 {
             ]
         }
     }
+
+    pub fn col(&self, col: usize) -> [f32; 3] {
+        [self[0][col], self[1][col], self[2][col]]
+    }
+
+    pub fn transpose(&self) -> Matrix3 {
+        let mut transpose = *self;
+        for row in 0..3 {
+            for col in (row + 1)..3
+            {
+                let temp = transpose[row][col];
+                transpose[row][col] = transpose[col][row];
+                transpose[col][row] = temp;
+            }
+        }
+        transpose
+    }
 }
 
 impl Index<usize> for Matrix3 {
@@ -319,6 +336,24 @@ impl IndexMut<usize> for Matrix3 {
     fn index_mut(&mut self, index: usize) -> &mut [f32; 3] {
         debug_assert!(index < 3, "Cannot get matrix row {} in a 3x3 matrix", index);
         &mut self.data[index]
+    }
+}
+
+impl Mul for Matrix3 {
+    type Output = Matrix3;
+
+    fn mul(self, other: Matrix3) -> Matrix3 {
+        let mut result: Matrix3 = unsafe { ::std::mem::uninitialized() };
+
+        for row in 0..3 {
+            for col in 0..3 {
+                result[row][col] = {
+                    self[row].dot(other.col(col))
+                };
+            }
+        }
+
+        result
     }
 }
 

@@ -7,7 +7,7 @@ use stopwatch::Stopwatch;
 use scene::Scene;
 use ecs::Entity;
 use super::bounding_volume::*;
-use debug_draw;
+// use debug_draw;
 
 /// A collision processor that partitions the space into a regular grid.
 ///
@@ -40,16 +40,16 @@ impl GridCollisionSystem {
     pub fn update(&mut self, scene: &Scene, _delta: f32) {
         let _stopwatch = Stopwatch::new("Grid Collision System");
 
-        // Debug draw the grid.
-        for i in -50..50 {
-            let offset = i as f32;
-            debug_draw::line(
-                Point::new(offset * self.cell_size, -50.0 * self.cell_size, 0.0),
-                Point::new(offset * self.cell_size,  50.0 * self.cell_size, 0.0));
-            debug_draw::line(
-                Point::new(-50.0 * self.cell_size, offset * self.cell_size, 0.0),
-                Point::new( 50.0 * self.cell_size, offset * self.cell_size, 0.0));
-        }
+        // // Debug draw the grid.
+        // for i in -50..50 {
+        //     let offset = i as f32;
+        //     debug_draw::line(
+        //         Point::new(offset * self.cell_size, -50.0 * self.cell_size, 0.0),
+        //         Point::new(offset * self.cell_size,  50.0 * self.cell_size, 0.0));
+        //     debug_draw::line(
+        //         Point::new(-50.0 * self.cell_size, offset * self.cell_size, 0.0),
+        //         Point::new( 50.0 * self.cell_size, offset * self.cell_size, 0.0));
+        // }
 
         self.collisions.clear();
         let bvh_manager = scene.get_manager::<BoundingVolumeManager>();
