@@ -116,17 +116,27 @@ impl DebugDraw {
     pub fn flush_commands(&mut self, camera: &Camera) {
         for command in &self.inner.command_buffer {
             match command {
-                &DebugDrawCommand::Line { start, end } => {
+                &DebugDrawCommand::Line { start, end, color: _ } => {
                     self.line_vertices.extend(start.as_array());
                     self.line_vertices.extend(end.as_array());
                 },
-                &DebugDrawCommand::Box { transform } => {
-                    self.renderer.draw_wireframe(camera, &self.shader, &self.unit_cube, transform);
+                &DebugDrawCommand::Box { transform, color } => {
+                    self.renderer.draw_wireframe(
+                        camera,
+                        &self.shader,
+                        &self.unit_cube,
+                        transform,
+                        color);
                 },
-                &DebugDrawCommand::Sphere { center, radius } => {
+                &DebugDrawCommand::Sphere { center, radius, color } => {
                     let model_transform =
                         Matrix4::from_point(center) * Matrix4::scale(radius, radius, radius);
-                    self.renderer.draw_wireframe(camera, &self.shader, &self.unit_sphere, model_transform);
+                    self.renderer.draw_wireframe(
+                        camera,
+                        &self.shader,
+                        &self.unit_sphere,
+                        model_transform,
+                        color);
                 },
             }
         }
@@ -136,7 +146,12 @@ impl DebugDraw {
                 self.line_indices.push(index as u32);
             }
             let line_mesh = build_mesh(&*self.renderer, &self.line_vertices, &self.line_indices);
-            self.renderer.draw_wireframe(camera, &self.shader, &line_mesh, Matrix4::identity());
+            self.renderer.draw_wireframe(
+                camera,
+                &self.shader,
+                &line_mesh,
+                Matrix4::identity(),
+                color::WHITE);
             self.renderer.delete_mesh(line_mesh);
         }
 
@@ -170,13 +185,16 @@ pub enum DebugDrawCommand {
     Line {
         start: Point,
         end: Point,
+        color: Color,
     },
     Box {
         transform: Matrix4,
+        color:     Color,
     },
     Sphere {
         center: Point,
         radius: f32,
+        color: Color,
     }
 }
 
@@ -196,15 +214,21 @@ pub fn line(start: Point, end: Point) {
     draw_command(DebugDrawCommand::Line {
         start: start,
         end: end,
+        color: color::WHITE,
     });
 }
 
 pub fn box_min_max(min: Point, max: Point) {
+    box_min_max_color(min, max, color::WHITE);
+}
+
+pub fn box_min_max_color(min: Point, max: Point, color: Color) {
     let offset = max - min;
     let center = min + offset * 0.5;
     let transform = Matrix4::from_point(center) * Matrix4::from_scale_vector(offset);
     draw_command(DebugDrawCommand::Box {
         transform: transform,
+        color: color,
     });
 }
 
@@ -212,18 +236,29 @@ pub fn box_center_widths(center: Point, widths: Vector3) {
     let transform = Matrix4::from_point(center) * Matrix4::from_scale_vector(widths);
     draw_command(DebugDrawCommand::Box {
         transform: transform,
+        color: color::WHITE,
     });
 }
 
 pub fn box_matrix(transform: Matrix4) {
+    box_matrix_color(transform, color::WHITE);
+}
+
+pub fn box_matrix_color(transform: Matrix4, color: Color) {
     draw_command(DebugDrawCommand::Box {
         transform: transform,
+        color: color,
     });
 }
 
 pub fn sphere(center: Point, radius: f32) {
+    sphere_color(center, radius, color::WHITE);
+}
+
+pub fn sphere_color(center: Point, radius: f32, color: Color) {
     draw_command(DebugDrawCommand::Sphere {
         center: center,
         radius: radius,
+        color: color,
     });
 }

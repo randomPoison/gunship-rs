@@ -311,7 +311,8 @@ impl GLRender {
         camera: &Camera,
         shader: &ShaderProgram,
         mesh: &GLMeshData,
-        model_transform: Matrix4
+        model_transform: Matrix4,
+        color: Color,
     ) {
         let gl = &self.gl;
         let view_transform = camera.view_matrix();
@@ -375,7 +376,7 @@ impl GLRender {
         }
 
         if let Some(surface_color_location) = shader.surface_color {
-            gl.uniform_4f(surface_color_location, Color::new(1.0, 1.0, 1.0, 1.0).as_array());
+            gl.uniform_4f(surface_color_location, color.as_array());
         }
 
         gl.draw_elements(

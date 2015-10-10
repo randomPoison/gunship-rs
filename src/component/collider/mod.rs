@@ -13,7 +13,7 @@ use scene::Scene;
 use debug_draw;
 use super::EntityMap;
 use self::grid_collision::GridCollisionSystem;
-use self::bounding_volume::bvh_update;
+use self::bounding_volume::{BoundingVolumeManager, bvh_update};
 use component::transform::Transform;
 
 pub mod grid_collision;
@@ -167,16 +167,20 @@ impl CachedCollider {
     }
 
     pub fn debug_draw(&self) {
+        self.debug_draw_color(color::WHITE);
+    }
+
+    pub fn debug_draw_color(&self, color: Color) {
         match self {
             &CachedCollider::Sphere(Sphere { center, radius }) => {
-                debug_draw::sphere(center, radius);
+                debug_draw::sphere_color(center, radius, color);
             },
             &CachedCollider::Box(obb) => {
                 let transform =
                     Matrix4::from_point(obb.center)
                   * Matrix4::from_matrix3(obb.orientation)
                   * Matrix4::from_scale_vector(obb.half_widths * 2.0);
-                debug_draw::box_matrix(transform);
+                debug_draw::box_matrix_color(transform, color);
             },
             &CachedCollider::Mesh => unimplemented!(),
         }
@@ -374,6 +378,23 @@ impl System for CollisionSystem {
 
         bvh_update(scene, delta);
         self.grid_system.update(scene, delta);
+
+        // Visualize the collisions.
+        let bvh_manager = scene.get_manager_mut::<BoundingVolumeManager>();
+        for bvh in bvh_manager.components() {
+            if bvh.aabb_intersected.get() {
+                debug_draw::box_min_max_color(bvh.aabb.min, bvh.aabb.max, color::RED);
+            } else {
+                debug_draw::box_min_max(bvh.aabb.min, bvh.aabb.max);
+            }
+
+            if bvh.collider_intersected.get() {
+                bvh.collider.debug_draw_color(color::RED);
+            } else {
+                bvh.collider.debug_draw();
+            }
+        }
+
         let mut collider_manager = scene.get_manager_mut::<ColliderManager>();
         collider_manager.callback_manager.process_collisions(scene, &self.grid_system.collisions);
     }

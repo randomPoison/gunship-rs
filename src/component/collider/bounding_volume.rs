@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::slice::Iter;
 use std::iter::Zip;
 
@@ -117,13 +117,26 @@ pub struct BoundVolume {
     pub entity: Entity,
     pub aabb: AABB,
     pub collider: CachedCollider,
+
+    // TODO: Debug only variables, strip these in release builds.
+    pub aabb_intersected: Cell<bool>,
+    pub collider_intersected: Cell<bool>,
 }
 
 impl BoundVolume {
     /// Tests if `other` collides with this BVH.
     pub fn test(&self, other: &BoundVolume) -> bool {
-        self.aabb.test_aabb(&other.aabb);
-        self.collider.test(&other.collider)
+        if self.aabb.test_aabb(&other.aabb) {
+            self.aabb_intersected.set(true);
+            other.aabb_intersected.set(true);
+            if self.collider.test(&other.collider) {
+                self.collider_intersected.set(true);
+                other.collider_intersected.set(true);
+                return true;
+            }
+        }
+
+        false
     }
 
     pub fn debug_draw(&self) {
@@ -355,7 +368,9 @@ pub fn bvh_update(scene: &Scene, _delta: f32) {
         if let Some(mut bvh) = bvh_manager.get_mut(entity) {
             bvh.collider = cached_collider;
             bvh.aabb = aabb;
-            bvh.debug_draw();
+
+            bvh.aabb_intersected.set(false);
+            bvh.collider_intersected.set(false);
             continue;
         }
         // else
@@ -364,6 +379,9 @@ pub fn bvh_update(scene: &Scene, _delta: f32) {
                 entity: entity,
                 aabb: aabb,
                 collider: cached_collider,
+
+                aabb_intersected: Cell::new(false),
+                collider_intersected: Cell::new(false),
             });
         }
     }
