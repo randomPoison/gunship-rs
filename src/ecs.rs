@@ -1,5 +1,5 @@
-use std::fmt;
 use std::collections::VecDeque;
+use std::fmt;
 
 use scene::Scene;
 
@@ -10,6 +10,7 @@ pub struct Entity(u32);
 pub struct EntityManager {
     entities: Vec<Entity>,
     recycled_entities: VecDeque<Entity>,
+    marked_for_destroy: Vec<Entity>,
     id_counter: u32
 }
 
@@ -18,6 +19,7 @@ impl EntityManager {
         EntityManager {
             entities: Vec::new(),
             recycled_entities: VecDeque::new(),
+            marked_for_destroy: Vec::new(),
             id_counter: 1
         }
     }
@@ -33,7 +35,19 @@ impl EntityManager {
         entity
     }
 
-    pub fn destroy(&mut self, entity: Entity) {
+    pub fn mark_for_destroy(&mut self, entity: Entity) {
+        debug_assert!(!self.marked_for_destroy.contains(&entity), "Can't mark an entity for destruction more than once");
+        self.marked_for_destroy.push(entity);
+    }
+
+    pub fn destroy_marked(&mut self) {
+        for entity in self.marked_for_destroy.drain(0..) {
+            debug_assert!(!self.recycled_entities.iter().any(|existing| &entity == existing), "Trying to recycle entity {:?} but it is already recycled");
+            self.recycled_entities.push_back(entity)
+        }
+    }
+
+    pub fn destroy_immediate(&mut self, entity: Entity) {
         debug_assert!(!self.recycled_entities.iter().any(|existing| &entity == existing), "Trying to recycle entity {:?} but it is already recycled");
 
         self.recycled_entities.push_back(entity);

@@ -1,5 +1,8 @@
-use scene::Scene;
+use std::cell::RefCell;
+
 use ecs::*;
+use scene::Scene;
+use super::EntitySet;
 
 pub type AlarmCallback = Fn(&Scene, Entity);
 
@@ -18,6 +21,7 @@ pub struct AlarmID(usize);
 pub struct AlarmManager {
     id_counter: usize,
     alarms: Vec<Alarm>,
+    marked_for_destroy: RefCell<EntitySet>,
 }
 
 impl AlarmManager {
@@ -25,6 +29,7 @@ impl AlarmManager {
         AlarmManager {
             id_counter: 0,
             alarms: Vec::new(),
+            marked_for_destroy: RefCell::new(EntitySet::default()),
         }
     }
 
@@ -93,11 +98,30 @@ impl AlarmManager {
 }
 
 impl ComponentManager for AlarmManager {
-    fn destroy_all(&self, _entity: Entity) {
-        println!("WARNING: AlarmManager::destroy_all() is not yet implemented");
+    fn destroy_all(&self, entity: Entity) {
+        self.marked_for_destroy.borrow_mut().insert(entity);
     }
 
     fn destroy_marked(&mut self) {
+        let mut marked_for_destroy = self.marked_for_destroy.borrow_mut();
+        for entity in marked_for_destroy.drain() {
+            // Iterate through all alarms and remove any associated with the entity.
+            loop {
+                let (index, remaining_time) = match self.alarms.iter().enumerate().find(|&(_, alarm)| alarm.entity == entity) {
+                    Some((index, alarm)) => {
+                        (index, alarm.remaining_time)
+                    }
+                    None => break,
+                };
+
+                if index < self.alarms.len() - 1 {
+                    // There's another alarm after the one wer're removing, so update it.
+                    self.alarms[index + 1].remaining_time += remaining_time;
+                }
+
+                self.alarms.remove(index);
+            }
+        }
     }
 }
 
@@ -108,6 +132,7 @@ impl Clone for AlarmManager {
         AlarmManager {
             id_counter: self.id_counter,
             alarms: Vec::new(),
+            marked_for_destroy: self.marked_for_destroy.clone(),
         }
     }
 }

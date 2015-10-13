@@ -1,11 +1,11 @@
-use std::cell::{Cell, RefCell};
+use std::cell::{Cell};
 use std::slice::Iter;
 use std::iter::Zip;
 
 use math::*;
 use stopwatch::Stopwatch;
 
-use component::{TransformManager, EntityMap, EntitySet};
+use component::{TransformManager, EntityMap};
 use scene::*;
 use ecs::*;
 use super::{CachedCollider, ColliderManager, Sphere};
@@ -18,8 +18,6 @@ pub struct BoundingVolumeManager {
     components: Vec<BoundVolume>,
     entities: Vec<Entity>,
     indices: EntityMap<usize>,
-
-    marked_for_destroy: RefCell<EntitySet>,
 }
 
 impl BoundingVolumeManager {
@@ -28,8 +26,6 @@ impl BoundingVolumeManager {
             components: Vec::new(),
             entities: Vec::new(),
             indices: EntityMap::default(),
-
-            marked_for_destroy: RefCell::new(EntitySet::default()),
         }
     }
 
@@ -92,23 +88,6 @@ impl BoundingVolumeManager {
         // and then return it at the end we wind up with 2 or 3 memcpys. Doing it all at
         // once at the end (hopefully) means only a single memcpy.
         self.components.swap_remove(index)
-    }
-}
-
-impl ComponentManager for BoundingVolumeManager {
-    fn destroy_all(&self, entity: Entity) {
-        if self.indices.contains_key(&entity) {
-            self.marked_for_destroy.borrow_mut().insert(entity);
-        }
-    }
-
-    fn destroy_marked(&mut self) {
-        let mut marked_for_destroy = RefCell::new(EntitySet::default());
-        ::std::mem::swap(&mut marked_for_destroy, &mut self.marked_for_destroy);
-        let mut marked_for_destroy = marked_for_destroy.into_inner();
-        for entity in marked_for_destroy.drain() {
-            self.destroy_immediate(entity);
-        }
     }
 }
 
@@ -355,9 +334,9 @@ pub fn bvh_update(scene: &Scene, _delta: f32) {
 
     let collider_manager = scene.get_manager::<ColliderManager>();
     let transform_manager = scene.get_manager::<TransformManager>();
-    let mut bvh_manager = scene.get_manager_mut::<BoundingVolumeManager>();
+    let mut bvh_manager = collider_manager.bvh_manager_mut();
 
-    for (entity, collider) in collider_manager.iter() {
+    for (collider, entity) in collider_manager.iter() {
         let transform = transform_manager.get(entity);
 
         let cached_collider = CachedCollider::from_collider_transform(&*collider, &*transform);

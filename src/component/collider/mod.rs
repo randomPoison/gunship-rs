@@ -1,8 +1,7 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap};
 use std::collections::hash_state::HashState;
-use std::cell::{RefCell, Ref};
+use std::cell::{RefCell, Ref, RefMut};
 use std::iter::*;
-use std::slice::Iter;
 
 use hash::FnvHashState;
 use math::*;
@@ -11,7 +10,8 @@ use stopwatch::Stopwatch;
 use ecs::*;
 use scene::Scene;
 use debug_draw;
-use super::EntityMap;
+use super::{EntityMap, EntitySet};
+use super::struct_component_manager::{StructComponentManager, ComponentIter};
 use self::grid_collision::GridCollisionSystem;
 use self::bounding_volume::{BoundingVolumeManager, bvh_update};
 use component::transform::Transform;
@@ -60,58 +60,60 @@ pub enum Collider {
 /// Manages the user-facing data in the collision system.
 #[derive(Debug, Clone)]
 pub struct ColliderManager {
-    colliders: Vec<RefCell<Collider>>,
-    entities:  Vec<Entity>,
-    indices:   HashMap<Entity, usize>,
-
-    callback_manager: CollisionCallbackManager,
+    inner: StructComponentManager<Collider>,
+    callback_manager: RefCell<CollisionCallbackManager>,
+    bvh_manager: RefCell<BoundingVolumeManager>,
+    marked_for_destroy: RefCell<EntitySet>,
 }
 
 impl ColliderManager {
     pub fn new() -> ColliderManager {
         ColliderManager {
-            colliders: Vec::new(),
-            entities:  Vec::new(),
-            indices:   HashMap::new(),
-
-            callback_manager: CollisionCallbackManager::new(),
+            inner: StructComponentManager::new(),
+            callback_manager: RefCell::new(CollisionCallbackManager::new()),
+            bvh_manager: RefCell::new(BoundingVolumeManager::new()),
+            marked_for_destroy: RefCell::new(EntitySet::default()),
         }
     }
 
     pub fn assign(&mut self, entity: Entity, collider: Collider) {
-        debug_assert!(!self.indices.contains_key(&entity));
-
-        let index = self.colliders.len();
-        self.colliders.push(RefCell::new(collider));
-        self.entities.push(entity);
-        self.indices.insert(entity, index);
+        self.inner.assign(entity, collider);
     }
 
-    pub fn register_callback<T: CollisionCallback + 'static>(&mut self, entity: Entity, callback: T) {
-        self.callback_manager.register(entity, callback);
+    pub fn register_callback<T: CollisionCallback + 'static>(&mut self, callback: T) {
+        self.callback_manager.borrow_mut().register(callback);
     }
 
-    // TODO: Eeeeeewwwwww, clean this up when abstract return types are added to Rust.
-    pub fn iter(&self) -> Zip<Cloned<Iter<Entity>>, Map<Iter<RefCell<Collider>>, fn (&RefCell<Collider>) -> Ref<Collider>>> {
-        fn unwrap(refcell_collider: &RefCell<Collider>) -> Ref<Collider> {
-            refcell_collider.borrow()
-        }
+    pub fn assign_callback<T: CollisionCallback + 'static>(&mut self, entity: Entity, callback: T) {
+        self.callback_manager.borrow_mut().assign(entity, callback);
+    }
 
-        self.entities.iter()
-            .cloned()
-            .zip(self.colliders
-                .iter()
-                .map(unwrap as fn (&RefCell<Collider>) -> Ref<Collider>))
+    pub fn iter(&self) -> ComponentIter<Collider> {
+        self.inner.iter()
+    }
+
+    pub fn bvh_manager(&self) -> Ref<BoundingVolumeManager> {
+        self.bvh_manager.borrow()
+    }
+
+    pub fn bvh_manager_mut(&self) -> RefMut<BoundingVolumeManager> {
+        self.bvh_manager.borrow_mut()
     }
 }
 
 impl ComponentManager for ColliderManager {
-    fn destroy_all(&self, _entity: Entity) {
-        // unimplemented!();
+    fn destroy_all(&self, entity: Entity) {
+        self.inner.destroy_all(entity);
+        self.marked_for_destroy.borrow_mut().insert(entity);
     }
 
     fn destroy_marked(&mut self) {
-        // unimplemented!();
+        self.inner.destroy_marked();
+        let mut marked_for_destroy = self.marked_for_destroy.borrow_mut();
+        for entity in marked_for_destroy.drain() {
+            self.callback_manager.borrow_mut().unregister_all(entity);
+            self.bvh_manager.borrow_mut().destroy_immediate(entity);
+        }
     }
 }
 
@@ -201,9 +203,16 @@ impl Sphere {
                 let max_dist_sqr = (self.radius + sphere.radius) * (self.radius + sphere.radius);
                 dist_sqr < max_dist_sqr
             },
-            &CachedCollider::Box(_) => unimplemented!(),
+            &CachedCollider::Box(obb) => {
+                self.test_obb(&obb)
+            },
             &CachedCollider::Mesh => unimplemented!(),
         }
+    }
+
+    fn test_obb(&self, obb: &OBB) -> bool {
+        let dist_sqr = obb.closest_distance_squared(self.center);
+        dist_sqr < self.radius * self.radius
     }
 }
 
@@ -217,7 +226,7 @@ pub struct OBB {
 impl OBB {
     fn test_collider(&self, other: &CachedCollider) -> bool {
         match other {
-            &CachedCollider::Sphere(_) => unimplemented!(),
+            &CachedCollider::Sphere(sphere) => sphere.test_obb(self),
             &CachedCollider::Box(ref obb) => self.test_obb(obb),
             &CachedCollider::Mesh => unimplemented!(),
         }
@@ -357,6 +366,37 @@ impl OBB {
         // Since no separating axis found, the OBBs must be intersecting.
         true
     }
+
+    /// Calculates the closest point to the given point on (or in) the OBB.
+    fn closest_point(&self, point: Point) -> Point {
+        let d = point - self.center;
+
+        // Start result at center of the box, make steps from there.
+        let mut result = self.center;
+        for axis in 0..3 {
+            let local_axis = self.orientation.col(axis);
+
+            // Project d onto the axis to get the distance along the axis of d from the box center.
+            let dist = d.dot(local_axis);
+
+            // If the distance is further than the box's extents clamp to the box.
+            let dist = dist.clamp(-self.half_widths[axis], self.half_widths[axis]);
+
+            // Step that distance along the axis to get the world coordinate.
+            result += dist * local_axis;
+        }
+
+        // Let's visualize these points.
+        debug_draw::sphere_color(result, 0.3, color::BLUE);
+
+        result
+    }
+
+    /// Calculates the squared distance between the given point and the OBB.
+    fn closest_distance_squared(&self, point: Point) -> f32 {
+        let closest = self.closest_point(point);
+        (point - closest).magnitude_squared()
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -377,10 +417,13 @@ impl System for CollisionSystem {
         let _stopwatch = Stopwatch::new("collision system");
 
         bvh_update(scene, delta);
-        self.grid_system.update(scene, delta);
+
+        let collider_manager = scene.get_manager::<ColliderManager>();
+        let bvh_manager = collider_manager.bvh_manager_mut();
+
+        self.grid_system.update(&*bvh_manager);
 
         // Visualize the collisions.
-        let bvh_manager = scene.get_manager_mut::<BoundingVolumeManager>();
         for bvh in bvh_manager.components() {
             if bvh.aabb_intersected.get() {
                 debug_draw::box_min_max_color(bvh.aabb.min, bvh.aabb.max, color::RED);
@@ -395,8 +438,7 @@ impl System for CollisionSystem {
             }
         }
 
-        let mut collider_manager = scene.get_manager_mut::<ColliderManager>();
-        collider_manager.callback_manager.process_collisions(scene, &self.grid_system.collisions);
+        collider_manager.callback_manager.borrow_mut().process_collisions(scene, &self.grid_system.collisions);
     }
 }
 
@@ -416,10 +458,20 @@ impl ::std::fmt::Debug for CollisionCallback {
     }
 }
 
+#[cfg(not(feature="hotloading"))]
 type CallbackId = u64;
 
+#[cfg(not(feature="hotloading"))]
 fn callback_id<T: CollisionCallback + 'static>() -> CallbackId {
     unsafe { ::std::intrinsics::type_id::<T>() }
+}
+
+#[cfg(feature="hotloading")]
+type CallbackId = String;
+
+#[cfg(feature="hotloading")]
+fn callback_id<T: CollisionCallback + 'static>() -> CallbackId {
+    unsafe { ::std::intrinsics::type_name::<T>() }.into()
 }
 
 #[derive(Debug)]
@@ -436,16 +488,23 @@ impl CollisionCallbackManager {
         }
     }
 
-    pub fn register<T: CollisionCallback + 'static>(&mut self, entity: Entity, callback: T) {
+    fn register<T: CollisionCallback + 'static>(&mut self, callback: T) {
         let callback_id = callback_id::<T>();
         if !self.callbacks.contains_key(&callback_id) {
-            self.callbacks.insert(callback_id, Box::new(callback));
+            self.callbacks.insert(callback_id.clone(), Box::new(callback));
+        }
+    }
+
+    fn assign<T: CollisionCallback + 'static>(&mut self, entity: Entity, callback: T) {
+        let callback_id = callback_id::<T>();
+        if !self.callbacks.contains_key(&callback_id) {
+            self.callbacks.insert(callback_id.clone(), Box::new(callback));
         }
 
         // TODO: Should we allow an entity to be registered with the same callback more than once?
         //       For now I'm going to say no since it seems like that's most likely a logic error.
         if let Some(mut entity_callbacks) = self.entity_callbacks.get_mut(&entity) {
-            entity_callbacks.push(callback_id);
+            entity_callbacks.push(callback_id.clone());
             return;
         }
 
@@ -457,19 +516,26 @@ impl CollisionCallbackManager {
         }
     }
 
+    fn unregister_all(&mut self, entity: Entity) {
+        self.entity_callbacks.remove(&entity);
+    }
+
     /// For a pair of colliding entities A and B, we assume that there is either an entry (A, B) or
     /// (B, A), but not both. We manually invoke the callback for both colliding entities.
     pub fn process_collisions<H>(
         &mut self,
         scene: &Scene,
-        collisions: &HashSet<(Entity, Entity), H>
+        collisions: &HashMap<(Entity, Entity), (), H>
     ) where H: HashState {
         let _stopwatch = Stopwatch::new("process collision callbacks");
 
-        for pair in collisions {
+        for pair in collisions.keys() {
             if let Some(callback_ids) = self.entity_callbacks.get(&pair.0) {
                 for callback_id in callback_ids.iter() {
-                    let mut callback = self.callbacks.get_mut(callback_id).unwrap();
+                    let mut callback = match self.callbacks.get_mut(callback_id) {
+                        Some(callback) => callback,
+                        None => panic!("No callback with id {:?}", callback_id),
+                    };
                     callback.invoke(scene, pair.0, pair.1);
                 }
             }

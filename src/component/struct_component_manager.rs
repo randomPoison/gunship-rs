@@ -55,12 +55,12 @@ impl<T: Clone + Any> StructComponentManager<T> {
         }
     }
 
-    pub fn components(&self) -> &Vec<RefCell<T>> {
-        &self.components
+    pub fn components(&self) -> &[RefCell<T>] {
+        &*self.components
     }
 
-    pub fn entities(&self) -> &Vec<Entity> {
-        &self.entities
+    pub fn entities(&self) -> &[Entity] {
+        &*self.entities
     }
 
     pub fn iter(&self) -> ComponentIter<T> {

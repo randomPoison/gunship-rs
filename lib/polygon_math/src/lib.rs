@@ -1,4 +1,4 @@
-#![feature(raw)]
+#![feature(raw, augmented_assignments, op_assign_traits)]
 #![cfg_attr(test, feature(test))]
 
 pub mod point;

@@ -305,8 +305,12 @@ impl Matrix3 {
         }
     }
 
-    pub fn col(&self, col: usize) -> [f32; 3] {
-        [self[0][col], self[1][col], self[2][col]]
+    pub fn col(&self, col: usize) -> Vector3 {
+        Vector3 {
+            x: self[0][col],
+            y: self[1][col],
+            z: self[2][col],
+        }
     }
 
     pub fn transpose(&self) -> Matrix3 {
@@ -320,6 +324,10 @@ impl Matrix3 {
             }
         }
         transpose
+    }
+
+    pub fn as_matrix4(&self) -> Matrix4 {
+        Matrix4::from_matrix3(*self)
     }
 }
 

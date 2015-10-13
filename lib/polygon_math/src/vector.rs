@@ -123,6 +123,14 @@ impl Dot<[f32; 3]> for Vector3 {
     }
 }
 
+impl Dot<Vector3> for [f32; 3] {
+    type Output = f32;
+
+    fn dot(self, rhs: Vector3) -> f32 {
+        rhs.dot(self)
+    }
+}
+
 // impl<'a> Dot<&'a [f32; 3]> for Vector3 {
 //     type Output = f32;
 //

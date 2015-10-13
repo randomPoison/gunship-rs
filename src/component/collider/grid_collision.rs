@@ -1,10 +1,10 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap};
+use std::collections::hash_map::Entry;
 
 use hash::*;
 use math::*;
 use stopwatch::Stopwatch;
 
-use scene::Scene;
 use ecs::Entity;
 use super::bounding_volume::*;
 // use debug_draw;
@@ -18,7 +18,9 @@ use super::bounding_volume::*;
 #[allow(raw_pointer_derive)]
 pub struct GridCollisionSystem {
     pub grid: HashMap<GridCell, Vec<(Entity, *const BoundVolume)>, FnvHashState>,
-    pub collisions: HashSet<(Entity, Entity), FnvHashState>,
+
+    /// This should be a HashSet, but HashSet doesn't have a way to get at entries directly.
+    pub collisions: HashMap<(Entity, Entity), (), FnvHashState>,
     pub cell_size: f32,
 }
 
@@ -32,12 +34,12 @@ impl GridCollisionSystem {
     pub fn new() -> GridCollisionSystem {
         GridCollisionSystem {
             grid: HashMap::default(),
-            collisions: HashSet::default(),
+            collisions: HashMap::default(),
             cell_size: 1.0,
         }
     }
 
-    pub fn update(&mut self, scene: &Scene, _delta: f32) {
+    pub fn update(&mut self, bvh_manager: &BoundingVolumeManager) {
         let _stopwatch = Stopwatch::new("Grid Collision System");
 
         // // Debug draw the grid.
@@ -52,7 +54,6 @@ impl GridCollisionSystem {
         // }
 
         self.collisions.clear();
-        let bvh_manager = scene.get_manager::<BoundingVolumeManager>();
 
         for bvh in bvh_manager.components() {
             let entity = bvh.entity;
@@ -75,9 +76,18 @@ impl GridCollisionSystem {
                         let other_bvh = unsafe { &*other_bvh };
                         let collision_pair = (entity, other_entity);
 
-                        if bvh.test(other_bvh) {
-                            // Woo, we have a collison.
-                            self.collisions.insert(collision_pair);
+                        // Check if the collision has already been detected before running the
+                        // collision test since it's potentially very expensive. We get the entry
+                        // directly, that way we only have to do one hash lookup.
+                        match self.collisions.entry(collision_pair) {
+                            Entry::Vacant(vacant_entry) => {
+                                // Collision hasn't already been detected, so do the test.
+                                if bvh.test(other_bvh) {
+                                    // Woo, we have a collison.
+                                    vacant_entry.insert(());
+                                }
+                            },
+                            _ => {},
                         }
                     }
 

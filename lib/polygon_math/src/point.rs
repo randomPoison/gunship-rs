@@ -1,4 +1,4 @@
-use std::ops::{Sub, Add, Neg};
+use std::ops::{Sub, Add, AddAssign, Neg};
 use std::cmp::{PartialOrd, Ord, Ordering};
 use std::mem;
 use std::f32;
@@ -89,16 +89,21 @@ impl Sub for Point {
     }
 }
 
+impl AddAssign<Vector3> for Point {
+    fn add_assign(&mut self, rhs: Vector3) {
+        self.x += rhs.x;
+        self.y += rhs.y;
+        self.z += rhs.z;
+        self.w = 1.0;
+    }
+}
+
 impl Add<Vector3> for Point {
     type Output = Point;
 
-    fn add(self, rhs: Vector3) -> Point {
-        Point {
-            x: self.x + rhs.x,
-            y: self.y + rhs.y,
-            z: self.z + rhs.z,
-            w: 1.0,
-        }
+    fn add(mut self, rhs: Vector3) -> Point {
+        self += rhs;
+        self
     }
 }
 

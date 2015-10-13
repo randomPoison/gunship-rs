@@ -12,7 +12,7 @@ use bs_audio::AudioSource;
 use ecs::{Entity, EntityManager, ComponentManager};
 use input::Input;
 use component::{TransformManager, CameraManager, MeshManager, LightManager, AudioSourceManager,
-                AlarmManager, ColliderManager, bounding_volume};
+                AlarmManager, ColliderManager};
 use resource::ResourceManager;
 
 #[cfg(not(feature = "hotloading"))]
@@ -51,7 +51,6 @@ impl Scene {
         scene.register_manager(AudioSourceManager::new(resource_manager.clone()));
         scene.register_manager(AlarmManager::new());
         scene.register_manager(ColliderManager::new());
-        scene.register_manager(bounding_volume::BoundingVolumeManager::new());
 
         scene
     }
@@ -71,7 +70,6 @@ impl Scene {
         scene.reload_manager::<LightManager>(self);
         scene.reload_manager::<AlarmManager>(self);
         scene.reload_manager::<ColliderManager>(self);
-        scene.reload_manager::<bounding_volume::BoundingVolumeManager>(self);
         scene.register_manager(self.get_manager::<MeshManager>().clone(resource_manager.clone()));
         scene.register_manager(self.get_manager::<AudioSourceManager>().clone(resource_manager.clone()));
 
@@ -135,16 +133,18 @@ impl Scene {
 
     pub fn destroy_entity(&self, entity: Entity) {
         for (_, manager) in self.component_managers.iter() {
-            manager.borrow_mut().destroy_all(entity);
+            manager.borrow().destroy_all(entity);
         }
 
-        self.entity_manager.borrow_mut().destroy(entity);
+        self.entity_manager.borrow_mut().mark_for_destroy(entity);
     }
 
     pub fn destroy_marked(&self) {
         for (_, manager) in self.component_managers.iter() {
             manager.borrow_mut().destroy_marked();
         }
+
+        self.entity_manager.borrow_mut().destroy_marked();
     }
 }
 
