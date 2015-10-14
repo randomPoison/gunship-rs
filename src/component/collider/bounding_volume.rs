@@ -68,26 +68,28 @@ impl BoundingVolumeManager {
         self.components.iter().zip(self.entities.iter())
     }
 
-    pub fn destroy_immediate(&mut self, entity: Entity) -> BoundVolume {
+    pub fn destroy_immediate(&mut self, entity: Entity) -> Option<BoundVolume> {
         // Retrieve indices of removed entity and the one it's swapped with.
-        let index = self.indices.remove(&entity).unwrap();
+        if let Some(index) = self.indices.remove(&entity) {
+            // Remove transform and the associate entity.
+            let removed_entity = self.entities.swap_remove(index);
+            debug_assert!(removed_entity == entity);
 
-        // Remove transform and the associate entity.
-        let removed_entity = self.entities.swap_remove(index);
-        debug_assert!(removed_entity == entity);
+            // Update the index mapping for the moved entity, but only if the one we removed
+            // wasn't the only one in the row (or the last one in the row).
+            if index != self.entities.len() {
+                let moved_entity = self.entities[index];
+                self.indices.insert(moved_entity, index);
+            }
 
-        // Update the index mapping for the moved entity, but only if the one we removed
-        // wasn't the only one in the row (or the last one in the row).
-        if index != self.entities.len() {
-            let moved_entity = self.entities[index];
-            self.indices.insert(moved_entity, index);
+            // Defer removing the transform until the very end to avoid a bunch of memcpys.
+            // Transform is a pretty fat struct so if we remove it, cache it to a variable,
+            // and then return it at the end we wind up with 2 or 3 memcpys. Doing it all at
+            // once at the end (hopefully) means only a single memcpy.
+            Some(self.components.swap_remove(index))
+        } else {
+            None
         }
-
-        // Defer removing the transform until the very end to avoid a bunch of memcpys.
-        // Transform is a pretty fat struct so if we remove it, cache it to a variable,
-        // and then return it at the end we wind up with 2 or 3 memcpys. Doing it all at
-        // once at the end (hopefully) means only a single memcpy.
-        self.components.swap_remove(index)
     }
 }
 

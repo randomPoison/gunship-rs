@@ -82,6 +82,10 @@ impl Quaternion {
       * Quaternion::axis_angle(Vector3::new(0.0, 0.0, 1.0), z)
     }
 
+    pub fn from_vector3(angles: Vector3) -> Quaternion {
+        Quaternion::from_eulers(angles.x, angles.y, angles.z)
+    }
+
     /// Converts the quaternion to the corresponding rotation matrix.
     pub fn as_matrix4(self) -> Matrix4 {
         Matrix4::from_quaternion(self)
