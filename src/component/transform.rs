@@ -102,6 +102,26 @@ impl TransformManager {
         }
     }
 
+    /// Walks the transform hierarchy depth-first, invoking `callback` with each entity.
+    ///
+    /// # Details
+    ///
+    /// The callback is also invoked for the root entity. If the root entity does not have a transform
+    /// the callback is never invoked.
+    pub fn walk_hierarchy<F: FnMut(Entity, &mut Transform)>(&self, entity: Entity, callback: &mut F) {
+        if let Some(&(row, index)) = self.indices.get(&entity) {
+            let mut transform = self.transforms[row][index].borrow_mut();
+            callback(entity, &mut *transform);
+
+            if self.transforms.len() > row + 1 {
+                for (child_index, _) in self.transforms[row + 1].iter().enumerate().filter(|&(_, transform)| transform.borrow().parent.unwrap() == entity) {
+                    let child_entity = self.entities[row + 1][child_index];
+                    self.walk_hierarchy(child_entity, callback);
+                }
+            }
+        }
+    }
+
     /// Marks the transform associated with the entity for destruction.
     ///
     /// # Details
@@ -117,8 +137,6 @@ impl TransformManager {
 
     pub fn destroy_immediate(&mut self, entity: Entity) {
         self.remove(entity);
-
-        // TODO: Destroy children.
     }
 
     // Removes and returns the transform associated with the given entity.

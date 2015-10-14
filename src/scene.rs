@@ -136,6 +136,13 @@ impl Scene {
             manager.borrow().destroy_all(entity);
         }
 
+        let transform_manager = self.get_manager::<TransformManager>();
+        transform_manager.walk_hierarchy(entity, &mut |entity, _| {
+            for (_, manager) in self.component_managers.iter() {
+                manager.borrow().destroy_all(entity);
+            }
+        });
+
         self.entity_manager.borrow_mut().mark_for_destroy(entity);
     }
 
