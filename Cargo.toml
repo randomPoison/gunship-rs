@@ -8,53 +8,27 @@ authors = ["David LeGare <excaliburhissheath@gmail.com>"]
 name = "gunship"
 
 [features]
-default = ["timing"]
-
 timing = []
 hotloading = []
 
-[dependencies.hash]
-version = "*"
-path = "lib/hash"
-
-[dependencies.bootstrap_rs]
-version = "*"
-path = "lib/bootstrap_rs"
-
-[dependencies.bootstrap_audio]
-version = "*"
-path = "lib/bootstrap_audio"
-
-[dependencies.parse_collada]
-version = "*"
-path = "lib/parse_collada"
-
-[dependencies.polygon]
-version = "*"
-path = "lib/polygon_rs"
-
-[dependencies.polygon_math]
-version = "*"
-path = "lib/polygon_math"
-
-[dependencies.stopwatch] # TODO: Make this a dev dependency somehow?
-version = "*"
-path = "lib/stopwatch"
-
-[profile.dev]
-debug = true
-opt-level = 2
+[dependencies]
+bootstrap_rs    = { path = "lib/bootstrap_rs" }
+bootstrap_audio = { path = "lib/bootstrap_audio" }
+hash            = { path = "lib/hash" }
+parse_collada   = { path = "lib/parse_collada" }
+polygon         = { path = "lib/polygon_rs" }
+polygon_math    = { path = "lib/polygon_math" }
+stopwatch       = { path = "lib/stopwatch" }
 
 [profile.release]
-# debug = true
 lto = true
 
 [[example]]
 name = "create_destroy"
 path = "examples/benchmarks/create_destroy.rs"
 
-[dev_dependencies.rand]
-version = "*"
+[dev_dependencies]
+rand = "*"
 
 [[example]]
 name = "circle_movement"
