@@ -1,5 +1,9 @@
-use std::ops::{Sub, Add, Neg};
+use std::ops::{Sub, Add, AddAssign, Neg};
+use std::cmp::{PartialOrd, Ord, Ordering};
 use std::mem;
+use std::f32;
+use std::raw::Slice;
+use std::slice;
 
 use vector::Vector3;
 
@@ -9,7 +13,8 @@ use vector::Vector3;
 /// with an `x`, `y`, and `z` position, as well as
 /// a `w` homogeneous coordinate for the purposes
 /// of linear algebra calculations.
-#[repr(C)] #[derive(Debug, Clone, Copy)]
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Point {
     pub x: f32,
     pub y: f32,
@@ -52,12 +57,27 @@ impl Point {
         }
     }
 
+    pub fn min() -> Point {
+        Point::new(f32::MIN, f32::MIN, f32::MIN)
+    }
+
+    pub fn max() -> Point {
+        Point::new(f32::MAX, f32::MAX, f32::MAX)
+    }
+
     pub fn as_vector3(&self) -> Vector3 {
         Vector3::new(self.x, self.y, self.z)
     }
 
     pub fn as_array(&self) -> &[f32; 4] {
         unsafe { mem::transmute(self) }
+    }
+
+    pub fn as_ref(points: &[Point]) -> &[f32] {
+        unsafe {
+            let Slice { data, len } = mem::transmute(points);
+            slice::from_raw_parts(data, len * 4)
+        }
     }
 }
 
@@ -69,16 +89,21 @@ impl Sub for Point {
     }
 }
 
+impl AddAssign<Vector3> for Point {
+    fn add_assign(&mut self, rhs: Vector3) {
+        self.x += rhs.x;
+        self.y += rhs.y;
+        self.z += rhs.z;
+        self.w = 1.0;
+    }
+}
+
 impl Add<Vector3> for Point {
     type Output = Point;
 
-    fn add(self, rhs: Vector3) -> Point {
-        Point {
-            x: self.x + rhs.x,
-            y: self.y + rhs.y,
-            z: self.z + rhs.z,
-            w: 1.0,
-        }
+    fn add(mut self, rhs: Vector3) -> Point {
+        self += rhs;
+        self
     }
 }
 
@@ -104,6 +129,56 @@ impl Neg for Point {
             y: -self.y,
             z: -self.z,
             w: 1.0,
+        }
+    }
+}
+
+/// We lie about Point being Eq because it's needed for Ord. For our purposes we don't
+/// care that it's not technically true according to the spec.
+impl Eq for Point {}
+
+impl PartialOrd for Point {
+
+    /// Ordering for points is defined by ordering the ordering precedence as x > y > z.
+    ///
+    /// TODO: Elaborate on ordering for points in vectors in the module documentation?
+    fn partial_cmp(&self, other: &Point) -> Option<Ordering> {
+        debug_assert!(self.w == 1.0 && other.w == 1.0, "Points must be normalized before comparison");
+
+        if self.x < other.x {
+            Some(Ordering::Less)
+        } else if self.x > other.x {
+            Some(Ordering::Greater)
+        } else if self.y < other.y {
+            Some(Ordering::Less)
+        } else if self.y > other.y {
+            Some(Ordering::Greater)
+        } else if self.z < other.z {
+            Some(Ordering::Less)
+        } else if self.z > other.z {
+            Some(Ordering::Greater)
+        } else if self.x == other.x && self.y == other.y && self.z == other.z {
+            Some(Ordering::Equal)
+        } else {
+            None
+        }
+    }
+}
+
+impl Ord for Point {
+    /// Super bad-nasty implementation of Ord for Point.
+    ///
+    /// This is so that we can use cmp::min() and cmp::max() with Point, but we have to settle
+    /// for panicking when a strict ordering can't be determined. We could also choose to define
+    /// an arbitrary ordering for NaN elements, but if a point has NaN coordinates something has
+    /// likely gone wrong so panicking will help even stranger bugs from appearing.
+    fn cmp(&self, other: &Point) -> Ordering {
+        match PartialOrd::partial_cmp(self, other) {
+            Some(ordering) => ordering,
+            None => panic!(
+                "Trying to compare points {:?} and {:?} when one as NaN coordinates",
+                self,
+                other),
         }
     }
 }

@@ -109,6 +109,7 @@ impl Drop for AudioSource {
     fn drop(&mut self) { unsafe {
         (&mut *self.audio_client).Release();
         (&mut *self.render_client).Release();
+        ole32::CoUninitialize();
     } }
 }
 

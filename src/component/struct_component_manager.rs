@@ -3,17 +3,18 @@ use std::slice::Iter;
 use std::cell::{RefCell, Ref, RefMut};
 use std::any::Any;
 
+use super::{EntityMap, EntitySet};
+
 use ecs::{Entity, ComponentManager};
 
-/// A default implementation for a component manager that can be represented
-/// as a single struct.
-#[derive(Clone)]
+/// A default manager for component types that can be represented as a single struct.
+#[derive(Debug, Clone)]
 pub struct StructComponentManager<T: Clone + Any> {
     components: Vec<RefCell<T>>,
     entities: Vec<Entity>,
-    indices: HashMap<Entity, usize>,
+    indices: EntityMap<usize>,
 
-    marked_for_destroy: RefCell<HashSet<Entity>>,
+    marked_for_destroy: RefCell<EntitySet>,
 }
 
 impl<T: Clone + Any> StructComponentManager<T> {
@@ -21,9 +22,9 @@ impl<T: Clone + Any> StructComponentManager<T> {
         StructComponentManager {
             components: Vec::new(),
             entities: Vec::new(),
-            indices: HashMap::new(),
+            indices: HashMap::default(),
 
-            marked_for_destroy: RefCell::new(HashSet::new()),
+            marked_for_destroy: RefCell::new(HashSet::default()),
         }
     }
 
@@ -38,26 +39,28 @@ impl<T: Clone + Any> StructComponentManager<T> {
         self.components[index].borrow_mut()
     }
 
-    pub fn get(&self, entity: Entity) -> Ref<T> {
-        assert!(self.indices.contains_key(&entity));
-
-        let index = *self.indices.get(&entity).unwrap();
-        self.components[index].borrow()
+    pub fn get(&self, entity: Entity) -> Option<Ref<T>> {
+        if let Some(index) = self.indices.get(&entity) {
+            Some(self.components[*index].borrow())
+        } else {
+            None
+        }
     }
 
-    pub fn get_mut(&self, entity: Entity) -> RefMut<T> {
-        assert!(self.indices.contains_key(&entity));
-
-        let index = *self.indices.get(&entity).unwrap();
-        self.components[index].borrow_mut()
+    pub fn get_mut(&self, entity: Entity) -> Option<RefMut<T>> {
+        if let Some(index) = self.indices.get(&entity) {
+            Some(self.components[*index].borrow_mut())
+        } else {
+            None
+        }
     }
 
-    pub fn components(&self) -> &Vec<RefCell<T>> {
-        &self.components
+    pub fn components(&self) -> &[RefCell<T>] {
+        &*self.components
     }
 
-    pub fn entities(&self) -> &Vec<Entity> {
-        &self.entities
+    pub fn entities(&self) -> &[Entity] {
+        &*self.entities
     }
 
     pub fn iter(&self) -> ComponentIter<T> {
@@ -105,7 +108,7 @@ impl<T: Clone + Any> ComponentManager for StructComponentManager<T> {
     }
 
     fn destroy_marked(&mut self) {
-        let mut marked_for_destroy = RefCell::new(HashSet::new());
+        let mut marked_for_destroy = RefCell::new(HashSet::default());
         ::std::mem::swap(&mut marked_for_destroy, &mut self.marked_for_destroy);
         let mut marked_for_destroy = marked_for_destroy.into_inner();
         for entity in marked_for_destroy.drain() {

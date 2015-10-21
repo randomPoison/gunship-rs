@@ -1,5 +1,3 @@
-extern crate stopwatch;
-
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::thread;
@@ -11,19 +9,13 @@ use std::raw::TraitObject;
 use std::mem;
 
 use bootstrap;
+use bootstrap::input::ScanCode;
 use bootstrap::window::Window;
 use bootstrap::window::Message::*;
 use bootstrap::time::Timer;
-
 use bs_audio;
-
 use polygon::gl_render::GLRender;
-
-#[cfg(feature = "timing")]
-use self::stopwatch::{Collector, Stopwatch};
-
-#[cfg(not(feature = "timing"))]
-use self::stopwatch::null::{Collector, Stopwatch};
+use stopwatch::{Collector, Stopwatch};
 
 use scene::Scene;
 use resource::ResourceManager;
@@ -47,11 +39,14 @@ pub struct Engine {
     light_update: Box<System>,
     audio_update: Box<System>,
     alarm_update: Box<System>,
+    collision_update: Box<System>,
+
     scene: Scene,
 
     debug_draw: DebugDraw,
 
     close: bool,
+    debug_pause: bool,
 }
 
 impl Engine {
@@ -80,20 +75,23 @@ impl Engine {
             system_indices: HashMap::new(),
             system_names: HashMap::new(),
 
-            transform_update: Box::new(TransformUpdateSystem),
+            transform_update: Box::new(transform_update),
             light_update: Box::new(LightUpdateSystem),
             audio_update: Box::new(AudioSystem),
             alarm_update: Box::new(AlarmSystem),
+            collision_update: Box::new(CollisionSystem::new()),
+
             scene: Scene::new(&resource_manager, audio_source),
 
             debug_draw: DebugDraw::new(renderer.clone(), &*resource_manager),
 
             close: false,
+            debug_pause: false,
         }
     }
 
     pub fn update(&mut self) {
-        let _stopwatch = Stopwatch::named("update");
+        let _stopwatch = Stopwatch::new("update");
 
         let scene = &mut self.scene;
 
@@ -123,23 +121,41 @@ impl Engine {
             }
         }
 
-        self.alarm_update.update(scene, TARGET_FRAME_TIME_SECONDS);
+        // TODO: More efficient handling of debug pause (i.e. something that doesn't have any
+        // overhead when doing a release build).
+        if !self.debug_pause || scene.input.key_pressed(ScanCode::F11) {
+            self.debug_draw.clear_buffer();
 
-        // Update systems.
-        for system in self.systems.iter_mut() {
-            system.update(scene, TARGET_FRAME_TIME_SECONDS);
+            self.alarm_update.update(scene, TARGET_FRAME_TIME_SECONDS);
+
+            // Update systems.
+            for system in self.systems.iter_mut() {
+                system.update(scene, TARGET_FRAME_TIME_SECONDS);
+            }
         }
 
         self.transform_update.update(scene, TARGET_FRAME_TIME_SECONDS);
-        self.light_update.update(scene, TARGET_FRAME_TIME_SECONDS);
-        self.audio_update.update(scene, TARGET_FRAME_TIME_SECONDS);
 
-        // Cleanup any entities that have been marked for destroy.
-        scene.destroy_marked();
+        if !self.debug_pause || scene.input.key_pressed(ScanCode::F11) {
+            self.collision_update.update(scene, TARGET_FRAME_TIME_SECONDS);
+            self.light_update.update(scene, TARGET_FRAME_TIME_SECONDS);
+            self.audio_update.update(scene, TARGET_FRAME_TIME_SECONDS);
+
+            // Cleanup any entities that have been marked for destroy.
+            scene.destroy_marked();
+        }
+
+        if scene.input.key_pressed(ScanCode::F9) {
+            self.debug_pause = !self.debug_pause;
+        }
+
+        if scene.input.key_pressed(ScanCode::F11) {
+            self.debug_pause = true;
+        }
     }
 
     pub fn draw(&mut self) {
-        let _stopwatch = Stopwatch::named("draw");
+        let _stopwatch = Stopwatch::new("draw");
 
         self.renderer.clear();
 
@@ -184,7 +200,7 @@ impl Engine {
         let mut collector = Collector::new().unwrap();
 
         loop {
-            let _stopwatch = Stopwatch::named("loop");
+            let _stopwatch = Stopwatch::new("loop");
 
             let start_time = timer.now();
 
@@ -195,7 +211,8 @@ impl Engine {
                 break;
             }
 
-            if timer.elapsed_ms(start_time) > TARGET_FRAME_TIME_MS {
+            if !cfg!(feature="timing")
+            && timer.elapsed_ms(start_time) > TARGET_FRAME_TIME_MS {
                 println!("WARNING: Missed frame time. Frame time: {}ms, target frame time: {}ms", timer.elapsed_ms(start_time), TARGET_FRAME_TIME_MS);
             }
 
@@ -285,15 +302,18 @@ impl Clone for Engine {
             system_indices: HashMap::new(),
             system_names: HashMap::new(),
 
-            transform_update: Box::new(TransformUpdateSystem),
+            transform_update: Box::new(transform_update),
             light_update: Box::new(LightUpdateSystem),
             audio_update: Box::new(AudioSystem),
             alarm_update: Box::new(AlarmSystem),
+            collision_update: Box::new(CollisionSystem::new()),
+
             scene: self.scene.clone(&resource_manager),
 
             debug_draw: DebugDraw::new(self.renderer.clone(), &*resource_manager),
 
             close: false,
+            debug_pause: false,
         };
 
         engine
@@ -330,15 +350,18 @@ pub fn engine_init(window: Rc<RefCell<Window>>) -> Box<Engine> {
         system_indices: HashMap::new(),
         system_names: HashMap::new(),
 
-        transform_update: Box::new(TransformUpdateSystem),
+        transform_update: Box::new(transform_update),
         light_update: Box::new(LightUpdateSystem),
         audio_update: Box::new(AudioSystem),
         alarm_update: Box::new(AlarmSystem),
+        collision_update: Box::new(CollisionSystem::new()),
+
         scene: Scene::new(&resource_manager, audio_source),
 
         debug_draw: DebugDraw::new(renderer.clone(), &*resource_manager),
 
         close: false,
+        debug_pause: false,
     })
 }
 
@@ -362,4 +385,11 @@ pub fn engine_close(engine: &Engine) -> bool {
 #[no_mangle]
 pub fn engine_drop(engine: Box<Engine>) {
     drop(engine);
+}
+
+#[cfg(test)]
+pub fn do_collision_update(engine: &mut Engine) {
+    let scene = &mut engine.scene;
+    engine.transform_update.update(scene, TARGET_FRAME_TIME_SECONDS);
+    engine.collision_update.update(scene, TARGET_FRAME_TIME_SECONDS);
 }

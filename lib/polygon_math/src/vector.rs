@@ -1,8 +1,8 @@
-use std::ops::{Mul, Div, Neg, Add, Sub};
+use std::ops::{Mul, MulAssign, Div, DivAssign, Neg, Add, AddAssign, Sub, SubAssign, Index, IndexMut};
 
-use super::IsZero;
+use super::{IsZero, Dot};
 
-#[repr(C)] #[derive(Debug, Clone, Copy)]
+#[repr(C)] #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Vector3 {
     pub x: f32,
     pub y: f32,
@@ -88,7 +88,7 @@ impl Vector3 {
     }
 
     pub fn is_normalized(&self) -> bool {
-        (self.dot(*self) - 1.0).is_zero()
+        (self.dot(self) - 1.0).is_zero()
     }
 
     pub fn magnitude(&self) -> f32 {
@@ -99,10 +99,6 @@ impl Vector3 {
         self.x * self.x + self.y * self.y + self.z * self.z
     }
 
-    pub fn dot(&self, rhs: Vector3) -> f32 {
-        self.x * rhs.x + self.y * rhs.y + self.z * rhs.z
-    }
-
     // pub fn cross(&self, rhs: Vector3) -> Vector3 {
     //     Vector3::new(
     //         self.y * rhs.z - self.z * rhs.y,
@@ -111,47 +107,103 @@ impl Vector3 {
     // }
 }
 
-impl Add<Vector3> for Vector3 {
-    type Output = Vector3;
+impl Dot for Vector3 {
+    type Output = f32;
 
-    fn add(self, rhs: Vector3) -> Vector3 {
-        Vector3 {
-            x: self.x + rhs.x,
-            y: self.y + rhs.y,
-            z: self.z + rhs.z,
-        }
+    fn dot(self, rhs: Vector3) -> f32 {
+        self.x * rhs.x + self.y * rhs.y + self.z * rhs.z
     }
 }
 
-impl Sub<Vector3> for Vector3 {
-    type Output = Vector3;
+impl Dot<[f32; 3]> for Vector3 {
+    type Output = f32;
 
-    fn sub(self, rhs: Vector3) -> Vector3 {
-        Vector3 {
-            x: self.x - rhs.x,
-            y: self.y - rhs.y,
-            z: self.z - rhs.z,
-        }
+    fn dot(self, rhs: [f32; 3]) -> f32 {
+        self.x * rhs[0] + self.y * rhs[1] + self.z * rhs[2]
     }
 }
 
-impl Mul<Vector3> for Vector3 {
+impl Dot<Vector3> for [f32; 3] {
+    type Output = f32;
+
+    fn dot(self, rhs: Vector3) -> f32 {
+        rhs.dot(self)
+    }
+}
+
+// impl<'a> Dot<&'a [f32; 3]> for Vector3 {
+//     type Output = f32;
+//
+//     fn dot(self, rhs: &[f32; 3]) -> f32 {
+//         self.dot(*rhs)
+//     }
+// }
+
+impl AddAssign for Vector3 {
+    fn add_assign(&mut self, rhs: Vector3) {
+        self.x += rhs.x;
+        self.y += rhs.y;
+        self.z += rhs.z;
+    }
+}
+
+impl Add for Vector3 {
     type Output = Vector3;
 
-    fn mul(self, rhs: Vector3) -> Vector3 {
-        Vector3::new(
-            self.x * rhs.x,
-            self.y * rhs.y,
-            self.z * rhs.z
-        )
+    fn add(mut self, rhs: Vector3) -> Vector3 {
+        self += rhs;
+        self
+    }
+}
+
+impl SubAssign for Vector3 {
+    fn sub_assign(&mut self, rhs: Vector3) {
+        self.x -= rhs.x;
+        self.y -= rhs.y;
+        self.z -= rhs.z;
+    }
+}
+
+impl Sub for Vector3 {
+    type Output = Vector3;
+
+    fn sub(mut self, rhs: Vector3) -> Vector3 {
+        self -= rhs;
+        self
+    }
+}
+
+impl MulAssign for Vector3 {
+    fn mul_assign(&mut self, rhs: Vector3) {
+        self.x *= rhs.x;
+        self.y *= rhs.y;
+        self.z *= rhs.z;
+    }
+}
+
+impl Mul for Vector3 {
+    type Output = Vector3;
+
+    fn mul(mut self, rhs: Vector3) -> Vector3 {
+        self *= rhs;
+        self
+    }
+}
+
+impl MulAssign<f32> for Vector3 {
+    fn mul_assign(&mut self, rhs: f32) {
+        self.x *= rhs;
+        self.y *= rhs;
+        self.z *= rhs;
     }
 }
 
 impl Mul<f32> for Vector3 {
     type Output = Vector3;
 
-    fn mul(self, rhs: f32) -> Vector3 {
-        Vector3::new(self.x * rhs, self.y * rhs, self.z * rhs)
+    fn mul(mut self, rhs: f32) -> Vector3 {
+        self *= rhs;
+        self
     }
 }
 
@@ -171,11 +223,20 @@ impl Neg for Vector3 {
     }
 }
 
+impl DivAssign<f32> for Vector3 {
+    fn div_assign(&mut self, rhs: f32) {
+        self.x /= rhs;
+        self.y /= rhs;
+        self.z /= rhs;
+    }
+}
+
 impl Div<f32> for Vector3 {
     type Output = Vector3;
 
-    fn div(self, rhs: f32) -> Vector3 {
-        Vector3::new(self.x / rhs, self.y / rhs, self.z / rhs)
+    fn div(mut self, rhs: f32) -> Vector3 {
+        self /= rhs;
+        self
     }
 }
 
@@ -190,5 +251,32 @@ impl Div<Vector3> for f32 {
 impl IsZero for Vector3 {
     fn is_zero(self) -> bool {
         self.dot(self).is_zero()
+    }
+}
+
+// TODO: Is `usize` an appropriate index? Especially considering the valid values are 0..3?
+impl Index<usize> for Vector3 {
+    type Output = f32;
+
+    fn index(&self, index: usize) -> &f32 {
+        match index {
+            0 => &self.x,
+            1 => &self.y,
+            2 => &self.z,
+            // TODO: Use `unreachable()` intrinsic in release mode.
+            _ => panic!("Index {} is out of bounds for Vector3", index),
+        }
+    }
+}
+
+impl IndexMut<usize> for Vector3 {
+    fn index_mut(&mut self, index: usize) -> &mut f32 {
+        match index {
+            0 => &mut self.x,
+            1 => &mut self.y,
+            2 => &mut self.z,
+            // TODO: Use `unreachable()` intrinsic in release mode.
+            _ => panic!("Index {} is out of bounds for Vector3", index),
+        }
     }
 }

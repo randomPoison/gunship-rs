@@ -5,22 +5,24 @@ use math::Vector3;
 use math::Matrix4;
 use math::Point;
 use math::Quaternion;
+use stopwatch::Stopwatch;
 
 use ecs::{Entity, System, ComponentManager};
 use scene::Scene;
+use super::{EntityMap, EntitySet};
 
 #[derive(Debug, Clone)]
 pub struct TransformManager {
     transforms: Vec<Vec<RefCell<Transform>>>,
-    entities: Vec<Vec<Entity>>,
+    entities: Vec<Vec<(Entity, Option<Entity>)>>,
 
     /// A map between the entity owning the transform and the location of the transform.
     ///
     /// The first value of the mapped tuple is the row containing the transform, the
     /// second is the index of the transform within that row.
-    indices: HashMap<Entity, (usize, usize)>,
+    indices: EntityMap<(usize, usize)>,
 
-    marked_for_destroy: RefCell<HashSet<Entity>>,
+    marked_for_destroy: RefCell<EntitySet>,
 }
 
 impl TransformManager {
@@ -28,8 +30,8 @@ impl TransformManager {
         let mut transform_manager = TransformManager {
             transforms: Vec::new(),
             entities: Vec::new(),
-            indices: HashMap::new(),
-            marked_for_destroy: RefCell::new(HashSet::new()),
+            indices: HashMap::default(),
+            marked_for_destroy: RefCell::new(HashSet::default()),
         };
 
         transform_manager.transforms.push(Vec::new());
@@ -40,7 +42,7 @@ impl TransformManager {
     pub fn assign(&mut self, entity: Entity) -> RefMut<Transform> {
         let index = self.transforms[0].len();
         self.transforms[0].push(RefCell::new(Transform::new()));
-        self.entities[0].push(entity);
+        self.entities[0].push((entity, None));
 
         assert!(self.transforms[0].len() == self.entities[0].len());
 
@@ -60,7 +62,7 @@ impl TransformManager {
 
     pub fn set_child(&mut self, parent: Entity, child: Entity) {
         // Remove old transform component.
-        let mut transform = self.remove(child);
+        let transform = self.remove(child);
 
         // Get the indices of the parent.
         let (parent_row, _) = *self.indices.get(&parent).unwrap();
@@ -72,10 +74,9 @@ impl TransformManager {
             self.entities.push(Vec::new());
         }
         // Add the child to the correct row.
-        transform.parent = Some(parent);
         let child_index = self.transforms[child_row].len();
         self.transforms[child_row].push(RefCell::new(transform));
-        self.entities[child_row].push(child);
+        self.entities[child_row].push((child, Some(parent)));
 
         // Update the index map.
         self.indices.insert(child, (child_row, child_index));
@@ -83,29 +84,62 @@ impl TransformManager {
 
     pub fn update_single(&self, entity: Entity) {
         let transform = self.get(entity);
-        self.update_transform(&*transform);
-    }
 
-    pub fn update_transform(&self, transform: &Transform) {
-        let (parent_matrix, parent_rotation) = match transform.parent {
+        let (row, index) = *self.indices.get(&entity).expect("Transform manager does not contain a transform for the given entity.");
+        let (_, parent) = self.entities[row][index];
+        match parent {
             None => {
-                (Matrix4::identity(), Quaternion::identity())
+                DUMMY_TRANSFORM.with(|parent| {
+                    transform.update(parent);
+                })
             },
             Some(parent) => {
                 let parent_transform = self.get(parent);
-
-                if parent_transform.out_of_date.get() {
-                    self.update_transform(&*parent_transform);
-                }
-
-                let parent_matrix = parent_transform.matrix_derived.get();
-                let parent_rotation = parent_transform.rotation_derived.get();
-
-                (parent_matrix, parent_rotation)
+                transform.update(&*parent_transform);
             }
-        };
+        }
+    }
 
-        transform.update(parent_matrix, parent_rotation);
+    /// Walks the transform hierarchy depth-first, invoking `callback` with each entity and its transform.
+    ///
+    /// # Details
+    ///
+    /// The callback is also invoked for the root entity. If the root entity does not have a transform
+    /// the callback is never invoked.
+    pub fn walk_hierarchy<F: FnMut(Entity, &mut Transform)>(&self, entity: Entity, callback: &mut F) {
+        if let Some(&(row, index)) = self.indices.get(&entity) {
+            let mut transform = self.transforms[row][index].borrow_mut();
+            callback(entity, &mut *transform);
+
+            let child_row = row + 1;
+            if self.transforms.len() > child_row {
+                for (child_index, _) in self.entities[child_row].iter().enumerate().filter(|&(_, &(_, parent))| parent.unwrap() == entity) {
+                    let (child_entity, _) = self.entities[child_row][child_index];
+                    self.walk_hierarchy(child_entity, callback);
+                }
+            }
+        }
+    }
+
+    /// Walks the transform hierarchy depth-first, invoking `callback` with each entity.
+    ///
+    /// # Details
+    ///
+    /// The callback is also invoked for the root entity. If the root entity does not have a transform
+    /// the callback is never invoked. Note that the transform itself is not passed to the callback,
+    /// if you need to access the transform use `walk_hierarchy()` instead.
+    pub fn walk_children<F: FnMut(Entity)>(&self, entity: Entity, callback: &mut F) {
+        if let Some(&(row, _)) = self.indices.get(&entity) {
+            callback(entity);
+
+            let child_row = row + 1;
+            if self.transforms.len() > child_row {
+                for (child_index, _) in self.entities[child_row].iter().enumerate().filter(|&(_, &(_, parent))| parent.unwrap() == entity) {
+                    let (child_entity, _) = self.entities[child_row][child_index];
+                    self.walk_children(child_entity, callback);
+                }
+            }
+        }
     }
 
     /// Marks the transform associated with the entity for destruction.
@@ -123,8 +157,6 @@ impl TransformManager {
 
     pub fn destroy_immediate(&mut self, entity: Entity) {
         self.remove(entity);
-
-        // TODO: Destroy children.
     }
 
     // Removes and returns the transform associated with the given entity.
@@ -138,13 +170,13 @@ impl TransformManager {
         debug_assert!(self.transforms[row].len() == self.entities[row].len());
 
         // Remove transform and the associate entity.
-        let removed_entity = self.entities[row].swap_remove(index);
+        let (removed_entity, _) = self.entities[row].swap_remove(index);
         debug_assert!(removed_entity == entity);
 
         // Update the index mapping for the moved entity, but only if the one we removed
         // wasn't the only one in the row (or the last one in the row).
         if index != self.entities[row].len() {
-            let moved_entity = self.entities[row][index];
+            let (moved_entity, _) = self.entities[row][index];
             self.indices.insert(moved_entity, (row, index));
         }
 
@@ -162,7 +194,7 @@ impl ComponentManager for TransformManager {
     }
 
     fn destroy_marked(&mut self) {
-        let mut marked_for_destroy = RefCell::new(HashSet::new());
+        let mut marked_for_destroy = RefCell::new(HashSet::default());
         ::std::mem::swap(&mut marked_for_destroy, &mut self.marked_for_destroy);
         let mut marked_for_destroy = marked_for_destroy.into_inner();
         for entity in marked_for_destroy.drain() {
@@ -170,6 +202,8 @@ impl ComponentManager for TransformManager {
         }
     }
 }
+
+thread_local!(static DUMMY_TRANSFORM: Transform = Transform::new());
 
 /// TODO: This should be module-level documentation.
 ///
@@ -203,7 +237,6 @@ pub struct Transform {
     rotation_derived: Cell<Quaternion>,
     scale_derived:    Cell<Vector3>,
     matrix_derived:   Cell<Matrix4>,
-    parent:           Option<Entity>,
     out_of_date:      Cell<bool>,
 }
 
@@ -218,7 +251,6 @@ impl Transform {
             rotation_derived: Cell::new(Quaternion::identity()),
             scale_derived:    Cell::new(Vector3::one()),
             matrix_derived:   Cell::new(Matrix4::identity()),
-            parent:           None,
             out_of_date:      Cell::new(false),
         }
     }
@@ -289,7 +321,7 @@ impl Transform {
         if self.out_of_date.get() {
             let local_matrix =
                 Matrix4::from_point(self.position)
-                * (self.rotation.as_matrix() * Matrix4::from_scale_vector(self.scale));
+                * (self.rotation.as_matrix4() * Matrix4::from_scale_vector(self.scale));
             self.local_matrix.set(local_matrix);
         }
 
@@ -307,7 +339,7 @@ impl Transform {
 
         let inverse =
             Matrix4::from_scale_vector(1.0 / self.scale_derived.get())
-          * (self.rotation_derived.get().as_matrix().transpose()
+          * (self.rotation_derived.get().as_matrix4().transpose()
           *  Matrix4::from_point(-self.position_derived.get()));
 
         inverse.transpose()
@@ -335,45 +367,40 @@ impl Transform {
     }
 
     /// Updates the local and derived matrices for the transform.
-    fn update(&self, parent_matrix: Matrix4, parent_rotation: Quaternion) {
+    fn update(&self, parent: &Transform) {
         let local_matrix = self.local_matrix();
 
-        let derived_matrix = parent_matrix * local_matrix;
+        let derived_matrix = parent.derived_matrix() * local_matrix;
         self.matrix_derived.set(derived_matrix);
 
         self.position_derived.set(derived_matrix.translation_part());
-        self.rotation_derived.set(parent_rotation * self.rotation);
+        self.rotation_derived.set(parent.rotation_derived() * self.rotation);
+        self.scale_derived.set(self.scale * parent.scale_derived());
 
         self.out_of_date.set(false);
     }
 }
 
-pub struct TransformUpdateSystem;
+pub fn transform_update(scene: &Scene, _: f32) {
+    let _stopwatch = Stopwatch::new("transform update");
 
-impl System for TransformUpdateSystem {
-    fn update(&mut self, scene: &Scene, _: f32) {
-        let transform_manager = scene.get_manager::<TransformManager>();
+    let transform_manager = scene.get_manager::<TransformManager>();
 
-        for row in transform_manager.transforms.iter() {
-            for transform in row {
-                // Retrieve the parent's transformation matrix, using the identity
-                // matrix if the transform has no parent.
-                let (parent_matrix, parent_rotation) = match transform.borrow().parent {
-                    None => {
-                        (Matrix4::identity(), Quaternion::identity())
-                    },
-                    Some(parent) => {
-                        let parent_transform = transform_manager.get(parent);
-
-                        let parent_matrix = parent_transform.derived_matrix();
-                        let parent_rotation = parent_transform.rotation_derived();
-
-                        (parent_matrix, parent_rotation)
-                    }
-                };
-
-                transform.borrow().update(parent_matrix, parent_rotation);
-            }
+    for (transform_row, entity_row) in transform_manager.transforms.iter().zip(transform_manager.entities.iter()) {
+        for (transform, &(_, parent)) in transform_row.iter().zip(entity_row.iter()) {
+            // Retrieve the parent's transformation matrix, using the identity
+            // matrix if the transform has no parent.
+            match parent {
+                None => {
+                    DUMMY_TRANSFORM.with(|parent| {
+                        transform.borrow().update(parent);
+                    });
+                },
+                Some(parent) => {
+                    let parent_transform = transform_manager.get(parent);
+                    transform.borrow().update(&*parent_transform);
+                }
+            };
         }
     }
 }

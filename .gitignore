@@ -17,9 +17,14 @@ lib/bootstrap-gl/gl_src/
 
 # Visual Studio
 *.sln
+.vs/
 
 *.amplxeproj
 *.cfg
 My Amplifier XE Results - create_destroy
 My Amplifier XE Results - circle_movement
+
+# Gunship Generated Files
 stopwatch.csv
+builds/
+My Amplifier XE Results - *

@@ -2,8 +2,8 @@ use std::ops::Mul;
 use std::f32::consts::PI;
 
 use vector::Vector3;
-use matrix::Matrix4;
-use super::{IsZero, Clamp};
+use matrix::*;
+use super::{IsZero, Clamp, Dot};
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct Quaternion {
@@ -82,9 +82,17 @@ impl Quaternion {
       * Quaternion::axis_angle(Vector3::new(0.0, 0.0, 1.0), z)
     }
 
+    pub fn from_vector3(angles: Vector3) -> Quaternion {
+        Quaternion::from_eulers(angles.x, angles.y, angles.z)
+    }
+
     /// Converts the quaternion to the corresponding rotation matrix.
-    pub fn as_matrix(&self) -> Matrix4 {
+    pub fn as_matrix4(self) -> Matrix4 {
         Matrix4::from_quaternion(self)
+    }
+
+    pub fn as_matrix3(self) -> Matrix3 {
+        Matrix3::from_quaternion(self)
     }
 
     /// Retrieves the rotation represented by the quaternion as a rotation about an axis.

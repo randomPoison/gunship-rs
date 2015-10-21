@@ -11,7 +11,8 @@ use bs_audio::AudioSource;
 
 use ecs::{Entity, EntityManager, ComponentManager};
 use input::Input;
-use component::{TransformManager, CameraManager, MeshManager, LightManager, AudioSourceManager, AlarmManager};
+use component::{TransformManager, CameraManager, MeshManager, LightManager, AudioSourceManager,
+                AlarmManager, ColliderManager};
 use resource::ResourceManager;
 
 #[cfg(not(feature = "hotloading"))]
@@ -49,6 +50,7 @@ impl Scene {
         scene.register_manager(MeshManager::new(resource_manager.clone()));
         scene.register_manager(AudioSourceManager::new(resource_manager.clone()));
         scene.register_manager(AlarmManager::new());
+        scene.register_manager(ColliderManager::new());
 
         scene
     }
@@ -67,6 +69,7 @@ impl Scene {
         scene.reload_manager::<CameraManager>(self);
         scene.reload_manager::<LightManager>(self);
         scene.reload_manager::<AlarmManager>(self);
+        scene.reload_manager::<ColliderManager>(self);
         scene.register_manager(self.get_manager::<MeshManager>().clone(resource_manager.clone()));
         scene.register_manager(self.get_manager::<AudioSourceManager>().clone(resource_manager.clone()));
 
@@ -83,9 +86,12 @@ impl Scene {
 
     pub fn get_manager<T: ComponentManager>(&self) -> ManagerRef<T> {
         let manager_id = manager_id::<T>();
-        let manager = self.component_managers
-            .get(&manager_id)
-            .expect(&format!("Tried to retrieve manager {} with ID {:?} but none exists", type_name::<T>(), manager_id));
+        let manager = match self.component_managers.get(&manager_id) {
+            Some(manager) => manager,
+            None => panic!("Tried to retrieve manager {} with ID {:?} but none exists",
+                           type_name::<T>(),
+                           manager_id),
+        };
 
         ManagerRef {
             manager: manager.borrow(),
@@ -95,9 +101,12 @@ impl Scene {
 
     pub fn get_manager_mut<T: ComponentManager>(&self) -> ManagerRefMut<T> {
         let manager_id = manager_id::<T>();
-        let manager = self.component_managers
-            .get(&manager_id)
-            .expect(&format!("Tried to retrieve manager {} with ID {:?} but none exists", type_name::<T>(), manager_id));
+        let manager = match self.component_managers.get(&manager_id) {
+            Some(manager) => manager,
+            None => panic!("Tried to retrieve manager {} with ID {:?} but none exists",
+                           type_name::<T>(),
+                           manager_id),
+        };
 
         ManagerRefMut {
             manager: manager.borrow_mut(),
@@ -124,16 +133,25 @@ impl Scene {
 
     pub fn destroy_entity(&self, entity: Entity) {
         for (_, manager) in self.component_managers.iter() {
-            manager.borrow_mut().destroy_all(entity);
+            manager.borrow().destroy_all(entity);
         }
 
-        self.entity_manager.borrow_mut().destroy(entity);
+        let transform_manager = self.get_manager::<TransformManager>();
+        transform_manager.walk_children(entity, &mut |entity| {
+            for (_, manager) in self.component_managers.iter() {
+                manager.borrow().destroy_all(entity);
+            }
+        });
+
+        self.entity_manager.borrow_mut().mark_for_destroy(entity);
     }
 
     pub fn destroy_marked(&self) {
         for (_, manager) in self.component_managers.iter() {
             manager.borrow_mut().destroy_marked();
         }
+
+        self.entity_manager.borrow_mut().destroy_marked();
     }
 }
 
