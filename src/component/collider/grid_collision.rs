@@ -22,6 +22,8 @@ pub struct GridCollisionSystem {
     /// This should be a HashSet, but HashSet doesn't have a way to get at entries directly.
     pub collisions: HashMap<(Entity, Entity), (), FnvHashState>,
     pub cell_size: f32,
+
+    candidate_collisions: Vec<(*const BoundVolume, *const BoundVolume)>,
 }
 
 impl Clone for GridCollisionSystem {
@@ -39,6 +41,8 @@ impl GridCollisionSystem {
             grid: HashMap::default(),
             collisions: HashMap::default(),
             cell_size: 1.0,
+
+            candidate_collisions: Vec::new(),
         }
     }
 
@@ -58,6 +62,18 @@ impl GridCollisionSystem {
 
         self.collisions.clear();
 
+        self.do_broadphase(bvh_manager);
+        self.do_narrowphase();
+
+        // Clear out grid contents from previous frame, start each frame with an empty grid and
+        // rebuild it rather than trying to update the grid as objects move.
+        for (_, mut cell) in &mut self.grid {
+            cell.clear();
+        }
+    }
+
+    fn do_broadphase(&mut self, bvh_manager: &BoundingVolumeManager) {
+        let _stopwatch = Stopwatch::new("Broadphase Testing (Grid Based)");
         for bvh in bvh_manager.components() {
             let entity = bvh.entity;
 
@@ -75,23 +91,8 @@ impl GridCollisionSystem {
 
                 if let Some(mut cell) = self.grid.get_mut(&test_cell) {
                     // Check against other volumes.
-                    for (other_entity, other_bvh) in cell.iter().cloned() {
-                        let other_bvh = unsafe { &*other_bvh };
-                        let collision_pair = (entity, other_entity);
-
-                        // Check if the collision has already been detected before running the
-                        // collision test since it's potentially very expensive. We get the entry
-                        // directly, that way we only have to do one hash lookup.
-                        match self.collisions.entry(collision_pair) {
-                            Entry::Vacant(vacant_entry) => {
-                                // Collision hasn't already been detected, so do the test.
-                                if bvh.test(other_bvh) {
-                                    // Woo, we have a collison.
-                                    vacant_entry.insert(());
-                                }
-                            },
-                            _ => {},
-                        }
+                    for (_, other_bvh) in cell.iter().cloned() {
+                        self.candidate_collisions.push((bvh as *const _, other_bvh));
                     }
 
                     // Add to existing cell.
@@ -105,11 +106,28 @@ impl GridCollisionSystem {
                 }
             }
         }
+    }
 
-        // Clear out grid contents from previous frame, start each frame with an empty grid an
-        // rebuilt it rather than trying to update the grid as objects move.
-        for (_, mut cell) in &mut self.grid {
-            cell.clear();
+    fn do_narrowphase(&mut self) {
+        let _stopwatch = Stopwatch::new("Narrowphase Testing");
+        for (bvh, other_bvh) in self.candidate_collisions.drain(0..) {
+            let bvh = unsafe { &*bvh };
+            let other_bvh = unsafe { &*other_bvh };
+            let collision_pair = (bvh.entity, other_bvh.entity);
+
+            // Check if the collision has already been detected before running the
+            // collision test since it's potentially very expensive. We get the entry
+            // directly, that way we only have to do one hash lookup.
+            match self.collisions.entry(collision_pair) {
+                Entry::Vacant(vacant_entry) => {
+                    // Collision hasn't already been detected, so do the test.
+                    if bvh.test(other_bvh) {
+                        // Woo, we have a collison.
+                        vacant_entry.insert(());
+                    }
+                },
+                _ => {},
+            }
         }
     }
 
@@ -137,6 +155,11 @@ pub struct GridCell {
     pub z: GridCoord,
 }
 
+// TODO: Using i16 for the grid coordinate makes the hash lookups substantially faster, but it means
+//       we'll have to take extra care when mapping world coordinates to grid coordinates. Points
+//       outside the representable range should be wrapped around. This will technically lead to
+//       more grid collisions, but extras will be culled quickly by the AABB test so it shouldn't
+//       be more of a performance hit than what we gained from converting to using i16s.
 pub type GridCoord = i16;
 
 impl GridCell {
