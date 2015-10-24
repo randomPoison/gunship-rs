@@ -20,15 +20,18 @@ polygon         = { path = "lib/polygon_rs" }
 polygon_math    = { path = "lib/polygon_math" }
 stopwatch       = { path = "lib/stopwatch" }
 
+[dev_dependencies]
+rand = "*"
+
 [profile.release]
+lto = true
+
+[profile.bench]
 lto = true
 
 [[example]]
 name = "create_destroy"
 path = "examples/benchmarks/create_destroy.rs"
-
-[dev_dependencies]
-rand = "*"
 
 [[example]]
 name = "circle_movement"

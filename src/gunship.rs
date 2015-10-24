@@ -1,5 +1,4 @@
 #![feature(core, core_intrinsics, raw, drain, unboxed_closures, hashmap_hasher, augmented_assignments)]
-#![cfg_attr(test, feature(test))]
 
 extern crate bootstrap_rs as bootstrap;
 extern crate bootstrap_audio as bs_audio;
@@ -25,9 +24,6 @@ pub mod resource;
 pub mod ecs;
 pub mod component;
 pub mod debug_draw;
-
-#[cfg(test)]
-mod test;
 
 mod wav;
 

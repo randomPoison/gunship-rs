@@ -124,7 +124,7 @@ impl ComponentManager for ColliderManager {
 /// It is common for collision processors to need to reference a collider multiple times in the
 /// course of a single processing pass, so it is valueable to only have to retrieve the position
 /// data for a collider once and cache off those results.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub enum CachedCollider {
     Sphere(Sphere),
     Box(OBB),
@@ -196,21 +196,23 @@ pub struct Sphere {
 }
 
 impl Sphere {
-    fn test_collider(&self, other: &CachedCollider) -> bool {
-        match other {
-            &CachedCollider::Sphere(sphere) => {
-                let dist_sqr = (self.center - sphere.center).magnitude_squared();
-                let max_dist_sqr = (self.radius + sphere.radius) * (self.radius + sphere.radius);
-                dist_sqr < max_dist_sqr
-            },
-            &CachedCollider::Box(obb) => {
-                self.test_obb(&obb)
-            },
-            &CachedCollider::Mesh => unimplemented!(),
+    pub fn test_collider(&self, other: &CachedCollider) -> bool {
+        match *other {
+            CachedCollider::Sphere(sphere) => self.test_sphere(&sphere),
+            CachedCollider::Box(obb) => self.test_obb(&obb),
+            CachedCollider::Mesh => unimplemented!(),
         }
     }
 
-    fn test_obb(&self, obb: &OBB) -> bool {
+    pub fn test_sphere(&self, other: &Sphere) -> bool {
+        let dist_sqr = (self.center - other.center).magnitude_squared();
+        let max_dist_sqr = (self.radius + other.radius) * (self.radius + other.radius);
+        let diff = dist_sqr - max_dist_sqr;
+
+        diff < 0.0 || diff.is_zero()
+    }
+
+    pub fn test_obb(&self, obb: &OBB) -> bool {
         let dist_sqr = obb.closest_distance_squared(self.center);
         dist_sqr < self.radius * self.radius
     }
@@ -224,7 +226,7 @@ pub struct OBB {
 }
 
 impl OBB {
-    fn test_collider(&self, other: &CachedCollider) -> bool {
+    pub fn test_collider(&self, other: &CachedCollider) -> bool {
         match other {
             &CachedCollider::Sphere(sphere) => sphere.test_obb(self),
             &CachedCollider::Box(ref obb) => self.test_obb(obb),
@@ -232,7 +234,7 @@ impl OBB {
         }
     }
 
-    fn test_obb(&self, b: &OBB) -> bool {
+    pub fn test_obb(&self, b: &OBB) -> bool {
         // Compute rotation matrix expressing b in a's coordinate frame.
         let r = {
             let mut r: Matrix3 = unsafe { ::std::mem::uninitialized() };
@@ -368,7 +370,7 @@ impl OBB {
     }
 
     /// Calculates the closest point to the given point on (or in) the OBB.
-    fn closest_point(&self, point: Point) -> Point {
+    pub fn closest_point(&self, point: Point) -> Point {
         let d = point - self.center;
 
         // Start result at center of the box, make steps from there.
@@ -386,14 +388,11 @@ impl OBB {
             result += dist * local_axis;
         }
 
-        // Let's visualize these points.
-        debug_draw::sphere_color(result, 0.3, color::BLUE);
-
         result
     }
 
     /// Calculates the squared distance between the given point and the OBB.
-    fn closest_distance_squared(&self, point: Point) -> f32 {
+    pub fn closest_distance_squared(&self, point: Point) -> f32 {
         let closest = self.closest_point(point);
         (point - closest).magnitude_squared()
     }
@@ -558,4 +557,77 @@ impl Clone for CollisionCallbackManager {
             entity_callbacks: self.entity_callbacks.clone(),
         }
     }
+}
+
+#[test]
+fn sphere_sphere_tests() {
+    macro_rules! sphere_test {
+        ($lhs:ident, $rhs:ident, $expected:expr) => {
+            assert!($rhs.test_sphere(&$lhs) == $expected, "{:#?} vs {:#?} expected {}", $rhs, $lhs, $expected);
+            assert!($lhs.test_sphere(&$rhs) == $expected, "{:#?} vs {:#?} expected {}", $lhs, $rhs, $expected);
+        }
+    }
+
+    let unit = Sphere {
+        center: Point::origin(),
+        radius: 1.0,
+    };
+
+
+    let far_unit = Sphere {
+        center: Point::new(2.0, 2.0, 2.0),
+        radius: 1.0,
+    };
+
+    let odd_radius = Sphere {
+        center: Point::new(1.7, 1.7, 1.7),
+        radius: 0.3,
+    };
+
+    let unit_edge = Sphere {
+        center: Point::new(2.0, 0.0, 0.0),
+        radius: 1.0,
+    };
+
+    // Identity tests.
+    sphere_test!(unit,       unit,       true);
+    sphere_test!(far_unit,   far_unit,   true);
+    sphere_test!(odd_radius, odd_radius, true);
+    sphere_test!(unit_edge,  unit_edge,  true);
+
+    sphere_test!(unit,     far_unit,   false);
+    sphere_test!(unit,     odd_radius, false);
+    sphere_test!(far_unit, odd_radius, true);
+    sphere_test!(unit,     unit_edge,  true);
+
+    // TODO: Centers far from the origin.
+    // TODO: Large radius.
+    // TODO: Small radius.
+}
+
+#[test]
+fn obb_obb_tests() {
+    use std::f32::consts::PI;
+
+    macro_rules! obb_test {
+        ($lhs:ident, $rhs:ident, $expected:expr) => {
+            assert!($rhs.test_obb(&$lhs) == $expected, "{:#?} vs {:#?} expected {}", $rhs, $lhs, $expected);
+            assert!($lhs.test_obb(&$rhs) == $expected, "{:#?} vs {:#?} expected {}", $lhs, $rhs, $expected);
+        }
+    }
+
+    let unit = OBB {
+        center: Point::origin(),
+        orientation: Matrix3::identity(),
+        half_widths: Vector3::new(0.5, 0.5, 0.5),
+    };
+
+    let rot_z = OBB {
+        center: Point::new(1.0, 0.0, 0.0),
+        orientation: Matrix3::rotation(0.0, 0.0, 0.25 * PI),
+        half_widths: Vector3::new(0.5, 0.5, 0.5),
+    };
+
+    obb_test!(unit, unit, true);
+    obb_test!(unit, rot_z, true);
 }

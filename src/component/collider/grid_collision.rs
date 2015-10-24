@@ -25,6 +25,9 @@ pub struct GridCollisionSystem {
 }
 
 impl Clone for GridCollisionSystem {
+    /// `GridCollisionSystem` doesn't have any real state between frames, it's only used to reuse
+    /// the grid's allocated memory between frames. Therefore to clone it we just invoke
+    /// `GridCollisionSystem::new()`.
     fn clone(&self) -> Self {
         GridCollisionSystem::new()
     }
@@ -113,9 +116,9 @@ impl GridCollisionSystem {
     /// Converts a point in world space to its grid cell.
     fn world_to_grid(&self, point: Point) -> GridCell {
         GridCell {
-            x: (point.x / self.cell_size).floor() as isize,
-            y: (point.y / self.cell_size).floor() as isize,
-            z: (point.z / self.cell_size).floor() as isize,
+            x: (point.x / self.cell_size).floor() as GridCoord,
+            y: (point.y / self.cell_size).floor() as GridCoord,
+            z: (point.z / self.cell_size).floor() as GridCoord,
         }
     }
 }
@@ -129,13 +132,15 @@ impl GridCollisionSystem {
 /// given point (`(point / cell_size).floor()`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct GridCell {
-    pub x: isize,
-    pub y: isize,
-    pub z: isize,
+    pub x: GridCoord,
+    pub y: GridCoord,
+    pub z: GridCoord,
 }
 
+pub type GridCoord = i16;
+
 impl GridCell {
-    pub fn new(x: isize, y: isize, z: isize) -> GridCell {
+    pub fn new(x: GridCoord, y: GridCoord, z: GridCoord) -> GridCell {
         GridCell {
             x: x,
             y: y,
