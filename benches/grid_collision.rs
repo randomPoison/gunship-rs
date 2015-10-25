@@ -6,7 +6,7 @@ extern crate rand;
 extern crate test;
 
 use gunship::*;
-use gunship::component::collider::grid_collision::{GridCollisionSystem, GridCell};
+use gunship::component::collider::grid_collision::{CollisionGrid, GridCell};
 use hash::fnv::FnvHasher;
 use self::test::Bencher;
 use std::hash::Hash;
@@ -37,16 +37,16 @@ fn hash_grid_cell_x1000(bencher: &mut Bencher) {
 #[bench]
 fn grid_lookup_x1000(bencher: &mut Bencher) {
     // Fill up the grid in advance
-    let mut collision_system = GridCollisionSystem::new();
+    let mut collision_grid = CollisionGrid::default();
     for grid_cell in GridCell::new(-50, -50, -50).iter_to(GridCell::new(50, 50, 50)) {
-        collision_system.grid.insert(grid_cell, Vec::new());
+        collision_grid.insert(grid_cell, Vec::new());
     }
 
     bencher.iter(|| {
         for x in 0..10 {
             for y in 0..10 {
                 for z in 0..10 {
-                    test::black_box(collision_system.grid.get(&GridCell::new(x, y, z)));
+                    test::black_box(collision_grid.get(&GridCell::new(x, y, z)));
                 }
             }
         }

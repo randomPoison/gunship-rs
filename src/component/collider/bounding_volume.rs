@@ -1,4 +1,4 @@
-use std::cell::{Cell};
+use std::cell::Cell;
 use std::slice::Iter;
 use std::iter::Zip;
 

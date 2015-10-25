@@ -1,7 +1,6 @@
-use std::collections::{HashMap};
+use std::collections::{HashMap, HashSet};
 use std::collections::hash_state::HashState;
 use std::cell::{RefCell, Ref, RefMut};
-use std::iter::*;
 
 use hash::FnvHashState;
 use math::*;
@@ -124,7 +123,7 @@ impl ComponentManager for ColliderManager {
 /// It is common for collision processors to need to reference a collider multiple times in the
 /// course of a single processing pass, so it is valueable to only have to retrieve the position
 /// data for a collider once and cache off those results.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum CachedCollider {
     Sphere(Sphere),
     Box(OBB),
@@ -398,7 +397,7 @@ impl OBB {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct CollisionSystem {
     grid_system: GridCollisionSystem,
 }
@@ -421,21 +420,6 @@ impl System for CollisionSystem {
         let bvh_manager = collider_manager.bvh_manager_mut();
 
         self.grid_system.update(&*bvh_manager);
-
-        // Visualize the collisions.
-        for bvh in bvh_manager.components() {
-            if bvh.aabb_intersected.get() {
-                debug_draw::box_min_max_color(bvh.aabb.min, bvh.aabb.max, color::RED);
-            } else {
-                debug_draw::box_min_max(bvh.aabb.min, bvh.aabb.max);
-            }
-
-            if bvh.collider_intersected.get() {
-                bvh.collider.debug_draw_color(color::RED);
-            } else {
-                bvh.collider.debug_draw();
-            }
-        }
 
         collider_manager.callback_manager.borrow_mut().process_collisions(scene, &self.grid_system.collisions);
     }
@@ -524,11 +508,11 @@ impl CollisionCallbackManager {
     pub fn process_collisions<H>(
         &mut self,
         scene: &Scene,
-        collisions: &HashMap<(Entity, Entity), (), H>
+        collisions: &HashSet<(Entity, Entity), H>
     ) where H: HashState {
         let _stopwatch = Stopwatch::new("process collision callbacks");
 
-        for pair in collisions.keys() {
+        for pair in collisions {
             if let Some(callback_ids) = self.entity_callbacks.get(&pair.0) {
                 for callback_id in callback_ids.iter() {
                     let mut callback = match self.callbacks.get_mut(callback_id) {
