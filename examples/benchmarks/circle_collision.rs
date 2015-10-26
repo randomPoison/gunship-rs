@@ -98,7 +98,8 @@ fn setup_scene(scene: &mut Scene) {
             center: Point::new(
                 random_range(-50.0, 50.0),
                 random_range(-50.0, 50.0),
-                0.0),
+                random_range(-50.0, 50.0),
+            ),
             radius: random_range(1.0, 5.0),
             period: random_range(10.0, 15.0),
         });
@@ -123,7 +124,8 @@ fn setup_scene(scene: &mut Scene) {
             center: Point::new(
                 random_range(-50.0, 50.0),
                 random_range(-50.0, 50.0),
-                0.0),
+                random_range(-50.0, 50.0),
+            ),
             radius: random_range(1.0, 5.0),
             period: random_range(10.0, 15.0),
         });
@@ -256,12 +258,9 @@ fn rotation_update(scene: &Scene, delta: f32) {
     }
 }
 
-fn visualize_collision(scene: &Scene, entity: Entity, _other: Entity) {
-    // let transform_manager = scene.get_manager::<TransformManager>();
-    // let transform = transform_manager.get(entity);
-    // // let center = transform.position() + Vector3::new(0.0, 0.0, 0.5);
-    // // debug_draw::box_center_widths(center, Vector3::new(0.4, 0.4, 0.4));
-    // debug_draw::sphere(transform.position(), 1.0);
+fn visualize_collision(scene: &Scene, entity: Entity, _other: &[Entity]) {
+    let collider_manager = scene.get_manager::<ColliderManager>();
+    collider_manager.bvh_manager().get(entity).unwrap().collider.debug_draw();
 }
 
 #[derive(Debug, Clone, Copy)]

@@ -462,6 +462,7 @@ fn callback_id<T: CollisionCallback + 'static>() -> CallbackId {
 pub struct CollisionCallbackManager {
     callbacks: HashMap<CallbackId, Box<CollisionCallback>, FnvHashState>,
     entity_callbacks: EntityMap<Vec<CallbackId>>,
+    entity_collisions: EntityMap<Vec<Entity>>,
 }
 
 impl CollisionCallbackManager {
@@ -469,6 +470,7 @@ impl CollisionCallbackManager {
         CollisionCallbackManager {
             callbacks: HashMap::default(),
             entity_callbacks: EntityMap::default(),
+            entity_collisions: EntityMap::default(),
         }
     }
 
@@ -513,27 +515,28 @@ impl CollisionCallbackManager {
     ) where H: HashState {
         let _stopwatch = Stopwatch::new("Process Collision Callbacks");
 
-        let entity_collisions = {
+        {
             let _stopwatch = Stopwatch::new("Sort Collision Data");
-            let mut entity_collisions: EntityMap<Vec<Entity>> = EntityMap::default();
             for &(entity, other) in collisions {
-                entity_collisions.entry(entity).or_insert(Vec::new()).push(other);
-                entity_collisions.entry(other).or_insert(Vec::new()).push(entity);
+                self.entity_collisions.entry(entity).or_insert(Vec::new()).push(other);
+                self.entity_collisions.entry(other).or_insert(Vec::new()).push(entity);
             }
-            entity_collisions
-        };
+        }
 
         let _stopwatch = Stopwatch::new("Perform collision callbacks");
-        for (entity, others) in entity_collisions {
+        for (entity, others) in &mut self.entity_collisions
+                                         .iter_mut()
+                                         .filter(|&(_, ref others)| others.len() > 0) {
             if let Some(callback_ids) = self.entity_callbacks.get(&entity) {
                 for callback_id in callback_ids.iter() {
                     let mut callback = match self.callbacks.get_mut(callback_id) {
                         Some(callback) => callback,
                         None => panic!("No callback with id {:?}", callback_id),
                     };
-                    callback.invoke(scene, entity, &*others);
+                    callback.invoke(scene, *entity, &*others);
                 }
             }
+            others.clear();
         }
     }
 }
@@ -544,6 +547,7 @@ impl Clone for CollisionCallbackManager {
         CollisionCallbackManager {
             callbacks: HashMap::default(),
             entity_callbacks: self.entity_callbacks.clone(),
+            entity_collisions: EntityMap::default(),
         }
     }
 }
