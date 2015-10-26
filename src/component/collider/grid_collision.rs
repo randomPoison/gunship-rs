@@ -1,7 +1,8 @@
 use std::collections::{HashMap, HashSet};
 use std::collections::hash_map::Entry;
-use std::{f32, mem, thread};
-use std::sync::{Arc, Mutex, Condvar};
+use std::f32::{MAX, MIN};
+use std::{mem, thread};
+use std::sync::{Arc, Mutex, Condvar, RwLock};
 use std::thread::JoinHandle;
 
 use hash::*;
@@ -10,9 +11,8 @@ use stopwatch::Stopwatch;
 
 use ecs::Entity;
 use super::bounding_volume::*;
-use debug_draw;
 
-const NUM_WORKERS: usize = 4;
+const NUM_WORKERS: usize = 8;
 
 pub type CollisionGrid = HashMap<GridCell, Vec<*const BoundVolume>, FnvHashState>;
 
@@ -23,7 +23,8 @@ pub type CollisionGrid = HashMap<GridCell, Vec<*const BoundVolume>, FnvHashState
 /// - Do something to configure the size of the grid.
 pub struct GridCollisionSystem {
     _workers: Vec<JoinHandle<()>>,
-    thread_data: Arc<WorkTracker>,
+    thread_data: Arc<SharedData>,
+    processed_work: Vec<WorkUnit>,
     pub collisions: HashSet<(Entity, Entity), FnvHashState>,
 
     dummy_worker: Worker, // Used during single-threaded testing.
@@ -31,48 +32,80 @@ pub struct GridCollisionSystem {
 
 impl GridCollisionSystem {
     pub fn new() -> GridCollisionSystem {
-        let thread_data = {
-            let mut work_units = Vec::new();
-            // TODO: Automatically generate work unit bounds.
+        let thread_data = Arc::new(SharedData {
+            volumes: RwLock::new(Vec::new()),
+            pending: (Mutex::new(Vec::new()), Condvar::new()),
+            complete: (Mutex::new(Vec::new()), Condvar::new()),
+        });
 
-            if NUM_WORKERS == 1 {
-                work_units.push(WorkUnit::new(AABB {
-                    min: Point::min(),
-                    max: Point::max(),
-                }));
-            } else if NUM_WORKERS == 2 {
-                work_units.push(WorkUnit::new(AABB {
-                    min: Point::min(),
-                    max: Point::new(0.0, f32::MAX, f32::MAX),
-                }));
-                work_units.push(WorkUnit::new(AABB {
-                    min: Point::new(0.0, f32::MIN, f32::MIN),
-                    max: Point::max(),
-                }));
-            } else if NUM_WORKERS == 4 {
-                work_units.push(WorkUnit::new(AABB {
-                    min: Point::min(),
-                    max: Point::new(0.0, 0.0, f32::MAX),
-                }));
-                work_units.push(WorkUnit::new(AABB {
-                    min: Point::new(f32::MIN, 0.0, f32::MIN),
-                    max: Point::new(0.0, f32::MAX, f32::MAX),
-                }));
-                work_units.push(WorkUnit::new(AABB {
-                    min: Point::new(0.0, f32::MIN, f32::MIN),
-                    max: Point::new(f32::MAX, 0.0, f32::MAX),
-                }));
-                work_units.push(WorkUnit::new(AABB {
-                    min: Point::new(0.0, 0.0, f32::MIN),
-                    max: Point::max(),
-                }));
-            }
-
-            Arc::new(WorkTracker {
-                pending: (Mutex::new(Vec::new()), Condvar::new()),
-                complete: (Mutex::new(work_units), Condvar::new()),
-            })
-        };
+        let mut processed_work = Vec::new();
+        if NUM_WORKERS == 1 {
+            processed_work.push(WorkUnit::new(AABB {
+                min: Point::min(),
+                max: Point::max(),
+            }));
+        } else if NUM_WORKERS == 2 {
+            processed_work.push(WorkUnit::new(AABB {
+                min: Point::min(),
+                max: Point::new(0.0, MAX, MAX),
+            }));
+            processed_work.push(WorkUnit::new(AABB {
+                min: Point::new(0.0, MIN, MIN),
+                max: Point::max(),
+            }));
+        } else if NUM_WORKERS == 4 {
+            processed_work.push(WorkUnit::new(AABB {
+                min: Point::min(),
+                max: Point::new(0.0, 0.0, MAX),
+            }));
+            processed_work.push(WorkUnit::new(AABB {
+                min: Point::new(MIN, 0.0, MIN),
+                max: Point::new(0.0, MAX, MAX),
+            }));
+            processed_work.push(WorkUnit::new(AABB {
+                min: Point::new(0.0, MIN, MIN),
+                max: Point::new(MAX, 0.0, MAX),
+            }));
+            processed_work.push(WorkUnit::new(AABB {
+                min: Point::new(0.0, 0.0, MIN),
+                max: Point::max(),
+            }));
+        } else if NUM_WORKERS == 8 {
+            processed_work.push(WorkUnit::new(AABB {
+                min: Point::new(MIN, MIN, MIN),
+                max: Point::new(0.0, 0.0, 0.0),
+            }));
+            processed_work.push(WorkUnit::new(AABB {
+                min: Point::new(MIN, MIN, 0.0),
+                max: Point::new(0.0, 0.0, MAX),
+            }));
+            processed_work.push(WorkUnit::new(AABB {
+                min: Point::new(MIN, 0.0, MIN),
+                max: Point::new(0.0, MAX, 0.0),
+            }));
+            processed_work.push(WorkUnit::new(AABB {
+                min: Point::new(MIN, 0.0, 0.0),
+                max: Point::new(0.0, MAX, MAX),
+            }));
+            processed_work.push(WorkUnit::new(AABB {
+                min: Point::new(0.0, MIN, MIN),
+                max: Point::new(MAX, 0.0, 0.0),
+            }));
+            processed_work.push(WorkUnit::new(AABB {
+                min: Point::new(0.0, MIN, 0.0),
+                max: Point::new(MAX, 0.0, MAX),
+            }));
+            processed_work.push(WorkUnit::new(AABB {
+                min: Point::new(0.0, 0.0, MIN),
+                max: Point::new(MAX, MAX, 0.0),
+            }));
+            processed_work.push(WorkUnit::new(AABB {
+                min: Point::new(0.0, 0.0, 0.0),
+                max: Point::new(MAX, MAX, MAX),
+            }));
+        } else {
+            panic!("unsupported number of workers {}, only 1, 2, 4, or 8 supported", NUM_WORKERS);
+        }
 
         let mut workers = Vec::new();
         for _ in 0..NUM_WORKERS {
@@ -87,6 +120,7 @@ impl GridCollisionSystem {
             _workers: workers,
             thread_data: thread_data.clone(),
             collisions: HashSet::default(),
+            processed_work: processed_work,
 
             dummy_worker: Worker::new(thread_data.clone()),
         }
@@ -118,7 +152,11 @@ impl GridCollisionSystem {
             let work_unit = &mut work_units[0];
 
             // Prepare work unit by giving it a copy of the list of volumes.
-            work_unit.volumes.clone_from(bvh_manager.components());
+            {
+                let mut volumes = thread_data.volumes.write().unwrap();
+                volumes.clear();
+                volumes.clone_from(bvh_manager.components());
+            }
 
             // Actually do the collision detection.
             self.dummy_worker.do_broadphase(work_unit);
@@ -128,21 +166,6 @@ impl GridCollisionSystem {
             for (collision, _) in work_unit.collisions.drain() {
                 self.collisions.insert(collision);
             }
-
-            // Visualize the collisions.
-            for bvh in &work_unit.volumes {
-                if bvh.aabb_intersected.get() {
-                    debug_draw::box_min_max_color(bvh.aabb.min, bvh.aabb.max, color::RED);
-                } else {
-                    debug_draw::box_min_max(bvh.aabb.min, bvh.aabb.max);
-                }
-
-                if bvh.collider_intersected.get() {
-                    bvh.collider.debug_draw_color(color::RED);
-                } else {
-                    bvh.collider.debug_draw();
-                }
-            }
         } else {
             let thread_data = &*self.thread_data;
             let &(ref pending_lock, ref pending_condvar) = &thread_data.pending;
@@ -150,50 +173,51 @@ impl GridCollisionSystem {
 
             // Convert all completed work units into pending work units, notifying a worker thread for each one.
             {
-                let mut pending = pending_lock.lock().unwrap();
-                let mut complete = complete_lock.lock().unwrap();
+                let _stopwatch = Stopwatch::new("Preparing Work Units");
+                {
+                    let mut pending = pending_lock.lock().unwrap();
 
-                assert!(complete.len() == NUM_WORKERS, "Expected {} complete work units, found {}", NUM_WORKERS, complete.len());
-                for mut work_unit in complete.drain(0..) {
-                    work_unit.volumes.clone_from(bvh_manager.components());
-                    pending.push(work_unit);
+                    assert!(
+                        self.processed_work.len() == NUM_WORKERS,
+                        "Expected {} complete work units, found {}",
+                        NUM_WORKERS,
+                        self.processed_work.len(),
+                    );
+                    // Prepare work unit by giving it a copy of the list of volumes.
+                    {
+                        let mut volumes = thread_data.volumes.write().unwrap();
+                        volumes.clone_from(bvh_manager.components());
+                    }
 
+                    // Swap all available work units into the pending queue.
+                    mem::swap(&mut *pending, &mut self.processed_work);
+                }
+
+                // Notify all workers that work is available.
+                // NB: `Condvar` also has a `notify_all()` method, but supposedly that's for a
+                // different use case than this and will be slower.
+                for _ in 0..NUM_WORKERS {
                     pending_condvar.notify_one();
                 }
             }
 
             // Wait until all work units have been completed and returned.
-            {
-                let mut complete = complete_lock.lock().unwrap();
-                while complete.len() < NUM_WORKERS {
-                    complete = complete_condvar.wait(complete).unwrap();
-                }
-
-                for work_unit in complete.iter_mut() {
-                    // Visualize the collisions.
-                    for bvh in &work_unit.volumes {
-                        if !bvh.aabb.test_aabb(&work_unit.bounds) {
-                            continue;
-                        }
-
-                        if bvh.aabb_intersected.get() {
-                            debug_draw::box_min_max_color(bvh.aabb.min, bvh.aabb.max, color::RED);
-                        } else {
-                            debug_draw::box_min_max(bvh.aabb.min, bvh.aabb.max);
-                        }
-
-                        if bvh.collider_intersected.get() {
-                            bvh.collider.debug_draw_color(color::RED);
-                        } else {
-                            bvh.collider.debug_draw();
-                        }
+            let _stopwatch = Stopwatch::new("Running Workers and Merging Results");
+            while self.processed_work.len() != NUM_WORKERS {
+                // Retrieve each work unit as it becomes available.
+                let mut work_unit = {
+                    let mut complete = complete_lock.lock().unwrap();
+                    while complete.len() == 0 {
+                        complete = complete_condvar.wait(complete).unwrap();
                     }
+                    complete.pop().unwrap()
+                };
 
-                    // Merge collision results back into total.
-                    for (collision, _) in work_unit.collisions.drain() {
-                        self.collisions.insert(collision);
-                    }
+                // Merge results of work unit into total.
+                for (collision, _) in work_unit.collisions.drain() {
+                    self.collisions.insert(collision);
                 }
+                self.processed_work.push(work_unit);
             }
         }
     }
@@ -211,7 +235,6 @@ impl Clone for GridCollisionSystem {
 #[derive(Debug)]
 #[allow(raw_pointer_derive)]
 struct WorkUnit {
-    volumes: Vec<BoundVolume>,
     collisions: HashMap<(Entity, Entity), (), FnvHashState>, // This should be a HashSet, but HashSet doesn't have a way to get at entries directly.
     bounds: AABB,
 }
@@ -219,20 +242,20 @@ struct WorkUnit {
 impl WorkUnit {
     fn new(bounds: AABB) -> WorkUnit {
         WorkUnit {
-            volumes: Vec::new(),
             bounds: bounds,
             collisions: HashMap::default(),
         }
     }
 }
 
-struct WorkTracker {
+struct SharedData {
+    volumes: RwLock<Vec<BoundVolume>>,
     pending: (Mutex<Vec<WorkUnit>>, Condvar),
     complete: (Mutex<Vec<WorkUnit>>, Condvar),
 }
 
 struct Worker {
-    thread_data: Arc<WorkTracker>,
+    thread_data: Arc<SharedData>,
     grid: HashMap<GridCell, Vec<*const BoundVolume>, FnvHashState>,
     cell_size: f32,
 
@@ -240,7 +263,7 @@ struct Worker {
 }
 
 impl Worker {
-    fn new(thread_data: Arc<WorkTracker>) -> Worker {
+    fn new(thread_data: Arc<SharedData>) -> Worker {
         Worker {
             thread_data: thread_data,
             grid: HashMap::default(),
@@ -277,7 +300,8 @@ impl Worker {
 
     fn do_broadphase(&mut self, work: &WorkUnit) {
         // let _stopwatch = Stopwatch::new("Broadphase Testing (Grid Based)");
-        for bvh in &work.volumes {
+        let volumes = self.thread_data.volumes.read().unwrap();
+        for bvh in &*volumes {
             // Retrieve the AABB at the root of the BVH.
             let aabb = bvh.aabb;
 

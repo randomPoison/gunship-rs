@@ -417,21 +417,22 @@ impl System for CollisionSystem {
         bvh_update(scene, delta);
 
         let collider_manager = scene.get_manager::<ColliderManager>();
-        let bvh_manager = collider_manager.bvh_manager_mut();
-
-        self.grid_system.update(&*bvh_manager);
+        {
+            let bvh_manager = collider_manager.bvh_manager_mut();
+            self.grid_system.update(&*bvh_manager);
+        }
 
         collider_manager.callback_manager.borrow_mut().process_collisions(scene, &self.grid_system.collisions);
     }
 }
 
 pub trait CollisionCallback {
-    fn invoke(&mut self, scene: &Scene, first: Entity, second: Entity);
+    fn invoke(&mut self, scene: &Scene, first: Entity, others: &[Entity]);
 }
 
-impl<T: ?Sized + 'static> CollisionCallback for T where T: FnMut(&Scene, Entity, Entity) {
-    fn invoke(&mut self, scene: &Scene, first: Entity, second: Entity) {
-        self.call_mut((scene, first, second));
+impl<T: ?Sized + 'static> CollisionCallback for T where T: FnMut(&Scene, Entity, &[Entity]) {
+    fn invoke(&mut self, scene: &Scene, first: Entity, others: &[Entity]) {
+        self.call_mut((scene, first, others));
     }
 }
 
@@ -510,23 +511,27 @@ impl CollisionCallbackManager {
         scene: &Scene,
         collisions: &HashSet<(Entity, Entity), H>
     ) where H: HashState {
-        let _stopwatch = Stopwatch::new("process collision callbacks");
+        let _stopwatch = Stopwatch::new("Process Collision Callbacks");
 
-        for pair in collisions {
-            if let Some(callback_ids) = self.entity_callbacks.get(&pair.0) {
+        let entity_collisions = {
+            let _stopwatch = Stopwatch::new("Sort Collision Data");
+            let mut entity_collisions: EntityMap<Vec<Entity>> = EntityMap::default();
+            for &(entity, other) in collisions {
+                entity_collisions.entry(entity).or_insert(Vec::new()).push(other);
+                entity_collisions.entry(other).or_insert(Vec::new()).push(entity);
+            }
+            entity_collisions
+        };
+
+        let _stopwatch = Stopwatch::new("Perform collision callbacks");
+        for (entity, others) in entity_collisions {
+            if let Some(callback_ids) = self.entity_callbacks.get(&entity) {
                 for callback_id in callback_ids.iter() {
                     let mut callback = match self.callbacks.get_mut(callback_id) {
                         Some(callback) => callback,
                         None => panic!("No callback with id {:?}", callback_id),
                     };
-                    callback.invoke(scene, pair.0, pair.1);
-                }
-            }
-
-            if let Some(callback_ids) = self.entity_callbacks.get(&pair.1) {
-                for callback_id in callback_ids.iter() {
-                    let mut callback = self.callbacks.get_mut(callback_id).unwrap();
-                    callback.invoke(scene, pair.1, pair.0);
+                    callback.invoke(scene, entity, &*others);
                 }
             }
         }
