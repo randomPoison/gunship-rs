@@ -154,6 +154,7 @@ impl Engine {
         }
     }
 
+    #[cfg(not(feature="no-draw"))]
     pub fn draw(&mut self) {
         let _stopwatch = Stopwatch::new("draw");
 
@@ -194,6 +195,9 @@ impl Engine {
 
         self.renderer.swap_buffers(self.window.borrow().deref());
     }
+
+    #[cfg(feature="no-draw")]
+    pub fn draw(&mut self) {}
 
     pub fn main_loop(&mut self) {
         let timer = Timer::new();

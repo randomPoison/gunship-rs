@@ -10,6 +10,7 @@ name = "gunship"
 [features]
 timing = []
 hotloading = []
+no-draw = []
 
 [dependencies]
 bootstrap_rs    = { path = "lib/bootstrap_rs" }
@@ -24,7 +25,8 @@ stopwatch       = { path = "lib/stopwatch" }
 rand = "*"
 
 [profile.release]
-lto = true
+# lto = true
+debug = true
 
 [profile.bench]
 lto = true

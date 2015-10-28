@@ -3,8 +3,10 @@ use std::collections::hash_map::Entry;
 use std::f32::{MAX, MIN};
 use std::{mem, thread};
 use std::sync::{Arc, Mutex, Condvar, RwLock};
+use std::sync::mpsc::{self, Receiver, SyncSender};
 use std::thread::JoinHandle;
 
+use bootstrap::time::{Timer, TimeMark};
 use hash::*;
 use math::*;
 use stopwatch::Stopwatch;
@@ -13,6 +15,7 @@ use ecs::Entity;
 use super::bounding_volume::*;
 
 const NUM_WORKERS: usize = 8;
+const NUM_WORK_UNITS: usize = 8;
 
 pub type CollisionGrid = HashMap<GridCell, Vec<*const BoundVolume>, FnvHashState>;
 
@@ -23,28 +26,26 @@ pub type CollisionGrid = HashMap<GridCell, Vec<*const BoundVolume>, FnvHashState
 /// - Do something to configure the size of the grid.
 pub struct GridCollisionSystem {
     _workers: Vec<JoinHandle<()>>,
-    thread_data: Arc<SharedData>,
+    thread_data: Arc<ThreadData>,
+    channel: Receiver<WorkUnit>,
     processed_work: Vec<WorkUnit>,
     pub collisions: HashSet<(Entity, Entity), FnvHashState>,
-
-    dummy_worker: Worker, // Used during single-threaded testing.
 }
 
 impl GridCollisionSystem {
     pub fn new() -> GridCollisionSystem {
-        let thread_data = Arc::new(SharedData {
+        let thread_data = Arc::new(ThreadData {
             volumes: RwLock::new(Vec::new()),
             pending: (Mutex::new(Vec::new()), Condvar::new()),
-            complete: (Mutex::new(Vec::new()), Condvar::new()),
         });
 
         let mut processed_work = Vec::new();
-        if NUM_WORKERS == 1 {
+        if NUM_WORK_UNITS == 1 {
             processed_work.push(WorkUnit::new(AABB {
-                min: Point::min(),
-                max: Point::max(),
+                min: Point::new(MIN, MIN, MIN),
+                max: Point::new(0.0, 0.0, 0.0),
             }));
-        } else if NUM_WORKERS == 2 {
+        } else if NUM_WORK_UNITS == 2 {
             processed_work.push(WorkUnit::new(AABB {
                 min: Point::min(),
                 max: Point::new(0.0, MAX, MAX),
@@ -53,7 +54,7 @@ impl GridCollisionSystem {
                 min: Point::new(0.0, MIN, MIN),
                 max: Point::max(),
             }));
-        } else if NUM_WORKERS == 4 {
+        } else if NUM_WORK_UNITS == 4 {
             processed_work.push(WorkUnit::new(AABB {
                 min: Point::min(),
                 max: Point::new(0.0, 0.0, MAX),
@@ -70,7 +71,7 @@ impl GridCollisionSystem {
                 min: Point::new(0.0, 0.0, MIN),
                 max: Point::max(),
             }));
-        } else if NUM_WORKERS == 8 {
+        } else if NUM_WORK_UNITS == 8 {
             processed_work.push(WorkUnit::new(AABB {
                 min: Point::new(MIN, MIN, MIN),
                 max: Point::new(0.0, 0.0, 0.0),
@@ -104,14 +105,16 @@ impl GridCollisionSystem {
                 max: Point::new(MAX, MAX, MAX),
             }));
         } else {
-            panic!("unsupported number of workers {}, only 1, 2, 4, or 8 supported", NUM_WORKERS);
+            panic!("unsupported number of workers {}, only 1, 2, 4, or 8 supported", NUM_WORK_UNITS);
         }
 
+        let (sender, receiver) = mpsc::sync_channel(NUM_WORKERS);
         let mut workers = Vec::new();
         for _ in 0..NUM_WORKERS {
             let thread_data = thread_data.clone();
+            let sender = sender.clone();
             workers.push(thread::spawn(move || {
-                let mut worker = Worker::new(thread_data);
+                let mut worker = Worker::new(thread_data, sender);
                 worker.start();
             }));
         }
@@ -119,106 +122,75 @@ impl GridCollisionSystem {
         GridCollisionSystem {
             _workers: workers,
             thread_data: thread_data.clone(),
+            channel: receiver,
             collisions: HashSet::default(),
             processed_work: processed_work,
-
-            dummy_worker: Worker::new(thread_data.clone()),
         }
     }
 
     pub fn update(&mut self, bvh_manager: &BoundingVolumeManager) {
         let _stopwatch = Stopwatch::new("Grid Collision System");
 
-        // // Debug draw the grid.
-        // for i in -50..50 {
-        //     let offset = i as f32;
-        //     debug_draw::line(
-        //         Point::new(offset * self.cell_size, -50.0 * self.cell_size, 0.0),
-        //         Point::new(offset * self.cell_size,  50.0 * self.cell_size, 0.0));
-        //     debug_draw::line(
-        //         Point::new(-50.0 * self.cell_size, offset * self.cell_size, 0.0),
-        //         Point::new( 50.0 * self.cell_size, offset * self.cell_size, 0.0));
-        // }
-
         self.collisions.clear();
+        let timer = Timer::new();
+        let start_time = timer.now();
 
-        if NUM_WORKERS == 0 {
-            // Single-threaded collision detection.
+        let thread_data = &*self.thread_data;
 
-            let thread_data = &*self.thread_data;
-            let &(ref complete_lock, _) = &thread_data.complete;
+        // Convert all completed work units into pending work units, notifying a worker thread for each one.
+        {
+            let _stopwatch = Stopwatch::new("Preparing Work Units");
 
-            let mut work_units = complete_lock.lock().unwrap();
-            let work_unit = &mut work_units[0];
-
+            assert!(
+                self.processed_work.len() == NUM_WORK_UNITS,
+                "Expected {} complete work units, found {}",
+                NUM_WORK_UNITS,
+                self.processed_work.len(),
+            );
             // Prepare work unit by giving it a copy of the list of volumes.
             {
                 let mut volumes = thread_data.volumes.write().unwrap();
-                volumes.clear();
                 volumes.clone_from(bvh_manager.components());
             }
 
-            // Actually do the collision detection.
-            self.dummy_worker.do_broadphase(work_unit);
-            self.dummy_worker.do_narrowphase(work_unit);
+            let &(ref pending, _) = &thread_data.pending;
+            let mut pending = pending.lock().unwrap();
 
-            // Merge collision results back into total.
+            // Swap all available work units into the pending queue.
+            mem::swap(&mut *pending, &mut self.processed_work);
+        }
+
+        // Synchronize with worker threads to get them going or whatever.
+        {
+            let _stopwatch = Stopwatch::new("Synchronizing To Start Workers");
+            let &(_, ref condvar) = &thread_data.pending;
+            condvar.notify_all();
+        }
+
+        // Wait until all work units have been completed and returned.
+        let _stopwatch = Stopwatch::new("Running Workers and Merging Results");
+        while self.processed_work.len() < NUM_WORK_UNITS {
+            // Retrieve each work unit as it becomes available.
+            let mut work_unit = self.channel.recv().unwrap();
+            work_unit.returned_time = timer.now();
+
+            // Merge results of work unit into total.
             for (collision, _) in work_unit.collisions.drain() {
                 self.collisions.insert(collision);
             }
-        } else {
-            let thread_data = &*self.thread_data;
-            let &(ref pending_lock, ref pending_condvar) = &thread_data.pending;
-            let &(ref complete_lock, ref complete_condvar) = &thread_data.complete;
+            self.processed_work.push(work_unit);
+        }
 
-            // Convert all completed work units into pending work units, notifying a worker thread for each one.
-            {
-                let _stopwatch = Stopwatch::new("Preparing Work Units");
-                {
-                    let mut pending = pending_lock.lock().unwrap();
-
-                    assert!(
-                        self.processed_work.len() == NUM_WORKERS,
-                        "Expected {} complete work units, found {}",
-                        NUM_WORKERS,
-                        self.processed_work.len(),
-                    );
-                    // Prepare work unit by giving it a copy of the list of volumes.
-                    {
-                        let mut volumes = thread_data.volumes.write().unwrap();
-                        volumes.clone_from(bvh_manager.components());
-                    }
-
-                    // Swap all available work units into the pending queue.
-                    mem::swap(&mut *pending, &mut self.processed_work);
-                }
-
-                // Notify all workers that work is available.
-                // NB: `Condvar` also has a `notify_all()` method, but supposedly that's for a
-                // different use case than this and will be slower.
-                for _ in 0..NUM_WORKERS {
-                    pending_condvar.notify_one();
-                }
-            }
-
-            // Wait until all work units have been completed and returned.
-            let _stopwatch = Stopwatch::new("Running Workers and Merging Results");
-            while self.processed_work.len() != NUM_WORKERS {
-                // Retrieve each work unit as it becomes available.
-                let mut work_unit = {
-                    let mut complete = complete_lock.lock().unwrap();
-                    while complete.len() == 0 {
-                        complete = complete_condvar.wait(complete).unwrap();
-                    }
-                    complete.pop().unwrap()
-                };
-
-                // Merge results of work unit into total.
-                for (collision, _) in work_unit.collisions.drain() {
-                    self.collisions.insert(collision);
-                }
-                self.processed_work.push(work_unit);
-            }
+        println!("\n-- TOP OF GRID UPDATE --");
+        println!("Total Time: {}ms", timer.elapsed_ms(start_time));
+        for work_unit in &self.processed_work {
+            println!(
+                "work unit returned: recieved @ {}ms, broadphase @ {}ms, narrowphase @ {}ms, returned @ {}ms",
+                timer.duration_ms(work_unit.received_time - start_time),
+                timer.duration_ms(work_unit.broadphase_time - start_time),
+                timer.duration_ms(work_unit.narrowphase_time - start_time),
+                timer.duration_ms(work_unit.returned_time - start_time),
+            );
         }
     }
 }
@@ -237,25 +209,35 @@ impl Clone for GridCollisionSystem {
 struct WorkUnit {
     collisions: HashMap<(Entity, Entity), (), FnvHashState>, // This should be a HashSet, but HashSet doesn't have a way to get at entries directly.
     bounds: AABB,
+
+    received_time: TimeMark,
+    broadphase_time: TimeMark,
+    narrowphase_time: TimeMark,
+    returned_time: TimeMark,
 }
 
 impl WorkUnit {
     fn new(bounds: AABB) -> WorkUnit {
+        let timer = Timer::new();
         WorkUnit {
             bounds: bounds,
             collisions: HashMap::default(),
+            received_time: timer.now(),
+            broadphase_time: timer.now(),
+            narrowphase_time: timer.now(),
+            returned_time: timer.now(),
         }
     }
 }
 
-struct SharedData {
+struct ThreadData {
     volumes: RwLock<Vec<BoundVolume>>,
     pending: (Mutex<Vec<WorkUnit>>, Condvar),
-    complete: (Mutex<Vec<WorkUnit>>, Condvar),
 }
 
 struct Worker {
-    thread_data: Arc<SharedData>,
+    thread_data: Arc<ThreadData>,
+    channel: SyncSender<WorkUnit>,
     grid: HashMap<GridCell, Vec<*const BoundVolume>, FnvHashState>,
     cell_size: f32,
 
@@ -263,9 +245,10 @@ struct Worker {
 }
 
 impl Worker {
-    fn new(thread_data: Arc<SharedData>) -> Worker {
+    fn new(thread_data: Arc<ThreadData>, channel: SyncSender<WorkUnit>) -> Worker {
         Worker {
             thread_data: thread_data,
+            channel: channel,
             grid: HashMap::default(),
             cell_size: 1.0,
             candidate_collisions: Vec::new(),
@@ -273,28 +256,28 @@ impl Worker {
     }
 
     fn start(&mut self) {
+        let timer = Timer::new();
         loop {
             // Wait until there's pending work, and take the first available one.
             let mut work = {
-                let work_tracker = &*self.thread_data;
-                let &(ref lock, ref cvar) = &work_tracker.pending;
-                let mut pending_work = lock.lock().unwrap();
-                while pending_work.len() == 0 {
-                    pending_work = cvar.wait(pending_work).unwrap();
+                let &(ref pending, ref condvar) = &self.thread_data.pending;
+                let mut pending = pending.lock().unwrap();
+                while pending.len() == 0 {
+                    pending = condvar.wait(pending).unwrap();
                 }
 
-                pending_work.pop().unwrap()
+                pending.pop().unwrap()
             };
+            work.received_time = timer.now();
 
             self.do_broadphase(&work);
+            work.broadphase_time = timer.now();
+
             self.do_narrowphase(&mut work);
+            work.narrowphase_time = timer.now();
 
             // Send completed work back to main thread.
-            let work_tracker = &*self.thread_data;
-            let &(ref lock, ref cvar) = &work_tracker.complete;
-            let mut completed_work = lock.lock().unwrap();
-            completed_work.push(work);
-            cvar.notify_all();
+            self.channel.send(work).unwrap();
         }
     }
 
