@@ -210,6 +210,9 @@ struct WorkUnit {
     collisions: HashMap<(Entity, Entity), (), FnvHashState>, // This should be a HashSet, but HashSet doesn't have a way to get at entries directly.
     bounds: AABB,
 
+    grid: HashMap<GridCell, Vec<*const BoundVolume>, FnvHashState>,
+    cell_size: f32,
+
     received_time: TimeMark,
     broadphase_time: TimeMark,
     narrowphase_time: TimeMark,
@@ -222,13 +225,28 @@ impl WorkUnit {
         WorkUnit {
             bounds: bounds,
             collisions: HashMap::default(),
+
+            grid: HashMap::default(),
+            cell_size: 1.0,
+
             received_time: timer.now(),
             broadphase_time: timer.now(),
             narrowphase_time: timer.now(),
             returned_time: timer.now(),
         }
     }
+
+    /// Converts a point in world space to its grid cell.
+    fn world_to_grid(&self, point: Point) -> GridCell {
+        GridCell {
+            x: (point.x / self.cell_size).floor() as GridCoord,
+            y: (point.y / self.cell_size).floor() as GridCoord,
+            z: (point.z / self.cell_size).floor() as GridCoord,
+        }
+    }
 }
+
+unsafe impl ::std::marker::Send for WorkUnit {}
 
 struct ThreadData {
     volumes: RwLock<Vec<BoundVolume>>,
@@ -238,8 +256,6 @@ struct ThreadData {
 struct Worker {
     thread_data: Arc<ThreadData>,
     channel: SyncSender<WorkUnit>,
-    grid: HashMap<GridCell, Vec<*const BoundVolume>, FnvHashState>,
-    cell_size: f32,
 
     candidate_collisions: Vec<(*const BoundVolume, *const BoundVolume)>,
 }
@@ -249,8 +265,6 @@ impl Worker {
         Worker {
             thread_data: thread_data,
             channel: channel,
-            grid: HashMap::default(),
-            cell_size: 1.0,
             candidate_collisions: Vec::new(),
         }
     }
@@ -270,7 +284,7 @@ impl Worker {
             };
             work.received_time = timer.now();
 
-            self.do_broadphase(&work);
+            self.do_broadphase(&mut work);
             work.broadphase_time = timer.now();
 
             self.do_narrowphase(&mut work);
@@ -281,7 +295,7 @@ impl Worker {
         }
     }
 
-    fn do_broadphase(&mut self, work: &WorkUnit) {
+    fn do_broadphase(&mut self, work: &mut WorkUnit) {
         // let _stopwatch = Stopwatch::new("Broadphase Testing (Grid Based)");
         let volumes = self.thread_data.volumes.read().unwrap();
         for bvh in &*volumes {
@@ -293,14 +307,14 @@ impl Worker {
                 continue;
             }
 
-            let min_cell = self.world_to_grid(aabb.min);
-            let max_cell = self.world_to_grid(aabb.max);
+            let min_cell = work.world_to_grid(aabb.min);
+            let max_cell = work.world_to_grid(aabb.max);
 
             // Iterate over all grid cells that the AABB touches. Test the BVH against any entities
             // that have already been placed in that cell, then add the BVH to the cell, creating
             // new cells as necessary.
             for test_cell in min_cell.iter_to(max_cell) {
-                if let Some(mut cell) = self.grid.get_mut(&test_cell) {
+                if let Some(mut cell) = work.grid.get_mut(&test_cell) {
                     // Check against other volumes.
                     for other_bvh in cell.iter().cloned() {
                         self.candidate_collisions.push((bvh, other_bvh));
@@ -313,14 +327,14 @@ impl Worker {
                 // else
                 {
                     let cell = vec![bvh as *const _];
-                    self.grid.insert(test_cell, cell);
+                    work.grid.insert(test_cell, cell);
                 }
             }
         }
 
         // Clear out grid contents from previous frame, start each frame with an empty grid and
         // rebuild it rather than trying to update the grid as objects move.
-        for (_, mut cell) in &mut self.grid {
+        for (_, mut cell) in &mut work.grid {
             cell.clear();
         }
     }
@@ -345,15 +359,6 @@ impl Worker {
                 },
                 _ => {},
             }
-        }
-    }
-
-    /// Converts a point in world space to its grid cell.
-    fn world_to_grid(&self, point: Point) -> GridCell {
-        GridCell {
-            x: (point.x / self.cell_size).floor() as GridCoord,
-            y: (point.y / self.cell_size).floor() as GridCoord,
-            z: (point.z / self.cell_size).floor() as GridCoord,
         }
     }
 }
