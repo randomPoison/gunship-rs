@@ -258,6 +258,7 @@ struct Worker {
     channel: SyncSender<WorkUnit>,
 
     candidate_collisions: Vec<(*const BoundVolume, *const BoundVolume)>,
+    cell_cache: Vec<Vec<*const BoundVolume>>,
 }
 
 impl Worker {
@@ -266,6 +267,7 @@ impl Worker {
             thread_data: thread_data,
             channel: channel,
             candidate_collisions: Vec::new(),
+            cell_cache: Vec::new(),
         }
     }
 
@@ -314,28 +316,26 @@ impl Worker {
             // that have already been placed in that cell, then add the BVH to the cell, creating
             // new cells as necessary.
             for test_cell in min_cell.iter_to(max_cell) {
-                if let Some(mut cell) = work.grid.get_mut(&test_cell) {
-                    // Check against other volumes.
-                    for other_bvh in cell.iter().cloned() {
-                        self.candidate_collisions.push((bvh, other_bvh));
-                    }
+                let cell_cache = &mut self.cell_cache;
+                let mut cell = work.grid.entry(test_cell).or_insert_with(|| {
+                    cell_cache.pop().unwrap_or(Vec::new())
+                });
 
-                    // Add to existing cell.
-                    cell.push(bvh);
-                    continue;
+                // Check against other volumes.
+                for other_bvh in cell.iter().cloned() {
+                    self.candidate_collisions.push((bvh, other_bvh));
                 }
-                // else
-                {
-                    let cell = vec![bvh as *const _];
-                    work.grid.insert(test_cell, cell);
-                }
+
+                // Add to existing cell.
+                cell.push(bvh);
             }
         }
 
         // Clear out grid contents from previous frame, start each frame with an empty grid and
         // rebuild it rather than trying to update the grid as objects move.
-        for (_, mut cell) in &mut work.grid {
+        for (_, mut cell) in work.grid.drain() {
             cell.clear();
+            self.cell_cache.push(cell);
         }
     }
 
