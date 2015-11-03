@@ -147,11 +147,33 @@ impl GridCollisionSystem {
                 NUM_WORK_UNITS,
                 self.processed_work.len(),
             );
-            // Prepare work unit by giving it a copy of the list of volumes.
-            {
-                let mut volumes = thread_data.volumes.write().unwrap();
-                volumes.clone_from(bvh_manager.components());
+
+            let mut longest = 0.0;
+            for bvh in bvh_manager.components() {
+                let diff_x = bvh.aabb.max.x - bvh.aabb.min.x;
+                let diff_y = bvh.aabb.max.y - bvh.aabb.min.y;
+                let diff_z = bvh.aabb.max.z - bvh.aabb.min.z;
+
+                if diff_x > longest {
+                    longest = diff_x;
+                }
+
+                if diff_y > longest {
+                    longest = diff_y;
+                }
+
+                if diff_z > longest {
+                    longest = diff_z;
+                }
             }
+
+            for work_unit in self.processed_work.iter_mut() {
+                work_unit.cell_size = longest;
+            }
+
+            // Prepare work unit by giving it a copy of the list of volumes.
+            let mut volumes = thread_data.volumes.write().unwrap();
+            volumes.clone_from(bvh_manager.components());
 
             let &(ref pending, _) = &thread_data.pending;
             let mut pending = pending.lock().unwrap();
@@ -311,6 +333,14 @@ impl Worker {
 
             let min_cell = work.world_to_grid(aabb.min);
             let max_cell = work.world_to_grid(aabb.max);
+            debug_assert!(
+                max_cell.x - min_cell.x <= 1
+             || max_cell.y - min_cell.y <= 1
+             || max_cell.z - min_cell.z <= 1,
+                "AABB spans too many grid cells (min: {:?}, max: {:?}), grid cells are too small, bvh: {:?}",
+                min_cell,
+                max_cell,
+                bvh);
 
             // Iterate over all grid cells that the AABB touches. Test the BVH against any entities
             // that have already been placed in that cell, then add the BVH to the cell, creating
@@ -328,6 +358,11 @@ impl Worker {
 
                 // Add to existing cell.
                 cell.push(bvh);
+            }
+
+            // Test extra special edge case cells.
+            if min_cell.x < max_cell.x {
+
             }
         }
 
@@ -393,13 +428,11 @@ impl GridCell {
         }
     }
 
-    pub fn iter_to(&self, dest: GridCell) -> GridIter {
-        // assert!(self < dest, "start point for grid iter must be less that end point, or use iter_from()");
-
+    pub fn iter_to(self, dest: GridCell) -> GridIter {
         GridIter {
-            from: *self,
+            from: self,
             to:   dest,
-            next: *self,
+            next: self,
         }
     }
 }
