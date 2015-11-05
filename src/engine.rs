@@ -32,6 +32,7 @@ pub struct Engine {
     resource_manager: Rc<ResourceManager>,
 
     systems: Vec<Box<System>>,
+    debug_systems: Vec<Box<System>>,
     system_indices: HashMap<TypeId, usize>,
     system_names: HashMap<String, TypeId>,
 
@@ -72,6 +73,7 @@ impl Engine {
             resource_manager: resource_manager.clone(),
 
             systems: Vec::new(),
+            debug_systems: Vec::new(),
             system_indices: HashMap::new(),
             system_names: HashMap::new(),
 
@@ -132,6 +134,11 @@ impl Engine {
             for system in self.systems.iter_mut() {
                 system.update(scene, TARGET_FRAME_TIME_SECONDS);
             }
+        }
+
+        // Update debug systems always forever.
+        for system in self.debug_systems.iter_mut() {
+            system.update(scene, TARGET_FRAME_TIME_SECONDS);
         }
 
         self.transform_update.update(scene, TARGET_FRAME_TIME_SECONDS);
@@ -248,6 +255,10 @@ impl Engine {
         self.system_names.insert(type_name::<T>().into(), system_id);
     }
 
+    pub fn register_debug_system<T: Any + System>(&mut self, system: T) {
+        self.debug_systems.push(Box::new(system));
+    }
+
     pub fn get_system<T: Any + System>(&self) -> &T {
         let system_id = TypeId::of::<T>();
         let index =
@@ -303,6 +314,7 @@ impl Clone for Engine {
             resource_manager: resource_manager.clone(),
 
             systems: Vec::new(),
+            debug_systems: Vec::new(),
             system_indices: HashMap::new(),
             system_names: HashMap::new(),
 
@@ -351,6 +363,7 @@ pub fn engine_init(window: Rc<RefCell<Window>>) -> Box<Engine> {
         resource_manager: resource_manager.clone(),
 
         systems: Vec::new(),
+        debug_systems: Vec::new(),
         system_indices: HashMap::new(),
         system_names: HashMap::new(),
 

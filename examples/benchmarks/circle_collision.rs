@@ -5,15 +5,15 @@ use std::f32::consts::PI;
 
 use gunship::*;
 
-const TOTAL_CUBES: usize = 5_000;
-const TOTAL_SPHERES: usize = 5_000;
+const TOTAL_CUBES:   usize = 10_000;
+const TOTAL_SPHERES: usize = 10_000;
 
 fn main() {
     let mut engine = Engine::new();
 
     engine.register_system(LoopUpdate { offset: 0.0 });
     engine.register_system(rotation_update);
-    engine.register_system(camera_movement);
+    engine.register_debug_system(camera_movement);
     setup_scene(engine.scene_mut());
 
     engine.main_loop();
@@ -75,26 +75,18 @@ fn setup_scene(scene: &mut Scene) {
             }));
     }
 
-    // Create a marker at the origin.
-    {
-        let entity = scene.create_entity();
-        let mut transform = transform_manager.assign(entity);
-        transform.set_scale(Vector3::new(0.1, 0.1, 0.1));
-        mesh_manager.assign(entity, "cube.pCube1");
-    }
-
     // Create some amount of cubes.
     for _ in 0..TOTAL_CUBES {
         let entity = scene.create_entity();
-        // let mut transform =
+        let mut transform =
             transform_manager.assign(entity);
-        // transform.set_scale(Vector3::new(
-        //     random_range(0.5, 3.5),
-        //     random_range(0.5, 3.5),
-        //     random_range(0.5, 3.5),
-        // ));
+        transform.set_scale(Vector3::new(
+            random_range(0.5, 3.5),
+            random_range(0.5, 3.5),
+            random_range(0.5, 3.5),
+        ));
         movement_manager.assign(entity, LoopMovement {
-            movement_type: MovementType::Circle,
+            movement_type: MovementType::CircleZ,
             center: Point::new(
                 random_range(-50.0, 50.0),
                 random_range(-50.0, 50.0),
@@ -120,7 +112,7 @@ fn setup_scene(scene: &mut Scene) {
         let entity = scene.create_entity();
         transform_manager.assign(entity);
         movement_manager.assign(entity, LoopMovement {
-            movement_type: MovementType::Circle,
+            movement_type: MovementType::CircleZ,
             center: Point::new(
                 random_range(-50.0, 50.0),
                 random_range(-50.0, 50.0),
@@ -137,50 +129,64 @@ fn setup_scene(scene: &mut Scene) {
         // mesh_manager.assign(entity, "sphere.pSphere1"); // TODO: Fix loading sphere mesh.
     }
 
-    // {
+    // { // 5
     //     let entity = scene.create_entity();
     //     let mut transform = transform_manager.assign(entity);
-    //     transform.rotate(Quaternion::from_eulers(0.1 * PI, 1.2 * PI, 1.0 * PI));
-    //     transform.set_scale(Vector3::new(2.0, 1.0, 3.0));
-    //     // movement_manager.assign(entity, LoopMovement {
-    //     //     movement_type: MovementType::Horizontal,
-    //     //     center: Point::origin(),
-    //     //     radius: 6.0,
-    //     //     period: 15.0,
-    //     // });
+    //     transform.set_position(Point::new(10.0, 9.5, 0.75));
+    //     transform.set_scale(Vector3::new(2.0, 1.0, 1.0));
     //     collider_manager.assign(entity, Collider::Box {
     //         offset: Vector3::zero(),
-    //         widths: Vector3::new(1.0, 1.0, 1.0),
+    //         widths: Vector3::one(),
     //     });
-    //     collider_manager.register_callback(entity, visualize_collision);
-    //     // mesh_manager.assign(entity, "cube.pCube1");
-    //     rotation_manager.assign(entity, RotationMovement::new(0.01 * PI, 0.12 * PI, 0.03 * PI));
-    // }
+    //     collider_manager.assign_callback(entity, visualize_collision);
+    //     mesh_manager.assign(entity, "cube.pCube1");
     //
-    // {
+    //     // movement_manager.assign(entity, LoopMovement {
+    //     //     movement_type: MovementType::Horizontal,
+    //     //     center: Point::new(10.0, 8.0, 0.0),
+    //     //     radius: 2.0,
+    //     //     period: 10.0,
+    //     // });
+    // }
+
+    // { // 6
     //     let entity = scene.create_entity();
     //     let mut transform = transform_manager.assign(entity);
-    //     transform.rotate(Quaternion::from_eulers(0.1 * PI, 1.2 * PI, 0.1 * PI));
-    //     transform.set_scale(Vector3::new(2.0, 1.0, 3.0));
-    //     movement_manager.assign(entity, LoopMovement {
-    //         movement_type: MovementType::Horizontal,
-    //         center: Point::origin(),
-    //         radius: 6.0,
-    //         period: 15.0,
-    //     });
-    //     collider_manager.assign(entity, Collider::Sphere {
+    //     transform.set_position(Point::new(11.0, 11.0, 0.0));
+    //     transform.set_scale(Vector3::new(1.0, 1.5, 1.0));
+    //     collider_manager.assign(entity, Collider::Box {
     //         offset: Vector3::zero(),
-    //         radius: 1.0,
+    //         widths: Vector3::one(),
     //     });
-    //     collider_manager.register_callback(entity, visualize_collision);
-    //     // mesh_manager.assign(entity, "sphere.pSphere1");
-    //     // rotation_manager.assign(entity, RotationMovement::new(0.0232 * PI, 0.0 * PI, 0.01 * PI));
+    //     collider_manager.assign_callback(entity, visualize_collision);
+    //     mesh_manager.assign(entity, "cube.pCube1");
+    // }
+
+    // { // 6
+    //     let entity = scene.create_entity();
+    //     let mut transform = transform_manager.assign(entity);
+    //     // transform.set_position(Point::new(10.0, 8.5, 0.0));
+    //     transform.set_scale(Vector3::new(1.0, 1.0, 1.0));
+    //     collider_manager.assign(entity, Collider::Box {
+    //         offset: Vector3::zero(),
+    //         widths: Vector3::one(),
+    //     });
+    //     collider_manager.assign_callback(entity, visualize_collision);
+    //     mesh_manager.assign(entity, "cube.pCube1");
+    //     movement_manager.assign(entity, LoopMovement {
+    //         movement_type: MovementType::CircleX,
+    //         center: Point::new(10.0, 9.0, 0.75),
+    //         radius: 0.75,
+    //         period: 6.0,
+    //     });
     // }
 }
 
 #[derive(Debug, Clone, Copy)]
-enum MovementType {
-    Circle,
+pub enum MovementType {
+    CircleX,
+    CircleY,
+    CircleZ,
     Vertical,
     Horizontal,
 }
@@ -206,7 +212,7 @@ impl System for LoopUpdate {
         let transform_manager = scene.get_manager::<TransformManager>();
 
         self.offset += delta;
-        for (mut movement, entity) in movement_manager.iter_mut() {
+        for (movement, entity) in movement_manager.iter_mut() {
             let mut transform = transform_manager.get_mut(entity);
 
             // Calculate the position of the cube.
@@ -215,7 +221,13 @@ impl System for LoopUpdate {
             let y_offset = t.sin() * movement.radius;
 
             match movement.movement_type {
-                MovementType::Circle => {
+                MovementType::CircleX => {
+                    transform.set_position(movement.center + Vector3::new(0.0, x_offset, y_offset));
+                },
+                MovementType::CircleY => {
+                    transform.set_position(movement.center + Vector3::new(x_offset, 0.0, y_offset));
+                }
+                MovementType::CircleZ => {
                     transform.set_position(movement.center + Vector3::new(x_offset, y_offset, 0.0));
                 },
                 MovementType::Horizontal => {
@@ -260,7 +272,7 @@ fn rotation_update(scene: &Scene, delta: f32) {
 
 fn visualize_collision(scene: &Scene, entity: Entity, _other: &[Entity]) {
     let collider_manager = scene.get_manager::<ColliderManager>();
-    collider_manager.bvh_manager().get(entity).unwrap().collider.debug_draw();
+    collider_manager.bvh_manager().get(entity).unwrap().collider.debug_draw_color(color::RED);
 }
 
 #[derive(Debug, Clone, Copy)]
