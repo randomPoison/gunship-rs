@@ -331,58 +331,86 @@ impl Worker {
                 continue;
             }
 
-            let min_cell = work.world_to_grid(aabb.min);
-            let max_cell = work.world_to_grid(aabb.max);
+            let min = work.world_to_grid(aabb.min);
+            let max = work.world_to_grid(aabb.max);
             debug_assert!(
-                max_cell.x - min_cell.x <= 1
-             || max_cell.y - min_cell.y <= 1
-             || max_cell.z - min_cell.z <= 1,
+                max.x - min.x <= 1
+             && max.y - min.y <= 1
+             && max.z - min.z <= 1,
                 "AABB spans too many grid cells (min: {:?}, max: {:?}), grid cells are too small, bvh: {:?}",
-                min_cell,
-                max_cell,
+                min,
+                max,
                 bvh);
-
-            let cell_cache = &mut self.cell_cache;
-            let candidate_collisions = &mut self.candidate_collisions;
-            let _cell_size = work.cell_size;
-            let mut test_cell = |grid_cell: GridCell| {
-                // // Visualize test cell.
-                // ::debug_draw::box_min_max(
-                //     Point::new(
-                //         grid_cell.x as f32 * _cell_size,
-                //         grid_cell.y as f32 * _cell_size,
-                //         grid_cell.z as f32 * _cell_size,
-                //     ),
-                //     Point::new(
-                //         grid_cell.x as f32 * _cell_size + _cell_size,
-                //         grid_cell.y as f32 * _cell_size + _cell_size,
-                //         grid_cell.z as f32 * _cell_size + _cell_size,
-                //     )
-                // );
-
-                let mut cell = work.grid.entry(grid_cell).or_insert_with(|| {
-                    cell_cache.pop().unwrap_or(Vec::new())
-                });
-
-                // Check against other volumes.
-                for other_bvh in cell.iter().cloned() {
-                    candidate_collisions.push((bvh, other_bvh));
-                }
-
-                // Add to existing cell.
-                cell.push(bvh);
-            };
 
             // Iterate over all grid cells that the AABB touches. Test the BVH against any entities
             // that have already been placed in that cell, then add the BVH to the cell, creating
             // new cells as necessary.
-            for grid_cell in min_cell.iter_to(max_cell) {
-                test_cell(grid_cell);
-            }
+            {
+                let cell_cache = &mut self.cell_cache;
+                let candidate_collisions = &mut self.candidate_collisions;
+                let _cell_size = work.cell_size;
+                let mut test_cell = |grid_cell: GridCell| {
+                    // // Visualize test cell.
+                    // ::debug_draw::box_min_max(
+                    //     Point::new(
+                    //         grid_cell.x as f32 * _cell_size,
+                    //         grid_cell.y as f32 * _cell_size,
+                    //         grid_cell.z as f32 * _cell_size,
+                    //     ),
+                    //     Point::new(
+                    //         grid_cell.x as f32 * _cell_size + _cell_size,
+                    //         grid_cell.y as f32 * _cell_size + _cell_size,
+                    //         grid_cell.z as f32 * _cell_size + _cell_size,
+                    //     )
+                    // );
 
-            // Test extra special edge case cells.
-            if min_cell.x < max_cell.x {
+                    let mut cell = work.grid.entry(grid_cell).or_insert_with(|| {
+                        cell_cache.pop().unwrap_or(Vec::new())
+                    });
 
+                    // Check against other volumes.
+                    for other_bvh in cell.iter().cloned() {
+                        candidate_collisions.push((bvh, other_bvh));
+                    }
+
+                    // Add to existing cell.
+                    cell.push(bvh);
+                };
+
+                test_cell(min);
+
+                let overlap_x = min.x < max.x;
+                let overlap_y = min.y < max.y;
+                let overlap_z = min.z < max.z;
+
+                // Test cases where volume overlaps along x.
+                if overlap_x {
+                    test_cell(GridCell::new(max.x, min.y, min.z));
+
+                    if overlap_y {
+                        test_cell(GridCell::new(min.x, max.y, min.z));
+                        test_cell(GridCell::new(max.x, max.y, min.z));
+
+                        if overlap_z {
+                            test_cell(GridCell::new(min.x, min.y, max.z));
+                            test_cell(GridCell::new(min.x, max.y, max.z));
+                            test_cell(GridCell::new(max.x, min.y, max.z));
+                            test_cell(GridCell::new(max.x, max.y, max.z));
+                        }
+                    } else if overlap_z {
+                        test_cell(GridCell::new(min.x, min.y, max.z));
+                        test_cell(GridCell::new(max.x, min.y, max.z));
+                    }
+                } else if overlap_y {
+                    test_cell(GridCell::new(min.x, max.y, min.z));
+
+                    if overlap_z {
+                        test_cell(GridCell::new(min.x, min.y, max.z));
+                        test_cell(GridCell::new(min.x, max.y, max.z));
+                    }
+                } else if overlap_z {
+                    test_cell(GridCell::new(min.x, min.y, max.z));
+                }
             }
         }
 
@@ -445,55 +473,6 @@ impl GridCell {
             x: x,
             y: y,
             z: z,
-        }
-    }
-
-    pub fn iter_to(self, dest: GridCell) -> GridIter {
-        GridIter {
-            from: self,
-            to:   dest,
-            next: Some(self),
-        }
-    }
-}
-
-pub struct GridIter {
-    from: GridCell,
-    to:   GridCell,
-    next: Option<GridCell>,
-}
-
-impl Iterator for GridIter {
-    type Item = GridCell;
-
-    fn next(&mut self) -> Option<GridCell> {
-        match self.next {
-            None => None,
-            Some(mut next) => {
-                let from = self.from;
-                let to = self.to;
-                let temp = next;
-
-                if next.z >= to.z {
-                    next.z = from.z;
-                    if next.y >= to.y {
-                        next.y = from.y;
-                        if next.x >= to.x {
-                            self.next = None;
-                            return Some(temp);
-                        } else {
-                            next.x += 1;
-                        }
-                    } else {
-                        next.y += 1;
-                    }
-                } else {
-                    next.z += 1;
-                }
-
-                self.next = Some(next);
-                Some(temp)
-            }
         }
     }
 }
