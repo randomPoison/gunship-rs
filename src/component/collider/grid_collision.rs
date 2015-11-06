@@ -342,22 +342,42 @@ impl Worker {
                 max_cell,
                 bvh);
 
-            // Iterate over all grid cells that the AABB touches. Test the BVH against any entities
-            // that have already been placed in that cell, then add the BVH to the cell, creating
-            // new cells as necessary.
-            for test_cell in min_cell.iter_to(max_cell) {
-                let cell_cache = &mut self.cell_cache;
-                let mut cell = work.grid.entry(test_cell).or_insert_with(|| {
+            let cell_cache = &mut self.cell_cache;
+            let candidate_collisions = &mut self.candidate_collisions;
+            let _cell_size = work.cell_size;
+            let mut test_cell = |grid_cell: GridCell| {
+                // // Visualize test cell.
+                // ::debug_draw::box_min_max(
+                //     Point::new(
+                //         grid_cell.x as f32 * _cell_size,
+                //         grid_cell.y as f32 * _cell_size,
+                //         grid_cell.z as f32 * _cell_size,
+                //     ),
+                //     Point::new(
+                //         grid_cell.x as f32 * _cell_size + _cell_size,
+                //         grid_cell.y as f32 * _cell_size + _cell_size,
+                //         grid_cell.z as f32 * _cell_size + _cell_size,
+                //     )
+                // );
+
+                let mut cell = work.grid.entry(grid_cell).or_insert_with(|| {
                     cell_cache.pop().unwrap_or(Vec::new())
                 });
 
                 // Check against other volumes.
                 for other_bvh in cell.iter().cloned() {
-                    self.candidate_collisions.push((bvh, other_bvh));
+                    candidate_collisions.push((bvh, other_bvh));
                 }
 
                 // Add to existing cell.
                 cell.push(bvh);
+            };
+
+            // Iterate over all grid cells that the AABB touches. Test the BVH against any entities
+            // that have already been placed in that cell, then add the BVH to the cell, creating
+            // new cells as necessary.
+            for grid_cell in min_cell.iter_to(max_cell) {
+                test_cell(grid_cell);
             }
 
             // Test extra special edge case cells.
@@ -432,7 +452,7 @@ impl GridCell {
         GridIter {
             from: self,
             to:   dest,
-            next: self,
+            next: Some(self),
         }
     }
 }
@@ -440,34 +460,40 @@ impl GridCell {
 pub struct GridIter {
     from: GridCell,
     to:   GridCell,
-    next: GridCell,
+    next: Option<GridCell>,
 }
 
 impl Iterator for GridIter {
     type Item = GridCell;
 
     fn next(&mut self) -> Option<GridCell> {
-        let from = self.from;
-        let to = self.to;
-        let mut next = self.next;
+        match self.next {
+            None => None,
+            Some(mut next) => {
+                let from = self.from;
+                let to = self.to;
+                let temp = next;
 
-        if next.z >= to.z {
-            next.z = from.z;
-            if next.y >= to.y {
-                next.y = from.y;
-                if next.x >= to.x {
-                    return None;
+                if next.z >= to.z {
+                    next.z = from.z;
+                    if next.y >= to.y {
+                        next.y = from.y;
+                        if next.x >= to.x {
+                            self.next = None;
+                            return Some(temp);
+                        } else {
+                            next.x += 1;
+                        }
+                    } else {
+                        next.y += 1;
+                    }
                 } else {
-                    next.x += 1;
+                    next.z += 1;
                 }
-            } else {
-                next.y += 1;
-            }
-        } else {
-            next.z += 1;
-        }
 
-        mem::swap(&mut self.next, &mut next);
-        Some(next)
+                self.next = Some(next);
+                Some(temp)
+            }
+        }
     }
 }
