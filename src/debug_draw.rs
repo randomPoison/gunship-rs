@@ -1,6 +1,7 @@
 use std::rc::Rc;
 use std::ptr;
 use std::f32::consts::PI;
+use std::sync::Mutex;
 
 use math::*;
 use polygon::Camera;
@@ -8,7 +9,7 @@ use polygon::gl_render::{GLRender, ShaderProgram, GLMeshData};
 use polygon::geometry::Mesh;
 use resource::ResourceManager;
 
-static mut instance: *mut DebugDrawInner = 0 as *mut DebugDrawInner;
+static mut instance: *const Mutex<DebugDrawInner> = 0 as *const _;
 
 #[derive(Debug)]
 pub struct DebugDraw {
@@ -18,7 +19,7 @@ pub struct DebugDraw {
     unit_cube: GLMeshData,
     unit_sphere: GLMeshData,
 
-    inner: Box<DebugDrawInner>,
+    inner: Box<Mutex<DebugDrawInner>>,
 
     // Vecs used for dynamically reconstructing meshes.
     line_vertices: Vec<f32>,
@@ -52,9 +53,9 @@ impl DebugDraw {
     pub fn new(renderer: Rc<GLRender>, resource_manager: &ResourceManager) -> DebugDraw {
         assert!(unsafe { instance.is_null() }, "Cannot create more than one instance of DebugDraw at a time");
 
-        let mut inner = Box::new(DebugDrawInner {
+        let mut inner = Box::new(Mutex::new(DebugDrawInner {
             command_buffer: Vec::new(),
-        });
+        }));
 
         unsafe {
             instance = &mut *inner;
@@ -114,7 +115,8 @@ impl DebugDraw {
     }
 
     pub fn flush_commands(&mut self, camera: &Camera) {
-        for command in &self.inner.command_buffer {
+        let inner = self.inner.lock().unwrap();
+        for command in &inner.command_buffer {
             match command {
                 &DebugDrawCommand::Line { start, end, color: _ } => {
                     self.line_vertices.extend(start.as_array());
@@ -162,7 +164,8 @@ impl DebugDraw {
     // TODO: This function is a hack to get debug pausing working. This should be better handled
     // by DebugDraw itself, rather than forcing Engine to handle it.
     pub fn clear_buffer(&mut self) {
-        self.inner.command_buffer.clear();
+        let mut inner = self.inner.lock().unwrap();
+        inner.command_buffer.clear();
     }
 }
 
@@ -206,7 +209,8 @@ struct DebugDrawInner {
 pub fn draw_command(command: DebugDrawCommand) {
     debug_assert!(unsafe { !instance.is_null() }, "Cannot use debug drawing if there is no instance");
 
-    let inner = unsafe { &mut *instance };
+    let inner = unsafe { &*instance };
+    let mut inner = inner.lock().unwrap();
     inner.command_buffer.push(command);
 }
 
