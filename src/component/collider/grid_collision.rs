@@ -148,27 +148,8 @@ impl GridCollisionSystem {
                 self.processed_work.len(),
             );
 
-            let mut longest = 0.0;
-            for bvh in bvh_manager.components() {
-                let diff_x = bvh.aabb.max.x - bvh.aabb.min.x;
-                let diff_y = bvh.aabb.max.y - bvh.aabb.min.y;
-                let diff_z = bvh.aabb.max.z - bvh.aabb.min.z;
-
-                if diff_x > longest {
-                    longest = diff_x;
-                }
-
-                if diff_y > longest {
-                    longest = diff_y;
-                }
-
-                if diff_z > longest {
-                    longest = diff_z;
-                }
-            }
-
             for work_unit in self.processed_work.iter_mut() {
-                work_unit.cell_size = longest;
+                work_unit.cell_size = bvh_manager.longest_axis();
             }
 
             // Prepare work unit by giving it a copy of the list of volumes.

@@ -17,6 +17,11 @@ pub struct BoundingVolumeManager {
     components: Vec<BoundVolume>,
     entities: Vec<Entity>,
     indices: EntityMap<usize>,
+
+    // Statistic data. Updated each frame in bvh_update().
+
+    longest_axis: f32,
+    collision_region: AABB,
 }
 
 impl BoundingVolumeManager {
@@ -25,6 +30,12 @@ impl BoundingVolumeManager {
             components: Vec::new(),
             entities: Vec::new(),
             indices: EntityMap::default(),
+
+            longest_axis: 0.0,
+            collision_region: AABB {
+                min: Point::min(),
+                max: Point::max(),
+            },
         }
     }
 
@@ -89,6 +100,14 @@ impl BoundingVolumeManager {
         } else {
             None
         }
+    }
+
+    pub fn longest_axis(&self) -> f32 {
+        self.longest_axis
+    }
+
+    pub fn collision_region(&self) -> AABB {
+        self.collision_region
     }
 }
 
@@ -329,11 +348,32 @@ pub fn bvh_update(scene: &Scene, _delta: f32) {
     let transform_manager = scene.get_manager::<TransformManager>();
     let mut bvh_manager = collider_manager.bvh_manager_mut();
 
+    bvh_manager.longest_axis = 0.0;
+
     for (collider, entity) in collider_manager.iter() {
         let transform = transform_manager.get(entity);
 
         let cached_collider = CachedCollider::from_collider_transform(&*collider, &*transform);
         let aabb = AABB::from_collider(&cached_collider);
+
+        // Update longest axis.
+        {
+            let diff_x = aabb.max.x - aabb.min.x;
+            let diff_y = aabb.max.y - aabb.min.y;
+            let diff_z = aabb.max.z - aabb.min.z;
+
+            if diff_x > bvh_manager.longest_axis {
+                bvh_manager.longest_axis = diff_x;
+            }
+
+            if diff_y > bvh_manager.longest_axis {
+                bvh_manager.longest_axis = diff_y;
+            }
+
+            if diff_z > bvh_manager.longest_axis {
+                bvh_manager.longest_axis = diff_z;
+            }
+        }
 
         // TODO: We can avoid branching here if we create the BVH when the collider is created,
         // or at least do something to ensure that they already exist by the time we get here.
