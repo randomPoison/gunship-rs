@@ -1,3 +1,122 @@
+//! The collision subsystem for the engine, including the user-facing API and the backend collision
+//! processing systems.
+//!
+//! The collision system is composed of two parts: the user-facing `ColliderManager` and a back end
+//! collision processing system. The system is designed to support different back ends while
+//! maintaining a consistent API for game code. This should allow for game developers to use a
+//! collision processing system that is best suited for their particular game while still allowing
+//! experimentation and rapid iteration (i.e. developers can start with the default collision
+//! engine and then switch to a more suitable one without having to change any of their code).
+//!
+//! User Facing API
+//! ===============
+//!
+//! In order to enable an entity to be tested for collisions with other entities it must be given
+//! a `Collider`. Colliders define basic collision volumes that can be used to perform collision
+//! tests. Colliders are assigned to entities and can be retrieved through the `ColliderManager`:
+//!
+//! ```rust
+//! fn update(scene: &Scene) {
+//!     // Retrieve the collider manager from the scene.
+//!     let collider_manager = scene.get_manager::<ColliderManager>();
+//!
+//!     // Create an entity and assign it a sphere collider.
+//!     // N.B. Entites also need to be assigned a `Transform` component for the Collider to work.
+//!     let entity = scene.create_entity();
+//!     collider_manager.assign(entity, Collider::Sphere {
+//!         offset: Vector3::zero(),
+//!         radius: 1.0,
+//!     });
+//! }
+//! ```
+//!
+//! There are currently two types of collision primitives supported (oriented boxes and spheres)
+//! with several more types planned for support in the future (meshes, axis-aligned boxes,
+//! capsules, and planes). Each of these types have configurable options, such as the radius for
+//! sphere colliders, and all colliders are placed in the world based on the entity's transform.
+//! Each collider has a natural "anchor point", which is by default located at the transform's
+//! world position (e.g. the sphere and box colliders' anchor are their center point), and all
+//! collider types have an `offset` member that allows for the collider to be shifted relative to
+//! the entity's transform.
+//!
+//! Collision Callbacks
+//! -------------------
+//!
+//! In order to be notified when collisions are detected game code must register a callback with
+//! the collision system. The collision callback can be any `CollisionCallback` trait object or
+//! function that has the same signature as `CollisionCallback::invoke()` (including closures).
+//! A callback is associated with one or more entities and will be invoked every frame where at
+//! least one of its entities are detected as part of a collision. A collision callback will be
+//! invoked at most once per frame -- they are intended to behave like system updates where
+//! high-overhead operations (e.g. retrieving component managers) is done once and then all
+//! relevant entities are processed at once.
+//!
+//! Multiple callbacks can be associated with the same entity so that callbacks don't have to
+//! perform multiple functions and different behaviors can be mixed and matched for different
+//! entities. The recommended way to use collision callbacks is perform collision behavior for a
+//! "class" of game entities without having to perform additional runtime checks. For example: If
+//! your game is about ducks eating breadcrumbs and you want you duck entity to eat a breadcrumb
+//! when it collides with the breadcrumb, you might have something as follows:
+//!
+//! ```rust
+//! fn duck_callback(scene: &Scene, collisions: &[Collision]) {
+//!     let duck_manager = scene.get_manager::<DuckManager>();
+//!     let bread_manager = scene.get_manager::<BreadManager>();
+//!
+//!     // Iterate over the collisions.
+//!     for collision in collisions {
+//!
+//!         // Ducks could collide with things other than breadcrubms,
+//!         // so check if we've actually collided with breadcrumb.
+//!         if bread_manager.has_component(collision.other) {
+//!
+//!             // Retrieve the `Duck` object from the duck manager.
+//!             let mut duck = duck_manager.get_mut(collision.entity).unwrap();
+//!
+//!             // Give the duck the breadcrumb.
+//!             duck.gain_breadcrumb();
+//!
+//!             // Destroy the breadcrumb entity now that the duck has eaten it.
+//!             scene.destroy(collision.other);
+//!         }
+//!     }
+//! }
+//! ```
+//!
+//! Notice how this code never checks that the colliding entities have a `Duck` component, it can
+//! safely unwrap the `Option<Duck>` that `get_mut()` returns because `duck_callback()` has only
+//! been registered with with entities that have a duck component. There are only two ways for the
+//! unwrap to panic: If the duck component has since been removed from the entity or if the Entity
+//! never had the component in the first place. In either case the unwrap failing indicates a bug
+//! in game code (either assigning the callback without the component or removing the component
+//! without unasigning the callback).
+//!
+//! Back End System
+//! ===============
+//!
+//! The back end system is responsible for performing all of the collision processing every frame.
+//! Collision procesing is broken into 4 steps:
+//!
+//! 1. Map user-defined colliders into usable collision volumes. This includes mapping the volumes
+//!    from local space to world space and apply appropriate transformations such as scale and
+//!    rotation.
+//! 2. Broadphase collision processing. This step culls impossible collision pairs and builds a
+//!    list of potential collision pairs to be tested further. This phase is meant to be very
+//!    coarse and helps keep collision processing fast by minimizing the number of expensive
+//!    collision tests that are being performed through cheaper preprocessing. This phase is also
+//!    the most configurable since different forms of broadphase processing work better for
+//!    different kinds of games, whereas narrowphase processing can't be substantially changed or
+//!    optimized.
+//! 3. Narrowphase collision processing. This step takes the list of potential collision pairs
+//!    and performs the final collision test to determine which pairs of collision volumes are
+//!    intersecting. This step also gathers any other collision information which may be forwarded
+//!    to game code such as a list of collision points.
+//! 4. Collision callbacks. This step takes the list of detected collisions from narrowphase and
+//!    invokes the appropriate collision callbacks with the lists of colliding entities.
+//!
+//! Currently the only back end system supported is the grid collision system. For more details
+//! see the `grid_collision` module below.
+
 use std::collections::{HashMap, HashSet};
 use std::collections::hash_state::HashState;
 use std::cell::{RefCell, Ref, RefMut};
@@ -18,45 +137,59 @@ use component::transform::Transform;
 pub mod grid_collision;
 pub mod bounding_volume;
 
-///! This is the collision sub-system for the game engine. It is composed of two parts: the
-///! user-facing `ColliderManager` and a back end collision processing system.
-///!
-///! In order to enable an entity to be tested for collisions with other entities it must be given
-///! a `Collider`. Colliders define basic collision volumes that can be used to perform collision
-///! tests. Users can access collider data to configure the collision volumes for their entities.
-///!
-///! Behind the scenes Gunship can support a number of processing systems to perform the collision
-///! detection using the user configured colliders. Maybe the user will have access to the
-///! processing system? That would be real useful, but maybe not? It could be useful if the user
-///! wants to have more control over the bounding volume hierarchy for each object.
-
+/// An enum representing all possible collision volumes. See each variant for more information.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Collider {
     /// Represents a sphere collider.
     ///
-    /// # Details
+    /// Details
+    /// =======
     ///
-    /// The sphere collider is positioned relative entity in world coordinates but is unscaled by
-    /// the entity's local or total scale. This is because the sphere collider cannot be deformed
-    /// by a non-uniform scale, so the collider must be sized absolutely. If an object changes size
-    /// at runtime and the collider needs to match that size users can programatically resize the
-    /// object's associated sphere collider.
+    /// The sphere collider is positioned at its entity's global position anchored at its center.
+    /// If the offset is `<0, 0, 0>` then the sphere's center will be at the transform's position,
+    /// otherwise the sphere's center will be positioned at `transform.position_derived()
+    /// + sphere.offset`. Sphere colliders are unscaled by the entity's local or total scale. This
+    /// is because the sphere collider cannot be deformed by a non-uniform scale, so the collider
+    /// must be sized absolutely. If an entity's size changes at runtime and the collider needs to
+    /// match that size users can programatically resize the object's associated sphere collider.
     Sphere {
+        /// The offset between the sphere's center and the entity's global position.
         offset: Vector3,
+
+        /// The radius in global units of the sphere collider. This is unaffected by the
+        /// transform's scale.
         radius: f32,
     },
 
     /// Represents a box collider oriented to the entity's local coordinate system.
+    ///
+    /// Details
+    /// =======
+    ///
+    /// The box collider is positioned at its entity's global position anchored at its center.
+    /// if the offset is `<0, 0, 0>` then the box's center will be that the transforms position,
+    /// otherwise the box's center will be positioned at `transform.position_derived() + box.offset`.
+    /// Box colliders are affected by both the transform's scale and orientation. The box is
+    /// oriented according to the transform's derived orientation, and scaled according it its
+    /// local scale. The `widths` member defines the base width along each axis, which are
+    /// multiplied by the corresponding axis of the transform's local scale. For example: If you
+    /// have a box collider with widths `<1, 2, 1>` and has a local scale of `<1, 2, 3>` the box
+    /// collider will be processed by the collision system as having widths `<1, 4, 3>`.
     Box {
         offset: Vector3,
         widths:  Vector3,
     },
 
-    /// Represents a collision geometry derived from mesh data.
+    /// Placeholder for mesh collider. Mesh colliders aren't supported currently, but they will be!
     Mesh,
 }
 
 /// Manages the user-facing data in the collision system.
+///
+/// `ColliderManager` is used to assign a collision volume to entities, as well as retrieve
+/// existing colliders. It can be retrieved from the scene with `Scene::get_manager()` and
+/// `Scene::get_manager_mut()`. It is also used to register collision callbacks and associate them
+/// with entities.
 #[derive(Debug, Clone)]
 pub struct ColliderManager {
     inner: StructComponentManager<Collider>,
@@ -66,6 +199,7 @@ pub struct ColliderManager {
 }
 
 impl ColliderManager {
+    /// Construct a new `ColliderManager`.
     pub fn new() -> ColliderManager {
         ColliderManager {
             inner: StructComponentManager::new(),
@@ -75,14 +209,43 @@ impl ColliderManager {
         }
     }
 
+    /// Assign a collider to the specified entity.
+    ///
+    /// Panics
+    /// ======
+    ///
+    /// Panics if the specified entity already has a collider component.
     pub fn assign(&mut self, entity: Entity, collider: Collider) {
         self.inner.assign(entity, collider);
     }
 
+    /// Registers a collision callback without associating it with an entity.
+    ///
+    /// Details
+    /// =======
+    ///
+    /// This method exists for hotloading support. Callbacks cannot be automatically reloaded when
+    /// hotloading occurs so game code must manually re-register callbacks in the post-hotload
+    /// setup. The callback manager retains the association between entities and their callbacks
+    /// even after hotloading so registering a callback is only needed in order for the collision
+    /// system to be able to invoke that callback after hotloading. When associating a callback
+    /// with an entity `register_callback()` does not need to be called before `assign_callback()`
+    /// as `assign_callback()` will automatically handle registering a new callback.
     pub fn register_callback<T: CollisionCallback + 'static>(&mut self, callback: T) {
         self.callback_manager.borrow_mut().register(callback);
     }
 
+    /// Assigns a callback to the specified entity.
+    ///
+    /// Details
+    /// =======
+    ///
+    /// Internally the callback manager (which is owned by the collider manager) keeps a list of
+    /// which callbacks are assigned to which entities. After collision processing has happened the
+    /// callback manager uses that information to build a list of all of the collisions that should
+    /// be passed when invoking that callback.
+    ///
+    /// For more information see the module documentation.
     pub fn assign_callback<T: CollisionCallback + 'static>(&mut self, entity: Entity, callback: T) {
         self.callback_manager.borrow_mut().assign(entity, callback);
     }
@@ -118,11 +281,19 @@ impl ComponentManager for ColliderManager {
 
 /// Combines collider data with calculated world position.
 ///
-/// #Details
+/// Details
+/// =======
 ///
 /// It is common for collision processors to need to reference a collider multiple times in the
 /// course of a single processing pass, so it is valueable to only have to retrieve the position
-/// data for a collider once and cache off those results.
+/// data for a collider once and cache off those results. Before broadphase is run the collision
+/// processing system creates a `CachedCollider` from each registered `Collider` component. The
+/// collision processing system is then able to operatie on the colliders without needing to access
+/// andy other data or component managers.
+///
+/// Like `Collider` this is an enum, but whereas `Collider` uses struct variants, `CachedCollider`
+/// opts to create separate types for each variant. This allows for each variant to have it's own
+/// member functions which helps to clean up the collision testing code a bit.
 #[derive(Debug, Clone, Copy)]
 pub enum CachedCollider {
     Sphere(Sphere),

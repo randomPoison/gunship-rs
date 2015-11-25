@@ -1,3 +1,90 @@
+//! A grid-based broadphase collision system. The default collision system for Gunship.
+//!
+//! The grid collision system places collision volumes in a uniform grid and builds the candidate
+//! collision list from the pairs of entities that share a grid cell. If two entities never overlap
+//! in any cell then it is impossible for them to be colliding and no further testing between the
+//! is necessary. The grid collision system is a good general purpose system with reasonable
+//! performance characteristics, though is likely not optimal in most cases under heavy load.
+//!
+//! Algorithm
+//! =========
+//!
+//! Conceptually the grid collision system works by dividing space into a uniform grid of cells.
+//! Collision volumes are placed into all cells which they may overlap (determined using the
+//! volume's AABB), and if there are other colliders in those cells then they are added to the list
+//! of candidate collisions that gets sent to narrowphase processing.
+//!
+//! For this implementation the grid is represented by a `HashTable<GridCell, Vec<*const BoundVolume>>`,
+//! where the key is the coordinates of the grid and the value is a list of the collision volumes
+//! that have been placed into that cell.
+//!
+//! As psuedocode the algorithm goes as follows:
+//!
+//! ```rust
+//! for volume in collision_volumes {
+//!     for cell in volume.aabb {
+//!         for other_volume in cell {
+//!             candidate_collisions.push(volume, other_volume);
+//!         }
+//!
+//!         cell.push(volume);
+//!     }
+//! }
+//! ```
+//!
+//! It's important to note that any given volume may overlap multiple cells. If that's the case it
+//! will be inserted into each cell it overlaps, and other volumes may be listed as a candidate
+//! collision partner multiple times. These duplicate candidate collisions are culled out by the
+//! narrowphase pass and do not result in redundant collision tests.
+//!
+//! Filling Grid Cells
+//! ==================
+//!
+//! The collision grid is defined by the size of the grid cells and the center point of the grid.
+//! Grid cells are axis aligned and uniform in size along X, Y, and Z, so the size of grid cells
+//! is described with a single `f32`. The grid center is offset from the world origin in order to
+//! more evenly subdivide the space for parallel collision processing (discussed below).
+//!
+//! The coordinate of a grid cell represents its minimum point, so the grid cell `(0, 0, 0)` covers
+//! the space from `grid_center` to `grid_center + cell_size * (1, 1, 1)`. In general any grid cell
+//! `<x, y, z>` covers the space from `grid_center + <x, y, z> * cell_size` to `grid_center +
+//! <x + 1, y + 1, z + 1> * cell_size`.
+//!
+//! In order to minimize the number of grid cells that any given collision volume overlaps the cell
+//! size is dynamically updated to be as long as the longest axis of any volume's AABB. This
+//! guarantees that no matter how volumes are positioned or oriented in space no volume can ever
+//! be placed in more than 8 grid cells on a given frame. This helps to minimize the number of
+//! grid lookups needed to perform the broadphase pass at the cost of potentially more candidate
+//! collisions that need to be processed in narrowphase.
+//!
+//! Parallel Collision processing
+//! ============================
+//!
+//! The grid collision system utilizes a configurable number of worker threads in order to speed up
+//! collision processing. This is done by subdividing the collision region into half-spaces and
+//! assigning those work regions to each worker thread. Worker threads then process all collision
+//! volumes but ignore any that do not intersect its work region. Each worker maintains its own
+//! grid and builds its own list of candidate collisions. It then runs its own narrowphase pass on
+//! its candidate collisions and returns the resulting list of confirmed collisions to the master
+//! thread. This has dual benefits:
+//!
+//! - Collisions (both broadphase and narrowphase) are processed in parallel. This is naturally
+//!   faster than serial processing as the grid-based processing and narrowphase processsing both
+//!   lend themselves well to being done in parallel since there are no dependencies or
+//!   synchronization between workers running in parallel.
+//! - The grid collision processing also benefits from subdividing the work region even when not
+//!   processing the regions in parallel. This is because grid lookup times increase as there are
+//!   more elements in the hash grid, so using separate grids reduces the number of colliders in
+//!   each hash grid, which improves lookup time and speeds up each worker thread further.
+//!
+//! Worker threads are maintained in a thread pool and kept running between frames to avoid the
+//! overhead of repeatedly creating and destroying threads. The synchronization overhead to give
+//! each worker thread its work unit each frame is low (< 0.1ms). The main thread has to perform
+//! some limited processing on the collision lists delivered by each worker thread since collision
+//! pairs that overlap the boundaries between work units will be detected by both or all of those
+//! workers, however this benefits somewhat from being done in parallel as well, helping to keep
+//! overhead low.
+
 use std::collections::{HashMap, HashSet};
 use std::collections::hash_map::Entry;
 use std::f32::{MAX, MIN};
@@ -133,7 +220,7 @@ impl GridCollisionSystem {
 
         self.collisions.clear();
         let timer = Timer::new();
-        let start_time = timer.now();
+        // let start_time = timer.now();
 
         let thread_data = &*self.thread_data;
 
@@ -184,17 +271,17 @@ impl GridCollisionSystem {
             self.processed_work.push(work_unit);
         }
 
-        println!("\n-- TOP OF GRID UPDATE --");
-        println!("Total Time: {}ms", timer.elapsed_ms(start_time));
-        for work_unit in &self.processed_work {
-            println!(
-                "work unit returned: recieved @ {}ms, broadphase @ {}ms, narrowphase @ {}ms, returned @ {}ms",
-                timer.duration_ms(work_unit.received_time - start_time),
-                timer.duration_ms(work_unit.broadphase_time - start_time),
-                timer.duration_ms(work_unit.narrowphase_time - start_time),
-                timer.duration_ms(work_unit.returned_time - start_time),
-            );
-        }
+        // println!("\n-- TOP OF GRID UPDATE --");
+        // println!("Total Time: {}ms", timer.elapsed_ms(start_time));
+        // for work_unit in &self.processed_work {
+        //     println!(
+        //         "work unit returned: recieved @ {}ms, broadphase @ {}ms, narrowphase @ {}ms, returned @ {}ms",
+        //         timer.duration_ms(work_unit.received_time - start_time),
+        //         timer.duration_ms(work_unit.broadphase_time - start_time),
+        //         timer.duration_ms(work_unit.narrowphase_time - start_time),
+        //         timer.duration_ms(work_unit.returned_time - start_time),
+        //     );
+        // }
     }
 }
 

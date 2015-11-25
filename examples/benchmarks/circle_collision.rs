@@ -5,8 +5,8 @@ use std::f32::consts::PI;
 
 use gunship::*;
 
-const TOTAL_CUBES:   usize = 10_000;
-const TOTAL_SPHERES: usize = 10_000;
+const TOTAL_CUBES:   usize = 5_000;
+const TOTAL_SPHERES: usize = 5_000;
 
 fn main() {
     let mut engine = Engine::new();

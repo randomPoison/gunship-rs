@@ -349,6 +349,10 @@ pub fn bvh_update(scene: &Scene, _delta: f32) {
     let mut bvh_manager = collider_manager.bvh_manager_mut();
 
     bvh_manager.longest_axis = 0.0;
+    bvh_manager.collision_region = AABB {
+        min: Point::max(),
+        max: Point::min(),
+    };
 
     for (collider, entity) in collider_manager.iter() {
         let transform = transform_manager.get(entity);
@@ -373,6 +377,15 @@ pub fn bvh_update(scene: &Scene, _delta: f32) {
             if diff_z > bvh_manager.longest_axis {
                 bvh_manager.longest_axis = diff_z;
             }
+        }
+
+        // Update collision region.
+        if aabb.min < bvh_manager.collision_region.min {
+            bvh_manager.collision_region.min = aabb.min;
+        }
+
+        if aabb.max > bvh_manager.collision_region.max {
+            bvh_manager.collision_region.max = aabb.max;
         }
 
         // TODO: We can avoid branching here if we create the BVH when the collider is created,
