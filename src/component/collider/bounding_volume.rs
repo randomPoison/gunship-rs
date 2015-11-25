@@ -1,4 +1,3 @@
-use std::cell::{Cell};
 use std::slice::Iter;
 use std::iter::Zip;
 
@@ -18,6 +17,11 @@ pub struct BoundingVolumeManager {
     components: Vec<BoundVolume>,
     entities: Vec<Entity>,
     indices: EntityMap<usize>,
+
+    // Statistic data. Updated each frame in bvh_update().
+
+    longest_axis: f32,
+    collision_region: AABB,
 }
 
 impl BoundingVolumeManager {
@@ -26,6 +30,12 @@ impl BoundingVolumeManager {
             components: Vec::new(),
             entities: Vec::new(),
             indices: EntityMap::default(),
+
+            longest_axis: 0.0,
+            collision_region: AABB {
+                min: Point::min(),
+                max: Point::max(),
+            },
         }
     }
 
@@ -91,6 +101,14 @@ impl BoundingVolumeManager {
             None
         }
     }
+
+    pub fn longest_axis(&self) -> f32 {
+        self.longest_axis
+    }
+
+    pub fn collision_region(&self) -> AABB {
+        self.collision_region
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -98,21 +116,13 @@ pub struct BoundVolume {
     pub entity: Entity,
     pub aabb: AABB,
     pub collider: CachedCollider,
-
-    // TODO: Debug only variables, strip these in release builds.
-    pub aabb_intersected: Cell<bool>,
-    pub collider_intersected: Cell<bool>,
 }
 
 impl BoundVolume {
     /// Tests if `other` collides with this BVH.
     pub fn test(&self, other: &BoundVolume) -> bool {
         if self.aabb.test_aabb(&other.aabb) {
-            self.aabb_intersected.set(true);
-            other.aabb_intersected.set(true);
             if self.collider.test(&other.collider) {
-                self.collider_intersected.set(true);
-                other.collider_intersected.set(true);
                 return true;
             }
         }
@@ -338,11 +348,45 @@ pub fn bvh_update(scene: &Scene, _delta: f32) {
     let transform_manager = scene.get_manager::<TransformManager>();
     let mut bvh_manager = collider_manager.bvh_manager_mut();
 
+    bvh_manager.longest_axis = 0.0;
+    bvh_manager.collision_region = AABB {
+        min: Point::max(),
+        max: Point::min(),
+    };
+
     for (collider, entity) in collider_manager.iter() {
         let transform = transform_manager.get(entity);
 
         let cached_collider = CachedCollider::from_collider_transform(&*collider, &*transform);
         let aabb = AABB::from_collider(&cached_collider);
+
+        // Update longest axis.
+        {
+            let diff_x = aabb.max.x - aabb.min.x;
+            let diff_y = aabb.max.y - aabb.min.y;
+            let diff_z = aabb.max.z - aabb.min.z;
+
+            if diff_x > bvh_manager.longest_axis {
+                bvh_manager.longest_axis = diff_x;
+            }
+
+            if diff_y > bvh_manager.longest_axis {
+                bvh_manager.longest_axis = diff_y;
+            }
+
+            if diff_z > bvh_manager.longest_axis {
+                bvh_manager.longest_axis = diff_z;
+            }
+        }
+
+        // Update collision region.
+        if aabb.min < bvh_manager.collision_region.min {
+            bvh_manager.collision_region.min = aabb.min;
+        }
+
+        if aabb.max > bvh_manager.collision_region.max {
+            bvh_manager.collision_region.max = aabb.max;
+        }
 
         // TODO: We can avoid branching here if we create the BVH when the collider is created,
         // or at least do something to ensure that they already exist by the time we get here.
@@ -350,8 +394,6 @@ pub fn bvh_update(scene: &Scene, _delta: f32) {
             bvh.collider = cached_collider;
             bvh.aabb = aabb;
 
-            bvh.aabb_intersected.set(false);
-            bvh.collider_intersected.set(false);
             continue;
         }
         // else
@@ -360,9 +402,6 @@ pub fn bvh_update(scene: &Scene, _delta: f32) {
                 entity: entity,
                 aabb: aabb,
                 collider: cached_collider,
-
-                aabb_intersected: Cell::new(false),
-                collider_intersected: Cell::new(false),
             });
         }
     }

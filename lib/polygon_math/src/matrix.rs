@@ -61,35 +61,27 @@ impl Matrix4 {
     }
 
     /// Creates a new rotation matrix from a set of Euler angles.
+    ///
+    /// Details
+    /// -------
+    ///
+    /// The resulting matrix will have the rotations applied in the order x -> y -> z.
     pub fn rotation(x: f32, y: f32, z: f32) -> Matrix4 {
-        let x_rot = Matrix4 {
-            data: [
-                [1.0, 0.0,      0.0,     0.0],
-                [0.0, x.cos(), -x.sin(), 0.0],
-                [0.0, x.sin(),  x.cos(), 0.0],
-                [0.0, 0.0,      0.0,     1.0],
-            ]
-        };
+        let s1 = x.sin();
+        let c1 = x.cos();
+        let s2 = y.sin();
+        let c2 = y.cos();
+        let s3 = z.sin();
+        let c3 = z.cos();
 
-        let y_rot = Matrix4 {
+        Matrix4 {
             data: [
-                [ y.cos(), 0.0, y.sin(), 0.0],
-                [ 0.0,     1.0, 0.0,     0.0],
-                [-y.sin(), 0.0, y.cos(), 0.0],
-                [ 0.0,     0.0, 0.0,     1.0],
+                [               c2 * c3,               -c2 * s3,       s2, 0.0],
+                [c1 * s3 + c3 * s1 * s2, c1 * c3 - s1 * s2 * s3, -c2 * s1, 0.0],
+                [s1 * s3 - c1 * c3 * s2, c3 * s1 + c1 * s2 * s3,  c1 * c2, 0.0],
+                [                   0.0,                    0.0,      0.0, 1.0],
             ]
-        };
-
-        let z_rot = Matrix4 {
-            data: [
-                [z.cos(), -z.sin(), 0.0, 0.0],
-                [z.sin(),  z.cos(), 0.0, 0.0],
-                [0.0,      0.0,     1.0, 0.0],
-                [0.0,      0.0,     0.0, 1.0],
-            ]
-        };
-
-        z_rot * (y_rot * x_rot)
+        }
     }
 
     /// Creates a new rotation matrix from a quaternion.
@@ -280,29 +272,52 @@ impl Debug for Matrix4 {
 
 /// A 3x3 matrix that can be used to represent a combination of rotation and scale.
 #[repr(C)] #[derive(Clone, Copy)]
-pub struct Matrix3 {
-    data: [[f32; 3]; 3]
-}
+pub struct Matrix3([[f32; 3]; 3]);
 
 impl Matrix3 {
+    pub fn identity() -> Matrix3 {
+        Matrix3([
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.0, 0.0, 1.0],
+        ])
+    }
+
     pub fn from_matrix4(other: &Matrix4) -> Matrix3 {
-        Matrix3 {
-            data: [
-                [other[0][0], other[0][1], other[0][2]],
-                [other[1][0], other[1][1], other[1][2]],
-                [other[2][0], other[2][1], other[2][2]],
-            ]
-        }
+        Matrix3([
+            [other[0][0], other[0][1], other[0][2]],
+            [other[1][0], other[1][1], other[1][2]],
+            [other[2][0], other[2][1], other[2][2]],
+        ])
     }
 
     pub fn from_quaternion(q: Quaternion) -> Matrix3 {
-        Matrix3 {
-            data: [
-                [(q.w*q.w + q.x*q.x - q.y*q.y - q.z*q.z), (2.0*q.x*q.y - 2.0*q.w*q.z),             (2.0*q.x*q.z + 2.0*q.w*q.y),           ],
-                [(2.0*q.x*q.y + 2.0*q.w*q.z),             (q.w*q.w - q.x*q.x + q.y*q.y - q.z*q.z), (2.0*q.y*q.z - 2.0*q.w*q.x),           ],
-                [(2.0*q.x*q.z - 2.0*q.w*q.y),             (2.0*q.y*q.z + 2.0*q.w*q.x),             (q.w*q.w - q.x*q.x - q.y*q.y + q.z*q.z)],
-            ]
-        }
+        Matrix3([
+            [(q.w*q.w + q.x*q.x - q.y*q.y - q.z*q.z), (2.0*q.x*q.y - 2.0*q.w*q.z),             (2.0*q.x*q.z + 2.0*q.w*q.y),           ],
+            [(2.0*q.x*q.y + 2.0*q.w*q.z),             (q.w*q.w - q.x*q.x + q.y*q.y - q.z*q.z), (2.0*q.y*q.z - 2.0*q.w*q.x),           ],
+            [(2.0*q.x*q.z - 2.0*q.w*q.y),             (2.0*q.y*q.z + 2.0*q.w*q.x),             (q.w*q.w - q.x*q.x - q.y*q.y + q.z*q.z)],
+        ])
+    }
+
+    /// Creates a new rotation matrix from a set of Euler angles.
+    ///
+    /// Details
+    /// -------
+    ///
+    /// The resulting matrix will have the rotations applied in the order x -> y -> z.
+    pub fn rotation(x: f32, y: f32, z: f32) -> Matrix3 {
+        let s1 = x.sin();
+        let c1 = x.cos();
+        let s2 = y.sin();
+        let c2 = y.cos();
+        let s3 = z.sin();
+        let c3 = z.cos();
+
+        Matrix3([
+            [               c2 * c3,               -c2 * s3,       s2],
+            [c1 * s3 + c3 * s1 * s2, c1 * c3 - s1 * s2 * s3, -c2 * s1],
+            [s1 * s3 - c1 * c3 * s2, c3 * s1 + c1 * s2 * s3,  c1 * c2],
+        ])
     }
 
     pub fn col(&self, col: usize) -> Vector3 {
@@ -336,14 +351,14 @@ impl Index<usize> for Matrix3 {
 
     fn index(&self, index: usize) -> &[f32; 3] {
         debug_assert!(index < 3, "Cannot get matrix row {} in a 3x3 matrix", index);
-        &self.data[index]
+        &self.0[index]
     }
 }
 
 impl IndexMut<usize> for Matrix3 {
     fn index_mut(&mut self, index: usize) -> &mut [f32; 3] {
         debug_assert!(index < 3, "Cannot get matrix row {} in a 3x3 matrix", index);
-        &mut self.data[index]
+        &mut self.0[index]
     }
 }
 

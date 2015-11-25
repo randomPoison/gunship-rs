@@ -10,6 +10,7 @@ name = "gunship"
 [features]
 timing = []
 hotloading = []
+no-draw = []
 
 [dependencies]
 bootstrap_rs    = { path = "lib/bootstrap_rs" }
@@ -20,15 +21,22 @@ polygon         = { path = "lib/polygon_rs" }
 polygon_math    = { path = "lib/polygon_math" }
 stopwatch       = { path = "lib/stopwatch" }
 
+[dev_dependencies]
+rand = "*"
+
+[profile.dev]
+opt-level = 1
+
 [profile.release]
+# lto = true
+debug = true
+
+[profile.bench]
 lto = true
 
 [[example]]
 name = "create_destroy"
 path = "examples/benchmarks/create_destroy.rs"
-
-[dev_dependencies]
-rand = "*"
 
 [[example]]
 name = "circle_movement"

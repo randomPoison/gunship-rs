@@ -32,6 +32,7 @@ pub struct Engine {
     resource_manager: Rc<ResourceManager>,
 
     systems: Vec<Box<System>>,
+    debug_systems: Vec<Box<System>>,
     system_indices: HashMap<TypeId, usize>,
     system_names: HashMap<String, TypeId>,
 
@@ -72,6 +73,7 @@ impl Engine {
             resource_manager: resource_manager.clone(),
 
             systems: Vec::new(),
+            debug_systems: Vec::new(),
             system_indices: HashMap::new(),
             system_names: HashMap::new(),
 
@@ -134,6 +136,11 @@ impl Engine {
             }
         }
 
+        // Update debug systems always forever.
+        for system in self.debug_systems.iter_mut() {
+            system.update(scene, TARGET_FRAME_TIME_SECONDS);
+        }
+
         self.transform_update.update(scene, TARGET_FRAME_TIME_SECONDS);
 
         if !self.debug_pause || scene.input.key_pressed(ScanCode::F11) {
@@ -154,6 +161,7 @@ impl Engine {
         }
     }
 
+    #[cfg(not(feature="no-draw"))]
     pub fn draw(&mut self) {
         let _stopwatch = Stopwatch::new("draw");
 
@@ -194,6 +202,9 @@ impl Engine {
 
         self.renderer.swap_buffers(self.window.borrow().deref());
     }
+
+    #[cfg(feature="no-draw")]
+    pub fn draw(&mut self) {}
 
     pub fn main_loop(&mut self) {
         let timer = Timer::new();
@@ -242,6 +253,10 @@ impl Engine {
         self.systems.push(Box::new(system));
         self.system_indices.insert(system_id, index);
         self.system_names.insert(type_name::<T>().into(), system_id);
+    }
+
+    pub fn register_debug_system<T: Any + System>(&mut self, system: T) {
+        self.debug_systems.push(Box::new(system));
     }
 
     pub fn get_system<T: Any + System>(&self) -> &T {
@@ -299,6 +314,7 @@ impl Clone for Engine {
             resource_manager: resource_manager.clone(),
 
             systems: Vec::new(),
+            debug_systems: Vec::new(),
             system_indices: HashMap::new(),
             system_names: HashMap::new(),
 
@@ -347,6 +363,7 @@ pub fn engine_init(window: Rc<RefCell<Window>>) -> Box<Engine> {
         resource_manager: resource_manager.clone(),
 
         systems: Vec::new(),
+        debug_systems: Vec::new(),
         system_indices: HashMap::new(),
         system_names: HashMap::new(),
 
@@ -387,7 +404,7 @@ pub fn engine_drop(engine: Box<Engine>) {
     drop(engine);
 }
 
-#[cfg(test)]
+// #[cfg(test)] // TODO: Only include this for benchmarks. Double TODO: better support headless benches.
 pub fn do_collision_update(engine: &mut Engine) {
     let scene = &mut engine.scene;
     engine.transform_update.update(scene, TARGET_FRAME_TIME_SECONDS);

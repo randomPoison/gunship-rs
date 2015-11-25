@@ -65,6 +65,18 @@ impl Point {
         Point::new(f32::MAX, f32::MAX, f32::MAX)
     }
 
+    pub fn distance(&self, other: &Point) -> f32 {
+        self.distance_sqr(other).sqrt()
+    }
+
+    pub fn distance_sqr(&self, other: &Point) -> f32 {
+        let diff_x = self.x - other.x;
+        let diff_y = self.y - other.y;
+        let diff_z = self.z - other.z;
+
+        diff_x * diff_x + diff_y * diff_y + diff_z * diff_z
+    }
+
     pub fn as_vector3(&self) -> Vector3 {
         Vector3::new(self.x, self.y, self.z)
     }
