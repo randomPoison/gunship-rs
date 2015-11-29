@@ -1,10 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::cell::{Cell, RefCell, Ref, RefMut};
 
-use math::Vector3;
-use math::Matrix4;
-use math::Point;
-use math::Quaternion;
+use math::*;
 use stopwatch::Stopwatch;
 
 use ecs::{Entity, System, ComponentManager};
@@ -94,6 +91,10 @@ impl TransformManager {
                 })
             },
             Some(parent) => {
+                // First update parent.
+                self.update_single(parent);
+
+                // Now update self with the parent's updated transform.
                 let parent_transform = self.get(parent);
                 transform.update(&*parent_transform);
             }
@@ -364,6 +365,21 @@ impl Transform {
     pub fn look_direction(&mut self, forward: Vector3, up: Vector3) {
         self.rotation = Quaternion::look_rotation(forward, up);
         self.out_of_date.set(true);
+    }
+
+    pub fn forward(&self) -> Vector3 {
+        let matrix = Matrix3::from_quaternion(self.rotation);
+        -matrix.z_part()
+    }
+
+    pub fn right(&self) -> Vector3 {
+        let matrix = Matrix3::from_quaternion(self.rotation);
+        matrix.x_part()
+    }
+
+    pub fn up(&self) -> Vector3 {
+        let matrix = Matrix3::from_quaternion(self.rotation);
+        matrix.y_part()
     }
 
     /// Updates the local and derived matrices for the transform.

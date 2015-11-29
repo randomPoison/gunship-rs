@@ -143,8 +143,8 @@ pub fn init() -> Result<AudioSource, String> { unsafe {
         let mut device: *mut IMMDevice = mem::uninitialized();
 
         let hresult = enumerator.GetDefaultAudioEndpoint(
-            EDataFlow::eRender,
-            ERole::eConsole,
+            eRender,
+            eConsole,
             mem::transmute(&mut device));
 
         if hresult != S_OK {
@@ -187,7 +187,7 @@ pub fn init() -> Result<AudioSource, String> { unsafe {
         println!("checking if audio client is supported");
         let mut format_ptr: *mut WAVEFORMATEX = mem::uninitialized();
         let hresult = audio_client.IsFormatSupported(
-            AUDCLNT_SHAREMODE::AUDCLNT_SHAREMODE_SHARED,
+            AUDCLNT_SHAREMODE_SHARED,
            &format_attempt,
            &mut format_ptr);
         if hresult != S_OK
@@ -211,7 +211,7 @@ pub fn init() -> Result<AudioSource, String> { unsafe {
         // Initialize the audio client with the chosen format.
         println!("initializing audio client");
         let hresult = audio_client.Initialize(
-            AUDCLNT_SHAREMODE::AUDCLNT_SHAREMODE_SHARED,
+            AUDCLNT_SHAREMODE_SHARED,
             0,
             10000000,
             0,

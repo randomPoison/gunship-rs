@@ -344,6 +344,18 @@ impl Matrix3 {
     pub fn as_matrix4(&self) -> Matrix4 {
         Matrix4::from_matrix3(*self)
     }
+
+    pub fn x_part(&self) -> Vector3 {
+        Vector3::new(self[0][0], self[1][0], self[2][0])
+    }
+
+    pub fn y_part(&self) -> Vector3 {
+        Vector3::new(self[0][1], self[1][1], self[2][1])
+    }
+
+    pub fn z_part(&self) -> Vector3 {
+        Vector3::new(self[0][2], self[1][2], self[2][2])
+    }
 }
 
 impl Index<usize> for Matrix3 {
