@@ -69,26 +69,24 @@ pub enum Error {
     },
     ParseFloatError {
         text: String,
-        error: std::num::ParseFloatError
+        error: std::num::ParseFloatError,
+    },
+    ParseIntError {
+        text: String,
+        error: std::num::ParseIntError,
     },
     FileError(std::io::Error),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-macro_rules! parse_attrib_by_type {
-    (String, $attrib:expr) => {
-        String::from($attrib)
-    }
-}
-
 macro_rules! collada_element {
     ($tag_name:expr, $struct_name:ident => {
         $(req attrib $req_attrib_name:ident: $req_attrib_type:ty),*
         $(opt attrib $opt_attrib_name:ident: $opt_attrib_type:ty),*
-        $(req child $req_child_name:ident:   $req_child_type:ty),*
-        $(opt child $opt_child_name:ident:   $opt_child_type:ty),*
-        $(rep child $rep_child_name:ident:   $rep_child_type:ty),*
+        $(req child  $req_child_name:ident:  $req_child_type:ty),*
+        $(opt child  $opt_child_name:ident:  $opt_child_type:ty),*
+        $(rep child  $rep_child_name:ident:  $rep_child_type:ty),*
     }) => {
         #[derive(Debug, Clone)]
         pub struct $struct_name {
@@ -115,21 +113,19 @@ macro_rules! collada_element {
 
                         // Required attributes.
                         $(Attribute(stringify!($req_attrib_name), attrib_value) => {
-                            let attrib = parse_attrib_by_type!($req_attrib_type, attrib_value);
-                            unsafe {
-                                ::std::mem::forget(
-                                    ::std::mem::replace(
-                                        &mut element.$req_attrib_name,
-                                        attrib,
-                                    )
+                            let attrib = try!(parse_attrib(attrib_value));
+                            ::std::mem::forget(
+                                ::std::mem::replace(
+                                    &mut element.$req_attrib_name,
+                                    attrib,
                                 )
-                            }
+                            )
                         },)*
 
                         // Optional attributes.
                         $(Attribute(stringify!($opt_attrib_name), attrib_value) => {
-                            let attrib = parse_attrib_by_type!($req_attrib_type, attrib_value);
-                            element.$req_attrib_name = Some(attrib);
+                            let attrib = try!(parse_attrib(attrib_value));
+                            element.$opt_attrib_name = Some(attrib);
                         },)*
 
                         // required children:
@@ -199,14 +195,41 @@ impl ColladaElement for String {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct Accessor {
-    pub count: usize,
-    pub offset: u32,
-    pub source: String,
-    pub stride: u32,
-    pub params: Vec<Param>,
+trait ColladaAttribute: Sized {
+    fn parse(text: &str) -> Result<Self>;
 }
+
+fn parse_attrib<T: ColladaAttribute>(text: &str) -> Result<T> {
+    T::parse(text)
+}
+
+impl ColladaAttribute for String {
+    fn parse(text: &str) -> Result<String> {
+        Ok(String::from(text))
+    }
+}
+
+impl ColladaAttribute for usize {
+    fn parse(text: &str) -> Result<usize> {
+        match usize::from_str_radix(text, 10) {
+            Ok(result) => Ok(result),
+            Err(error) => Err(Error::ParseIntError {
+                text: String::from(text),
+                error: error,
+            }),
+        }
+    }
+}
+
+collada_element!("accessor", Accessor => {
+    req attrib count:  usize,
+    req attrib source: String
+
+    opt attrib offset: usize,
+    opt attrib stride: usize
+
+    rep child param: Param
+});
 
 #[derive(Debug, Clone)]
 pub enum ArrayElement {
@@ -416,12 +439,48 @@ impl<'a> From<&'a str> for NodeType {
     }
 }
 
+// `Param` has to be handled manually because one of its children is <type> which
+// can't be handled by the macro because it's a keyword.
 #[derive(Debug, Clone)]
 pub struct Param {
+    pub data_type: String,
+
     pub name: Option<String>,
     pub sid: Option<String>,
-    pub data_type: String,
     pub semantic: Option<String>,
+}
+
+impl ColladaElement for Param {
+    fn parse(parser: &mut ColladaParser, _: &str) -> Result<Param> {
+        let mut param = Param {
+            name: None,
+            sid: None,
+            data_type: String::new(),
+            semantic: None,
+        };
+
+        loop {
+            let event = parser.next_event();
+            match event {
+                Attribute("name", name_str) => {
+                    param.name = Some(String::from(name_str));
+                },
+                Attribute("sid", sid_str) => {
+                    param.sid = Some(String::from(sid_str));
+                },
+                Attribute("type", type_str) => {
+                    param.data_type.push_str(type_str);
+                },
+                Attribute("semantic", semantic_str) => {
+                    param.semantic = Some(String::from(semantic_str));
+                },
+                EndElement("param") => break,
+                _ => return Err(illegal_event(event, "param")),
+            }
+        }
+
+        Ok(param)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -615,42 +674,6 @@ impl<'a> ColladaParser<'a> {
         }
 
         Ok(collada)
-    }
-
-    fn parse_accessor(&mut self) -> Result<Accessor> {
-        let mut accessor = Accessor {
-            count: 0,
-            offset: 0,
-            source: String::new(),
-            stride: 1,
-            params: Vec::new(),
-        };
-
-        loop {
-            let event = self.next_event();
-            match event {
-                Attribute("count", count_str) => {
-                    accessor.count = usize::from_str(count_str).unwrap();
-                },
-                Attribute("offset", offset_str) => {
-                    accessor.offset = u32::from_str(offset_str).unwrap();
-                },
-                Attribute("source", source_str) => {
-                    accessor.source.push_str(source_str);
-                },
-                Attribute("stride", stride_str) => {
-                    accessor.stride = u32::from_str(stride_str).unwrap();
-                },
-                StartElement("param") => {
-                    let param = try!(self.parse_param());
-                    accessor.params.push(param);
-                },
-                EndElement("accessor") => break,
-                _ => return Err(illegal_event(event, "accessor"))
-            }
-        }
-
-        Ok(accessor)
     }
 
     fn parse_asset(&mut self) -> Result<Asset> {
@@ -1403,37 +1426,6 @@ impl<'a> ColladaParser<'a> {
         Ok(primitives.unwrap())
     }
 
-    fn parse_param(&mut self) -> Result<Param> {
-        let mut param = Param {
-            name: None,
-            sid: None,
-            data_type: String::new(),
-            semantic: None,
-        };
-
-        loop {
-            let event = self.next_event();
-            match event {
-                Attribute("name", name_str) => {
-                    param.name = Some(String::from(name_str));
-                },
-                Attribute("sid", sid_str) => {
-                    param.sid = Some(String::from(sid_str));
-                },
-                Attribute("type", type_str) => {
-                    param.data_type.push_str(type_str);
-                },
-                Attribute("semantic", semantic_str) => {
-                    param.semantic = Some(String::from(semantic_str));
-                },
-                EndElement("param") => break,
-                _ => return Err(illegal_event(event, "param")),
-            }
-        }
-
-        Ok(param)
-    }
-
     fn parse_polygons(&mut self) {
         println!("Skipping over <polygons> element");
         println!("Warning: <polygons> is not yet supported by parse_collada");
@@ -1578,7 +1570,7 @@ impl<'a> ColladaParser<'a> {
         loop {
             let event = self.next_event();
             match event {
-                StartElement("accessor") => match self.parse_accessor() {
+                StartElement("accessor") => match Accessor::parse(self, "technique_common_source") {
                     Err(error) => return Err(error),
                     Ok(_accessor) => {
                         accessor = Some(_accessor);
