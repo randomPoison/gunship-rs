@@ -92,9 +92,9 @@ impl Window {
         }
 
         match unsafe { winmm::timeBeginPeriod(1) } {
-            TIMERR_NOERROR => println!("time period set to 1ms"),
+            TIMERR_NOERROR => {},
             TIMERR_NOCANDO => println!("unable to set timer period"),
-            _ => panic!("invalid result form winmm::timeBeginPeriod()"),
+            _ => panic!("invalid result from winmm::timeBeginPeriod()"),
         }
 
         window

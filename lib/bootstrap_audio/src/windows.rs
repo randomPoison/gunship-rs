@@ -184,7 +184,6 @@ pub fn init() -> Result<AudioSource, String> { unsafe {
 
         // Query the system to see if the desired format is supported. If it is not it will
         // set format_ptr to point to the closest valid format.
-        println!("checking if audio client is supported");
         let mut format_ptr: *mut WAVEFORMATEX = mem::uninitialized();
         let hresult = audio_client.IsFormatSupported(
             AUDCLNT_SHAREMODE_SHARED,
@@ -209,7 +208,6 @@ pub fn init() -> Result<AudioSource, String> { unsafe {
         let format_copy = ptr::read(format);
 
         // Initialize the audio client with the chosen format.
-        println!("initializing audio client");
         let hresult = audio_client.Initialize(
             AUDCLNT_SHAREMODE_SHARED,
             0,
@@ -224,7 +222,7 @@ pub fn init() -> Result<AudioSource, String> { unsafe {
         }
 
         match hresult {
-            S_OK => println!("successfully initialized the audio client"),
+            S_OK => {},
             _ => println!("IAudioClient::Initialize() failed with hresult 0x{:x}", hresult),
         }
 
@@ -250,12 +248,13 @@ pub fn init() -> Result<AudioSource, String> { unsafe {
         &mut *render_client
     };
 
-    let latency_ms = {
-        let mut latency: REFERENCE_TIME = 0;
-        audio_client.GetStreamLatency(&mut latency);
-        latency as f32 / 10000.0
-    };
-    println!("max audio latency: {}ms", latency_ms);
+    // TODO: Keep track of audio latency somewhere?
+    // let latency_ms = {
+    //     let mut latency: REFERENCE_TIME = 0;
+    //     audio_client.GetStreamLatency(&mut latency);
+    //     latency as f32 / 10000.0
+    // };
+    // println!("max audio latency: {}ms", latency_ms);
 
     // let num_channels = format.nChannels;
 

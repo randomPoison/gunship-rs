@@ -58,11 +58,9 @@ impl Engine {
         let resource_manager = Rc::new(ResourceManager::new(renderer.clone()));
 
         let audio_source = match bs_audio::init() {
-            Ok(audio_source) => {
-                println!("Audio subsystem successfully initialized");
-                audio_source
-            },
+            Ok(audio_source) => audio_source,
             Err(error) => {
+                // TODO: Rather than panicking, create a null audio system and keep running.
                 panic!("Error while initialzing audio subsystem: {}", error)
             },
         };

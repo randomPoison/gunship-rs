@@ -30,8 +30,9 @@ impl GLRender {
     pub fn new(window: &Window) -> GLRender {
         let gl = gl::Context::new(window);
 
-        let version_str = gl.get_string(StringName::Version);
-        println!("OpenGL Version: {:?}", version_str);
+        // TODO: Once better logging is implemented leave logging in and just disable unwanted logs.
+        // let version_str = gl.get_string(StringName::Version);
+        // println!("OpenGL Version: {:?}", version_str);
 
         gl.enable(ServerCapability::DebugOutput);
 

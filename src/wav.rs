@@ -83,7 +83,6 @@ impl FormatChunk {
         };
 
         try!(file.read(buffer));
-        println!("{:?}", chunk);
         Ok(chunk)
     }
 }
@@ -172,7 +171,6 @@ impl Wave {
 
     fn fill_chunk(&mut self, file: &mut File) -> Result<(), ::std::io::Error> {
         let header = try!(ChunkHeader::from_stream(file));
-        println!("header: {:?}", header);
 
         match header.id {
             FMT  => {
