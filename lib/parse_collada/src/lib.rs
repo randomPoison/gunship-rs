@@ -76,6 +76,129 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
+macro_rules! parse_attrib_by_type {
+    (String, $attrib:expr) => {
+        String::from($attrib)
+    }
+}
+
+macro_rules! collada_element {
+    ($tag_name:expr, $struct_name:ident => {
+        $(req attrib $req_attrib_name:ident: $req_attrib_type:ty),*
+        $(opt attrib $opt_attrib_name:ident: $opt_attrib_type:ty),*
+        $(req child $req_child_name:ident:   $req_child_type:ty),*
+        $(opt child $opt_child_name:ident:   $opt_child_type:ty),*
+        $(rep child $rep_child_name:ident:   $rep_child_type:ty),*
+    }) => {
+        #[derive(Debug, Clone)]
+        pub struct $struct_name {
+            $(pub $req_attrib_name: $req_attrib_type,)*
+            $(pub $opt_attrib_name: Option<$opt_attrib_type>,)*
+            $(pub $req_child_name:  $req_child_type,)*
+            $(pub $opt_child_name:  Option<$opt_child_type>,)*
+            $(pub $rep_child_name:  Vec<$rep_child_type>,)*
+        }
+
+        impl ColladaElement for $struct_name {
+            fn parse(parser: &mut ColladaParser, _: &str) -> Result<$struct_name> {
+                let mut element = $struct_name {
+                    $($req_attrib_name: unsafe { ::std::mem::uninitialized() },)*
+                    $($opt_attrib_name: None,)*
+                    $($req_child_name:  unsafe { ::std::mem::uninitialized() },)*
+                    $($opt_child_name:  None,)*
+                    $($rep_child_name:  Vec::new(),)*
+                };
+
+                loop {
+                    let event = parser.next_event();
+                    match event {
+
+                        // Required attributes.
+                        $(Attribute(stringify!($req_attrib_name), attrib_value) => {
+                            let attrib = parse_attrib_by_type!($req_attrib_type, attrib_value);
+                            unsafe {
+                                ::std::mem::forget(
+                                    ::std::mem::replace(
+                                        &mut element.$req_attrib_name,
+                                        attrib,
+                                    )
+                                )
+                            }
+                        },)*
+
+                        // Optional attributes.
+                        $(Attribute(stringify!($opt_attrib_name), attrib_value) => {
+                            let attrib = parse_attrib_by_type!($req_attrib_type, attrib_value);
+                            element.$req_attrib_name = Some(attrib);
+                        },)*
+
+                        // required children:
+                        $(StartElement(stringify!($req_child_name)) => {
+                            let child = try!(parse_element(parser, stringify!($req_child_type)));
+                            unsafe {
+                                ::std::mem::forget(
+                                    ::std::mem::replace(
+                                        &mut element.$req_child_name,
+                                        child,
+                                    )
+                                )
+                            }
+                        },)*
+
+                        // optional children:
+                        $(StartElement(stringify!($opt_child_name)) => {
+                            let child = try!(parse_element(parser, stringify!($opt_child_type)));
+                            element.$opt_child_name = Some(child);
+                        },)*
+
+                        // repeating children:
+                        $(StartElement(stringify!($rep_child_name)) => {
+                            let child = try!(parse_element(parser, stringify!($rep_child_type)));
+                            element.$rep_child_name.push(child);
+                        },)*
+
+                        EndElement($tag_name) => break,
+                        _ => return Err(illegal_event(event, $tag_name)),
+                    }
+                }
+
+                Ok(element)
+            }
+        }
+    }
+}
+
+trait ColladaElement: Sized {
+    fn parse(parser: &mut ColladaParser, parent: &str) -> Result<Self>;
+}
+
+fn parse_element<T: ColladaElement>(parser: &mut ColladaParser, parent: &str) -> Result<T> {
+    T::parse(parser, parent)
+}
+
+impl ColladaElement for String {
+    fn parse(parser: &mut ColladaParser, parent: &str) -> Result<String> {
+        let text = {
+            let event = parser.next_event();
+            match event {
+                TextNode(text) => text,
+                EndElement(_) => {
+                    return Ok(String::from(""));
+                },
+                _ => return Err(illegal_event(event, parent)),
+            }
+        };
+
+        let event = parser.next_event();
+        match event {
+            EndElement(_) => {},
+            _ => return Err(illegal_event(event, parent)),
+        }
+
+        Ok(String::from(text))
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Accessor {
     pub count: usize,
@@ -112,8 +235,15 @@ pub struct Asset {
 #[derive(Debug, Clone)]
 pub struct BindMaterial;
 
-#[derive(Debug, Clone)]
-pub struct Contributor;
+collada_element!("contributor", Contributor => {
+    opt child author:         String,
+    opt child author_email:   String,
+    opt child author_website: String,
+    opt child authoring_tool: String,
+    opt child comments:       String,
+    opt child copyright:      String,
+    opt child source_data:    String
+});
 
 #[derive(Debug, Clone)]
 pub struct EvaluateScene {
@@ -542,7 +672,7 @@ impl<'a> ColladaParser<'a> {
             let event = self.next_event();
             match event {
                 StartElement("contributor") => {
-                    let contributor = try!(self.parse_contributor());
+                    let contributor = try!(parse_element(self, "contributor"));
                     asset.contributors.push(contributor);
                 },
                 StartElement("coverage") => {
@@ -615,13 +745,6 @@ impl<'a> ColladaParser<'a> {
         println!("Skipping over <bool_array> element");
         println!("Warning: <bool_array> is not yet supported by parse_collada");
         self.skip_to_end_element("bool_array");
-    }
-
-    fn parse_contributor(&mut self) -> Result<Contributor> {
-        println!("Skipping over <contributor> tag");
-        println!("Warning: <contributor> is not yet supported by parse_collada");
-        self.skip_to_end_element("contributor");
-        Ok(Contributor)
     }
 
     fn parse_convex_mesh(&mut self) {
