@@ -6,7 +6,7 @@ use std::error::Error;
 use std::rc::Rc;
 use std::cell::RefCell;
 
-use collada::{self, COLLADA, GeometricElement, ArrayElement, PrimitiveType, VisualScene, Geometry,
+use collada::{self, Collada, GeometricElement, ArrayElement, PrimitiveType, VisualScene, Geometry,
               Node};
 
 use polygon::gl_render::{GLRender, GLMeshData, ShaderProgram};
@@ -64,9 +64,9 @@ impl ResourceManager {
                 "{} could not be loaded because it is not a file",
                 full_path.display()));
         }
-        let collada_data = match COLLADA::load(&full_path) {
+        let collada_data = match Collada::load(&full_path) {
             Err(why) => return Err(format!(
-                "couldn't open {}: {}",
+                "couldn't open {}: {:?}",
                 full_path.display(),
                 &why)),
             Ok(data) => data,

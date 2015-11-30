@@ -11,7 +11,7 @@ use std::fs::File;
 use unicode_segmentation::{UnicodeSegmentation, GraphemeIndices};
 use rustc_unicode::str::UnicodeStr;
 
-use XMLEvent::*;
+use Event::*;
 use XMLElement::*;
 use TagType::*;
 
@@ -20,8 +20,46 @@ pub enum TagType {
     EndTag
 }
 
-pub struct XMLParser {
+pub struct Parser {
     raw_text: String
+}
+
+impl Parser {
+    /// Create an empty `Parser`.
+    pub fn new() -> Parser {
+        Parser {
+            raw_text: String::new()
+        }
+    }
+
+    /// Create a new `Parser` with the contents of `file`.
+    pub fn from_file(file: &mut File) -> Result<Parser, Error> {
+        let mut parser = Parser::new();
+        match file.read_to_string(&mut parser.raw_text) {
+            Err(_) => Err("Couldn't read contents of file".to_string()), // TODO: Provide the actual error message.
+            Ok(_) => Ok(parser)
+        }
+    }
+
+    /// Creates a new `Parser` from a `String`.
+    ///
+    /// This is used primarily for debugging purposes, if you
+    /// want to read an XML file use `from_file()`.
+    pub fn from_string(text: String) -> Parser {
+        Parser {
+            raw_text: text
+        }
+    }
+
+    /// Begins the parsing by returning an iterator
+    /// into the contents of the document.
+    pub fn parse<'a>(&'a self) -> EventIterator<'a> {
+        EventIterator {
+            parser: self,
+            text_enumerator: UnicodeSegmentation::grapheme_indices(&*self.raw_text, true),
+            element_stack: vec![StartDocument]
+        }
+    }
 }
 
 /// The set of events that can be emitted by the parser.
@@ -32,52 +70,16 @@ pub struct XMLParser {
 /// parsing, but requires the document to be loaded into
 /// before parsing can begin.
 #[derive(Debug, PartialEq)]
-pub enum XMLEvent<'a> {
+pub enum Event<'a> {
     Declaration(&'a str, &'a str),
     StartElement(&'a str),
     EndElement(&'a str),
     TextNode(&'a str),
     Attribute(&'a str, &'a str),
-    ParseError(String)
+    ParseError(Error),
 }
 
-impl XMLParser {
-    /// Create an empty `XMLParser`.
-    pub fn new() -> XMLParser {
-        XMLParser {
-            raw_text: String::new()
-        }
-    }
-
-    /// Create a new `XMLParser` with the contents of `file`.
-    pub fn from_file(file: &mut File) -> Result<XMLParser, String> {
-        let mut parser = XMLParser::new();
-        match file.read_to_string(&mut parser.raw_text) {
-            Err(_) => Err("Couldn't read contents of file".to_string()), // TODO: Provide the actual error message.
-            Ok(_) => Ok(parser)
-        }
-    }
-
-    /// Creates a new `XMLParser` from a `String`.
-    ///
-    /// This is used primarily for debugging purposes, if you
-    /// want to read an XML file use `from_file()`.
-    pub fn from_string(text: String) -> XMLParser {
-        XMLParser {
-            raw_text: text
-        }
-    }
-
-    /// Begins the parsing by returning an iterator
-    /// into the contents of the document.
-    pub fn parse<'a>(&'a self) -> SAXEvents<'a> {
-        SAXEvents {
-            parser: self,
-            text_enumerator: UnicodeSegmentation::grapheme_indices(&*self.raw_text, true),
-            element_stack: vec![StartDocument]
-        }
-    }
-}
+pub type Error = String;
 
 /// Values used to track the state of the
 /// parser as it evaluates the document.
@@ -94,14 +96,14 @@ enum XMLElement<'a> {
 /// Internally this iterates over the graphemes iterator borrowed from the
 /// `raw_text` field of `parser`. Additionally, the tags held in `element_stack`
 /// are slices borrowed from `parser.raw_text`. Therefore the lifetime of the
-/// items given by `SAXEvents` is dependent on the parser they came from.
-pub struct SAXEvents<'a> {
-    parser: &'a XMLParser,
+/// items given by `EventIterator` is dependent on the parser they came from.
+pub struct EventIterator<'a> {
+    parser: &'a Parser,
     text_enumerator: GraphemeIndices<'a>,
     element_stack: Vec<XMLElement<'a>>
 }
 
-impl<'a> SAXEvents<'a> {
+impl<'a> EventIterator<'a> {
     /// Parses the first element from the document.
     ///
     /// # Results
@@ -109,7 +111,7 @@ impl<'a> SAXEvents<'a> {
     /// - Returns StartElement if the document begins with a well formatted tag.
     /// - Returns ParseError if the first character is not "<".
     /// - Returns ParseError if the first tag is ill formatted.
-    fn parse_document_start(&mut self) -> XMLEvent<'a> {
+    fn parse_document_start(&mut self) -> Event<'a> {
         let (tag_name, tag_type) = match self.text_enumerator.next() {
             None => return ParseError("XML document must have a top level element.".to_string()),
             Some((_, grapheme)) => match grapheme.as_ref() {
@@ -136,7 +138,7 @@ impl<'a> SAXEvents<'a> {
         }
     }
 
-    fn parse_xml_declaration(&mut self) -> XMLEvent<'a> {
+    fn parse_xml_declaration(&mut self) -> Event<'a> {
         // pop the AttributeElement and Tag off the stack since
         // they shouldn't be there after the declaration ends
         self.element_stack.pop();
@@ -245,7 +247,7 @@ impl<'a> SAXEvents<'a> {
     ///
     /// - The text parser must currently be parsing an open tag, and must not
     ///   have reached the closing ">" character.
-    fn parse_attribute(&mut self) -> Option<XMLEvent<'a>> {
+    fn parse_attribute(&mut self) -> Option<Event<'a>> {
         let attribute_name = {
             // eat leading whitespace to get the start of the attribute name
             let start_index = match self.eat_whitespace() {
@@ -334,7 +336,7 @@ impl<'a> SAXEvents<'a> {
         } }
     }
 
-    fn parse_tag_body(&mut self) -> XMLEvent<'a> {
+    fn parse_tag_body(&mut self) -> Event<'a> {
         let start_index = match self.eat_whitespace() {
             Err(error) => return ParseError(error),
             Ok((index, grapheme)) => match grapheme {
@@ -410,10 +412,10 @@ impl<'a> SAXEvents<'a> {
     }
 }
 
-impl<'a> Iterator for SAXEvents<'a> {
-    type Item = XMLEvent<'a>;
+impl<'a> Iterator for EventIterator<'a> {
+    type Item = Event<'a>;
 
-    fn next(&mut self) -> Option<XMLEvent<'a>> {
+    fn next(&mut self) -> Option<Event<'a>> {
         let result = match self.element_stack.pop() {
             None => None, // TODO: Keep parsing to check for invalid formatting
             Some(element) => {
