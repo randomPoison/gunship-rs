@@ -235,7 +235,7 @@ macro_rules! collada_element {
     };
 }
 
-trait ColladaElement: Sized {
+pub trait ColladaElement: Sized {
     fn parse(parser: &mut ColladaParser, parent: &str) -> Result<Self>;
 }
 
@@ -278,7 +278,7 @@ impl ColladaElement for f32 {
     }
 }
 
-trait ColladaAttribute: Sized {
+pub trait ColladaAttribute: Sized {
     fn parse(text: &str) -> Result<Self>;
 }
 
@@ -411,7 +411,16 @@ collada_element!("asset", Asset => {
     rep child extra: Extra
 });
 
-collada_element!("bind_material", BindMaterial => {});
+collada_element!("bind", Bind => {});
+
+collada_element!("bind_material", BindMaterial => {
+    req child technique_common: TechniqueCommon<InstanceMaterial>
+    rep child param: Param,
+    rep child technique: TechniqueCore,
+    rep child extra: Extra
+});
+
+collada_element!("bind_vertex_input", BindVertexInput => {});
 collada_element!("blinn", Blinn => {});
 
 collada_element!("color", Color => {
@@ -576,11 +585,22 @@ impl ColladaElement for Extra {
     }
 }
 
+collada_element!("float", Float => {
+    opt attrib sid: String
+    contents: f32
+});
+
 #[derive(Debug, Clone)]
 pub enum FxCommonColorOrTextureType {
     Color(Color),
     Param(ParamReference),
     Texture(Texture),
+}
+
+#[derive(Debug, Clone)]
+pub enum FxCommonFloatOrParamType {
+    Float(Float),
+    Param(ParamReference),
 }
 
 #[derive(Debug, Clone)]
@@ -651,7 +671,12 @@ collada_element!("geographic_location", GeographicLocation => {
     req child altitude: Altitude
 });
 
-collada_element!("index_of_refraction", IndexOfRefraction => {});
+collada_element!("index_of_refraction", IndexOfRefraction => {
+    req enum child child: FxCommonFloatOrParamType {
+        "float" => Float(Float),
+        "param" => Param(ParamReference)
+    }
+});
 
 #[derive(Debug, Clone)]
 pub struct InputShared {
@@ -695,7 +720,16 @@ pub struct InstanceGeometry {
 #[derive(Debug, Clone)]
 pub struct InstanceLight;
 
-collada_element!("instance_material", InstanceMaterial => {});
+collada_element!("instance_material", InstanceMaterial => {
+    req attrib target: String,
+    req attrib symbol: String
+    opt attrib sid: String,
+    opt attrib name: String
+
+    rep child bind: Bind,
+    rep child bind_vertex_input: BindVertexInput,
+    rep child extra: Extra
+});
 
 #[derive(Debug, Clone)]
 pub struct InstanceNode;
@@ -1104,7 +1138,12 @@ collada_element!("reflective", Reflective => {
     }
 });
 
-collada_element!("reflectivity", Reflectivity => {});
+collada_element!("reflectivity", Reflectivity => {
+    req enum child child: FxCommonFloatOrParamType {
+        "float" => Float(Float),
+        "param" => Param(ParamReference)
+    }
+});
 
 collada_element!("render", Render => {
     opt attrib name: String,
@@ -1188,6 +1227,33 @@ impl ColladaElement for Source {
 }
 
 #[derive(Debug, Clone)]
+pub struct TechniqueCommon<T: ColladaElement>(T);
+
+impl<T: ColladaElement> ColladaElement for TechniqueCommon<T> {
+    fn parse(parser: &mut ColladaParser, _: &str) -> Result<TechniqueCommon<T>> {
+        let mut t: T = unsafe { mem::uninitialized() };
+
+        loop {
+            let event = parser.next_event();
+            match event {
+                StartElement(_) => {
+                    mem::forget(
+                        mem::replace(
+                            &mut t,
+                            try!(parse_element(parser, "technique_common")),
+                        )
+                    );
+                },
+                EndElement("technique_common") => break,
+                _ => return Err(illegal_event(event, "technique_common")),
+            }
+        }
+
+        Ok(TechniqueCommon(t))
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct TechniqueCore(xml::dom::Node);
 
 impl ColladaElement for TechniqueCore {
@@ -1239,7 +1305,12 @@ collada_element!("transparent", Transparent => {
     }
 });
 
-collada_element!("transparency", Transparency => {});
+collada_element!("transparency", Transparency => {
+    req enum child child: FxCommonFloatOrParamType {
+        "float" => Float(Float),
+        "param" => Param(ParamReference)
+    }
+});
 
 #[derive(Debug, Clone)]
 pub struct Triangles {
@@ -1355,7 +1426,7 @@ collada_element!("visual_scene", VisualScene => {
     rep child extra: Extra
 });
 
-struct ColladaParser<'a> {
+pub struct ColladaParser<'a> {
     events: xml::EventIterator<'a>
 }
 
