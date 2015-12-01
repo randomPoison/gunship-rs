@@ -325,6 +325,8 @@ impl ColladaAttribute for AltitudeMode {
     }
 }
 
+collada_element!("annotate", Annotate => {});
+
 #[derive(Debug, Clone)]
 pub enum ArrayElement {
     IDREF,
@@ -367,6 +369,66 @@ collada_element!("coverage", Coverage => {
     opt child geographic_location: GeographicLocation
 });
 
+#[derive(Debug, Clone, Default)]
+pub struct Effect {
+    pub id: Option<String>,
+    pub name: Option<String>,
+    pub asset: Option<Asset>,
+    pub annotate: Vec<Annotate>,
+    pub newparam: Vec<NewParam>,
+    pub profile: Vec<Profile>,
+    pub extra: Vec<Extra>,
+}
+
+impl ColladaElement for Effect {
+    fn parse(parser: &mut ColladaParser, _: &str) -> Result<Effect> {
+        let mut effect = Effect::default();
+
+        loop {
+            let event = parser.next_event();
+            match event {
+                Attribute("id", id_str) =>
+                    effect.id = Some(String::from(id_str)),
+                Attribute("name", name_str) =>
+                    effect.name = Some(String::from(name_str)),
+                StartElement("asset") =>
+                    effect.asset = Some(
+                        try!(parse_element(parser, "effect"))),
+                StartElement("annotate") =>
+                    effect.annotate.push(
+                        try!(parse_element(parser, "effect"))),
+                StartElement("newparam") =>
+                    effect.newparam.push(
+                        try!(parse_element(parser, "effect"))),
+                StartElement("profile_BRIDGE") =>
+                    effect.profile.push(Profile::Bridge(
+                        try!(parse_element(parser, "effect")))),
+                StartElement("profile_CG") =>
+                    effect.profile.push(Profile::Cg(
+                        try!(parse_element(parser, "effect")))),
+                StartElement("profile_GLES") =>
+                    effect.profile.push(Profile::Gles(
+                        try!(parse_element(parser, "effect")))),
+                StartElement("profile_GLES2") =>
+                    effect.profile.push(Profile::Gles2(
+                        try!(parse_element(parser, "effect")))),
+                StartElement("profile_GLSL") =>
+                    effect.profile.push(Profile::Glsl(
+                        try!(parse_element(parser, "effect")))),
+                StartElement("profile_COMMON") =>
+                    effect.profile.push(Profile::Common(
+                        try!(parse_element(parser, "effect")))),
+                StartElement("extra") =>
+                    effect.extra.push(try!(parse_element(parser, "effect"))),
+                EndElement("effect") => break,
+                _ => return Err(illegal_event(event, "effect")),
+            }
+        }
+
+        Ok(effect)
+    }
+}
+
 collada_element!("evaluate_scene", EvaluateScene => {
     opt attrib id: String,
     opt attrib name: String,
@@ -388,7 +450,7 @@ pub struct Extra {
 
     // children
     pub asset: Option<Asset>,
-    pub technique: Vec<Technique>,
+    pub technique: Vec<TechniqueCore>,
 }
 
 impl ColladaElement for Extra {
@@ -419,7 +481,7 @@ impl ColladaElement for Extra {
                     extra.asset = Some(asset);
                 },
                 StartElement("technique") => {
-                    let technique = try!(Technique::parse(parser, "extra"));
+                    let technique = try!(TechniqueCore::parse(parser, "extra"));
                     extra.technique.push(technique);
                 },
                 EndElement("extra") => break,
@@ -558,8 +620,14 @@ pub struct LibraryCameras;
 #[derive(Debug, Clone)]
 pub struct LibraryControllers;
 
-#[derive(Debug, Clone)]
-pub struct LibraryEffects;
+collada_element!("library_effects", LibraryEffects => {
+    opt attrib id: String,
+    opt attrib name: String
+
+    opt child asset: Asset
+    rep child effect: Effect,
+    rep child extra: Extra
+});
 
 #[derive(Debug, Clone)]
 pub struct LibraryForceFields;
@@ -679,6 +747,8 @@ impl ColladaElement for Mesh {
         Ok(mesh)
     }
 }
+
+collada_element!("newparam", NewParam => {});
 
 #[derive(Debug, Clone)]
 pub struct Node {
@@ -873,6 +943,23 @@ pub enum PrimitiveType {
     Tristrips
 }
 
+#[derive(Debug, Clone)]
+pub enum Profile {
+    Bridge(ProfileBridge),
+    Cg(ProfileCg),
+    Gles(ProfileGles),
+    Gles2(ProfileGles2),
+    Glsl(ProfileGlsl),
+    Common(ProfileCommon),
+}
+
+collada_element!("profile_BRIDGE", ProfileBridge => {});
+collada_element!("profile_CG", ProfileCg => {});
+collada_element!("profile_GLES", ProfileGles => {});
+collada_element!("profile_GLES2", ProfileGles2 => {});
+collada_element!("profile_GLSL", ProfileGlsl => {});
+collada_element!("profile_COMMON", ProfileCommon => {});
+
 collada_element!("render", Render => {
     opt attrib name: String,
     opt attrib sid: String,
@@ -897,7 +984,7 @@ pub struct Source {
     pub asset: Option<Asset>,
     pub array_element: Option<ArrayElement>,
     pub technique_common: Option<Accessor>,
-    pub technique: Vec<Technique>,
+    pub technique: Vec<TechniqueCore>,
 }
 
 impl ColladaElement for Source {
@@ -946,15 +1033,21 @@ impl ColladaElement for Source {
 }
 
 #[derive(Debug, Clone)]
-pub struct Technique(xml::dom::Node);
+pub struct TechniqueCore(xml::dom::Node);
 
-impl ColladaElement for Technique {
-    fn parse(parser: &mut ColladaParser, _: &str) -> Result<Technique> {
+impl ColladaElement for TechniqueCore {
+    fn parse(parser: &mut ColladaParser, _: &str) -> Result<TechniqueCore> {
         xml::dom::Node::from_events(&mut parser.events, "technique")
-        .map(|node| Technique(node))
+        .map(|node| TechniqueCore(node))
         .map_err(|err| Error::XmlError(err))
     }
 }
+
+// #[derive(Debug, Clone)]
+// pub struct TechniqueFxCommon {
+//     pub id: Option<String>,
+//
+// }
 
 collada_element!("technique_hint", TechniqueHint => {});
 
@@ -1141,7 +1234,8 @@ impl<'a> ColladaParser<'a> {
                 StartElement("library_animation_clips") => self.parse_library_animation_clips(),
                 StartElement("library_cameras") => self.parse_library_cameras(),
                 StartElement("library_controllers") => self.parse_library_controllers(),
-                StartElement("library_effects") => self.parse_library_effects(),
+                StartElement("library_effects") =>
+                    collada.library_effects = Some(try!(parse_element(self, "COLLADA"))),
                 StartElement("library_force_fields") => self.parse_library_force_fields(),
                 StartElement("library_geometries") => {
                     let library_geometries = try!(LibraryGeometries::parse(self, "COLLADA"));
@@ -1396,12 +1490,6 @@ impl<'a> ColladaParser<'a> {
         println!("Skipping over <library_controllers> element");
         println!("Warning: <library_controllers> is not yet supported by parse_collada");
         self.skip_to_end_element("library_controllers");
-    }
-
-    fn parse_library_effects(&mut self) {
-        println!("Skipping over <library_effects> element");
-        println!("Warning: <library_effects> is not yet supported by parse_collada");
-        self.skip_to_end_element("library_effects");
     }
 
     fn parse_library_force_fields(&mut self) {
