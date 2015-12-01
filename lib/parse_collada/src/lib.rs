@@ -929,14 +929,13 @@ impl ColladaElement for Source {
 }
 
 #[derive(Debug, Clone)]
-pub struct Technique;
+pub struct Technique(xml::dom::Node);
 
 impl ColladaElement for Technique {
     fn parse(parser: &mut ColladaParser, _: &str) -> Result<Technique> {
-        println!("Skipping over <technique>");
-        println!("<technique> is not yet supported by parse-collada");
-        parser.skip_to_end_element("technique");
-        Ok(Technique)
+        xml::dom::Node::from_events(&mut parser.events, "technique")
+        .map(|node| Technique(node))
+        .map_err(|err| Error::XmlError(err))
     }
 }
 
@@ -1667,7 +1666,7 @@ impl<'a> ColladaParser<'a> {
     /// panicking if there is no next event.
     fn next_event(&mut self) -> xml::Event<'a> {
         match self.events.next() {
-            None => panic!("Ran out of events too early."),
+            None => panic!("Ran out of events too early."), // TODO: Don't panic!
             Some(event) => event
         }
     }

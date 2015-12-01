@@ -6,6 +6,8 @@ extern crate unicode_segmentation;
 #[cfg(test)]
 mod test;
 
+pub mod dom;
+
 use std::io::prelude::*;
 use std::fs::File;
 use unicode_segmentation::{UnicodeSegmentation, GraphemeIndices};
@@ -33,7 +35,7 @@ impl Parser {
     }
 
     /// Create a new `Parser` with the contents of `file`.
-    pub fn from_file(file: &mut File) -> Result<Parser, Error> {
+    pub fn from_file(file: &mut File) -> Result<Parser> {
         let mut parser = Parser::new();
         match file.read_to_string(&mut parser.raw_text) {
             Err(_) => Err("Couldn't read contents of file".to_string()), // TODO: Provide the actual error message.
@@ -80,6 +82,7 @@ pub enum Event<'a> {
 }
 
 pub type Error = String;
+pub type Result<T> = std::result::Result<T, Error>;
 
 /// Values used to track the state of the
 /// parser as it evaluates the document.
@@ -202,7 +205,7 @@ impl<'a> EventIterator<'a> {
 
     /// Parses the tag name at the current location of the parser,
     /// including whether the tag is an start-tag or end-tag.
-    fn parse_tag_name(&mut self) -> Result<(&'a str, TagType), String> {
+    fn parse_tag_name(&mut self) -> Result<(&'a str, TagType)> {
         match self.text_enumerator.next() {
             None => Err("Document ends prematurely.".to_string()),
             Some((index, grapheme)) => match grapheme {
@@ -213,7 +216,7 @@ impl<'a> EventIterator<'a> {
         }
     }
 
-    fn parse_start_tag_name(&mut self, start_index: usize) -> Result<(&'a str, TagType), String> {
+    fn parse_start_tag_name(&mut self, start_index: usize) -> Result<(&'a str, TagType)> {
         match self.parse_identifier(start_index) {
             Ok((identifier, delimiter)) => {
                 self.element_stack.push(Element(identifier));
@@ -228,7 +231,7 @@ impl<'a> EventIterator<'a> {
         }
     }
 
-    fn parse_end_tag_name(&mut self, start_index: usize) -> Result<(&'a str, TagType), String> {
+    fn parse_end_tag_name(&mut self, start_index: usize) -> Result<(&'a str, TagType)> {
         match self.parse_identifier(start_index) {
             Ok((identifier, delimiter)) => {
                 if delimiter != ">" {
@@ -316,7 +319,7 @@ impl<'a> EventIterator<'a> {
     /// '"' character that closes the attribute value, so the
     /// next character to be parsed will the first charcter
     /// after the attribute.
-    fn parse_attribute_value(&mut self) -> Result<&'a str, String> {
+    fn parse_attribute_value(&mut self) -> Result<&'a str> {
         // check that first character is '"'
         let start_index = match self.text_enumerator.next() {
             None => return Err("Document ends in the middle of an attribute!".to_string()),
@@ -377,7 +380,7 @@ impl<'a> EventIterator<'a> {
     ///
     /// - `Err` if the document ends before the identifier finishes.
     /// - `Err` if the identifier is ill formatted.
-    fn parse_identifier(&mut self, start_index: usize) -> Result<(&'a str, &'a str), String> {
+    fn parse_identifier(&mut self, start_index: usize) -> Result<(&'a str, &'a str)> {
         loop { match self.text_enumerator.next() {
             None => return Err("Document ends prematurely".to_string()),
             Some((end_index, grapheme)) => {
@@ -396,7 +399,7 @@ impl<'a> EventIterator<'a> {
     /// # Failures
     ///
     /// - `Err` if the document ends before a non-whitespace character.
-    fn eat_whitespace(&mut self) -> Result<(usize, &'a str), String> {
+    fn eat_whitespace(&mut self) -> Result<(usize, &'a str)> {
         loop { match self.text_enumerator.next() {
             None => return Err("Document ends with whitespace.".to_string()),
             Some((index, grapheme)) => {
