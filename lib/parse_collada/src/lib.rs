@@ -519,8 +519,15 @@ pub struct InstanceCamera;
 #[derive(Debug, Clone)]
 pub struct InstanceController;
 
-#[derive(Debug, Clone)]
-pub struct InstanceEffect;
+collada_element!("instance_effect", InstanceEffect => {
+    req attrib url: String
+    opt attrib sid: String,
+    opt attrib name: String
+
+    rep child technique_hint: TechniqueHint,
+    rep child setparam: SetParam,
+    rep child extra: Extra
+});
 
 #[derive(Debug, Clone)]
 pub struct InstanceGeometry {
@@ -573,8 +580,15 @@ pub struct LibraryImages;
 #[derive(Debug, Clone)]
 pub struct LibraryLights;
 
-#[derive(Debug, Clone)]
-pub struct LibraryMaterials;
+collada_element!("library_materials", LibraryMaterials => {
+    opt attrib id: String,
+    opt attrib name: String
+
+    opt child asset: Asset
+
+    rep child material: Material,
+    rep child extra: Extra
+});
 
 #[derive(Debug, Clone)]
 pub struct LibraryNodes;
@@ -600,6 +614,15 @@ collada_element!("library_visual_scenes", LibraryVisualScenes => {
 
 #[derive(Debug, Clone)]
 pub struct LookAt;
+
+collada_element!("material", Material => {
+    opt attrib id: String,
+    opt attrib name: String
+
+    req child instance_effect: InstanceEffect
+    opt child asset: Asset
+    rep child extra: Extra
+});
 
 #[derive(Debug, Clone)]
 pub struct Matrix {
@@ -727,15 +750,15 @@ impl ColladaElement for Node {
                     node.transformations.push(TransformationElement::Matrix(matrix));
                 },
                 StartElement("rotate") => {
-                    let rotate = try!(parser.parse_rotate());
+                    let rotate = try!(parse_element(parser, "node"));
                     node.transformations.push(TransformationElement::Rotate(rotate));
                 },
                 StartElement("scale") => {
-                    let scale = try!(parser.parse_scale());
+                    let scale = try!(parse_element(parser, "node"));
                     node.transformations.push(TransformationElement::Scale(scale));
                 },
                 StartElement("skew") => {
-                    let skew = try!(parser.parse_skew());
+                    let skew = try!(parse_element(parser, "node"));
                     node.transformations.push(TransformationElement::Skew(skew));
                 },
                 StartElement("translate") => {
@@ -861,17 +884,11 @@ collada_element!("render", Render => {
     rep child extra: Extra
 });
 
-#[derive(Debug, Clone)]
-pub struct Rotate;
-
-#[derive(Debug, Clone)]
-pub struct Scale;
-
-#[derive(Debug, Clone)]
-pub struct Scene;
-
-#[derive(Debug, Clone)]
-pub struct Skew;
+collada_element!("rotate", Rotate => {});
+collada_element!("scale", Scale => {});
+collada_element!("scene", Scene => {});
+collada_element!("setparam", SetParam => {});
+collada_element!("skew", Skew => {});
 
 #[derive(Debug, Clone)]
 pub struct Source {
@@ -938,6 +955,8 @@ impl ColladaElement for Technique {
         .map_err(|err| Error::XmlError(err))
     }
 }
+
+collada_element!("technique_hint", TechniqueHint => {});
 
 #[derive(Debug, Clone)]
 pub enum TransformationElement {
@@ -1130,7 +1149,9 @@ impl<'a> ColladaParser<'a> {
                 },
                 StartElement("library_images") => self.parse_library_images(),
                 StartElement("library_lights") => self.parse_library_lights(),
-                StartElement("library_materials") => self.parse_library_materials(),
+                StartElement("library_materials") => {
+                    collada.library_materials = Some(try!(parse_element(self, "COLLADA")));
+                },
                 StartElement("library_nodes") => self.parse_library_nodes(),
                 StartElement("library_physics_materials") => self.parse_library_physics_materials(),
                 StartElement("library_physics_models") => self.parse_library_physics_models(),
@@ -1401,12 +1422,6 @@ impl<'a> ColladaParser<'a> {
         self.skip_to_end_element("library_lights");
     }
 
-    fn parse_library_materials(&mut self) {
-        println!("Skipping over <library_materials> element");
-        println!("Warning: <library_materials> is not yet supported by parse_collada");
-        self.skip_to_end_element("library_materials");
-    }
-
     fn parse_library_nodes(&mut self) {
         println!("Skipping over <library_nodes> element");
         println!("Warning: <library_nodes> is not yet supported by parse_collada");
@@ -1532,34 +1547,10 @@ impl<'a> ColladaParser<'a> {
         self.skip_to_end_element("polylist");
     }
 
-    fn parse_rotate(&mut self) -> Result<Rotate> {
-        println!("Skipping over <rotate> element");
-        println!("Warning: <rotate> is not yet supported by parse_collada");
-        self.skip_to_end_element("rotate");
-
-        Ok(Rotate)
-    }
-
-    fn parse_scale(&mut self) -> Result<Scale> {
-        println!("Skipping over <scale> element");
-        println!("Warning: <scale> is not yet supported by parse_collada");
-        self.skip_to_end_element("scale");
-
-        Ok(Scale)
-    }
-
     fn parse_scene(&mut self) {
         println!("Skipping over <scene> element");
         println!("Warning: <scene> is not yet supported by parse_collada");
         self.skip_to_end_element("scene");
-    }
-
-    fn parse_skew(&mut self) -> Result<Skew> {
-        println!("Skipping over <skew> element");
-        println!("Warning: <skew> is not yet supported by parse_collada");
-        self.skip_to_end_element("skew");
-
-        Ok(Skew)
     }
 
     fn parse_spline(&mut self) {
