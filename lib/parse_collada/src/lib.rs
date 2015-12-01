@@ -717,6 +717,8 @@ pub struct InstanceGeometry {
     pub extras: Vec<Extra>,
 }
 
+collada_element!("instance_kinematic_scene", InstanceKinematicScene => {});
+
 #[derive(Debug, Clone)]
 pub struct InstanceLight;
 
@@ -733,6 +735,13 @@ collada_element!("instance_material", InstanceMaterial => {
 
 #[derive(Debug, Clone)]
 pub struct InstanceNode;
+
+collada_element!("instance_physics_scene", InstancePhysicsScene => {});
+collada_element!("instance_visual_scene", InstanceVisualScene => {
+    req attrib url: String
+    opt attrib sid: String,
+    opt attrib name: String
+});
 
 collada_element!("lambert", Lambert => {
     opt child emission: Emission,
@@ -1158,7 +1167,14 @@ collada_element!("render", Render => {
 
 collada_element!("rotate", Rotate => {});
 collada_element!("scale", Scale => {});
-collada_element!("scene", Scene => {});
+
+collada_element!("scene", Scene => {
+    opt child instance_visual_scene: InstanceVisualScene,
+    opt child instance_kinematic_scene: InstanceKinematicScene
+    rep child instance_physics_scene: InstancePhysicsScene,
+    rep child extra: Extra
+});
+
 collada_element!("setparam", SetParam => {});
 
 #[derive(Debug, Clone)]
@@ -1502,7 +1518,8 @@ impl<'a> ColladaParser<'a> {
                     let library_visual_scenes = try!(LibraryVisualScenes::parse(self, "COLLADA"));
                     collada.library_visual_scenes = Some(library_visual_scenes);
                 },
-                StartElement("scene") => self.parse_scene(),
+                StartElement("scene") =>
+                    collada.scene = Some(try!(parse_element(self, "COLLADA"))),
                 StartElement("extra") => {
                     let extra = try!(Extra::parse(self, "COLLADA"));
                     collada.extras.push(extra);
@@ -1873,12 +1890,6 @@ impl<'a> ColladaParser<'a> {
         println!("Skipping over <polylist> element");
         println!("Warning: <polylist> is not yet supported by parse_collada");
         self.skip_to_end_element("polylist");
-    }
-
-    fn parse_scene(&mut self) {
-        println!("Skipping over <scene> element");
-        println!("Warning: <scene> is not yet supported by parse_collada");
-        self.skip_to_end_element("scene");
     }
 
     fn parse_spline(&mut self) {
