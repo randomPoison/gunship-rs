@@ -84,6 +84,12 @@ pub enum Error {
         text: String,
         error: std::num::ParseIntError,
     },
+    /// Used in generic programming.
+    ///
+    /// This is a bit of a hack to make generic programming work, but it'd be preferable to
+    /// either use the specific parse error variants or remove the specific variants and only
+    /// have the generic parse error.
+    ParseError(String),
     FileError(std::io::Error),
 }
 
@@ -103,21 +109,33 @@ macro_rules! collada_element {
             }
         }
     };
+
     ($tag_name:expr, $struct_name:ident => {
         $(req attrib $req_attrib_name:ident: $req_attrib_type:ty),*
         $(opt attrib $opt_attrib_name:ident: $opt_attrib_type:ty),*
+
         $(req child  $req_child_name:ident:  $req_child_type:ty),*
         $(opt child  $opt_child_name:ident:  $opt_child_type:ty),*
         $(rep child  $rep_child_name:ident:  $rep_child_type:ty),*
+
+        $(req enum child $req_enum_child_name:ident: $req_enum_child_type:ident {
+            $($var_tag:expr => $var_name:ident($var_type:ty)),*
+        }),*
+        // $(opt enum child ),*
+        // $(rep enum child ),*
         $(contents: $contents_type:ty),*
     }) => {
         #[derive(Debug, Clone)]
         pub struct $struct_name {
             $(pub $req_attrib_name: $req_attrib_type,)*
             $(pub $opt_attrib_name: Option<$opt_attrib_type>,)*
+
             $(pub $req_child_name:  $req_child_type,)*
             $(pub $opt_child_name:  Option<$opt_child_type>,)*
             $(pub $rep_child_name:  Vec<$rep_child_type>,)*
+
+            $(pub $req_enum_child_name: $req_enum_child_type,)*
+
             $(pub contents: $contents_type,)*
         }
 
@@ -126,9 +144,13 @@ macro_rules! collada_element {
                 let mut element = $struct_name {
                     $($req_attrib_name: unsafe { ::std::mem::uninitialized() },)*
                     $($opt_attrib_name: None,)*
+
                     $($req_child_name:  unsafe { ::std::mem::uninitialized() },)*
                     $($opt_child_name:  None,)*
                     $($rep_child_name:  Vec::new(),)*
+
+                    $($req_enum_child_name: unsafe { ::std::mem::uninitialized() },)*
+
                     $(contents: unsafe { ::std::mem::uninitialized::<$contents_type>() },)*
                 };
 
@@ -153,7 +175,7 @@ macro_rules! collada_element {
                             element.$opt_attrib_name = Some(attrib);
                         },)*
 
-                        // required children:
+                        // Required children.
                         $(StartElement(stringify!($req_child_name)) => {
                         let child = try!(parse_element(parser, stringify!($req_child_type)));
                             ::std::mem::forget(
@@ -164,19 +186,34 @@ macro_rules! collada_element {
                             )
                         },)*
 
-                        // optional children:
+                        // Optional children.
                         $(StartElement(stringify!($opt_child_name)) => {
                             let child = try!(parse_element(parser, stringify!($opt_child_type)));
                             element.$opt_child_name = Some(child);
                         },)*
 
-                        // repeating children:
+                        // Repeating Children.
                         $(StartElement(stringify!($rep_child_name)) => {
                             let child = try!(parse_element(parser, stringify!($rep_child_type)));
                             element.$rep_child_name.push(child);
                         },)*
 
-                        // text node
+                        // Required enum children.
+                        $(
+                            $(
+                                StartElement($var_tag) => {
+                                    let child: $var_type = try!(parse_element(parser, stringify!($req_enum_child_name)));
+                                    ::std::mem::forget(
+                                        ::std::mem::replace(
+                                            &mut element.$req_enum_child_name,
+                                            $req_enum_child_type::$var_name(child),
+                                        )
+                                    );
+                                }
+                            )*
+                        )*
+
+                        // Text node.
                         $(TextNode(text) => {
                             let contents = try!(parse_attrib::<$contents_type>(text));
                             ::std::mem::forget(
@@ -290,6 +327,21 @@ impl ColladaAttribute for bool {
     }
 }
 
+impl<T: std::str::FromStr> ColladaAttribute for Vec<T> {
+    fn parse(text: &str) -> Result<Vec<T>> {
+        let mut result = Vec::new();
+
+        for word in text.split_whitespace() {
+            let num = try!(
+                T::from_str(word)
+                .map_err(|_| Error::ParseError(String::from(word))));
+            result.push(num);
+        }
+
+        Ok(result)
+    }
+}
+
 collada_element!("accessor", Accessor => {
     req attrib count:  usize,
     req attrib source: String
@@ -325,6 +377,13 @@ impl ColladaAttribute for AltitudeMode {
     }
 }
 
+collada_element!("ambient", AmbientFx => {
+    req enum child child: FxCommonColorOrTextureType {
+        "color" => Color(Color),
+        "param" => Param(ParamReference),
+        "texture" => Texture(Texture)
+    }
+});
 collada_element!("annotate", Annotate => {});
 
 #[derive(Debug, Clone)]
@@ -352,8 +411,14 @@ collada_element!("asset", Asset => {
     rep child extra: Extra
 });
 
-#[derive(Debug, Clone)]
-pub struct BindMaterial;
+collada_element!("bind_material", BindMaterial => {});
+collada_element!("blinn", Blinn => {});
+
+collada_element!("color", Color => {
+    opt attrib sid: String
+
+    contents: Vec<f32>
+});
 
 collada_element!("contributor", Contributor => {
     opt child author:         String,
@@ -365,8 +430,18 @@ collada_element!("contributor", Contributor => {
     opt child source_data:    String
 });
 
+collada_element!("constant", ConstantFx => {});
+
 collada_element!("coverage", Coverage => {
     opt child geographic_location: GeographicLocation
+});
+
+collada_element!("diffuse", Diffuse => {
+    req enum child child: FxCommonColorOrTextureType {
+        "color" => Color(Color),
+        "param" => Param(ParamReference),
+        "texture" => Texture(Texture)
+    }
 });
 
 #[derive(Debug, Clone, Default)]
@@ -428,6 +503,14 @@ impl ColladaElement for Effect {
         Ok(effect)
     }
 }
+
+collada_element!("emission", Emission => {
+    req enum child child: FxCommonColorOrTextureType {
+        "color" => Color(Color),
+        "param" => Param(ParamReference),
+        "texture" => Texture(Texture)
+    }
+});
 
 collada_element!("evaluate_scene", EvaluateScene => {
     opt attrib id: String,
@@ -491,6 +574,13 @@ impl ColladaElement for Extra {
 
         Ok(extra)
     }
+}
+
+#[derive(Debug, Clone)]
+pub enum FxCommonColorOrTextureType {
+    Color(Color),
+    Param(ParamReference),
+    Texture(Texture),
 }
 
 #[derive(Debug, Clone)]
@@ -561,6 +651,8 @@ collada_element!("geographic_location", GeographicLocation => {
     req child altitude: Altitude
 });
 
+collada_element!("index_of_refraction", IndexOfRefraction => {});
+
 #[derive(Debug, Clone)]
 pub struct InputShared {
     pub offset: u32,
@@ -607,6 +699,16 @@ collada_element!("instance_material", InstanceMaterial => {});
 
 #[derive(Debug, Clone)]
 pub struct InstanceNode;
+
+collada_element!("lambert", Lambert => {
+    opt child emission: Emission,
+    opt child ambient: AmbientFx,
+    opt child diffuse: Diffuse,
+    opt child reflectivity: Reflectivity,
+    opt child transparent: Transparent,
+    opt child transparency: Transparency,
+    opt child index_of_refraction: IndexOfRefraction
+});
 
 #[derive(Debug, Clone)]
 pub struct LibraryAnimations;
@@ -888,6 +990,29 @@ impl<'a> From<&'a str> for NodeType {
     }
 }
 
+#[derive(Debug, Clone)]
+pub enum Opaque {
+    AOne,
+    RgbZero,
+    AZero,
+    RgbOne,
+}
+
+impl ColladaAttribute for Opaque {
+    fn parse(text: &str) -> Result<Opaque> {
+        match text {
+            "A_ONE" => Ok(Opaque::AOne),
+            "RGB_ZERO" => Ok(Opaque::RgbZero),
+            "A_ZERO" => Ok(Opaque::AZero),
+            "RGB_ONE" => Ok(Opaque::RgbOne),
+            _ => Err(Error::BadAttributeValue {
+                attrib: String::from("opaque"),
+                value: String::from(text),
+            }),
+        }
+    }
+}
+
 // `Param` has to be handled manually because one of its children is <type> which
 // can't be handled by the macro because it's a keyword.
 #[derive(Debug, Clone)]
@@ -932,6 +1057,9 @@ impl ColladaElement for Param {
     }
 }
 
+collada_element!("param", ParamReference => {});
+collada_element!("phong", Phong => {});
+
 #[derive(Debug, Clone)]
 pub enum PrimitiveType {
     Lines,
@@ -958,7 +1086,25 @@ collada_element!("profile_CG", ProfileCg => {});
 collada_element!("profile_GLES", ProfileGles => {});
 collada_element!("profile_GLES2", ProfileGles2 => {});
 collada_element!("profile_GLSL", ProfileGlsl => {});
-collada_element!("profile_COMMON", ProfileCommon => {});
+
+collada_element!("profile_COMMON", ProfileCommon => {
+    opt attrib id: String
+
+    req child technique: TechniqueFxCommon
+    opt child asset: Asset
+    rep child newparam: NewParam,
+    rep child extra: Extra
+});
+
+collada_element!("reflective", Reflective => {
+    req enum child child: FxCommonColorOrTextureType {
+        "color" => Color(Color),
+        "param" => Param(ParamReference),
+        "texture" => Texture(Texture)
+    }
+});
+
+collada_element!("reflectivity", Reflectivity => {});
 
 collada_element!("render", Render => {
     opt attrib name: String,
@@ -975,6 +1121,15 @@ collada_element!("rotate", Rotate => {});
 collada_element!("scale", Scale => {});
 collada_element!("scene", Scene => {});
 collada_element!("setparam", SetParam => {});
+
+#[derive(Debug, Clone)]
+pub enum ShaderElementCommon {
+    Constant(ConstantFx),
+    Lambert(Lambert),
+    Phong(Phong),
+    Blinn(Blinn)
+}
+
 collada_element!("skew", Skew => {});
 
 #[derive(Debug, Clone)]
@@ -1043,13 +1198,23 @@ impl ColladaElement for TechniqueCore {
     }
 }
 
-// #[derive(Debug, Clone)]
-// pub struct TechniqueFxCommon {
-//     pub id: Option<String>,
-//
-// }
+collada_element!("technique", TechniqueFxCommon => {
+    req attrib sid: String
+    opt attrib id:  String
+
+    opt child asset: Asset
+    rep child extra: Extra
+
+    req enum child shader_element: ShaderElementCommon {
+        "constant" => Constant(ConstantFx),
+        "lambert" => Lambert(Lambert),
+        "phong" => Phong(Phong),
+        "blinn" => Blinn(Blinn)
+    }
+});
 
 collada_element!("technique_hint", TechniqueHint => {});
+collada_element!("texture", Texture => {});
 
 #[derive(Debug, Clone)]
 pub enum TransformationElement {
@@ -1063,6 +1228,18 @@ pub enum TransformationElement {
 
 #[derive(Debug, Clone)]
 pub struct Translate;
+
+collada_element!("transparent", Transparent => {
+    opt attrib opaque: Opaque
+
+    req enum child child: FxCommonColorOrTextureType {
+        "color" => Color(Color),
+        "param" => Param(ParamReference),
+        "texture" => Texture(Texture)
+    }
+});
+
+collada_element!("transparency", Transparency => {});
 
 #[derive(Debug, Clone)]
 pub struct Triangles {
@@ -1267,14 +1444,6 @@ impl<'a> ColladaParser<'a> {
         Ok(collada)
     }
 
-    fn parse_bind_material(&mut self) -> Result<BindMaterial> {
-        println!("Skipping over <bind_material> element");
-        println!("Warning: <bind_material> is not yet supported by parse_collada");
-        self.skip_to_end_element("bind_material");
-
-        Ok(BindMaterial)
-    }
-
     fn parse_bool_array(&mut self) {
         println!("Skipping over <bool_array> element");
         println!("Warning: <bool_array> is not yet supported by parse_collada");
@@ -1431,7 +1600,7 @@ impl<'a> ColladaParser<'a> {
                     instance_geometry.url.push_str(url_str);
                 },
                 StartElement("bind_material") => {
-                    let bind_material = try!(self.parse_bind_material());
+                    let bind_material = try!(parse_element(self, "instance_geometry"));
                     instance_geometry.bind_material = Some(bind_material);
                 },
                 StartElement("extra") => {
