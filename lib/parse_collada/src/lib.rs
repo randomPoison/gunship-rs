@@ -4,14 +4,10 @@ use std::fs::File;
 use std::path::Path;
 use std::str::FromStr;
 use std::convert::From;
+use xml::Event::*;
 
-use xml::XMLParser;
-use xml::XMLEvent;
-use xml::XMLEvent::*;
-use xml::SAXEvents;
-
-#[derive(Debug, Clone)]
-pub struct COLLADA {
+#[derive(Debug, Clone, Default)]
+pub struct Collada {
     pub version: String,
     pub asset: Option<Asset>,
     pub library_animations: Option<LibraryAnimations>,
@@ -33,19 +29,16 @@ pub struct COLLADA {
     pub extras: Vec<Extra>,
 }
 
-impl COLLADA {
-    pub fn load<P: AsRef<Path>>(path: P) -> Result<COLLADA, String> {
+impl Collada {
+    pub fn load<P: AsRef<Path>>(path: P) -> Result<Collada> {
         let mut file = match File::open(&path) {
             // The `desc` field of `IoError` is a string that describes the error.
-            Err(why) => return Err(format!(
-                "couldn't open {}: {}",
-                path.as_ref().display(),
-                &why)),
+            Err(why) => return Err(Error::FileError(why)),
             Ok(file) => file,
         };
 
-        match XMLParser::from_file(&mut file) {
-            Err(why) => Err(why),
+        match xml::Parser::from_file(&mut file) {
+            Err(why) => Err(Error::XmlError(why)),
             Ok(xml_parser) => {
                 let mut parser = ColladaParser {
                     events: xml_parser.parse()
@@ -56,77 +49,767 @@ impl COLLADA {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct Accessor {
-    pub count: usize,
-    pub offset: u32,
-    pub source: String,
-    pub stride: u32,
-    pub params: Vec<Param>,
+// TODO: Include line number and column??????????????
+// TODO: Implement Display for Error.
+#[derive(Debug)]
+pub enum Error {
+    XmlError(xml::Error),
+    UnmatchedTag(String),
+    IllegalElement {
+        parent: String,
+        child: String,
+    },
+    IllegalAttribute {
+        tag: String,
+        attribute: String,
+    },
+    BadAttributeValue {
+        attrib: String,
+        value: String,
+    },
+    IllegalTextContents {
+        tag: String,
+        text: String,
+    },
+    ParseBoolError {
+        text: String,
+        error: std::str::ParseBoolError,
+    },
+    ParseFloatError {
+        text: String,
+        error: std::num::ParseFloatError,
+    },
+    ParseIntError {
+        text: String,
+        error: std::num::ParseIntError,
+    },
+    MissingRequiredChild {
+        parent: String,
+        child: String,
+    },
+
+    /// Indicates that a child that should have appeared at most one time appeared multiple times.
+    RepeatingChild {
+        parent: String,
+        child: String,
+    },
+
+    /// Used in generic programming.
+    ///
+    /// This is a bit of a hack to make generic programming work, but it'd be preferable to
+    /// either use the specific parse error variants or remove the specific variants and only
+    /// have the generic parse error.
+    ParseError(String),
+    FileError(std::io::Error),
 }
+
+pub type Result<T> = std::result::Result<T, Error>;
+
+macro_rules! collada_element {
+    ($element:expr, $type_name:ident => {}) => {
+        #[derive(Debug, Clone, Default)]
+        pub struct $type_name;
+
+        impl ColladaElement for $type_name {
+            fn parse(parser: &mut ColladaParser) -> Result<$type_name> {
+                println!("Skippping over <{}>", $element);
+                println!("WARNING: <{}> is not yet supported by parse-collada", $element);
+                parser.skip_to_end_element($element);
+                Ok($type_name)
+            }
+        }
+    };
+
+    ($tag_name:expr, $struct_name:ident => {
+        $(req attrib $req_attrib_name:ident: $req_attrib_type:ty),*
+        $(opt attrib $opt_attrib_name:ident: $opt_attrib_type:ty),*
+
+        $(req child  $req_child_name:ident:  $req_child_type:ty),*
+        $(opt child  $opt_child_name:ident:  $opt_child_type:ty),*
+        $(rep child  $rep_child_name:ident:  $rep_child_type:ty),*
+
+        $(req enum child $req_enum_child_name:ident: $req_enum_child_type:ident {
+            $($req_var_tag:expr => $req_var_name:ident($req_var_type:ty)),*
+        }),*
+        $(opt enum child $opt_enum_child_name:ident: $opt_enum_child_type:ident {
+            $($opt_var_tag:expr => $opt_var_name:ident($opt_var_type:ty)),*
+        }),*
+        // $(rep enum child ),*
+        $(contents: $contents_type:ty),*
+    }) => {
+        #[derive(Debug, Clone)]
+        pub struct $struct_name {
+            $(pub $req_attrib_name: $req_attrib_type,)*
+            $(pub $opt_attrib_name: Option<$opt_attrib_type>,)*
+
+            $(pub $req_child_name:  $req_child_type,)*
+            $(pub $opt_child_name:  Option<$opt_child_type>,)*
+            $(pub $rep_child_name:  Vec<$rep_child_type>,)*
+
+            $(pub $req_enum_child_name: $req_enum_child_type,)*
+            $(pub $opt_enum_child_name: Option<$opt_enum_child_type>,)*
+
+            $(pub contents: $contents_type,)*
+        }
+
+        impl ColladaElement for $struct_name {
+            fn parse(parser: &mut ColladaParser) -> Result<$struct_name> {
+                $(let mut $req_attrib_name = None;)*
+                $(let mut $opt_attrib_name = None;)*
+
+                $(let mut $req_child_name = None;)*
+                $(let mut $opt_child_name = None;)*
+                $(let mut $rep_child_name = Vec::new();)*
+
+                $(let mut $req_enum_child_name = None;)*
+                $(let mut $opt_enum_child_name = None;)*
+
+                $(let mut contents: Option<$contents_type> = None;)*
+
+                loop {
+                    let event = parser.next_event();
+                    match event {
+
+                        // Required attributes.
+                        $(Attribute(stringify!($req_attrib_name), attrib_value) => {
+                            if $req_attrib_name.is_some() {
+                                return Err(Error::RepeatingChild {
+                                    parent: String::from($tag_name),
+                                    child: String::from(stringify!($req_attrib_name)),
+                                });
+                            }
+
+                            let attrib = try!(parse_attrib(attrib_value));
+                            $req_attrib_name = Some(attrib);
+                        },)*
+
+                        // Optional attributes.
+                        $(Attribute(stringify!($opt_attrib_name), attrib_value) => {
+                            if $opt_attrib_name.is_some() {
+                                return Err(Error::RepeatingChild {
+                                    parent: String::from($tag_name),
+                                    child: String::from(stringify!($opt_attrib_name)),
+                                });
+                            }
+
+                            let attrib = try!(parse_attrib(attrib_value));
+                            $opt_attrib_name = Some(attrib);
+                        },)*
+
+                        // Required children.
+                        $(StartElement(stringify!($req_child_name)) => {
+                            if $req_child_name.is_some() {
+                                return Err(Error::RepeatingChild {
+                                    parent: String::from($tag_name),
+                                    child: String::from(stringify!($req_child_name)),
+                                });
+                            }
+
+                            let child = try!(parse_element(parser));
+                            $req_child_name = Some(child);
+                        },)*
+
+                        // Optional children.
+                        $(StartElement(stringify!($opt_child_name)) => {
+                            if $opt_child_name.is_some() {
+                                return Err(Error::RepeatingChild {
+                                    parent: String::from($tag_name),
+                                    child: String::from(stringify!($opt_child_name)),
+                                });
+                            }
+
+                            let child = try!(parse_element(parser));
+                            $opt_child_name = Some(child);
+                        },)*
+
+                        // Repeating Children.
+                        $(StartElement(stringify!($rep_child_name)) => {
+                            let child = try!(parse_element(parser));
+                            $rep_child_name.push(child);
+                        },)*
+
+                        // Required enum children.
+                        $(
+                            $(
+                                StartElement($req_var_tag) => {
+                                    if $req_enum_child_name.is_some() {
+                                        return Err(Error::RepeatingChild {
+                                            parent: String::from($tag_name),
+                                            child: String::from(stringify!($req_enum_child_name)),
+                                        });
+                                    }
+
+                                    let child: $req_var_type = try!(parse_element(parser));
+                                    $req_enum_child_name = Some($req_enum_child_type::$req_var_name(child));
+                                }
+                            )*
+                        )*
+
+                        // Optional enum children.
+                        $(
+                            $(
+                                StartElement($opt_var_tag) => {
+                                    if $opt_enum_child_name.is_some() {
+                                        return Err(Error::RepeatingChild {
+                                            parent: String::from($tag_name),
+                                            child: String::from(stringify!($opt_enum_child_name)),
+                                        });
+                                    }
+
+                                    let child: $opt_var_type = try!(parse_element(parser));
+                                    $opt_enum_child_name = Some($opt_enum_child_type::$opt_var_name(child));
+                                }
+                            )*
+                        )*
+
+                        // Text node.
+                        $(TextNode(text) => {
+                            if contents.is_some() {
+                                return Err(Error::RepeatingChild {
+                                    parent: String::from($tag_name),
+                                    child: String::from(stringify!(contents)),
+                                });
+                            }
+
+                            contents = Some(try!(parse_attrib::<$contents_type>(text)));
+                        })*
+
+                        EndElement($tag_name) => break,
+                        _ => return Err(illegal_event(event, $tag_name)),
+                    }
+                }
+
+                $(
+                    if $req_attrib_name.is_none() {
+                        return Err(Error::MissingRequiredChild {
+                            parent: String::from($tag_name),
+                            child: String::from(stringify!($req_attrib_name)),
+                        });
+                    }
+                )*
+
+                $(
+                    if $req_child_name.is_none() {
+                        return Err(Error::MissingRequiredChild {
+                            parent: String::from($tag_name),
+                            child: String::from(stringify!($req_child_name)),
+                        });
+                    }
+                )*
+
+                $(
+                    if $req_enum_child_name.is_none() {
+                        return Err(Error::MissingRequiredChild {
+                            parent: String::from($tag_name),
+                            child: String::from(stringify!($req_enum_child_name)),
+                        });
+                    }
+                )*
+
+                $(
+                    if contents.is_none() {
+                        contents = Some(Default::default()) as Option<$contents_type>;
+                    }
+                )*
+
+                Ok($struct_name {
+                    $($req_attrib_name: $req_attrib_name.unwrap(),)*
+                    $($opt_attrib_name: $opt_attrib_name,)*
+
+                    $($req_child_name:  $req_child_name.unwrap(),)*
+                    $($opt_child_name:  $opt_child_name,)*
+                    $($rep_child_name:  $rep_child_name,)*
+
+                    $($req_enum_child_name: $req_enum_child_name.unwrap(),)*
+                    $($opt_enum_child_name: $opt_enum_child_name,)*
+
+                    $(contents: contents.unwrap() as $contents_type,)*
+                })
+            }
+        }
+    };
+}
+
+pub trait ColladaElement: Sized {
+    fn parse(parser: &mut ColladaParser) -> Result<Self>;
+}
+
+fn parse_element<T: ColladaElement>(parser: &mut ColladaParser) -> Result<T> {
+    T::parse(parser)
+}
+
+pub trait ColladaAttribute: Sized {
+    fn parse(text: &str) -> Result<Self>;
+}
+
+fn parse_attrib<T: ColladaAttribute>(text: &str) -> Result<T> {
+    T::parse(text)
+}
+
+impl ColladaAttribute for String {
+    fn parse(text: &str) -> Result<String> {
+        Ok(String::from(text))
+    }
+}
+
+impl ColladaAttribute for usize {
+    fn parse(text: &str) -> Result<usize> {
+        match usize::from_str_radix(text, 10) {
+            Ok(result) => Ok(result),
+            Err(error) => Err(Error::ParseIntError {
+                text: String::from(text),
+                error: error,
+            }),
+        }
+    }
+}
+
+impl ColladaAttribute for isize {
+    fn parse(text: &str) -> Result<isize> {
+        match isize::from_str_radix(text, 10) {
+            Ok(result) => Ok(result),
+            Err(error) => Err(Error::ParseIntError {
+                text: String::from(text),
+                error: error,
+            }),
+        }
+    }
+}
+
+impl ColladaAttribute for f32 {
+    fn parse(text: &str) -> Result<f32> {
+        match f32::from_str(text) {
+            Ok(result) => Ok(result),
+            Err(error) => Err(Error::ParseFloatError {
+                text: String::from(text),
+                error: error,
+            }),
+        }
+    }
+}
+
+impl ColladaAttribute for bool {
+    fn parse(text: &str) -> Result<bool> {
+        bool::from_str(text).map_err(|err| {
+            Error::ParseBoolError {
+                text: String::from(text),
+                error: err,
+            }
+        })
+    }
+}
+
+impl<T: std::str::FromStr> ColladaAttribute for Vec<T> {
+    fn parse(text: &str) -> Result<Vec<T>> {
+        let mut result = Vec::new();
+
+        for word in text.split_whitespace() {
+            let num = try!(
+                T::from_str(word)
+                .map_err(|_| Error::ParseError(String::from(word))));
+            result.push(num);
+        }
+
+        Ok(result)
+    }
+}
+
+collada_element!("accessor", Accessor => {
+    req attrib count:  usize,
+    req attrib source: String
+
+    opt attrib offset: usize,
+    opt attrib stride: usize
+
+    rep child param: Param
+});
+
+collada_element!("altitude", Altitude => {
+    req attrib mode: AltitudeMode
+
+    contents: f32
+});
+
+#[derive(Debug, Clone)]
+pub enum AltitudeMode {
+    Absolute,
+    RelativeToGround,
+}
+
+impl Default for AltitudeMode {
+    fn default() -> AltitudeMode {
+        AltitudeMode::RelativeToGround
+    }
+}
+
+impl ColladaAttribute for AltitudeMode {
+    fn parse(text: &str) -> Result<AltitudeMode> {
+        match text {
+            "absolute" => Ok(AltitudeMode::Absolute),
+            "relativeToGround" => Ok(AltitudeMode::RelativeToGround),
+            _ => Err(Error::BadAttributeValue {
+                attrib: String::from("mode"),
+                value: String::from(text),
+            }),
+        }
+    }
+}
+
+collada_element!("ambient", AmbientFx => {
+    req enum child child: FxCommonColorOrTextureType {
+        "color" => Color(Color),
+        "param" => Param(ParamReference),
+        "texture" => Texture(Texture)
+    }
+});
+
+collada_element!("animation", Animation => {
+    opt attrib id: String,
+    opt attrib name: String
+
+    opt child asset: Asset
+    rep child animation: Animation,
+    rep child source: Source,
+    rep child sampler: Sampler,
+    rep child channel: Channel,
+    rep child extra: Extra
+});
+
+collada_element!("annotate", Annotate => {});
 
 #[derive(Debug, Clone)]
 pub enum ArrayElement {
-    IDREF,
-    Name,
-    Bool,
-    Float(Vec<f32>),
-    Int
+    Idref(IdrefArray),
+    Name(NameArray),
+    Bool(BoolArray),
+    Float(FloatArray),
+    Int(IntArray),
+    Token(TokenArray),
+    Sidref(SidrefArray),
 }
 
-#[derive(Debug, Clone)]
-pub struct Asset;
+collada_element!("asset", Asset => {
+    req child created: Created,
+    req child modified: Modified
 
-#[derive(Debug, Clone)]
-pub struct BindMaterial;
+    opt child coverage: Coverage,
+    opt child keywords: Keywords,
+    opt child revision: Revision,
+    opt child subject: Subject,
+    opt child title: Title,
+    opt child unit: Unit,
+    opt child up_axis: UpAxis
 
-#[derive(Debug, Clone)]
-pub struct EvaluateScene {
+    rep child contributor: Contributor,
+    rep child extra: Extra
+});
+
+collada_element!("author", Author => {
+    contents: String
+});
+
+collada_element!("author_email", AuthorEmail => {
+    contents: String
+});
+
+collada_element!("author_website", AuthorWebsite => {
+    contents: String
+});
+
+collada_element!("authoring_tool", AuthoringTool => {
+    contents: String
+});
+
+collada_element!("bind", Bind => {});
+
+collada_element!("bind_material", BindMaterial => {
+    req child technique_common: TechniqueCommon<InstanceMaterial>
+    rep child param: Param,
+    rep child technique: TechniqueCore,
+    rep child extra: Extra
+});
+
+collada_element!("bind_vertex_input", BindVertexInput => {});
+collada_element!("blinn", Blinn => {});
+collada_element!("bool_array", BoolArray => {});
+collada_element!("brep", Brep => {});
+
+collada_element!("channel", Channel => {
+    req attrib source: String,
+    req attrib target: String
+});
+
+collada_element!("color", Color => {
+    opt attrib sid: String
+
+    contents: Vec<f32>
+});
+
+collada_element!("comments", Comments => {
+    contents: String
+});
+
+collada_element!("contributor", Contributor => {
+    opt child author:         Author,
+    opt child author_email:   AuthorEmail,
+    opt child author_website: AuthorWebsite,
+    opt child authoring_tool: AuthoringTool,
+    opt child comments:       Comments,
+    opt child copyright:      Copyright,
+    opt child source_data:    SourceData
+});
+
+collada_element!("constant", ConstantFx => {});
+collada_element!("convex_mesh", ConvexMesh => {});
+
+collada_element!("copyright", Copyright => {
+    contents: String
+});
+
+collada_element!("coverage", Coverage => {
+    opt child geographic_location: GeographicLocation
+});
+
+collada_element!("created", Created => {
+    contents: String
+});
+
+collada_element!("diffuse", Diffuse => {
+    req enum child child: FxCommonColorOrTextureType {
+        "color" => Color(Color),
+        "param" => Param(ParamReference),
+        "texture" => Texture(Texture)
+    }
+});
+
+#[derive(Debug, Clone, Default)]
+pub struct Effect {
+    pub id: Option<String>,
     pub name: Option<String>,
-    pub renders: Vec<Render>,
+    pub asset: Option<Asset>,
+    pub annotate: Vec<Annotate>,
+    pub newparam: Vec<NewParam>,
+    pub profile: Vec<Profile>,
+    pub extra: Vec<Extra>,
+}
+
+impl ColladaElement for Effect {
+    fn parse(parser: &mut ColladaParser) -> Result<Effect> {
+        let mut effect = Effect::default();
+
+        loop {
+            let event = parser.next_event();
+            match event {
+                Attribute("id", id_str) =>
+                    effect.id = Some(String::from(id_str)),
+                Attribute("name", name_str) =>
+                    effect.name = Some(String::from(name_str)),
+                StartElement("asset") =>
+                    effect.asset = Some(
+                        try!(parse_element(parser))),
+                StartElement("annotate") =>
+                    effect.annotate.push(
+                        try!(parse_element(parser))),
+                StartElement("newparam") =>
+                    effect.newparam.push(
+                        try!(parse_element(parser))),
+                StartElement("profile_BRIDGE") =>
+                    effect.profile.push(Profile::Bridge(
+                        try!(parse_element(parser)))),
+                StartElement("profile_CG") =>
+                    effect.profile.push(Profile::Cg(
+                        try!(parse_element(parser)))),
+                StartElement("profile_GLES") =>
+                    effect.profile.push(Profile::Gles(
+                        try!(parse_element(parser)))),
+                StartElement("profile_GLES2") =>
+                    effect.profile.push(Profile::Gles2(
+                        try!(parse_element(parser)))),
+                StartElement("profile_GLSL") =>
+                    effect.profile.push(Profile::Glsl(
+                        try!(parse_element(parser)))),
+                StartElement("profile_COMMON") =>
+                    effect.profile.push(Profile::Common(
+                        try!(parse_element(parser)))),
+                StartElement("extra") =>
+                    effect.extra.push(try!(parse_element(parser))),
+                EndElement("effect") => break,
+                _ => return Err(illegal_event(event, "effect")),
+            }
+        }
+
+        Ok(effect)
+    }
+}
+
+collada_element!("emission", Emission => {
+    req enum child child: FxCommonColorOrTextureType {
+        "color" => Color(Color),
+        "param" => Param(ParamReference),
+        "texture" => Texture(Texture)
+    }
+});
+
+collada_element!("evaluate_scene", EvaluateScene => {
+    opt attrib id: String,
+    opt attrib name: String,
+    opt attrib sid: String,
+    opt attrib enable: bool
+
+    opt child asset: Asset
+
+    rep child render: Render,
+    rep child extra: Extra
+});
+
+#[derive(Debug, Clone, Default)]
+pub struct Extra {
+    // attribs
+    pub id: Option<String>,
+    pub name: Option<String>,
+    pub type_hint: Option<String>,
+
+    // children
+    pub asset: Option<Asset>,
+    pub technique: Vec<TechniqueCore>,
+}
+
+impl ColladaElement for Extra {
+    fn parse(parser: &mut ColladaParser) -> Result<Extra> {
+        let mut extra = Extra {
+            id: None,
+            name: None,
+            type_hint: None,
+
+            asset: None,
+            technique: Vec::new(),
+        };
+
+        loop {
+            let event = parser.next_event();
+            match event {
+                Attribute("id", id_str) => {
+                    extra.id = Some(String::from(id_str));
+                },
+                Attribute("name", name_str) => {
+                    extra.name = Some(String::from(name_str));
+                },
+                Attribute("type", type_str) => {
+                    extra.type_hint = Some(String::from(type_str));
+                },
+                StartElement("asset") => {
+                    let asset = try!(parse_element(parser));
+                    extra.asset = Some(asset);
+                },
+                StartElement("technique") => {
+                    let technique = try!(parse_element(parser));
+                    extra.technique.push(technique);
+                },
+                EndElement("extra") => break,
+                _ => return Err(illegal_event(event, "extra")),
+            }
+        }
+
+        Ok(extra)
+    }
+}
+
+collada_element!("float", Float => {
+    opt attrib sid: String
+    contents: f32
+});
+
+collada_element!("float_array", FloatArray => {
+    req attrib count: usize
+    opt attrib id: String,
+    opt attrib name: String,
+    opt attrib digits: usize,
+    opt attrib magnitude: isize
+
+    contents: Vec<f32>
+});
+
+#[derive(Debug, Clone)]
+pub enum FxCommonColorOrTextureType {
+    Color(Color),
+    Param(ParamReference),
+    Texture(Texture),
 }
 
 #[derive(Debug, Clone)]
-pub struct Extra;
+pub enum FxCommonFloatOrParamType {
+    Float(Float),
+    Param(ParamReference),
+}
 
 #[derive(Debug, Clone)]
 pub enum GeometricElement {
-    ConvexMesh,
+    ConvexMesh(ConvexMesh),
     Mesh(Mesh),
-    Spline
+    Spline(Spline),
+    Brep(Brep),
 }
 
-#[derive(Debug, Clone)]
-pub struct Geometry {
-    pub id: Option<String>,
-    pub name: Option<String>,
-    pub data: GeometricElement
-}
+collada_element!("geometry", Geometry => {
+    opt attrib id: String,
+    opt attrib name: String
 
-#[derive(Debug, Clone)]
+    opt child asset: Asset
+    rep child extra: Extra
+
+    req enum child geometric_element: GeometricElement {
+        "convex_mesh" => ConvexMesh(ConvexMesh),
+        "mesh" => Mesh(Mesh),
+        "spline" => Spline(Spline),
+        "brep" => Brep(Brep)
+    }
+});
+
+collada_element!("geographic_location", GeographicLocation => {
+    req child longitude: Longitude,
+    req child latitude: Latitude,
+    req child altitude: Altitude
+});
+
+collada_element!("IDREF_array", IdrefArray => {});
+
+collada_element!("index_of_refraction", IndexOfRefraction => {
+    req enum child child: FxCommonFloatOrParamType {
+        "float" => Float(Float),
+        "param" => Param(ParamReference)
+    }
+});
+
+#[derive(Debug, Clone, Default)]
 pub struct InputShared {
     pub offset: u32,
     pub semantic: String,
     pub source: String,
-    pub set: Option<u32>
+    pub set: Option<u32>,
 }
 
-#[derive(Debug, Clone)]
-pub struct InputUnshared {
-    pub semantic: String,
-    pub source: String,
-}
+collada_element!("input", InputUnshared => {
+    req attrib semantic: String,
+    req attrib source: String
+});
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct InstanceCamera;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct InstanceController;
 
-#[derive(Debug, Clone)]
-pub struct InstanceEffect;
+collada_element!("instance_effect", InstanceEffect => {
+    req attrib url: String
+    opt attrib sid: String,
+    opt attrib name: String
 
-#[derive(Debug, Clone)]
+    rep child technique_hint: TechniqueHint,
+    rep child setparam: SetParam,
+    rep child extra: Extra
+});
+
+#[derive(Debug, Clone, Default)]
 pub struct InstanceGeometry {
     pub sid: Option<String>,
     pub name: Option<String>,
@@ -135,84 +818,220 @@ pub struct InstanceGeometry {
     pub extras: Vec<Extra>,
 }
 
-#[derive(Debug, Clone)]
+collada_element!("instance_kinematic_scene", InstanceKinematicScene => {});
+
+#[derive(Debug, Clone, Default)]
 pub struct InstanceLight;
 
-#[derive(Debug, Clone)]
+collada_element!("instance_material", InstanceMaterial => {
+    req attrib target: String,
+    req attrib symbol: String
+    opt attrib sid: String,
+    opt attrib name: String
+
+    rep child bind: Bind,
+    rep child bind_vertex_input: BindVertexInput,
+    rep child extra: Extra
+});
+
+#[derive(Debug, Clone, Default)]
 pub struct InstanceNode;
 
-#[derive(Debug, Clone)]
-pub struct LibraryAnimations;
+collada_element!("instance_physics_scene", InstancePhysicsScene => {});
+collada_element!("instance_visual_scene", InstanceVisualScene => {
+    req attrib url: String
+    opt attrib sid: String,
+    opt attrib name: String
+});
 
-#[derive(Debug, Clone)]
+collada_element!("int_array", IntArray => {});
+
+collada_element!("keywords", Keywords => {
+    contents: String
+});
+
+collada_element!("lambert", Lambert => {
+    opt child emission: Emission,
+    opt child ambient: AmbientFx,
+    opt child diffuse: Diffuse,
+    opt child reflectivity: Reflectivity,
+    opt child transparent: Transparent,
+    opt child transparency: Transparency,
+    opt child index_of_refraction: IndexOfRefraction
+});
+
+collada_element!("latitude", Latitude => {
+    contents: f32
+});
+
+collada_element!("layer", Layer => {
+    contents: String
+});
+
+collada_element!("library_animations", LibraryAnimations => {
+    opt attrib id: String,
+    opt attrib name: String
+
+    opt child asset: Asset
+    rep child animation: Animation,
+    rep child extra: Extra
+});
+
+#[derive(Debug, Clone, Default)]
 pub struct LibraryAnimationClips;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct LibraryCameras;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct LibraryControllers;
 
-#[derive(Debug, Clone)]
-pub struct LibraryEffects;
+collada_element!("library_effects", LibraryEffects => {
+    opt attrib id: String,
+    opt attrib name: String
 
-#[derive(Debug, Clone)]
+    opt child asset: Asset
+    rep child effect: Effect,
+    rep child extra: Extra
+});
+
+#[derive(Debug, Clone, Default)]
 pub struct LibraryForceFields;
 
-#[derive(Debug, Clone)]
-pub struct LibraryGeometries {
-    pub id: Option<String>,
-    pub name: Option<String>,
-    pub geometries: Vec<Geometry>
-}
+collada_element!("library_geometries", LibraryGeometries => {
+    opt attrib id: String,
+    opt attrib name: String
 
-#[derive(Debug, Clone)]
+    opt child asset: Asset
+
+    rep child geometry: Geometry,
+    rep child extra: Extra
+});
+
+#[derive(Debug, Clone, Default)]
 pub struct LibraryImages;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct LibraryLights;
 
-#[derive(Debug, Clone)]
-pub struct LibraryMaterials;
+collada_element!("library_materials", LibraryMaterials => {
+    opt attrib id: String,
+    opt attrib name: String
 
-#[derive(Debug, Clone)]
+    opt child asset: Asset
+
+    rep child material: Material,
+    rep child extra: Extra
+});
+
+#[derive(Debug, Clone, Default)]
 pub struct LibraryNodes;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct LibraryPhysicsMaterials;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct LibraryPhysicsModels;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct LibraryPhysicsScenes;
 
-#[derive(Debug, Clone)]
-pub struct LibraryVisualScenes {
-    pub id: Option<String>,
-    pub name: Option<String>,
-    pub asset: Option<Asset>,
-    pub visual_scenes: Vec<VisualScene>,
-    pub extras: Vec<Extra>,
-}
+collada_element!("library_visual_scenes", LibraryVisualScenes => {
+    opt attrib id: String,
+    opt attrib name: String
 
-#[derive(Debug, Clone)]
+    opt child asset: Asset
+
+    rep child visual_scene: VisualScene,
+    rep child extra: Extra
+});
+
+collada_element!("longitude", Longitude => {
+    contents: f32
+});
+
+#[derive(Debug, Clone, Default)]
 pub struct LookAt;
 
-#[derive(Debug, Clone)]
+collada_element!("material", Material => {
+    opt attrib id: String,
+    opt attrib name: String
+
+    req child instance_effect: InstanceEffect
+    opt child asset: Asset
+    rep child extra: Extra
+});
+
+#[derive(Debug, Clone, Default)]
 pub struct Matrix {
     pub sid: Option<String>,
     pub data: [f32; 16],
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Mesh {
-    pub sources: Vec<Source>,
+    pub source: Vec<Source>,
     pub vertices: Vertices,
-    pub primitives: Vec<PrimitiveType>
+    pub primitive_elements: Vec<PrimitiveType>,
+    pub extra: Vec<Extra>,
 }
 
-#[derive(Debug, Clone)]
+impl ColladaElement for Mesh {
+    fn parse(parser: &mut ColladaParser) -> Result<Mesh> {
+        let mut mesh = Mesh {
+            source: Vec::new(),
+            vertices: Vertices::new(),
+            primitive_elements: Vec::new(),
+            extra: Vec::new(),
+        };
+
+        loop {
+            let event = parser.next_event();
+            match event {
+                StartElement("source") => {
+                    let source = try!(parse_element(parser));
+                    mesh.source.push(source);
+                },
+                StartElement("vertices") => {
+                    mesh.vertices = try!(parser.parse_vertices());
+                },
+                StartElement("lines") => parser.parse_lines(),
+                StartElement("linestrips") => parser.parse_linestrips(),
+                StartElement("polygons") => parser.parse_polygons(),
+                StartElement("polylist") => parser.parse_polylist(),
+                StartElement("triangles") => {
+                    let triangles = try!(parse_element(parser));
+                    mesh.primitive_elements.push(PrimitiveType::Triangles(triangles));
+                },
+                StartElement("trifans") => parser.parse_trifans(),
+                StartElement("tristrips") => parser.parse_tristrips(),
+                StartElement("extra") => {
+                    let extra = try!(parse_element(parser));
+                    mesh.extra.push(extra);
+                },
+                EndElement("mesh") => break,
+                _ => return Err(illegal_event(event, "mesh"))
+            }
+        }
+
+        Ok(mesh)
+    }
+}
+
+collada_element!("modified", Modified => {
+    contents: String
+});
+
+collada_element!("Name_array", NameArray => {
+    req attrib count: usize
+    opt attrib id: String,
+    opt attrib name: String
+
+    contents: Vec<String>
+});
+collada_element!("newparam", NewParam => {});
+
+#[derive(Debug, Clone, Default)]
 pub struct Node {
     pub id: Option<String>,
     pub name: Option<String>,
@@ -230,29 +1049,207 @@ pub struct Node {
     pub extras: Vec<Extra>,
 }
 
+impl ColladaElement for Node {
+    fn parse(parser: &mut ColladaParser) -> Result<Node> {
+        let mut node = Node {
+            id: None,
+            name: None,
+            sid: None,
+            node_type: None,
+            layers: Vec::new(),
+            asset: None,
+            transformations: Vec::new(),
+            instance_cameras: Vec::new(),
+            instance_controllers: Vec::new(),
+            instance_geometries: Vec::new(),
+            instance_lights: Vec::new(),
+            instance_nodes: Vec::new(),
+            nodes: Vec::new(),
+            extras: Vec::new(),
+        };
+
+        loop {
+            let event = parser.next_event();
+            match event {
+                Attribute("id", id_str) => {
+                    node.id = Some(String::from(id_str));
+                },
+                Attribute("name", name_str) => {
+                    node.name = Some(String::from(name_str));
+                },
+                Attribute("sid", sid_name) => {
+                    node.sid = Some(String::from(sid_name));
+                },
+                Attribute("type", type_str) => {
+                    node.node_type = Some(try!(parse_attrib(type_str)));
+                },
+                Attribute("layer", layer_str) => {
+                    for layer in layer_str.split(" ") {
+                        node.layers.push(String::from(layer));
+                    }
+                },
+                StartElement("asset") => {
+                    let asset = try!(parse_element(parser));
+                    node.asset = Some(asset);
+                },
+                StartElement("lookat") => {
+                    let lookat = try!(parser.parse_lookat());
+                    node.transformations.push(TransformationElement::LookAt(lookat));
+                },
+                StartElement("matrix") => {
+                    let matrix = try!(parser.parse_matrix());
+                    node.transformations.push(TransformationElement::Matrix(matrix));
+                },
+                StartElement("rotate") => {
+                    let rotate = try!(parse_element(parser));
+                    node.transformations.push(TransformationElement::Rotate(rotate));
+                },
+                StartElement("scale") => {
+                    let scale = try!(parse_element(parser));
+                    node.transformations.push(TransformationElement::Scale(scale));
+                },
+                StartElement("skew") => {
+                    let skew = try!(parse_element(parser));
+                    node.transformations.push(TransformationElement::Skew(skew));
+                },
+                StartElement("translate") => {
+                    let translate = try!(parser.parse_translate());
+                    node.transformations.push(TransformationElement::Translate(translate));
+                },
+                StartElement("instance_camera") => {
+                    let instance_camera = try!(parser.parse_instance_camera());
+                    node.instance_cameras.push(instance_camera);
+                },
+                StartElement("instance_controller") => {
+                    let instance_controller = try!(parser.parse_instance_controller());
+                    node.instance_controllers.push(instance_controller);
+                },
+                StartElement("instance_geometry") => {
+                    let instance_geometry = try!(parser.parse_instance_geometry());
+                    node.instance_geometries.push(instance_geometry);
+                },
+                StartElement("instance_light") => {
+                    let instance_light = try!(parser.parse_instance_light());
+                    node.instance_lights.push(instance_light);
+                },
+                StartElement("instance_node") => {
+                    let instance_node = try!(parser.parse_instance_node());
+                    node.instance_nodes.push(instance_node);
+                },
+                StartElement("node") => {
+                    let child_node = try!(parse_element(parser));
+                    node.nodes.push(child_node);
+                },
+                StartElement("extra") => {
+                    let extra = try!(parse_element(parser));
+                    node.extras.push(extra);
+                },
+                EndElement("node") => break,
+                _ => return Err(illegal_event(event, "node")),
+            }
+        }
+
+        Ok(node)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum NodeType {
     Node,
     Joint,
 }
 
-impl<'a> From<&'a str> for NodeType {
-    fn from(type_str: &str) -> NodeType {
-        match type_str {
-            "NODE" => NodeType::Node,
-            "JOINT" => NodeType::Joint,
-            _ => panic!("Cannot parse node type from {}", type_str),
+impl Default for NodeType {
+    fn default() -> Self {
+        NodeType::Node
+    }
+}
+
+impl ColladaAttribute for NodeType {
+    fn parse(text: &str) -> Result<NodeType> {
+        match text {
+            "NODE" => Ok(NodeType::Node),
+            "JOINT" => Ok(NodeType::Joint),
+            _ => Err(Error::ParseError(String::from(text))),
         }
     }
 }
 
 #[derive(Debug, Clone)]
+pub enum Opaque {
+    AOne,
+    RgbZero,
+    AZero,
+    RgbOne,
+}
+
+impl Default for Opaque {
+    fn default() -> Self {
+        Opaque::AOne
+    }
+}
+
+impl ColladaAttribute for Opaque {
+    fn parse(text: &str) -> Result<Opaque> {
+        match text {
+            "A_ONE" => Ok(Opaque::AOne),
+            "RGB_ZERO" => Ok(Opaque::RgbZero),
+            "A_ZERO" => Ok(Opaque::AZero),
+            "RGB_ONE" => Ok(Opaque::RgbOne),
+            _ => Err(Error::BadAttributeValue {
+                attrib: String::from("opaque"),
+                value: String::from(text),
+            }),
+        }
+    }
+}
+
+// `Param` has to be handled manually because one of its children is <type> which
+// can't be handled by the macro because it's a keyword.
+#[derive(Debug, Clone, Default)]
 pub struct Param {
+    pub data_type: String,
+
     pub name: Option<String>,
     pub sid: Option<String>,
-    pub data_type: String,
     pub semantic: Option<String>,
 }
+
+impl ColladaElement for Param {
+    fn parse(parser: &mut ColladaParser) -> Result<Param> {
+        let mut param = Param {
+            name: None,
+            sid: None,
+            data_type: String::new(),
+            semantic: None,
+        };
+
+        loop {
+            let event = parser.next_event();
+            match event {
+                Attribute("name", name_str) => {
+                    param.name = Some(String::from(name_str));
+                },
+                Attribute("sid", sid_str) => {
+                    param.sid = Some(String::from(sid_str));
+                },
+                Attribute("type", type_str) => {
+                    param.data_type.push_str(type_str);
+                },
+                Attribute("semantic", semantic_str) => {
+                    param.semantic = Some(String::from(semantic_str));
+                },
+                EndElement("param") => break,
+                _ => return Err(illegal_event(event, "param")),
+            }
+        }
+
+        Ok(param)
+    }
+}
+
+collada_element!("param", ParamReference => {});
+collada_element!("phong", Phong => {});
 
 #[derive(Debug, Clone)]
 pub enum PrimitiveType {
@@ -266,31 +1263,224 @@ pub enum PrimitiveType {
 }
 
 #[derive(Debug, Clone)]
-pub struct Render {
-    pub camera_node: Option<String>,
-    pub layers: Vec<String>,
-    pub instance_effect: Option<InstanceEffect>,
+pub enum Profile {
+    Bridge(ProfileBridge),
+    Cg(ProfileCg),
+    Gles(ProfileGles),
+    Gles2(ProfileGles2),
+    Glsl(ProfileGlsl),
+    Common(ProfileCommon),
 }
 
-#[derive(Debug, Clone)]
-pub struct Rotate;
+collada_element!("profile_BRIDGE", ProfileBridge => {});
+collada_element!("profile_CG", ProfileCg => {});
+collada_element!("profile_GLES", ProfileGles => {});
+collada_element!("profile_GLES2", ProfileGles2 => {});
+collada_element!("profile_GLSL", ProfileGlsl => {});
+
+collada_element!("profile_COMMON", ProfileCommon => {
+    opt attrib id: String
+
+    req child technique: TechniqueFxCommon
+    opt child asset: Asset
+    rep child newparam: NewParam,
+    rep child extra: Extra
+});
+
+collada_element!("reflective", Reflective => {
+    req enum child child: FxCommonColorOrTextureType {
+        "color" => Color(Color),
+        "param" => Param(ParamReference),
+        "texture" => Texture(Texture)
+    }
+});
+
+collada_element!("reflectivity", Reflectivity => {
+    req enum child child: FxCommonFloatOrParamType {
+        "float" => Float(Float),
+        "param" => Param(ParamReference)
+    }
+});
+
+collada_element!("render", Render => {
+    opt attrib name: String,
+    opt attrib sid: String,
+    opt attrib camera_node: String
+
+    opt child instance_material: InstanceMaterial
+
+    rep child layer: Layer,
+    rep child extra: Extra
+});
+
+collada_element!("revision", Revision => {
+    contents: String
+});
+
+collada_element!("rotate", Rotate => {});
+
+collada_element!("sampler", Sampler => {
+    opt attrib id: String,
+    opt attrib pre_behavior: SamplerBehavior,
+    opt attrib post_behavior: SamplerBehavior
+
+    rep child input: InputUnshared
+});
 
 #[derive(Debug, Clone)]
-pub struct Scale;
-
-#[derive(Debug, Clone)]
-pub struct Scene;
-
-#[derive(Debug, Clone)]
-pub struct Skew;
-
-#[derive(Debug, Clone)]
-pub struct Source {
-    pub id: Option<String>,
-    pub name: Option<String>,
-    pub array_element: ArrayElement,
-    pub accessor: Accessor
+pub enum SamplerBehavior {
+    Undefined,
+    Constant,
+    Gradient,
+    Cycle,
+    Oscillate,
+    CycleRelative,
 }
+
+impl Default for SamplerBehavior {
+    fn default() -> SamplerBehavior {
+        SamplerBehavior::Undefined
+    }
+}
+
+impl ColladaAttribute for SamplerBehavior {
+    fn parse(text: &str) -> Result<SamplerBehavior> {
+        match text {
+            "UNDEFINED" => Ok(SamplerBehavior::Undefined),
+            "CONSTANT" => Ok(SamplerBehavior::Constant),
+            "GRADIENT" => Ok(SamplerBehavior::Gradient),
+            "CYCLE" => Ok(SamplerBehavior::Cycle),
+            "OSCILLATE" => Ok(SamplerBehavior::Oscillate),
+            "CYCLE_RELATIVE" => Ok(SamplerBehavior::CycleRelative),
+            _ => Err(Error::BadAttributeValue {
+                attrib: String::from("pre/post_behavior"),
+                value: String::from(text),
+            }),
+        }
+    }
+}
+
+collada_element!("scale", Scale => {});
+
+collada_element!("scene", Scene => {
+    opt child instance_visual_scene: InstanceVisualScene,
+    opt child instance_kinematic_scene: InstanceKinematicScene
+    rep child instance_physics_scene: InstancePhysicsScene,
+    rep child extra: Extra
+});
+
+collada_element!("setparam", SetParam => {});
+
+#[derive(Debug, Clone)]
+pub enum ShaderElementCommon {
+    Constant(ConstantFx),
+    Lambert(Lambert),
+    Phong(Phong),
+    Blinn(Blinn)
+}
+
+collada_element!("SIDREF_array", SidrefArray => {});
+collada_element!("skew", Skew => {});
+
+collada_element!("source", Source => {
+    req attrib id: String
+    opt attrib name: String
+
+    opt child asset: Asset,
+    opt child technique_common: TechniqueCommon<Accessor>
+    rep child technique: TechniqueCore
+
+    opt enum child array_element: ArrayElement {
+        "bool_array" => Bool(BoolArray),
+        "float_array" => Float(FloatArray),
+        "IDREF_array" => Idref(IdrefArray),
+        "int_array" => Int(IntArray),
+        "Name_array" => Name(NameArray),
+        "SIDREF_array" => Sidref(SidrefArray),
+        "token_array" => Token(TokenArray)
+    }
+});
+
+collada_element!("source_data", SourceData => {
+    contents: String
+});
+
+collada_element!("spline", Spline => {});
+
+collada_element!("subject", Subject => {
+    contents: String
+});
+
+#[derive(Debug, Clone, Default)]
+pub struct TechniqueCommon<T: ColladaElement>(T);
+
+impl<T: ColladaElement> ColladaElement for TechniqueCommon<T> {
+    fn parse(parser: &mut ColladaParser) -> Result<TechniqueCommon<T>> {
+        let mut t = None;
+
+        loop {
+            let event = parser.next_event();
+            match event {
+                StartElement(child) => {
+                    if t.is_some() {
+                        return Err(Error::RepeatingChild {
+                            parent: String::from("technique_common"),
+                            child: String::from(child),
+                        });
+                    }
+
+                    t = Some(try!(parse_element(parser)));
+                },
+                EndElement("technique_common") => break,
+                _ => return Err(illegal_event(event, "technique_common")),
+            }
+        }
+
+        if let Some(t) = t {
+            Ok(TechniqueCommon(t))
+        } else {
+            Err(Error::MissingRequiredChild {
+                parent: String::from("technique_common"),
+                child: String::from("TODO: Get tag name from generic type"),
+            })
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct TechniqueCore(xml::dom::Node);
+
+impl ColladaElement for TechniqueCore {
+    fn parse(parser: &mut ColladaParser) -> Result<TechniqueCore> {
+        xml::dom::Node::from_events(&mut parser.events, "technique")
+        .map(|node| TechniqueCore(node))
+        .map_err(|err| Error::XmlError(err))
+    }
+}
+
+collada_element!("technique", TechniqueFxCommon => {
+    req attrib sid: String
+    opt attrib id:  String
+
+    opt child asset: Asset
+    rep child extra: Extra
+
+    req enum child shader_element: ShaderElementCommon {
+        "constant" => Constant(ConstantFx),
+        "lambert" => Lambert(Lambert),
+        "phong" => Phong(Phong),
+        "blinn" => Blinn(Blinn)
+    }
+});
+
+collada_element!("technique_hint", TechniqueHint => {});
+collada_element!("texture", Texture => {});
+
+collada_element!("title", Title => {
+    contents: String
+});
+
+collada_element!("token_array", TokenArray => {});
 
 #[derive(Debug, Clone)]
 pub enum TransformationElement {
@@ -302,19 +1492,119 @@ pub enum TransformationElement {
     Translate(Translate),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Translate;
 
-#[derive(Debug, Clone)]
+collada_element!("transparent", Transparent => {
+    opt attrib opaque: Opaque
+
+    req enum child child: FxCommonColorOrTextureType {
+        "color" => Color(Color),
+        "param" => Param(ParamReference),
+        "texture" => Texture(Texture)
+    }
+});
+
+collada_element!("transparency", Transparency => {
+    req enum child child: FxCommonFloatOrParamType {
+        "float" => Float(Float),
+        "param" => Param(ParamReference)
+    }
+});
+
+#[derive(Debug, Clone, Default)]
 pub struct Triangles {
     pub name: Option<String>,
     pub count: usize,
     pub material: Option<String>,
-    pub inputs: Vec<InputShared>,
-    pub primitives: Vec<usize>
+    pub input: Vec<InputShared>,
+    pub p: Option<Vec<usize>>,
+    pub extra: Vec<Extra>,
 }
 
-#[derive(Debug, Clone)]
+impl ColladaElement for Triangles {
+    fn parse(parser: &mut ColladaParser) -> Result<Triangles> {
+        let mut triangles = Triangles {
+            name: None,
+            count: 0,
+            material: None,
+            input: Vec::new(),
+            p: None,
+            extra: Vec::new(),
+        };
+
+        loop {
+            let event = parser.next_event();
+            match event {
+                Attribute("name", name_str) => {
+                    triangles.name = Some(name_str.to_string());
+                },
+                Attribute("count", count_str) => {
+                    triangles.count = try!(usize::from_str(count_str).map_err(|err| {
+                        Error::ParseIntError {
+                            text: String::from(count_str),
+                            error: err,
+                        }
+                    }));
+                },
+                Attribute("material", material_str) => {
+                    triangles.material = Some(String::from(material_str));
+                },
+                StartElement("input") => {
+                    let input = try!(parser.parse_input_shared());
+                    triangles.input.push(input);
+                },
+                StartElement("p") => {
+                    let p = try!(parser.parse_p());
+                    triangles.p = Some(p);
+                },
+                StartElement("extra") => {
+                    let extra = try!(parse_element(parser));
+                    triangles.extra.push(extra);
+                },
+                EndElement("triangles") => break,
+                _ => return Err(illegal_event(event, "triangles"))
+            }
+        }
+
+        Ok(triangles)
+    }
+}
+
+collada_element!("unit", Unit => {
+    opt attrib name: String,
+    opt attrib meter: f32
+});
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UpAxis {
+    X,
+    Y,
+    Z,
+}
+
+impl Default for UpAxis {
+    fn default() -> Self {
+        UpAxis::Y
+    }
+}
+
+impl ColladaElement for UpAxis {
+    fn parse(parser: &mut ColladaParser) -> Result<UpAxis> {
+        let text = try!(parser.parse_text_node("up_axis"));
+        match text.trim() {
+            "X_UP" => Ok(UpAxis::X),
+            "Y_UP" => Ok(UpAxis::Y),
+            "Z_UP" => Ok(UpAxis::Z),
+            _ => Err(Error::IllegalTextContents {
+                tag: String::from("up_axis"),
+                text: String::from(text.trim()),
+            }),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default)]
 pub struct Vertices {
     pub id: String,
     pub name: Option<String>,
@@ -331,23 +1621,24 @@ impl Vertices {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct VisualScene {
-    pub id: Option<String>,
-    pub name: Option<String>,
-    pub asset: Option<Asset>,
-    pub nodes: Vec<Node>,
-    pub evaluations: Vec<EvaluateScene>,
-    pub extras: Vec<Extra>,
-}
+collada_element!("visual_scene", VisualScene => {
+    opt attrib id: String,
+    opt attrib name: String
 
-struct ColladaParser<'a> {
-    events: SAXEvents<'a>
+    opt child asset: Asset
+
+    rep child node: Node,
+    rep child evaluate_scene: EvaluateScene,
+    rep child extra: Extra
+});
+
+pub struct ColladaParser<'a> {
+    events: xml::EventIterator<'a>
 }
 
 impl<'a> ColladaParser<'a> {
-    fn parse(&mut self) -> Result<COLLADA, String> {
-        let mut collada = COLLADA {
+    fn parse(&mut self) -> Result<Collada> {
+        let mut collada = Collada {
             version: String::new(),
             asset: None,
             library_animations: None,
@@ -372,13 +1663,13 @@ impl<'a> ColladaParser<'a> {
         let event = self.next_event();
         match event {
             Declaration(_, _) => {},
-            _ => return Err(format!("Illegal event at the beginning of the document: {:?}", event)),
+            _ => return Err(illegal_event(event, "file root")),
         }
 
         let event = self.next_event();
         match event {
             StartElement("COLLADA") => {},
-            _ => return Err(format!("Illegal event after document declaration: {:?}", event)),
+            _ => return Err(illegal_event(event, "file root")),
         }
 
         loop {
@@ -389,210 +1680,50 @@ impl<'a> ColladaParser<'a> {
                 },
                 Attribute("xmlns", _) => {}, // "xmlns" is an XML attribute that we don't care about (I think).
                 Attribute("base", _) => {}, // "base" is an XML attribute that we don't care about (I think).
-                StartElement("asset") => self.parse_asset(),
-                StartElement("library_animations") => self.parse_library_animations(),
+                StartElement("asset") => {
+                    let asset = try!(parse_element(self));
+                    collada.asset = Some(asset);
+                },
+                StartElement("library_animations") =>
+                    collada.library_animations = Some(try!(parse_element(self))),
                 StartElement("library_animation_clips") => self.parse_library_animation_clips(),
                 StartElement("library_cameras") => self.parse_library_cameras(),
                 StartElement("library_controllers") => self.parse_library_controllers(),
-                StartElement("library_effects") => self.parse_library_effects(),
+                StartElement("library_effects") =>
+                    collada.library_effects = Some(try!(parse_element(self))),
                 StartElement("library_force_fields") => self.parse_library_force_fields(),
                 StartElement("library_geometries") => {
-                    let library_geometries = try!(self.parse_library_geometries());
+                    let library_geometries = try!(parse_element(self));
                     collada.library_geometries = Some(library_geometries);
                 },
                 StartElement("library_images") => self.parse_library_images(),
                 StartElement("library_lights") => self.parse_library_lights(),
-                StartElement("library_materials") => self.parse_library_materials(),
+                StartElement("library_materials") => {
+                    collada.library_materials = Some(try!(parse_element(self)));
+                },
                 StartElement("library_nodes") => self.parse_library_nodes(),
                 StartElement("library_physics_materials") => self.parse_library_physics_materials(),
                 StartElement("library_physics_models") => self.parse_library_physics_models(),
                 StartElement("library_physics_scenes") => self.parse_library_physics_scenes(),
                 StartElement("library_visual_scenes") => {
-                    let library_visual_scenes = try!(self.parse_library_visual_scenes());
+                    let library_visual_scenes = try!(parse_element(self));
                     collada.library_visual_scenes = Some(library_visual_scenes);
                 },
-                StartElement("scene") => self.parse_scene(),
-                StartElement("extra") => self.parse_extra(),
+                StartElement("scene") =>
+                    collada.scene = Some(try!(parse_element(self))),
+                StartElement("extra") => {
+                    let extra = try!(parse_element(self));
+                    collada.extras.push(extra);
+                },
                 EndElement("COLLADA") => break,
-                _ => return Err(format!("Illegal event while parsing COLLADA: {:?}", event)),
+                _ => return Err(illegal_event(event, "COLLADA")),
             }
         }
 
         Ok(collada)
     }
 
-    fn parse_accessor(&mut self) -> Result<Accessor, String> {
-        let mut accessor = Accessor {
-            count: 0,
-            offset: 0,
-            source: String::new(),
-            stride: 1,
-            params: Vec::new(),
-        };
-
-        loop {
-            let event = self.next_event();
-            match event {
-                Attribute("count", count_str) => {
-                    accessor.count = usize::from_str(count_str).unwrap();
-                },
-                Attribute("offset", offset_str) => {
-                    accessor.offset = u32::from_str(offset_str).unwrap();
-                },
-                Attribute("source", source_str) => {
-                    accessor.source.push_str(source_str);
-                },
-                Attribute("stride", stride_str) => {
-                    accessor.stride = u32::from_str(stride_str).unwrap();
-                },
-                StartElement("param") => {
-                    let param = try!(self.parse_param());
-                    accessor.params.push(param);
-                },
-                EndElement("accessor") => break,
-                _ => return Err(format!("Illegal event while parsing <accessor>: {:?}", event))
-            }
-        }
-
-        Ok(accessor)
-    }
-
-    fn parse_asset(&mut self) {
-        println!("Skipping over <asset> element");
-        println!("Warning: <asset> is not yet supported by parse_collada");
-        self.skip_to_end_element("asset");
-    }
-
-    fn parse_bind_material(&mut self) -> Result<BindMaterial, String> {
-        println!("Skipping over <bind_material> element");
-        println!("Warning: <bind_material> is not yet supported by parse_collada");
-        self.skip_to_end_element("bind_material");
-
-        Ok(BindMaterial)
-    }
-
-    fn parse_bool_array(&mut self) {
-        println!("Skipping over <bool_array> element");
-        println!("Warning: <bool_array> is not yet supported by parse_collada");
-        self.skip_to_end_element("bool_array");
-    }
-
-    fn parse_convex_mesh(&mut self) {
-        println!("Skipping over <convex_mesh> tag");
-        println!("Warning: <convex_mesh> is not yet supported by parse_collada");
-        self.skip_to_end_element("convex_mesh");
-    }
-
-    fn parse_evaluate_scene(&mut self) -> Result<EvaluateScene, String> {
-        let mut evaluate_scene = EvaluateScene {
-            name: None,
-            renders: Vec::new(),
-        };
-
-        loop {
-            let event = self.next_event();
-            match event {
-                Attribute("name", name_str) => {
-                    evaluate_scene.name = Some(String::from(name_str));
-                },
-                StartElement("render") => {
-                    let render = try!(self.parse_render());
-                    evaluate_scene.renders.push(render);
-                },
-                EndElement("evaluate_scene") => break,
-                _ => return Err(format!("Illegal event while parsing <evaluate_scene>: {:?}", event)),
-            }
-        }
-
-        assert!(evaluate_scene.renders.len() >= 1);
-        Ok(evaluate_scene)
-    }
-
-    fn parse_extra(&mut self) {
-        println!("Skipping over <extra> element");
-        println!("Warning: <extra> is not yet supported by parse_collada");
-        self.skip_to_end_element("extra");
-    }
-
-    fn parse_float_array(&mut self) -> Result<ArrayElement, String> {
-        let mut count: usize = 0;
-        let mut float_array: Option<ArrayElement> = None;
-
-        loop {
-            let event = self.next_event();
-            match event {
-                Attribute("count", count_str) => {
-                    count = usize::from_str(count_str).unwrap()
-                },
-                Attribute("id", _) => (),
-                Attribute("name", _) => (),
-                Attribute("digits", _) => (),
-                Attribute("magnitude", _) => (),
-                TextNode(text) => {
-                    let data = text.split_whitespace().map(|word| {
-                        let value = match f32::from_str(word) {
-                            Err(error) => return panic!("Error while parsing <float_array>: {} (value was {})", error, word), // TODO: Return an error instead of panicking.
-                            Ok(value) => value
-                        };
-                        value
-                    }).collect::<Vec<f32>>();
-
-                    assert!(data.len() == count);
-
-                    float_array = Some(ArrayElement::Float(data));
-                },
-                EndElement("float_array") => break,
-                _ => return Err(format!("Illegal event while parsing <float_array>: {:?}", event))
-            }
-        }
-
-        Ok(float_array.unwrap())
-    }
-
-    fn parse_geometry(&mut self) -> Result<Geometry, String> {
-        let mut id: Option<String> = None;
-        let mut name: Option<String> = None;
-        let mut data: Option<GeometricElement> = None;
-
-        loop {
-            let event = self.next_event();
-            match event {
-                Attribute("id", _id) => {
-                    id = Some(_id.to_string());
-                },
-                Attribute("name", _name) => {
-                    name = Some(_name.to_string());
-                },
-                StartElement("asset") => self.parse_asset(),
-                StartElement("convex_mesh") => self.parse_convex_mesh(),
-                StartElement("mesh") => match self.parse_mesh() {
-                    Err(error) => return Err(error),
-                    Ok(mesh) => {
-                        data = Some(mesh);
-                    }
-                },
-                StartElement("spline") => self.parse_spline(),
-                StartElement("extra") => self.parse_extra(),
-                EndElement("geometry") => break,
-                _ => return Err(format!("Illegal event occurred while parsing <geometry>: {:?}", event))
-            }
-        }
-
-        Ok(Geometry {
-            id: id,
-            name: name,
-            data: data.unwrap()
-        })
-    }
-
-    #[allow(non_snake_case)]
-    fn parse_IDREF_array(&mut self) {
-        println!("Skipping over <IDREF_array> element");
-        println!("Warning: <IDREF_array> is not yet supported by parse_collada");
-        self.skip_to_end_element("IDREF_array");
-    }
-
-    fn parse_input_shared(&mut self) -> Result<InputShared, String> {
+    fn parse_input_shared(&mut self) -> Result<InputShared> {
         let mut input = InputShared {
             offset: u32::max_value(),
             semantic: String::new(),
@@ -616,7 +1747,7 @@ impl<'a> ColladaParser<'a> {
                     input.set = Some(u32::from_str(set_str).unwrap());
                 },
                 EndElement("input") => break,
-                _ => return Err(format!("Illegal event while parsing <input (shared)>: {:?}", event))
+                _ => return Err(illegal_event(event, "input (shared)"))
             }
         }
 
@@ -625,33 +1756,7 @@ impl<'a> ColladaParser<'a> {
         Ok(input)
     }
 
-    fn parse_input_unshared(&mut self) -> Result<InputUnshared, String> {
-        let mut input = InputUnshared {
-            semantic: String::new(),
-            source: String::new(),
-        };
-
-        loop {
-            let event = self.next_event();
-            match event {
-                Attribute("semantic", semantic_str) => {
-                    input.semantic.push_str(semantic_str);
-                },
-                Attribute("source", source_str) => {
-                    input.source.push_str(source_str);
-                },
-                EndElement("input") => break,
-                _ => return Err(format!("Illegal event while parsing <input (unshared)>: {:?}", event)),
-            }
-        }
-
-        assert!(!input.semantic.is_empty());
-        assert!(!input.source.is_empty());
-
-        Ok(input)
-    }
-
-    fn parse_instance_camera(&mut self) -> Result<InstanceCamera, String> {
+    fn parse_instance_camera(&mut self) -> Result<InstanceCamera> {
         println!("Skipping over <instance_camera> element");
         println!("Warning: <instance_camera> is not yet supported by parse_collada");
         self.skip_to_end_element("instance_camera");
@@ -659,7 +1764,7 @@ impl<'a> ColladaParser<'a> {
         Ok(InstanceCamera)
     }
 
-    fn parse_instance_controller(&mut self) -> Result<InstanceController, String> {
+    fn parse_instance_controller(&mut self) -> Result<InstanceController> {
         println!("Skipping over <instance_controller> element");
         println!("Warning: <instance_controller> is not yet supported by parse_collada");
         self.skip_to_end_element("instance_controller");
@@ -667,13 +1772,7 @@ impl<'a> ColladaParser<'a> {
         Ok(InstanceController)
     }
 
-    fn parse_instance_effect(&mut self) {
-        println!("Skipping over <instance_effect> element");
-        println!("Warning: <instance_effect> is not yet supported by parse_collada");
-        self.skip_to_end_element("instance_effect");
-    }
-
-    fn parse_instance_geometry(&mut self) -> Result<InstanceGeometry, String> {
+    fn parse_instance_geometry(&mut self) -> Result<InstanceGeometry> {
         let mut instance_geometry = InstanceGeometry {
             sid: None,
             name: None,
@@ -695,19 +1794,22 @@ impl<'a> ColladaParser<'a> {
                     instance_geometry.url.push_str(url_str);
                 },
                 StartElement("bind_material") => {
-                    let bind_material = try!(self.parse_bind_material());
+                    let bind_material = try!(parse_element(self));
                     instance_geometry.bind_material = Some(bind_material);
                 },
-                StartElement("extra") => self.parse_extra(),
+                StartElement("extra") => {
+                    let extra = try!(parse_element(self));
+                    instance_geometry.extras.push(extra);
+                },
                 EndElement("instance_geometry") => break,
-                _ => return Err(format!("Illegal event while parsing <instance_geometry>: {:?}", event)),
+                _ => return Err(illegal_event(event, "instance_geometry")),
             }
         }
 
         Ok(instance_geometry)
     }
 
-    fn parse_instance_light(&mut self) -> Result<InstanceLight, String> {
+    fn parse_instance_light(&mut self) -> Result<InstanceLight> {
         println!("Skipping over <instance_light> element");
         println!("Warning: <instance_light> is not yet supported by parse_collada");
         self.skip_to_end_element("instance_light");
@@ -715,24 +1817,12 @@ impl<'a> ColladaParser<'a> {
         Ok(InstanceLight)
     }
 
-    fn parse_instance_node(&mut self) -> Result<InstanceNode, String> {
+    fn parse_instance_node(&mut self) -> Result<InstanceNode> {
         println!("Skipping over <instance_node> element");
         println!("Warning: <instance_node> is not yet supported by parse_collada");
         self.skip_to_end_element("instance_node");
 
         Ok(InstanceNode)
-    }
-
-    fn parse_int_array(&mut self) {
-        println!("Skipping over <int_array> element");
-        println!("Warning: <int_array> is not yet supported by parse_collada");
-        self.skip_to_end_element("int_array");
-    }
-
-    fn parse_library_animations(&mut self) {
-        println!("Skipping over <library_animations> element");
-        println!("Warning: <library_animations> is not yet supported by parse_collada");
-        self.skip_to_end_element("library_animations");
     }
 
     fn parse_library_animation_clips(&mut self) {
@@ -753,46 +1843,10 @@ impl<'a> ColladaParser<'a> {
         self.skip_to_end_element("library_controllers");
     }
 
-    fn parse_library_effects(&mut self) {
-        println!("Skipping over <library_effects> element");
-        println!("Warning: <library_effects> is not yet supported by parse_collada");
-        self.skip_to_end_element("library_effects");
-    }
-
     fn parse_library_force_fields(&mut self) {
         println!("Skipping over <library_force_fields> element");
         println!("Warning: <library_force_fields> is not yet supported by parse_collada");
         self.skip_to_end_element("library_force_fields");
-    }
-
-    fn parse_library_geometries(&mut self) -> Result<LibraryGeometries, String> {
-        let mut library_geometries = LibraryGeometries {
-            id: None,
-            name: None,
-            geometries: Vec::new()
-        };
-
-        loop {
-            let event = self.next_event();
-            match event {
-                Attribute("id", _id) => {
-                    library_geometries.id = Some(_id.to_string());
-                },
-                Attribute("name", _name) => {
-                    library_geometries.name = Some(_name.to_string());
-                },
-                StartElement("asset") => self.parse_asset(),
-                StartElement("geometry") => {
-                    let geometry = try!(self.parse_geometry());
-                    library_geometries.geometries.push(geometry);
-                },
-                StartElement("extra") => self.parse_extra(),
-                EndElement("library_geometries") => break,
-                _ => return Err(format!("Illegal event occurred while parsing <library_geometries>: {:?}", event))
-            }
-        }
-
-        Ok(library_geometries)
     }
 
     fn parse_library_images(&mut self) {
@@ -805,12 +1859,6 @@ impl<'a> ColladaParser<'a> {
         println!("Skipping over <library_lights> element");
         println!("Warning: <library_lights> is not yet supported by parse_collada");
         self.skip_to_end_element("library_lights");
-    }
-
-    fn parse_library_materials(&mut self) {
-        println!("Skipping over <library_materials> element");
-        println!("Warning: <library_materials> is not yet supported by parse_collada");
-        self.skip_to_end_element("library_materials");
     }
 
     fn parse_library_nodes(&mut self) {
@@ -837,39 +1885,6 @@ impl<'a> ColladaParser<'a> {
         self.skip_to_end_element("library_physics_scenes");
     }
 
-    fn parse_library_visual_scenes(&mut self) -> Result<LibraryVisualScenes, String> {
-        let mut library_visual_scenes = LibraryVisualScenes {
-            id: None,
-            name: None,
-            asset: None,
-            visual_scenes: Vec::new(),
-            extras: Vec::new(),
-        };
-
-        loop {
-            let event = self.next_event();
-            match event {
-                Attribute("id", id_str) => {
-                    library_visual_scenes.id = Some(String::from(id_str));
-                },
-                Attribute("name", name_str) => {
-                    library_visual_scenes.name = Some(String::from(name_str));
-                },
-                StartElement("asset") => self.parse_asset(),
-                StartElement("visual_scene") => {
-                    let visual_scene = try!(self.parse_visual_scene());
-                    library_visual_scenes.visual_scenes.push(visual_scene);
-                },
-                StartElement("extra") => self.parse_extra(),
-                EndElement("library_visual_scenes") => break,
-                _ => return Err(format!("Illegal event while parsing <library_visual_scenes>: {:?}", event)),
-            }
-        }
-
-        assert!(library_visual_scenes.visual_scenes.len() >= 1);
-        Ok(library_visual_scenes)
-    }
-
     fn parse_lines(&mut self) {
         println!("Skipping over <lines> element");
         println!("Warning: <lines> is not yet supported by parse_collada");
@@ -882,7 +1897,7 @@ impl<'a> ColladaParser<'a> {
         self.skip_to_end_element("linestrips");
     }
 
-    fn parse_lookat(&mut self) -> Result<LookAt, String> {
+    fn parse_lookat(&mut self) -> Result<LookAt> {
         println!("Skipping over <lookat> element");
         println!("Warning: <lookat> is not yet supported by parse_collada");
         self.skip_to_end_element("lookat");
@@ -890,7 +1905,7 @@ impl<'a> ColladaParser<'a> {
         Ok(LookAt)
     }
 
-    fn parse_matrix(&mut self) -> Result<Matrix, String> {
+    fn parse_matrix(&mut self) -> Result<Matrix> {
         let mut matrix = Matrix {
             sid: None,
             data: [0.0; 16],
@@ -905,169 +1920,29 @@ impl<'a> ColladaParser<'a> {
                 TextNode(matrix_str) => {
                     let f32_iter = matrix_str.split_whitespace().map(|word| {
                         match f32::from_str(word) {
-                            Err(error) => return Err(format!("Error while parsing <float_array>: {} (value was {})", error, word)),
+                            Err(error) => return Err(Error::ParseFloatError {
+                                text: String::from(word),
+                                error: error,
+                            }),
                             Ok(value) => Ok(value)
                         }
                     });
                     for (data_val, result_f32) in matrix.data.iter_mut().zip(f32_iter) {
                         match result_f32 {
                             Ok(val) => *data_val = val,
-                            Err(err_string) => return Err(err_string),
+                            Err(error) => return Err(error),
                         }
                     }
                 },
                 EndElement("matrix") => break,
-                _ => return Err(format!("Illegal event while parsing <matrix>: {:?}", event)),
+                _ => return Err(illegal_event(event, "matrix")),
             }
         }
 
         Ok(matrix)
     }
 
-    fn parse_mesh(&mut self) -> Result<GeometricElement, String> {
-        let mut mesh = Mesh {
-            sources: Vec::new(),
-            vertices: Vertices::new(),
-            primitives: Vec::new(),
-        };
-
-        loop {
-            let event = self.next_event();
-            match event {
-                StartElement("source") => match self.parse_source() {
-                    Err(error) => return Err(error),
-                    Ok(source) => {
-                        mesh.sources.push(source);
-                    }
-                },
-                StartElement("vertices") => {
-                    mesh.vertices = try!(self.parse_vertices());
-                },
-                StartElement("lines") => self.parse_lines(),
-                StartElement("linestrips") => self.parse_linestrips(),
-                StartElement("polygons") => self.parse_polygons(),
-                StartElement("polylist") => self.parse_polylist(),
-                StartElement("triangles") => match self.parse_triangles() {
-                    Err(error) => return Err(error),
-                    Ok(triangles) => {
-                        mesh.primitives.push(triangles);
-                    }
-                },
-                StartElement("trifans") => self.parse_trifans(),
-                StartElement("tristrips") => self.parse_tristrips(),
-                StartElement("extra") => self.parse_extra(),
-                EndElement("mesh") => break,
-                _ => return Err(format!("Illegal event while parsing <mesh>: {:?}", event))
-            }
-        }
-
-        Ok(GeometricElement::Mesh(mesh))
-    }
-
-    #[allow(non_snake_case)]
-    fn parse_Name_array(&mut self) {
-        println!("Skipping over <Name_array> element");
-        println!("Warning: <Name_array> is not yet supported by parse_collada");
-        self.skip_to_end_element("Name_array");
-    }
-
-    fn parse_node(&mut self) -> Result<Node, String> {
-        let mut node = Node {
-            id: None,
-            name: None,
-            sid: None,
-            node_type: None,
-            layers: Vec::new(),
-            asset: None,
-            transformations: Vec::new(),
-            instance_cameras: Vec::new(),
-            instance_controllers: Vec::new(),
-            instance_geometries: Vec::new(),
-            instance_lights: Vec::new(),
-            instance_nodes: Vec::new(),
-            nodes: Vec::new(),
-            extras: Vec::new(),
-        };
-
-        loop {
-            let event = self.next_event();
-            match event {
-                Attribute("id", id_str) => {
-                    node.id = Some(String::from(id_str));
-                },
-                Attribute("name", name_str) => {
-                    node.name = Some(String::from(name_str));
-                },
-                Attribute("sid", sid_name) => {
-                    node.sid = Some(String::from(sid_name));
-                },
-                Attribute("type", type_str) => {
-                    node.node_type = Some(NodeType::from(type_str));
-                },
-                Attribute("layer", layer_str) => {
-                    for layer in layer_str.split(" ") {
-                        node.layers.push(String::from(layer));
-                    }
-                },
-                StartElement("asset") => self.parse_asset(),
-                StartElement("lookat") => {
-                    let lookat = try!(self.parse_lookat());
-                    node.transformations.push(TransformationElement::LookAt(lookat));
-                },
-                StartElement("matrix") => {
-                    let matrix = try!(self.parse_matrix());
-                    node.transformations.push(TransformationElement::Matrix(matrix));
-                },
-                StartElement("rotate") => {
-                    let rotate = try!(self.parse_rotate());
-                    node.transformations.push(TransformationElement::Rotate(rotate));
-                },
-                StartElement("scale") => {
-                    let scale = try!(self.parse_scale());
-                    node.transformations.push(TransformationElement::Scale(scale));
-                },
-                StartElement("skew") => {
-                    let skew = try!(self.parse_skew());
-                    node.transformations.push(TransformationElement::Skew(skew));
-                },
-                StartElement("translate") => {
-                    let translate = try!(self.parse_translate());
-                    node.transformations.push(TransformationElement::Translate(translate));
-                },
-                StartElement("instance_camera") => {
-                    let instance_camera = try!(self.parse_instance_camera());
-                    node.instance_cameras.push(instance_camera);
-                },
-                StartElement("instance_controller") => {
-                    let instance_controller = try!(self.parse_instance_controller());
-                    node.instance_controllers.push(instance_controller);
-                },
-                StartElement("instance_geometry") => {
-                    let instance_geometry = try!(self.parse_instance_geometry());
-                    node.instance_geometries.push(instance_geometry);
-                },
-                StartElement("instance_light") => {
-                    let instance_light = try!(self.parse_instance_light());
-                    node.instance_lights.push(instance_light);
-                },
-                StartElement("instance_node") => {
-                    let instance_node = try!(self.parse_instance_node());
-                    node.instance_nodes.push(instance_node);
-                },
-                StartElement("node") => {
-                    let child_node = try!(self.parse_node());
-                    node.nodes.push(child_node);
-                },
-                StartElement("extra") => self.parse_extra(),
-                EndElement("node") => break,
-                _ => return Err(format!("Illegal event while parsing <node>: {:?}", event)),
-            }
-        }
-
-        Ok(node)
-    }
-
-    fn parse_p(&mut self) -> Result<Vec<usize>, String> {
+    fn parse_p(&mut self) -> Result<Vec<usize>> {
         let mut primitives: Option<Vec<usize>> = None;
 
         loop {
@@ -1085,42 +1960,11 @@ impl<'a> ColladaParser<'a> {
                     primitives = Some(data);
                 },
                 EndElement("p") => break,
-                _ => return Err(format!("Illegal event while parsing <p>: {:?}", event))
+                _ => return Err(illegal_event(event, "p"))
             }
         }
 
         Ok(primitives.unwrap())
-    }
-
-    fn parse_param(&mut self) -> Result<Param, String> {
-        let mut param = Param {
-            name: None,
-            sid: None,
-            data_type: String::new(),
-            semantic: None,
-        };
-
-        loop {
-            let event = self.next_event();
-            match event {
-                Attribute("name", name_str) => {
-                    param.name = Some(String::from(name_str));
-                },
-                Attribute("sid", sid_str) => {
-                    param.sid = Some(String::from(sid_str));
-                },
-                Attribute("type", type_str) => {
-                    param.data_type.push_str(type_str);
-                },
-                Attribute("semantic", semantic_str) => {
-                    param.semantic = Some(String::from(semantic_str));
-                },
-                EndElement("param") => break,
-                _ => return Err(format!("Illegal event while parsing <param>: {:?}", event)),
-            }
-        }
-
-        Ok(param)
     }
 
     fn parse_polygons(&mut self) {
@@ -1135,200 +1979,12 @@ impl<'a> ColladaParser<'a> {
         self.skip_to_end_element("polylist");
     }
 
-    fn parse_render(&mut self) -> Result<Render, String> {
-        let mut render = Render {
-            camera_node: None,
-            layers: Vec::new(),
-            instance_effect: None,
-        };
-
-        loop {
-            let event = self.next_event();
-            match event {
-                Attribute("camera_node", camera_node_str) => {
-                    render.camera_node = Some(String::from(camera_node_str));
-                },
-                StartElement("layer") => {
-                    if let TextNode(layer_str) = self.next_event() {
-                        render.layers.push(String::from(layer_str));
-                    } else {
-                        return Err(format!("Illegal event while parsing <layer>: {:?}", event));
-                    }
-
-                    let event = self.next_event();
-                    if event != EndElement("layer") {
-                        return Err(format!("Illegal event while parsing <layer>: {:?}", event));
-                    }
-                }
-                StartElement("instance_effect") => self.parse_instance_effect(),
-                EndElement("render") => break,
-                _ => return Err(format!("Illegal event while parsing <render>: {:?}", event)),
-            }
-        }
-
-        Ok(render)
-    }
-
-    fn parse_rotate(&mut self) -> Result<Rotate, String> {
-        println!("Skipping over <rotate> element");
-        println!("Warning: <rotate> is not yet supported by parse_collada");
-        self.skip_to_end_element("rotate");
-
-        Ok(Rotate)
-    }
-
-    fn parse_scale(&mut self) -> Result<Scale, String> {
-        println!("Skipping over <scale> element");
-        println!("Warning: <scale> is not yet supported by parse_collada");
-        self.skip_to_end_element("scale");
-
-        Ok(Scale)
-    }
-
-    fn parse_scene(&mut self) {
-        println!("Skipping over <scene> element");
-        println!("Warning: <scene> is not yet supported by parse_collada");
-        self.skip_to_end_element("scene");
-    }
-
-    fn parse_skew(&mut self) -> Result<Skew, String> {
-        println!("Skipping over <skew> element");
-        println!("Warning: <skew> is not yet supported by parse_collada");
-        self.skip_to_end_element("skew");
-
-        Ok(Skew)
-    }
-
-    fn parse_source(&mut self) -> Result<Source, String> {
-        let mut id: Option<String> = None;
-        let mut name: Option<String> = None;
-        let mut array_element: Option<ArrayElement> = None;
-        let mut accessor: Option<Accessor> = None;
-
-        loop {
-            let event = self.next_event();
-            match event {
-                Attribute("id", _id) => {
-                    id = Some(_id.to_string());
-                },
-                Attribute("name", _name) => {
-                    name = Some(_name.to_string());
-                },
-                StartElement("asset") => self.parse_asset(),
-                StartElement("IDREF_array") => self.parse_IDREF_array(),
-                StartElement("Name_array") => self.parse_Name_array(),
-                StartElement("bool_array") => self.parse_bool_array(),
-                StartElement("float_array") => match self.parse_float_array() {
-                    Err(error) => return Err(error),
-                    Ok(float_array) => {
-                        array_element = Some(float_array);
-                    }
-                },
-                StartElement("int_array") => self.parse_int_array(),
-                StartElement("technique_common") => match self.parse_technique_common_source() {
-                    Err(error) => return Err(error),
-                    Ok(_accessor) => {
-                        accessor = Some(_accessor);
-                    }
-                },
-                StartElement("technique") => self.parse_technique(),
-                EndElement("source") => break,
-                _ => return Err(format!("Illegal event while parsing <source>: {:?}", event))
-            }
-        }
-
-        Ok(Source {
-            id: id,
-            name: name,
-            array_element: array_element.unwrap(),
-            accessor: accessor.unwrap()
-        })
-    }
-
-    fn parse_spline(&mut self) {
-        println!("Skipping over <spline> element");
-        println!("Warning: <spline> is not yet supported by parse_collada");
-        self.skip_to_end_element("spline");
-    }
-
-    fn parse_technique(&mut self) {
-        println!("Skipping over <technique> element");
-        println!("Warning: <technique> is not yet supported by parse_collada");
-        self.skip_to_end_element("technique");
-    }
-
-    fn parse_technique_common_source(&mut self) -> Result<Accessor, String> {
-        let mut accessor: Option<Accessor> = None;
-
-        loop {
-            let event = self.next_event();
-            match event {
-                StartElement("accessor") => match self.parse_accessor() {
-                    Err(error) => return Err(error),
-                    Ok(_accessor) => {
-                        accessor = Some(_accessor);
-                    }
-                },
-                EndElement("technique_common") => break,
-                _ => return Err(format!("Illegal event while parsing <source><technique_common>: {:?}", event))
-            }
-        }
-
-        Ok(accessor.unwrap())
-    }
-
-    fn parse_translate(&mut self) -> Result<Translate, String> {
+    fn parse_translate(&mut self) -> Result<Translate> {
         println!("Skipping over <translate> element");
         println!("Warning: <translate> is not yet supported by parse_collada");
         self.skip_to_end_element("translate");
 
         Ok(Translate)
-    }
-
-    fn parse_triangles(&mut self) -> Result<PrimitiveType, String> {
-        let mut name: Option<String> = None;
-        let mut count: usize = 0;
-        let mut material: Option<String> = None;
-        let mut inputs: Vec<InputShared> = Vec::new();
-        let mut primitives: Option<Vec<usize>> = None;
-
-        loop {
-            let event = self.next_event();
-            match event {
-                Attribute("name", name_str) => {
-                    name = Some(name_str.to_string());
-                },
-                Attribute("count", count_str) => {
-                    count = usize::from_str(count_str).unwrap();
-                },
-                Attribute("material", material_str) => {
-                    material = Some(material_str.to_string());
-                },
-                StartElement("input") => match self.parse_input_shared() {
-                    Err(error) => return Err(error),
-                    Ok(input) => {
-                        inputs.push(input);
-                    }
-                },
-                StartElement("p") => match self.parse_p() {
-                    Err(error) => return Err(error),
-                    Ok(_primitives) => {
-                        primitives = Some(_primitives);
-                    }
-                },
-                StartElement("extra") => self.parse_extra(),
-                EndElement("triangles") => break,
-                _ => return Err(format!("Illegal event while parsing <triangles>: {:?}", event))
-            }
-        }
-
-        Ok(PrimitiveType::Triangles(Triangles {
-            name: name,
-            count: count,
-            material: material,
-            inputs: inputs,
-            primitives: primitives.unwrap()
-        }))
     }
 
     fn parse_trifans(&mut self) {
@@ -1343,7 +1999,7 @@ impl<'a> ColladaParser<'a> {
         self.skip_to_end_element("tristrips");
     }
 
-    fn parse_vertices(&mut self) -> Result<Vertices, String> {
+    fn parse_vertices(&mut self) -> Result<Vertices> {
         let mut vertices = Vertices::new();
 
         loop {
@@ -1356,53 +2012,15 @@ impl<'a> ColladaParser<'a> {
                     vertices.name = Some(String::from(name_str));
                 },
                 StartElement("input") => {
-                    let input = try!(self.parse_input_unshared());
+                    let input = try!(parse_element(self));
                     vertices.inputs.push(input);
                 },
                 EndElement("vertices") => break,
-                _ => return Err(format!("Illegal event while parsing <vertices>: {:?}", event)),
+                _ => return Err(illegal_event(event, "vertices")),
             }
         }
 
         Ok(vertices)
-    }
-
-    fn parse_visual_scene(&mut self) -> Result<VisualScene, String> {
-        let mut visual_scene = VisualScene {
-            id: None,
-            name: None,
-            asset: None,
-            nodes: Vec::new(),
-            evaluations: Vec::new(),
-            extras: Vec::new(),
-        };
-
-        loop {
-            let event = self.next_event();
-            match event {
-                Attribute("id", id_str) => {
-                    visual_scene.id = Some(String::from(id_str));
-                },
-                Attribute("name", name_str) => {
-                    visual_scene.name = Some(String::from(name_str));
-                },
-                StartElement("asset") => self.parse_asset(),
-                StartElement("node") => {
-                    let node = try!(self.parse_node());
-                    visual_scene.nodes.push(node);
-                },
-                StartElement("evaluate_scene") => {
-                    let evaluate_scene = try!(self.parse_evaluate_scene());
-                    visual_scene.evaluations.push(evaluate_scene);
-                },
-                StartElement("extra") => self.parse_extra(),
-                EndElement("visual_scene") => break,
-                _ => return Err(format!("Illegal event while parsing <visual_scene>: {:?}", event)),
-            }
-        }
-
-        assert!(visual_scene.nodes.len() >= 1);
-        Ok(visual_scene)
     }
 
     /// Consumes all events until the desired one is reached.
@@ -1431,10 +2049,48 @@ impl<'a> ColladaParser<'a> {
 
     /// Unwraps and returns the next `XMLEvent`,
     /// panicking if there is no next event.
-    fn next_event(&mut self) -> XMLEvent<'a> {
+    fn next_event(&mut self) -> xml::Event<'a> {
         match self.events.next() {
-            None => panic!("Ran out of events too early."),
+            None => panic!("Ran out of events too early."), // TODO: Don't panic!
             Some(event) => event
         }
+    }
+
+    /// Parses out the contents of an element that is only a text node.
+    fn parse_text_node(&mut self, element: &str) -> Result<&str> {
+        let text = {
+            let event = self.next_event();
+            match event {
+                TextNode(text) => text,
+                EndElement(tag) if tag == element => {
+                    return Ok("");
+                },
+                _ => return Err(illegal_event(event, element)),
+            }
+        };
+
+        let event = self.next_event();
+        match event {
+            EndElement(tag) if tag == element => {},
+            _ => return Err(illegal_event(event, element)),
+        }
+
+        Ok(text)
+    }
+}
+
+fn illegal_event(event: xml::Event, parent: &str) -> Error {
+    match event {
+        StartElement(element) => Error::IllegalElement {
+            parent: String::from(parent),
+            child:  String::from(element),
+        },
+        Attribute(attribute, _) => Error::IllegalAttribute {
+            tag:       String::from(parent),
+            attribute: String::from(attribute),
+        },
+
+        ParseError(error) => Error::XmlError(error),
+        _ => panic!("Hit a parse event that should be illegal: {:?} under {:?}", event, parent),
     }
 }

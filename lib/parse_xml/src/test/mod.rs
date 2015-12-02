@@ -94,7 +94,7 @@ fn test_declaration() {
 
 #[test]
 fn test_file() {
-    let file = load_file( "../../meshes/cube.dae" );
+    let file = load_file( "../../meshes/cube.dae" ); // TODO: Don't even bother loading the file, just copy it into here as a raw string.
 
     parse!(XML file, {
         Declaration("1.0", "utf-8");

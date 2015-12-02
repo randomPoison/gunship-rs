@@ -6,7 +6,7 @@ use std::error::Error;
 use std::rc::Rc;
 use std::cell::RefCell;
 
-use collada::{self, COLLADA, GeometricElement, ArrayElement, PrimitiveType, VisualScene, Geometry,
+use collada::{self, Collada, GeometricElement, ArrayElement, PrimitiveType, VisualScene, Geometry,
               Node};
 
 use polygon::gl_render::{GLRender, GLMeshData, ShaderProgram};
@@ -64,16 +64,16 @@ impl ResourceManager {
                 "{} could not be loaded because it is not a file",
                 full_path.display()));
         }
-        let collada_data = match COLLADA::load(&full_path) {
+        let collada_data = match Collada::load(&full_path) {
             Err(why) => return Err(format!(
-                "couldn't open {}: {}",
+                "couldn't open {}: {:?}",
                 full_path.display(),
                 &why)),
             Ok(data) => data,
         };
 
         // Store each of the visual scenes from the collada file.
-        for visual_scene in collada_data.library_visual_scenes.as_ref().unwrap().visual_scenes.iter() {
+        for visual_scene in collada_data.library_visual_scenes.as_ref().unwrap().visual_scene.iter() {
             let id = match visual_scene.id {
                 None => return Err(format!(
                     "COLLADA file {} contained a <visual_scene> with no \"id\" attribute, this is unsupported.",
@@ -84,7 +84,7 @@ impl ResourceManager {
         }
 
         // Store each of the geometries so they can be referenced later.
-        for geometry in collada_data.library_geometries.as_ref().unwrap().geometries.iter() {
+        for geometry in collada_data.library_geometries.as_ref().unwrap().geometry.iter() {
             let id = match geometry.id {
                 None => return Err(format!(
                     "COLLADA file {} contained a <geometry> with no \"id\" attribute, this is unsupported",
@@ -133,7 +133,7 @@ impl ResourceManager {
         let mut node = {
             let name = uri_segments.next().unwrap();
             let mut result: Option<&Node> = None;
-            for node in &visual_scene.nodes {
+            for node in &visual_scene.node {
                 if node.id.as_ref().unwrap() == name {
                     result = Some(node);
                     break;
@@ -202,19 +202,19 @@ impl ResourceManager {
         };
 
         let node = {
-            if visual_scene.nodes.len() == 0 {
+            if visual_scene.node.len() == 0 {
                 return Err(format!(
                     "No nodes associated with model {}",
                     resource));
             }
 
-            if visual_scene.nodes.len() > 1 {
+            if visual_scene.node.len() > 1 {
                 println!(
                     "WARNING: Model {} has more than one node at the root level. This is not currenlty supported, only the first node will be used.",
                     resource);
             }
 
-            &visual_scene.nodes[0]
+            &visual_scene.node[0]
         };
 
         let mut uri = String::from(resource);
@@ -333,7 +333,7 @@ impl ResourceManager {
 /// In order to to this, it reorganizes the normals, UVs, and other vertex attributes to
 /// be in the same order as the vertex positions.
 fn geometry_to_mesh(geometry: &Geometry) -> Mesh {
-    let mesh = match geometry.data {
+    let mesh = match geometry.geometric_element {
         GeometricElement::Mesh(ref mesh) => mesh,
         _ => panic!("No mesh found within geometry")
     };
@@ -341,11 +341,11 @@ fn geometry_to_mesh(geometry: &Geometry) -> Mesh {
     let position_data_raw = get_raw_positions(&mesh);
     let normal_data_raw = get_normals(&mesh);
 
-    let triangles = match mesh.primitives[0] {
+    let triangles = match mesh.primitive_elements[0] {
         PrimitiveType::Triangles(ref triangles) => triangles,
         _ => panic!("Only triangles primitives are supported currently")
     };
-    let primitive_indices = &triangles.primitives;
+    let primitive_indices = &triangles.p.as_ref().unwrap();
 
     // Create a new array for the positions so we can add the w coordinate.
     let mut position_data: Vec<f32> = Vec::with_capacity(position_data_raw.len() / 3 * 4);
@@ -354,7 +354,7 @@ fn geometry_to_mesh(geometry: &Geometry) -> Mesh {
     let mut normal_data: Vec<f32> = Vec::with_capacity(position_data.len());
 
     // Iterate over the indices, rearranging the normal data to match the position data.
-    let stride = triangles.inputs.len();
+    let stride = triangles.input.len();
     let mut vertex_index_map: HashMap<(usize, usize), u32> = HashMap::new();
     let mut indices: Vec<u32> = Vec::new();
     let vertex_count = triangles.count * 3;
@@ -400,9 +400,9 @@ fn geometry_to_mesh(geometry: &Geometry) -> Mesh {
 
 fn get_raw_positions(mesh: &collada::Mesh) -> &[f32] {
     // TODO: Consult the correct element (<triangles> for now) to determine which source has position data.
-    let position_data: &[f32] = match mesh.sources[0].array_element {
-        ArrayElement::Float(ref float_array) => float_array.as_ref(),
-        _ => panic!("Only float arrays supported for vertex position array")
+    let position_data: &[f32] = match *mesh.source[0].array_element.as_ref().unwrap() {
+        ArrayElement::Float(ref float_array) => float_array.contents.as_ref(),
+        _ => panic!("Only float arrays supported for vertex position array"),
     };
     assert!(position_data.len() > 0);
 
@@ -411,8 +411,8 @@ fn get_raw_positions(mesh: &collada::Mesh) -> &[f32] {
 
 fn get_normals(mesh: &collada::Mesh) -> &[f32] {
     // TODO: Consult the correct element (<triangles> for now) to determine which source has normal data.
-    let normal_data: &[f32] = match mesh.sources[1].array_element {
-        ArrayElement::Float(ref float_array) => float_array.as_ref(),
+    let normal_data: &[f32] = match *mesh.source[1].array_element.as_ref().unwrap() {
+        ArrayElement::Float(ref float_array) => float_array.contents.as_ref(),
         _ => panic!("Only float arrays supported for vertex normal array")
     };
     assert!(normal_data.len() > 0);

@@ -6,7 +6,7 @@ use std::mem;
 
 use self::winapi::*;
 
-#[derive(Debug)] #[allow(raw_pointer_derive)]
+#[derive(Debug)]
 pub struct AudioSource {
     audio_client: *mut IAudioClient,
     render_client: *mut IAudioRenderClient,
