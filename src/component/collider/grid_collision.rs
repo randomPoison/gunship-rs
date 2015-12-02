@@ -295,7 +295,6 @@ impl Clone for GridCollisionSystem {
 }
 
 #[derive(Debug)]
-#[allow(raw_pointer_derive)]
 struct WorkUnit {
     collisions: HashMap<(Entity, Entity), (), FnvHashState>, // This should be a HashSet, but HashSet doesn't have a way to get at entries directly.
     bounds: AABB,

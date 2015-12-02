@@ -7,6 +7,7 @@ use std::collections::HashMap;
 use std::intrinsics;
 use std::raw::TraitObject;
 use std::mem;
+use std::time::Duration;
 
 use bootstrap;
 use bootstrap::input::ScanCode;
@@ -228,7 +229,7 @@ impl Engine {
             // Wait for target frame time.
             let mut remaining_time_ms = TARGET_FRAME_TIME_MS - timer.elapsed_ms(start_time);
             while remaining_time_ms > 1.0 {
-                thread::sleep_ms(remaining_time_ms as u32);
+                thread::sleep(Duration::from_millis(remaining_time_ms as u64));
                 remaining_time_ms = TARGET_FRAME_TIME_MS - timer.elapsed_ms(start_time);
             }
 
