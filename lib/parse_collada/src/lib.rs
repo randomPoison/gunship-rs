@@ -135,7 +135,7 @@ macro_rules! collada_element {
             $($opt_var_tag:expr => $opt_var_name:ident($opt_var_type:ty)),*
         }),*
         // $(rep enum child ),*
-        $(contents: $contents_type:ident),*
+        $(contents: $contents_type:ty),*
     }) => {
         #[derive(Debug, Clone)]
         pub struct $struct_name {
@@ -308,7 +308,7 @@ macro_rules! collada_element {
 
                 $(
                     if contents.is_none() {
-                        contents = Some($contents_type::default());
+                        contents = Some(Default::default()) as Option<$contents_type>;
                     }
                 )*
 
@@ -533,14 +533,16 @@ collada_element!("bind_vertex_input", BindVertexInput => {});
 collada_element!("blinn", Blinn => {});
 collada_element!("bool_array", BoolArray => {});
 collada_element!("brep", Brep => {});
-collada_element!("channel", Channel => {});
 
-pub type Vecf32 = Vec<f32>;
+collada_element!("channel", Channel => {
+    req attrib source: String,
+    req attrib target: String
+});
 
 collada_element!("color", Color => {
     opt attrib sid: String
 
-    contents: Vecf32
+    contents: Vec<f32>
 });
 
 collada_element!("comments", Comments => {
@@ -724,7 +726,7 @@ collada_element!("float_array", FloatArray => {
     opt attrib digits: usize,
     opt attrib magnitude: isize
 
-    contents: Vecf32
+    contents: Vec<f32>
 });
 
 #[derive(Debug, Clone)]
@@ -786,11 +788,10 @@ pub struct InputShared {
     pub set: Option<u32>,
 }
 
-#[derive(Debug, Clone, Default)]
-pub struct InputUnshared {
-    pub semantic: String,
-    pub source: String,
-}
+collada_element!("input", InputUnshared => {
+    req attrib semantic: String,
+    req attrib source: String
+});
 
 #[derive(Debug, Clone, Default)]
 pub struct InstanceCamera;
@@ -1021,7 +1022,13 @@ collada_element!("modified", Modified => {
     contents: String
 });
 
-collada_element!("Name_array", NameArray => {});
+collada_element!("Name_array", NameArray => {
+    req attrib count: usize
+    opt attrib id: String,
+    opt attrib name: String
+
+    contents: Vec<String>
+});
 collada_element!("newparam", NewParam => {});
 
 #[derive(Debug, Clone, Default)]
@@ -1311,7 +1318,48 @@ collada_element!("revision", Revision => {
 });
 
 collada_element!("rotate", Rotate => {});
-collada_element!("sampler", Sampler => {});
+
+collada_element!("sampler", Sampler => {
+    opt attrib id: String,
+    opt attrib pre_behavior: SamplerBehavior,
+    opt attrib post_behavior: SamplerBehavior
+
+    rep child input: InputUnshared
+});
+
+#[derive(Debug, Clone)]
+pub enum SamplerBehavior {
+    Undefined,
+    Constant,
+    Gradient,
+    Cycle,
+    Oscillate,
+    CycleRelative,
+}
+
+impl Default for SamplerBehavior {
+    fn default() -> SamplerBehavior {
+        SamplerBehavior::Undefined
+    }
+}
+
+impl ColladaAttribute for SamplerBehavior {
+    fn parse(text: &str) -> Result<SamplerBehavior> {
+        match text {
+            "UNDEFINED" => Ok(SamplerBehavior::Undefined),
+            "CONSTANT" => Ok(SamplerBehavior::Constant),
+            "GRADIENT" => Ok(SamplerBehavior::Gradient),
+            "CYCLE" => Ok(SamplerBehavior::Cycle),
+            "OSCILLATE" => Ok(SamplerBehavior::Oscillate),
+            "CYCLE_RELATIVE" => Ok(SamplerBehavior::CycleRelative),
+            _ => Err(Error::BadAttributeValue {
+                attrib: String::from("pre/post_behavior"),
+                value: String::from(text),
+            }),
+        }
+    }
+}
+
 collada_element!("scale", Scale => {});
 
 collada_element!("scene", Scene => {
@@ -1708,32 +1756,6 @@ impl<'a> ColladaParser<'a> {
         Ok(input)
     }
 
-    fn parse_input_unshared(&mut self) -> Result<InputUnshared> {
-        let mut input = InputUnshared {
-            semantic: String::new(),
-            source: String::new(),
-        };
-
-        loop {
-            let event = self.next_event();
-            match event {
-                Attribute("semantic", semantic_str) => {
-                    input.semantic.push_str(semantic_str);
-                },
-                Attribute("source", source_str) => {
-                    input.source.push_str(source_str);
-                },
-                EndElement("input") => break,
-                _ => return Err(illegal_event(event, "input (unshared)")),
-            }
-        }
-
-        assert!(!input.semantic.is_empty());
-        assert!(!input.source.is_empty());
-
-        Ok(input)
-    }
-
     fn parse_instance_camera(&mut self) -> Result<InstanceCamera> {
         println!("Skipping over <instance_camera> element");
         println!("Warning: <instance_camera> is not yet supported by parse_collada");
@@ -1990,7 +2012,7 @@ impl<'a> ColladaParser<'a> {
                     vertices.name = Some(String::from(name_str));
                 },
                 StartElement("input") => {
-                    let input = try!(self.parse_input_unshared());
+                    let input = try!(parse_element(self));
                     vertices.inputs.push(input);
                 },
                 EndElement("vertices") => break,

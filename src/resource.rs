@@ -47,8 +47,6 @@ impl ResourceManager {
 
     /// TODO: Perform validity checking on data when loading (e.g. make sure all nodes have an id).
     pub fn load_model<P: AsRef<Path>>(&self, path: P) -> Result<(), String> {
-        println!("load_model({:?})", path.as_ref());
-
         let mut visual_scenes = self.visual_scenes.borrow_mut();
         let mut geometries = self.geometries.borrow_mut();
 
