@@ -1,6 +1,6 @@
 use super::{Event, EventIterator, Result};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Node {
     pub name: String,
     pub attributes: Vec<Attribute>,
@@ -42,7 +42,7 @@ impl Node {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Attribute {
     pub name: String,
     pub value: String,

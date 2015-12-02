@@ -7,7 +7,7 @@ use std::str::FromStr;
 use std::convert::From;
 use xml::Event::*;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Collada {
     pub version: String,
     pub asset: Option<Asset>,
@@ -84,6 +84,11 @@ pub enum Error {
         text: String,
         error: std::num::ParseIntError,
     },
+    MissingRequiredChild {
+        parent: String,
+        child: String,
+    },
+
     /// Used in generic programming.
     ///
     /// This is a bit of a hack to make generic programming work, but it'd be preferable to
@@ -97,7 +102,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 macro_rules! collada_element {
     ($element:expr, $type_name:ident => {}) => {
-        #[derive(Debug, Clone)]
+        #[derive(Debug, Clone, Default)]
         pub struct $type_name;
 
         impl ColladaElement for $type_name {
@@ -125,9 +130,9 @@ macro_rules! collada_element {
             $($opt_var_tag:expr => $opt_var_name:ident($opt_var_type:ty)),*
         }),*
         // $(rep enum child ),*
-        $(contents: $contents_type:ty),*
+        $(contents: $contents_type:ident),*
     }) => {
-        #[derive(Debug, Clone)]
+        #[derive(Debug, Clone, Default)]
         pub struct $struct_name {
             $(pub $req_attrib_name: $req_attrib_type,)*
             $(pub $opt_attrib_name: Option<$opt_attrib_type>,)*
@@ -145,18 +150,22 @@ macro_rules! collada_element {
         impl ColladaElement for $struct_name {
             fn parse(parser: &mut ColladaParser) -> Result<$struct_name> {
                 let mut element = $struct_name {
-                    $($req_attrib_name: unsafe { ::std::mem::uninitialized() },)*
+                    $($req_attrib_name: Default::default(),)*
                     $($opt_attrib_name: None,)*
 
-                    $($req_child_name:  unsafe { ::std::mem::uninitialized() },)*
+                    $($req_child_name:  Default::default(),)*
                     $($opt_child_name:  None,)*
                     $($rep_child_name:  Vec::new(),)*
 
-                    $($req_enum_child_name: unsafe { ::std::mem::uninitialized() },)*
+                    $($req_enum_child_name: Default::default(),)*
                     $($opt_enum_child_name: None,)*
 
-                    $(contents: unsafe { ::std::mem::uninitialized::<$contents_type>() },)*
+                    $(contents: $contents_type::default(),)*
                 };
+
+                $(let mut $req_attrib_name = false;)*
+                $(let mut $req_child_name = false;)*
+                $(let mut $req_enum_child_name = false;)*
 
                 loop {
                     let event = parser.next_event();
@@ -170,7 +179,9 @@ macro_rules! collada_element {
                                     &mut element.$req_attrib_name,
                                     attrib,
                                 )
-                            )
+                            );
+
+                            $req_attrib_name = true;
                         },)*
 
                         // Optional attributes.
@@ -187,7 +198,9 @@ macro_rules! collada_element {
                                     &mut element.$req_child_name,
                                     child,
                                 )
-                            )
+                            );
+
+                            $req_child_name = true;
                         },)*
 
                         // Optional children.
@@ -213,6 +226,8 @@ macro_rules! collada_element {
                                             $req_enum_child_type::$req_var_name(child),
                                         )
                                     );
+
+                                    $req_enum_child_name = true;
                                 }
                             )*
                         )*
@@ -243,13 +258,40 @@ macro_rules! collada_element {
                     }
                 }
 
+                $(
+                    if !$req_attrib_name {
+                        return Err(Error::MissingRequiredChild {
+                            parent: String::from($tag_name),
+                            child: String::from(stringify!($req_attrib_name)),
+                        });
+                    }
+                )*
+
+                $(
+                    if !$req_child_name {
+                        return Err(Error::MissingRequiredChild {
+                            parent: String::from($tag_name),
+                            child: String::from(stringify!($req_child_name)),
+                        });
+                    }
+                )*
+
+                $(
+                    if !$req_enum_child_name {
+                        return Err(Error::MissingRequiredChild {
+                            parent: String::from($tag_name),
+                            child: String::from(stringify!($req_enum_child_name)),
+                        });
+                    }
+                )*
+
                 Ok(element)
             }
         }
     };
 }
 
-pub trait ColladaElement: Sized {
+pub trait ColladaElement: Sized + Default {
     fn parse(parser: &mut ColladaParser) -> Result<Self>;
 }
 
@@ -351,14 +393,20 @@ collada_element!("altitude", Altitude => {
 
 #[derive(Debug, Clone)]
 pub enum AltitudeMode {
-    Absoulete,
+    Absolute,
     RelativeToGround,
+}
+
+impl Default for AltitudeMode {
+    fn default() -> AltitudeMode {
+        AltitudeMode::Absolute
+    }
 }
 
 impl ColladaAttribute for AltitudeMode {
     fn parse(text: &str) -> Result<AltitudeMode> {
         match text {
-            "absolute" => Ok(AltitudeMode::Absoulete),
+            "absolute" => Ok(AltitudeMode::Absolute),
             "relativeToGround" => Ok(AltitudeMode::RelativeToGround),
             _ => Err(Error::BadAttributeValue {
                 attrib: String::from("mode"),
@@ -399,6 +447,12 @@ pub enum ArrayElement {
     Int(IntArray),
     Token(TokenArray),
     Sidref(SidrefArray),
+}
+
+impl Default for ArrayElement {
+    fn default() -> Self {
+        ArrayElement::Idref(IdrefArray::default())
+    }
 }
 
 collada_element!("asset", Asset => {
@@ -447,10 +501,12 @@ collada_element!("blinn", Blinn => {});
 collada_element!("bool_array", BoolArray => {});
 collada_element!("channel", Channel => {});
 
+pub type Vecf32 = Vec<f32>;
+
 collada_element!("color", Color => {
     opt attrib sid: String
 
-    contents: Vec<f32>
+    contents: Vecf32
 });
 
 collada_element!("comments", Comments => {
@@ -569,7 +625,7 @@ collada_element!("evaluate_scene", EvaluateScene => {
     rep child extra: Extra
 });
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Extra {
     // attribs
     pub id: Option<String>,
@@ -633,7 +689,7 @@ collada_element!("float_array", FloatArray => {
     opt attrib digits: usize,
     opt attrib magnitude: isize
 
-    contents: Vec<f32>
+    contents: Vecf32
 });
 
 #[derive(Debug, Clone)]
@@ -643,10 +699,22 @@ pub enum FxCommonColorOrTextureType {
     Texture(Texture),
 }
 
+impl Default for FxCommonColorOrTextureType {
+    fn default() -> Self {
+        FxCommonColorOrTextureType::Color(Color::default())
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum FxCommonFloatOrParamType {
     Float(Float),
     Param(ParamReference),
+}
+
+impl Default for FxCommonFloatOrParamType {
+    fn default() -> Self {
+        FxCommonFloatOrParamType::Float(Float::default())
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -656,7 +724,13 @@ pub enum GeometricElement {
     Spline
 }
 
-#[derive(Debug, Clone)]
+impl Default for GeometricElement {
+    fn default() -> Self {
+        GeometricElement::ConvexMesh
+    }
+}
+
+#[derive(Debug, Clone, Default)]
 pub struct Geometry {
     pub asset: Option<Asset>,
     pub id:    Option<String>,
@@ -671,7 +745,7 @@ impl ColladaElement for Geometry {
             asset: None,
             id:    None,
             name:  None,
-            data:  unsafe { mem::uninitialized() },
+            data:  Default::default(),
             extra: Vec::new(),
         };
 
@@ -726,7 +800,7 @@ collada_element!("index_of_refraction", IndexOfRefraction => {
     }
 });
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct InputShared {
     pub offset: u32,
     pub semantic: String,
@@ -734,16 +808,16 @@ pub struct InputShared {
     pub set: Option<u32>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct InputUnshared {
     pub semantic: String,
     pub source: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct InstanceCamera;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct InstanceController;
 
 collada_element!("instance_effect", InstanceEffect => {
@@ -756,7 +830,7 @@ collada_element!("instance_effect", InstanceEffect => {
     rep child extra: Extra
 });
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct InstanceGeometry {
     pub sid: Option<String>,
     pub name: Option<String>,
@@ -767,7 +841,7 @@ pub struct InstanceGeometry {
 
 collada_element!("instance_kinematic_scene", InstanceKinematicScene => {});
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct InstanceLight;
 
 collada_element!("instance_material", InstanceMaterial => {
@@ -781,7 +855,7 @@ collada_element!("instance_material", InstanceMaterial => {
     rep child extra: Extra
 });
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct InstanceNode;
 
 collada_element!("instance_physics_scene", InstancePhysicsScene => {});
@@ -824,13 +898,13 @@ collada_element!("library_animations", LibraryAnimations => {
     rep child extra: Extra
 });
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct LibraryAnimationClips;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct LibraryCameras;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct LibraryControllers;
 
 collada_element!("library_effects", LibraryEffects => {
@@ -842,7 +916,7 @@ collada_element!("library_effects", LibraryEffects => {
     rep child extra: Extra
 });
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct LibraryForceFields;
 
 collada_element!("library_geometries", LibraryGeometries => {
@@ -855,10 +929,10 @@ collada_element!("library_geometries", LibraryGeometries => {
     rep child extra: Extra
 });
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct LibraryImages;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct LibraryLights;
 
 collada_element!("library_materials", LibraryMaterials => {
@@ -871,16 +945,16 @@ collada_element!("library_materials", LibraryMaterials => {
     rep child extra: Extra
 });
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct LibraryNodes;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct LibraryPhysicsMaterials;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct LibraryPhysicsModels;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct LibraryPhysicsScenes;
 
 collada_element!("library_visual_scenes", LibraryVisualScenes => {
@@ -897,7 +971,7 @@ collada_element!("longitude", Longitude => {
     contents: f32
 });
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct LookAt;
 
 collada_element!("material", Material => {
@@ -909,13 +983,13 @@ collada_element!("material", Material => {
     rep child extra: Extra
 });
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Matrix {
     pub sid: Option<String>,
     pub data: [f32; 16],
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Mesh {
     pub source: Vec<Source>,
     pub vertices: Vertices,
@@ -972,7 +1046,7 @@ collada_element!("modified", Modified => {
 collada_element!("Name_array", NameArray => {});
 collada_element!("newparam", NewParam => {});
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Node {
     pub id: Option<String>,
     pub name: Option<String>,
@@ -1022,7 +1096,7 @@ impl ColladaElement for Node {
                     node.sid = Some(String::from(sid_name));
                 },
                 Attribute("type", type_str) => {
-                    node.node_type = Some(NodeType::from(type_str));
+                    node.node_type = Some(try!(parse_attrib(type_str)));
                 },
                 Attribute("layer", layer_str) => {
                     for layer in layer_str.split(" ") {
@@ -1100,12 +1174,18 @@ pub enum NodeType {
     Joint,
 }
 
-impl<'a> From<&'a str> for NodeType {
-    fn from(type_str: &str) -> NodeType {
-        match type_str {
-            "NODE" => NodeType::Node,
-            "JOINT" => NodeType::Joint,
-            _ => panic!("Cannot parse node type from {}", type_str),
+impl Default for NodeType {
+    fn default() -> Self {
+        NodeType::Node
+    }
+}
+
+impl ColladaAttribute for NodeType {
+    fn parse(text: &str) -> Result<NodeType> {
+        match text {
+            "NODE" => Ok(NodeType::Node),
+            "JOINT" => Ok(NodeType::Joint),
+            _ => Err(Error::ParseError(String::from(text))),
         }
     }
 }
@@ -1116,6 +1196,12 @@ pub enum Opaque {
     RgbZero,
     AZero,
     RgbOne,
+}
+
+impl Default for Opaque {
+    fn default() -> Self {
+        Opaque::AOne
+    }
 }
 
 impl ColladaAttribute for Opaque {
@@ -1135,7 +1221,7 @@ impl ColladaAttribute for Opaque {
 
 // `Param` has to be handled manually because one of its children is <type> which
 // can't be handled by the macro because it's a keyword.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Param {
     pub data_type: String,
 
@@ -1191,6 +1277,12 @@ pub enum PrimitiveType {
     Tristrips
 }
 
+impl Default for PrimitiveType {
+    fn default() -> Self {
+        PrimitiveType::Lines
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum Profile {
     Bridge(ProfileBridge),
@@ -1199,6 +1291,12 @@ pub enum Profile {
     Gles2(ProfileGles2),
     Glsl(ProfileGlsl),
     Common(ProfileCommon),
+}
+
+impl Default for Profile {
+    fn default() -> Self {
+        Profile::Bridge(ProfileBridge::default())
+    }
 }
 
 collada_element!("profile_BRIDGE", ProfileBridge => {});
@@ -1267,6 +1365,12 @@ pub enum ShaderElementCommon {
     Blinn(Blinn)
 }
 
+impl Default for ShaderElementCommon {
+    fn default() -> Self {
+        ShaderElementCommon::Constant(ConstantFx::default())
+    }
+}
+
 collada_element!("SIDREF_array", SidrefArray => {});
 collada_element!("skew", Skew => {});
 
@@ -1297,12 +1401,12 @@ collada_element!("subject", Subject => {
     contents: String
 });
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct TechniqueCommon<T: ColladaElement>(T);
 
 impl<T: ColladaElement> ColladaElement for TechniqueCommon<T> {
     fn parse(parser: &mut ColladaParser) -> Result<TechniqueCommon<T>> {
-        let mut t: T = unsafe { mem::uninitialized() };
+        let mut t: T = Default::default();
 
         loop {
             let event = parser.next_event();
@@ -1324,7 +1428,7 @@ impl<T: ColladaElement> ColladaElement for TechniqueCommon<T> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct TechniqueCore(xml::dom::Node);
 
 impl ColladaElement for TechniqueCore {
@@ -1369,7 +1473,13 @@ pub enum TransformationElement {
     Translate(Translate),
 }
 
-#[derive(Debug, Clone)]
+impl Default for TransformationElement {
+    fn default() -> Self {
+        TransformationElement::LookAt(LookAt::default())
+    }
+}
+
+#[derive(Debug, Clone, Default)]
 pub struct Translate;
 
 collada_element!("transparent", Transparent => {
@@ -1389,7 +1499,7 @@ collada_element!("transparency", Transparency => {
     }
 });
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Triangles {
     pub name: Option<String>,
     pub count: usize,
@@ -1460,6 +1570,12 @@ pub enum UpAxis {
     Z,
 }
 
+impl Default for UpAxis {
+    fn default() -> Self {
+        UpAxis::Y
+    }
+}
+
 impl ColladaElement for UpAxis {
     fn parse(parser: &mut ColladaParser) -> Result<UpAxis> {
         let text = try!(parser.parse_text_node("up_axis"));
@@ -1475,7 +1591,7 @@ impl ColladaElement for UpAxis {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Vertices {
     pub id: String,
     pub name: Option<String>,
