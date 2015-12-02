@@ -401,7 +401,7 @@ fn geometry_to_mesh(geometry: &Geometry) -> Mesh {
 fn get_raw_positions(mesh: &collada::Mesh) -> &[f32] {
     // TODO: Consult the correct element (<triangles> for now) to determine which source has position data.
     let position_data: &[f32] = match *mesh.source[0].array_element.as_ref().unwrap() {
-        ArrayElement::Float(ref float_array) => float_array.as_ref(),
+        ArrayElement::Float(ref float_array) => float_array.contents.as_ref(),
         _ => panic!("Only float arrays supported for vertex position array"),
     };
     assert!(position_data.len() > 0);
@@ -412,7 +412,7 @@ fn get_raw_positions(mesh: &collada::Mesh) -> &[f32] {
 fn get_normals(mesh: &collada::Mesh) -> &[f32] {
     // TODO: Consult the correct element (<triangles> for now) to determine which source has normal data.
     let normal_data: &[f32] = match *mesh.source[1].array_element.as_ref().unwrap() {
-        ArrayElement::Float(ref float_array) => float_array.as_ref(),
+        ArrayElement::Float(ref float_array) => float_array.contents.as_ref(),
         _ => panic!("Only float arrays supported for vertex normal array")
     };
     assert!(normal_data.len() > 0);
