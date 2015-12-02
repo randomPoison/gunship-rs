@@ -257,47 +257,6 @@ fn parse_element<T: ColladaElement>(parser: &mut ColladaParser, parent: &str) ->
     T::parse(parser, parent)
 }
 
-// impl ColladaElement for T {
-//     fn parse(parser: &mut ColladaParser, parent: &str) -> Result<T> {
-//         let text = try!(parser.parse_text_node(parent));
-//         T::from_str(text).map_err(|_| {
-//             Error::ParseError(String::from(text))
-//         })
-//     }
-// }
-
-impl ColladaElement for String {
-    fn parse(parser: &mut ColladaParser, parent: &str) -> Result<String> {
-        let text = {
-            let event = parser.next_event();
-            match event {
-                TextNode(text) => text,
-                EndElement(_) => {
-                    return Ok(String::from(""));
-                },
-                _ => return Err(illegal_event(event, parent)),
-            }
-        };
-
-        let event = parser.next_event();
-        match event {
-            EndElement(_) => {},
-            _ => return Err(illegal_event(event, parent)),
-        }
-
-        Ok(String::from(text))
-    }
-}
-
-impl ColladaElement for f32 {
-    fn parse(parser: &mut ColladaParser, parent: &str) -> Result<f32> {
-        let text = try!(parser.parse_text_node(parent));
-        f32::from_str(text).map_err(|_| {
-            Error::ParseError(String::from(text))
-        })
-    }
-}
-
 pub trait ColladaAttribute: Sized {
     fn parse(text: &str) -> Result<Self>;
 }
@@ -443,19 +402,35 @@ pub enum ArrayElement {
 }
 
 collada_element!("asset", Asset => {
-    req child created: String,
-    req child modified: String
+    req child created: Created,
+    req child modified: Modified
 
     opt child coverage: Coverage,
-    opt child keywords: String,
-    opt child revision: String,
-    opt child subject: String,
-    opt child title: String,
+    opt child keywords: Keywords,
+    opt child revision: Revision,
+    opt child subject: Subject,
+    opt child title: Title,
     opt child unit: Unit,
     opt child up_axis: UpAxis
 
     rep child contributor: Contributor,
     rep child extra: Extra
+});
+
+collada_element!("author", Author => {
+    contents: String
+});
+
+collada_element!("author_email", AuthorEmail => {
+    contents: String
+});
+
+collada_element!("author_website", AuthorWebsite => {
+    contents: String
+});
+
+collada_element!("authoring_tool", AuthoringTool => {
+    contents: String
 });
 
 collada_element!("bind", Bind => {});
@@ -478,20 +453,32 @@ collada_element!("color", Color => {
     contents: Vec<f32>
 });
 
+collada_element!("comments", Comments => {
+    contents: String
+});
+
 collada_element!("contributor", Contributor => {
-    opt child author:         String,
-    opt child author_email:   String,
-    opt child author_website: String,
-    opt child authoring_tool: String,
-    opt child comments:       String,
-    opt child copyright:      String,
-    opt child source_data:    String
+    opt child author:         Author,
+    opt child author_email:   AuthorEmail,
+    opt child author_website: AuthorWebsite,
+    opt child authoring_tool: AuthoringTool,
+    opt child comments:       Comments,
+    opt child copyright:      Copyright,
+    opt child source_data:    SourceData
 });
 
 collada_element!("constant", ConstantFx => {});
 
+collada_element!("copyright", Copyright => {
+    contents: String
+});
+
 collada_element!("coverage", Coverage => {
     opt child geographic_location: GeographicLocation
+});
+
+collada_element!("created", Created => {
+    contents: String
 });
 
 collada_element!("diffuse", Diffuse => {
@@ -725,8 +712,8 @@ impl ColladaElement for Geometry {
 }
 
 collada_element!("geographic_location", GeographicLocation => {
-    req child longitude: f32,
-    req child latitude: f32,
+    req child longitude: Longitude,
+    req child latitude: Latitude,
     req child altitude: Altitude
 });
 
@@ -806,6 +793,10 @@ collada_element!("instance_visual_scene", InstanceVisualScene => {
 
 collada_element!("int_array", IntArray => {});
 
+collada_element!("keywords", Keywords => {
+    contents: String
+});
+
 collada_element!("lambert", Lambert => {
     opt child emission: Emission,
     opt child ambient: AmbientFx,
@@ -814,6 +805,14 @@ collada_element!("lambert", Lambert => {
     opt child transparent: Transparent,
     opt child transparency: Transparency,
     opt child index_of_refraction: IndexOfRefraction
+});
+
+collada_element!("latitude", Latitude => {
+    contents: f32
+});
+
+collada_element!("layer", Layer => {
+    contents: String
 });
 
 collada_element!("library_animations", LibraryAnimations => {
@@ -894,6 +893,10 @@ collada_element!("library_visual_scenes", LibraryVisualScenes => {
     rep child extra: Extra
 });
 
+collada_element!("longitude", Longitude => {
+    contents: f32
+});
+
 #[derive(Debug, Clone)]
 pub struct LookAt;
 
@@ -961,6 +964,10 @@ impl ColladaElement for Mesh {
         Ok(mesh)
     }
 }
+
+collada_element!("modified", Modified => {
+    contents: String
+});
 
 collada_element!("Name_array", NameArray => {});
 collada_element!("newparam", NewParam => {});
@@ -1231,8 +1238,12 @@ collada_element!("render", Render => {
 
     opt child instance_material: InstanceMaterial
 
-    rep child layer: String,
+    rep child layer: Layer,
     rep child extra: Extra
+});
+
+collada_element!("revision", Revision => {
+    contents: String
 });
 
 collada_element!("rotate", Rotate => {});
@@ -1276,6 +1287,14 @@ collada_element!("source", Source => {
         "SIDREF_array" => Sidref(SidrefArray),
         "token_array" => Token(TokenArray)
     }
+});
+
+collada_element!("source_data", SourceData => {
+    contents: String
+});
+
+collada_element!("subject", Subject => {
+    contents: String
 });
 
 #[derive(Debug, Clone)]
@@ -1333,6 +1352,11 @@ collada_element!("technique", TechniqueFxCommon => {
 
 collada_element!("technique_hint", TechniqueHint => {});
 collada_element!("texture", Texture => {});
+
+collada_element!("title", Title => {
+    contents: String
+});
+
 collada_element!("token_array", TokenArray => {});
 
 #[derive(Debug, Clone)]
