@@ -101,7 +101,7 @@ macro_rules! collada_element {
         pub struct $type_name;
 
         impl ColladaElement for $type_name {
-            fn parse(parser: &mut ColladaParser, _: &str) -> Result<$type_name> {
+            fn parse(parser: &mut ColladaParser) -> Result<$type_name> {
                 println!("Skippping over <{}>", $element);
                 println!("WARNING: <{}> is not yet supported by parse-collada", $element);
                 parser.skip_to_end_element($element);
@@ -143,7 +143,7 @@ macro_rules! collada_element {
         }
 
         impl ColladaElement for $struct_name {
-            fn parse(parser: &mut ColladaParser, _: &str) -> Result<$struct_name> {
+            fn parse(parser: &mut ColladaParser) -> Result<$struct_name> {
                 let mut element = $struct_name {
                     $($req_attrib_name: unsafe { ::std::mem::uninitialized() },)*
                     $($opt_attrib_name: None,)*
@@ -181,7 +181,7 @@ macro_rules! collada_element {
 
                         // Required children.
                         $(StartElement(stringify!($req_child_name)) => {
-                        let child = try!(parse_element(parser, stringify!($req_child_type)));
+                        let child = try!(parse_element(parser));
                             ::std::mem::forget(
                                 ::std::mem::replace(
                                     &mut element.$req_child_name,
@@ -192,13 +192,13 @@ macro_rules! collada_element {
 
                         // Optional children.
                         $(StartElement(stringify!($opt_child_name)) => {
-                            let child = try!(parse_element(parser, stringify!($opt_child_type)));
+                            let child = try!(parse_element(parser));
                             element.$opt_child_name = Some(child);
                         },)*
 
                         // Repeating Children.
                         $(StartElement(stringify!($rep_child_name)) => {
-                            let child = try!(parse_element(parser, stringify!($rep_child_type)));
+                            let child = try!(parse_element(parser));
                             element.$rep_child_name.push(child);
                         },)*
 
@@ -206,7 +206,7 @@ macro_rules! collada_element {
                         $(
                             $(
                                 StartElement($req_var_tag) => {
-                                    let child: $req_var_type = try!(parse_element(parser, stringify!($req_enum_child_name)));
+                                    let child: $req_var_type = try!(parse_element(parser));
                                     ::std::mem::forget(
                                         ::std::mem::replace(
                                             &mut element.$req_enum_child_name,
@@ -221,7 +221,7 @@ macro_rules! collada_element {
                         $(
                             $(
                                 StartElement($opt_var_tag) => {
-                                    let child: $opt_var_type = try!(parse_element(parser, stringify!($opt_enum_child_name)));
+                                    let child: $opt_var_type = try!(parse_element(parser));
                                     element.$opt_enum_child_name = Some($opt_enum_child_type::$opt_var_name(child));
                                 }
                             )*
@@ -250,11 +250,11 @@ macro_rules! collada_element {
 }
 
 pub trait ColladaElement: Sized {
-    fn parse(parser: &mut ColladaParser, parent: &str) -> Result<Self>;
+    fn parse(parser: &mut ColladaParser) -> Result<Self>;
 }
 
-fn parse_element<T: ColladaElement>(parser: &mut ColladaParser, parent: &str) -> Result<T> {
-    T::parse(parser, parent)
+fn parse_element<T: ColladaElement>(parser: &mut ColladaParser) -> Result<T> {
+    T::parse(parser)
 }
 
 pub trait ColladaAttribute: Sized {
@@ -501,7 +501,7 @@ pub struct Effect {
 }
 
 impl ColladaElement for Effect {
-    fn parse(parser: &mut ColladaParser, _: &str) -> Result<Effect> {
+    fn parse(parser: &mut ColladaParser) -> Result<Effect> {
         let mut effect = Effect::default();
 
         loop {
@@ -513,33 +513,33 @@ impl ColladaElement for Effect {
                     effect.name = Some(String::from(name_str)),
                 StartElement("asset") =>
                     effect.asset = Some(
-                        try!(parse_element(parser, "effect"))),
+                        try!(parse_element(parser))),
                 StartElement("annotate") =>
                     effect.annotate.push(
-                        try!(parse_element(parser, "effect"))),
+                        try!(parse_element(parser))),
                 StartElement("newparam") =>
                     effect.newparam.push(
-                        try!(parse_element(parser, "effect"))),
+                        try!(parse_element(parser))),
                 StartElement("profile_BRIDGE") =>
                     effect.profile.push(Profile::Bridge(
-                        try!(parse_element(parser, "effect")))),
+                        try!(parse_element(parser)))),
                 StartElement("profile_CG") =>
                     effect.profile.push(Profile::Cg(
-                        try!(parse_element(parser, "effect")))),
+                        try!(parse_element(parser)))),
                 StartElement("profile_GLES") =>
                     effect.profile.push(Profile::Gles(
-                        try!(parse_element(parser, "effect")))),
+                        try!(parse_element(parser)))),
                 StartElement("profile_GLES2") =>
                     effect.profile.push(Profile::Gles2(
-                        try!(parse_element(parser, "effect")))),
+                        try!(parse_element(parser)))),
                 StartElement("profile_GLSL") =>
                     effect.profile.push(Profile::Glsl(
-                        try!(parse_element(parser, "effect")))),
+                        try!(parse_element(parser)))),
                 StartElement("profile_COMMON") =>
                     effect.profile.push(Profile::Common(
-                        try!(parse_element(parser, "effect")))),
+                        try!(parse_element(parser)))),
                 StartElement("extra") =>
-                    effect.extra.push(try!(parse_element(parser, "effect"))),
+                    effect.extra.push(try!(parse_element(parser))),
                 EndElement("effect") => break,
                 _ => return Err(illegal_event(event, "effect")),
             }
@@ -582,7 +582,7 @@ pub struct Extra {
 }
 
 impl ColladaElement for Extra {
-    fn parse(parser: &mut ColladaParser, _: &str) -> Result<Extra> {
+    fn parse(parser: &mut ColladaParser) -> Result<Extra> {
         let mut extra = Extra {
             id: None,
             name: None,
@@ -605,11 +605,11 @@ impl ColladaElement for Extra {
                     extra.type_hint = Some(String::from(type_str));
                 },
                 StartElement("asset") => {
-                    let asset = try!(parse_element(parser, "extra"));
+                    let asset = try!(parse_element(parser));
                     extra.asset = Some(asset);
                 },
                 StartElement("technique") => {
-                    let technique = try!(parse_element(parser, "extra"));
+                    let technique = try!(parse_element(parser));
                     extra.technique.push(technique);
                 },
                 EndElement("extra") => break,
@@ -666,7 +666,7 @@ pub struct Geometry {
 }
 
 impl ColladaElement for Geometry {
-    fn parse(parser: &mut ColladaParser, _: &str) -> Result<Geometry> {
+    fn parse(parser: &mut ColladaParser) -> Result<Geometry> {
         let mut geometry = Geometry {
             asset: None,
             id:    None,
@@ -685,11 +685,11 @@ impl ColladaElement for Geometry {
                     geometry.name = Some(_name.to_string());
                 },
                 StartElement("asset") => {
-                    geometry.asset = Some(try!(parse_element(parser, "geometry")));
+                    geometry.asset = Some(try!(parse_element(parser)));
                 },
                 StartElement("convex_mesh") => parser.parse_convex_mesh(),
                 StartElement("mesh") => {
-                    let mesh = try!(parse_element(parser, "geometry"));
+                    let mesh = try!(parse_element(parser));
                     mem::forget(
                         mem::replace(
                             &mut geometry.data,
@@ -699,7 +699,7 @@ impl ColladaElement for Geometry {
                 },
                 StartElement("spline") => parser.parse_spline(),
                 StartElement("extra") => {
-                    let extra = try!(parse_element(parser, "geometry"));
+                    let extra = try!(parse_element(parser));
                     geometry.extra.push(extra);
                 },
                 EndElement("geometry") => break,
@@ -924,7 +924,7 @@ pub struct Mesh {
 }
 
 impl ColladaElement for Mesh {
-    fn parse(parser: &mut ColladaParser, _: &str) -> Result<Mesh> {
+    fn parse(parser: &mut ColladaParser) -> Result<Mesh> {
         let mut mesh = Mesh {
             source: Vec::new(),
             vertices: Vertices::new(),
@@ -936,7 +936,7 @@ impl ColladaElement for Mesh {
             let event = parser.next_event();
             match event {
                 StartElement("source") => {
-                    let source = try!(parse_element(parser, "mesh"));
+                    let source = try!(parse_element(parser));
                     mesh.source.push(source);
                 },
                 StartElement("vertices") => {
@@ -947,13 +947,13 @@ impl ColladaElement for Mesh {
                 StartElement("polygons") => parser.parse_polygons(),
                 StartElement("polylist") => parser.parse_polylist(),
                 StartElement("triangles") => {
-                    let triangles = try!(parse_element(parser, "mesh"));
+                    let triangles = try!(parse_element(parser));
                     mesh.primitive_elements.push(PrimitiveType::Triangles(triangles));
                 },
                 StartElement("trifans") => parser.parse_trifans(),
                 StartElement("tristrips") => parser.parse_tristrips(),
                 StartElement("extra") => {
-                    let extra = try!(parse_element(parser, "mesh"));
+                    let extra = try!(parse_element(parser));
                     mesh.extra.push(extra);
                 },
                 EndElement("mesh") => break,
@@ -991,7 +991,7 @@ pub struct Node {
 }
 
 impl ColladaElement for Node {
-    fn parse(parser: &mut ColladaParser, _: &str) -> Result<Node> {
+    fn parse(parser: &mut ColladaParser) -> Result<Node> {
         let mut node = Node {
             id: None,
             name: None,
@@ -1030,7 +1030,7 @@ impl ColladaElement for Node {
                     }
                 },
                 StartElement("asset") => {
-                    let asset = try!(parse_element(parser, "node"));
+                    let asset = try!(parse_element(parser));
                     node.asset = Some(asset);
                 },
                 StartElement("lookat") => {
@@ -1042,15 +1042,15 @@ impl ColladaElement for Node {
                     node.transformations.push(TransformationElement::Matrix(matrix));
                 },
                 StartElement("rotate") => {
-                    let rotate = try!(parse_element(parser, "node"));
+                    let rotate = try!(parse_element(parser));
                     node.transformations.push(TransformationElement::Rotate(rotate));
                 },
                 StartElement("scale") => {
-                    let scale = try!(parse_element(parser, "node"));
+                    let scale = try!(parse_element(parser));
                     node.transformations.push(TransformationElement::Scale(scale));
                 },
                 StartElement("skew") => {
-                    let skew = try!(parse_element(parser, "node"));
+                    let skew = try!(parse_element(parser));
                     node.transformations.push(TransformationElement::Skew(skew));
                 },
                 StartElement("translate") => {
@@ -1078,11 +1078,11 @@ impl ColladaElement for Node {
                     node.instance_nodes.push(instance_node);
                 },
                 StartElement("node") => {
-                    let child_node = try!(parse_element(parser, "node"));
+                    let child_node = try!(parse_element(parser));
                     node.nodes.push(child_node);
                 },
                 StartElement("extra") => {
-                    let extra = try!(parse_element(parser, "node"));
+                    let extra = try!(parse_element(parser));
                     node.extras.push(extra);
                 },
                 EndElement("node") => break,
@@ -1145,7 +1145,7 @@ pub struct Param {
 }
 
 impl ColladaElement for Param {
-    fn parse(parser: &mut ColladaParser, _: &str) -> Result<Param> {
+    fn parse(parser: &mut ColladaParser) -> Result<Param> {
         let mut param = Param {
             name: None,
             sid: None,
@@ -1301,7 +1301,7 @@ collada_element!("subject", Subject => {
 pub struct TechniqueCommon<T: ColladaElement>(T);
 
 impl<T: ColladaElement> ColladaElement for TechniqueCommon<T> {
-    fn parse(parser: &mut ColladaParser, _: &str) -> Result<TechniqueCommon<T>> {
+    fn parse(parser: &mut ColladaParser) -> Result<TechniqueCommon<T>> {
         let mut t: T = unsafe { mem::uninitialized() };
 
         loop {
@@ -1311,7 +1311,7 @@ impl<T: ColladaElement> ColladaElement for TechniqueCommon<T> {
                     mem::forget(
                         mem::replace(
                             &mut t,
-                            try!(parse_element(parser, "technique_common")),
+                            try!(parse_element(parser)),
                         )
                     );
                 },
@@ -1328,7 +1328,7 @@ impl<T: ColladaElement> ColladaElement for TechniqueCommon<T> {
 pub struct TechniqueCore(xml::dom::Node);
 
 impl ColladaElement for TechniqueCore {
-    fn parse(parser: &mut ColladaParser, _: &str) -> Result<TechniqueCore> {
+    fn parse(parser: &mut ColladaParser) -> Result<TechniqueCore> {
         xml::dom::Node::from_events(&mut parser.events, "technique")
         .map(|node| TechniqueCore(node))
         .map_err(|err| Error::XmlError(err))
@@ -1400,7 +1400,7 @@ pub struct Triangles {
 }
 
 impl ColladaElement for Triangles {
-    fn parse(parser: &mut ColladaParser, _: &str) -> Result<Triangles> {
+    fn parse(parser: &mut ColladaParser) -> Result<Triangles> {
         let mut triangles = Triangles {
             name: None,
             count: 0,
@@ -1436,7 +1436,7 @@ impl ColladaElement for Triangles {
                     triangles.p = Some(p);
                 },
                 StartElement("extra") => {
-                    let extra = try!(parse_element(parser, "triangles"));
+                    let extra = try!(parse_element(parser));
                     triangles.extra.push(extra);
                 },
                 EndElement("triangles") => break,
@@ -1461,7 +1461,7 @@ pub enum UpAxis {
 }
 
 impl ColladaElement for UpAxis {
-    fn parse(parser: &mut ColladaParser, _: &str) -> Result<UpAxis> {
+    fn parse(parser: &mut ColladaParser) -> Result<UpAxis> {
         let text = try!(parser.parse_text_node("up_axis"));
         match text.trim() {
             "X_UP" => Ok(UpAxis::X),
@@ -1552,38 +1552,38 @@ impl<'a> ColladaParser<'a> {
                 Attribute("xmlns", _) => {}, // "xmlns" is an XML attribute that we don't care about (I think).
                 Attribute("base", _) => {}, // "base" is an XML attribute that we don't care about (I think).
                 StartElement("asset") => {
-                    let asset = try!(parse_element(self, "COLLADA"));
+                    let asset = try!(parse_element(self));
                     collada.asset = Some(asset);
                 },
                 StartElement("library_animations") =>
-                    collada.library_animations = Some(try!(parse_element(self, "COLLADA"))),
+                    collada.library_animations = Some(try!(parse_element(self))),
                 StartElement("library_animation_clips") => self.parse_library_animation_clips(),
                 StartElement("library_cameras") => self.parse_library_cameras(),
                 StartElement("library_controllers") => self.parse_library_controllers(),
                 StartElement("library_effects") =>
-                    collada.library_effects = Some(try!(parse_element(self, "COLLADA"))),
+                    collada.library_effects = Some(try!(parse_element(self))),
                 StartElement("library_force_fields") => self.parse_library_force_fields(),
                 StartElement("library_geometries") => {
-                    let library_geometries = try!(parse_element(self, "COLLADA"));
+                    let library_geometries = try!(parse_element(self));
                     collada.library_geometries = Some(library_geometries);
                 },
                 StartElement("library_images") => self.parse_library_images(),
                 StartElement("library_lights") => self.parse_library_lights(),
                 StartElement("library_materials") => {
-                    collada.library_materials = Some(try!(parse_element(self, "COLLADA")));
+                    collada.library_materials = Some(try!(parse_element(self)));
                 },
                 StartElement("library_nodes") => self.parse_library_nodes(),
                 StartElement("library_physics_materials") => self.parse_library_physics_materials(),
                 StartElement("library_physics_models") => self.parse_library_physics_models(),
                 StartElement("library_physics_scenes") => self.parse_library_physics_scenes(),
                 StartElement("library_visual_scenes") => {
-                    let library_visual_scenes = try!(parse_element(self, "COLLADA"));
+                    let library_visual_scenes = try!(parse_element(self));
                     collada.library_visual_scenes = Some(library_visual_scenes);
                 },
                 StartElement("scene") =>
-                    collada.scene = Some(try!(parse_element(self, "COLLADA"))),
+                    collada.scene = Some(try!(parse_element(self))),
                 StartElement("extra") => {
-                    let extra = try!(parse_element(self, "COLLADA"));
+                    let extra = try!(parse_element(self));
                     collada.extras.push(extra);
                 },
                 EndElement("COLLADA") => break,
@@ -1697,11 +1697,11 @@ impl<'a> ColladaParser<'a> {
                     instance_geometry.url.push_str(url_str);
                 },
                 StartElement("bind_material") => {
-                    let bind_material = try!(parse_element(self, "instance_geometry"));
+                    let bind_material = try!(parse_element(self));
                     instance_geometry.bind_material = Some(bind_material);
                 },
                 StartElement("extra") => {
-                    let extra = try!(parse_element(self, "instance_geometry"));
+                    let extra = try!(parse_element(self));
                     instance_geometry.extras.push(extra);
                 },
                 EndElement("instance_geometry") => break,

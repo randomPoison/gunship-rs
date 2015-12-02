@@ -24,8 +24,8 @@ stopwatch       = { path = "lib/stopwatch" }
 [dev_dependencies]
 rand = "*"
 
-[profile.dev]
-opt-level = 1
+# [profile.dev]
+# opt-level = 1
 
 [profile.release]
 # lto = true
