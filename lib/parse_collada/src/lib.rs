@@ -1,7 +1,6 @@
 extern crate parse_xml as xml;
 
 use std::fs::File;
-use std::mem;
 use std::path::Path;
 use std::str::FromStr;
 use std::convert::From;
@@ -89,6 +88,12 @@ pub enum Error {
         child: String,
     },
 
+    /// Indicates that a child that should have appeared at most one time appeared multiple times.
+    RepeatingChild {
+        parent: String,
+        child: String,
+    },
+
     /// Used in generic programming.
     ///
     /// This is a bit of a hack to make generic programming work, but it'd be preferable to
@@ -132,7 +137,7 @@ macro_rules! collada_element {
         // $(rep enum child ),*
         $(contents: $contents_type:ident),*
     }) => {
-        #[derive(Debug, Clone, Default)]
+        #[derive(Debug, Clone)]
         pub struct $struct_name {
             $(pub $req_attrib_name: $req_attrib_type,)*
             $(pub $opt_attrib_name: Option<$opt_attrib_type>,)*
@@ -149,23 +154,17 @@ macro_rules! collada_element {
 
         impl ColladaElement for $struct_name {
             fn parse(parser: &mut ColladaParser) -> Result<$struct_name> {
-                let mut element = $struct_name {
-                    $($req_attrib_name: Default::default(),)*
-                    $($opt_attrib_name: None,)*
+                $(let mut $req_attrib_name = None;)*
+                $(let mut $opt_attrib_name = None;)*
 
-                    $($req_child_name:  Default::default(),)*
-                    $($opt_child_name:  None,)*
-                    $($rep_child_name:  Vec::new(),)*
+                $(let mut $req_child_name = None;)*
+                $(let mut $opt_child_name = None;)*
+                $(let mut $rep_child_name = Vec::new();)*
 
-                    $($req_enum_child_name: Default::default(),)*
-                    $($opt_enum_child_name: None,)*
+                $(let mut $req_enum_child_name = None;)*
+                $(let mut $opt_enum_child_name = None;)*
 
-                    $(contents: $contents_type::default(),)*
-                };
-
-                $(let mut $req_attrib_name = false;)*
-                $(let mut $req_child_name = false;)*
-                $(let mut $req_enum_child_name = false;)*
+                $(let mut contents: Option<$contents_type> = None;)*
 
                 loop {
                     let event = parser.next_event();
@@ -173,61 +172,75 @@ macro_rules! collada_element {
 
                         // Required attributes.
                         $(Attribute(stringify!($req_attrib_name), attrib_value) => {
-                            let attrib = try!(parse_attrib(attrib_value));
-                            ::std::mem::forget(
-                                ::std::mem::replace(
-                                    &mut element.$req_attrib_name,
-                                    attrib,
-                                )
-                            );
+                            if $req_attrib_name.is_some() {
+                                return Err(Error::RepeatingChild {
+                                    parent: String::from($tag_name),
+                                    child: String::from(stringify!($req_attrib_name)),
+                                });
+                            }
 
-                            $req_attrib_name = true;
+                            let attrib = try!(parse_attrib(attrib_value));
+                            $req_attrib_name = Some(attrib);
                         },)*
 
                         // Optional attributes.
                         $(Attribute(stringify!($opt_attrib_name), attrib_value) => {
+                            if $opt_attrib_name.is_some() {
+                                return Err(Error::RepeatingChild {
+                                    parent: String::from($tag_name),
+                                    child: String::from(stringify!($opt_attrib_name)),
+                                });
+                            }
+
                             let attrib = try!(parse_attrib(attrib_value));
-                            element.$opt_attrib_name = Some(attrib);
+                            $opt_attrib_name = Some(attrib);
                         },)*
 
                         // Required children.
                         $(StartElement(stringify!($req_child_name)) => {
-                        let child = try!(parse_element(parser));
-                            ::std::mem::forget(
-                                ::std::mem::replace(
-                                    &mut element.$req_child_name,
-                                    child,
-                                )
-                            );
+                            if $req_child_name.is_some() {
+                                return Err(Error::RepeatingChild {
+                                    parent: String::from($tag_name),
+                                    child: String::from(stringify!($req_child_name)),
+                                });
+                            }
 
-                            $req_child_name = true;
+                            let child = try!(parse_element(parser));
+                            $req_child_name = Some(child);
                         },)*
 
                         // Optional children.
                         $(StartElement(stringify!($opt_child_name)) => {
+                            if $opt_child_name.is_some() {
+                                return Err(Error::RepeatingChild {
+                                    parent: String::from($tag_name),
+                                    child: String::from(stringify!($opt_child_name)),
+                                });
+                            }
+
                             let child = try!(parse_element(parser));
-                            element.$opt_child_name = Some(child);
+                            $opt_child_name = Some(child);
                         },)*
 
                         // Repeating Children.
                         $(StartElement(stringify!($rep_child_name)) => {
                             let child = try!(parse_element(parser));
-                            element.$rep_child_name.push(child);
+                            $rep_child_name.push(child);
                         },)*
 
                         // Required enum children.
                         $(
                             $(
                                 StartElement($req_var_tag) => {
-                                    let child: $req_var_type = try!(parse_element(parser));
-                                    ::std::mem::forget(
-                                        ::std::mem::replace(
-                                            &mut element.$req_enum_child_name,
-                                            $req_enum_child_type::$req_var_name(child),
-                                        )
-                                    );
+                                    if $req_enum_child_name.is_some() {
+                                        return Err(Error::RepeatingChild {
+                                            parent: String::from($tag_name),
+                                            child: String::from(stringify!($req_enum_child_name)),
+                                        });
+                                    }
 
-                                    $req_enum_child_name = true;
+                                    let child: $req_var_type = try!(parse_element(parser));
+                                    $req_enum_child_name = Some($req_enum_child_type::$req_var_name(child));
                                 }
                             )*
                         )*
@@ -236,21 +249,29 @@ macro_rules! collada_element {
                         $(
                             $(
                                 StartElement($opt_var_tag) => {
+                                    if $opt_enum_child_name.is_some() {
+                                        return Err(Error::RepeatingChild {
+                                            parent: String::from($tag_name),
+                                            child: String::from(stringify!($opt_enum_child_name)),
+                                        });
+                                    }
+
                                     let child: $opt_var_type = try!(parse_element(parser));
-                                    element.$opt_enum_child_name = Some($opt_enum_child_type::$opt_var_name(child));
+                                    $opt_enum_child_name = Some($opt_enum_child_type::$opt_var_name(child));
                                 }
                             )*
                         )*
 
                         // Text node.
                         $(TextNode(text) => {
-                            let contents = try!(parse_attrib::<$contents_type>(text));
-                            ::std::mem::forget(
-                                ::std::mem::replace(
-                                    &mut element.contents,
-                                    contents,
-                                )
-                            );
+                            if contents.is_some() {
+                                return Err(Error::RepeatingChild {
+                                    parent: String::from($tag_name),
+                                    child: String::from(stringify!(contents)),
+                                });
+                            }
+
+                            contents = Some(try!(parse_attrib::<$contents_type>(text)));
                         })*
 
                         EndElement($tag_name) => break,
@@ -259,7 +280,7 @@ macro_rules! collada_element {
                 }
 
                 $(
-                    if !$req_attrib_name {
+                    if $req_attrib_name.is_none() {
                         return Err(Error::MissingRequiredChild {
                             parent: String::from($tag_name),
                             child: String::from(stringify!($req_attrib_name)),
@@ -268,7 +289,7 @@ macro_rules! collada_element {
                 )*
 
                 $(
-                    if !$req_child_name {
+                    if $req_child_name.is_none() {
                         return Err(Error::MissingRequiredChild {
                             parent: String::from($tag_name),
                             child: String::from(stringify!($req_child_name)),
@@ -277,7 +298,7 @@ macro_rules! collada_element {
                 )*
 
                 $(
-                    if !$req_enum_child_name {
+                    if $req_enum_child_name.is_none() {
                         return Err(Error::MissingRequiredChild {
                             parent: String::from($tag_name),
                             child: String::from(stringify!($req_enum_child_name)),
@@ -285,13 +306,31 @@ macro_rules! collada_element {
                     }
                 )*
 
-                Ok(element)
+                $(
+                    if contents.is_none() {
+                        contents = Some($contents_type::default());
+                    }
+                )*
+
+                Ok($struct_name {
+                    $($req_attrib_name: $req_attrib_name.unwrap(),)*
+                    $($opt_attrib_name: $opt_attrib_name,)*
+
+                    $($req_child_name:  $req_child_name.unwrap(),)*
+                    $($opt_child_name:  $opt_child_name,)*
+                    $($rep_child_name:  $rep_child_name,)*
+
+                    $($req_enum_child_name: $req_enum_child_name.unwrap(),)*
+                    $($opt_enum_child_name: $opt_enum_child_name,)*
+
+                    $(contents: contents.unwrap() as $contents_type,)*
+                })
             }
         }
     };
 }
 
-pub trait ColladaElement: Sized + Default {
+pub trait ColladaElement: Sized {
     fn parse(parser: &mut ColladaParser) -> Result<Self>;
 }
 
@@ -399,7 +438,7 @@ pub enum AltitudeMode {
 
 impl Default for AltitudeMode {
     fn default() -> AltitudeMode {
-        AltitudeMode::Absolute
+        AltitudeMode::RelativeToGround
     }
 }
 
@@ -449,12 +488,6 @@ pub enum ArrayElement {
     Sidref(SidrefArray),
 }
 
-impl Default for ArrayElement {
-    fn default() -> Self {
-        ArrayElement::Idref(IdrefArray::default())
-    }
-}
-
 collada_element!("asset", Asset => {
     req child created: Created,
     req child modified: Modified
@@ -499,6 +532,7 @@ collada_element!("bind_material", BindMaterial => {
 collada_element!("bind_vertex_input", BindVertexInput => {});
 collada_element!("blinn", Blinn => {});
 collada_element!("bool_array", BoolArray => {});
+collada_element!("brep", Brep => {});
 collada_element!("channel", Channel => {});
 
 pub type Vecf32 = Vec<f32>;
@@ -524,6 +558,7 @@ collada_element!("contributor", Contributor => {
 });
 
 collada_element!("constant", ConstantFx => {});
+collada_element!("convex_mesh", ConvexMesh => {});
 
 collada_element!("copyright", Copyright => {
     contents: String
@@ -699,91 +734,34 @@ pub enum FxCommonColorOrTextureType {
     Texture(Texture),
 }
 
-impl Default for FxCommonColorOrTextureType {
-    fn default() -> Self {
-        FxCommonColorOrTextureType::Color(Color::default())
-    }
-}
-
 #[derive(Debug, Clone)]
 pub enum FxCommonFloatOrParamType {
     Float(Float),
     Param(ParamReference),
 }
 
-impl Default for FxCommonFloatOrParamType {
-    fn default() -> Self {
-        FxCommonFloatOrParamType::Float(Float::default())
-    }
-}
-
 #[derive(Debug, Clone)]
 pub enum GeometricElement {
-    ConvexMesh,
+    ConvexMesh(ConvexMesh),
     Mesh(Mesh),
-    Spline
+    Spline(Spline),
+    Brep(Brep),
 }
 
-impl Default for GeometricElement {
-    fn default() -> Self {
-        GeometricElement::ConvexMesh
+collada_element!("geometry", Geometry => {
+    opt attrib id: String,
+    opt attrib name: String
+
+    opt child asset: Asset
+    rep child extra: Extra
+
+    req enum child geometric_element: GeometricElement {
+        "convex_mesh" => ConvexMesh(ConvexMesh),
+        "mesh" => Mesh(Mesh),
+        "spline" => Spline(Spline),
+        "brep" => Brep(Brep)
     }
-}
-
-#[derive(Debug, Clone, Default)]
-pub struct Geometry {
-    pub asset: Option<Asset>,
-    pub id:    Option<String>,
-    pub name:  Option<String>,
-    pub data:  GeometricElement,
-    pub extra: Vec<Extra>,
-}
-
-impl ColladaElement for Geometry {
-    fn parse(parser: &mut ColladaParser) -> Result<Geometry> {
-        let mut geometry = Geometry {
-            asset: None,
-            id:    None,
-            name:  None,
-            data:  Default::default(),
-            extra: Vec::new(),
-        };
-
-        loop {
-            let event = parser.next_event();
-            match event {
-                Attribute("id", _id) => {
-                    geometry.id = Some(_id.to_string());
-                },
-                Attribute("name", _name) => {
-                    geometry.name = Some(_name.to_string());
-                },
-                StartElement("asset") => {
-                    geometry.asset = Some(try!(parse_element(parser)));
-                },
-                StartElement("convex_mesh") => parser.parse_convex_mesh(),
-                StartElement("mesh") => {
-                    let mesh = try!(parse_element(parser));
-                    mem::forget(
-                        mem::replace(
-                            &mut geometry.data,
-                            GeometricElement::Mesh(mesh),
-                        )
-                    );
-                },
-                StartElement("spline") => parser.parse_spline(),
-                StartElement("extra") => {
-                    let extra = try!(parse_element(parser));
-                    geometry.extra.push(extra);
-                },
-                EndElement("geometry") => break,
-                _ => return Err(illegal_event(event, "geometry"))
-            }
-        }
-
-        Ok(geometry)
-    }
-}
+});
 
 collada_element!("geographic_location", GeographicLocation => {
     req child longitude: Longitude,
@@ -1277,12 +1255,6 @@ pub enum PrimitiveType {
     Tristrips
 }
 
-impl Default for PrimitiveType {
-    fn default() -> Self {
-        PrimitiveType::Lines
-    }
-}
-
 #[derive(Debug, Clone)]
 pub enum Profile {
     Bridge(ProfileBridge),
@@ -1291,12 +1263,6 @@ pub enum Profile {
     Gles2(ProfileGles2),
     Glsl(ProfileGlsl),
     Common(ProfileCommon),
-}
-
-impl Default for Profile {
-    fn default() -> Self {
-        Profile::Bridge(ProfileBridge::default())
-    }
 }
 
 collada_element!("profile_BRIDGE", ProfileBridge => {});
@@ -1365,12 +1331,6 @@ pub enum ShaderElementCommon {
     Blinn(Blinn)
 }
 
-impl Default for ShaderElementCommon {
-    fn default() -> Self {
-        ShaderElementCommon::Constant(ConstantFx::default())
-    }
-}
-
 collada_element!("SIDREF_array", SidrefArray => {});
 collada_element!("skew", Skew => {});
 
@@ -1397,6 +1357,8 @@ collada_element!("source_data", SourceData => {
     contents: String
 });
 
+collada_element!("spline", Spline => {});
+
 collada_element!("subject", Subject => {
     contents: String
 });
@@ -1406,25 +1368,34 @@ pub struct TechniqueCommon<T: ColladaElement>(T);
 
 impl<T: ColladaElement> ColladaElement for TechniqueCommon<T> {
     fn parse(parser: &mut ColladaParser) -> Result<TechniqueCommon<T>> {
-        let mut t: T = Default::default();
+        let mut t = None;
 
         loop {
             let event = parser.next_event();
             match event {
-                StartElement(_) => {
-                    mem::forget(
-                        mem::replace(
-                            &mut t,
-                            try!(parse_element(parser)),
-                        )
-                    );
+                StartElement(child) => {
+                    if t.is_some() {
+                        return Err(Error::RepeatingChild {
+                            parent: String::from("technique_common"),
+                            child: String::from(child),
+                        });
+                    }
+
+                    t = Some(try!(parse_element(parser)));
                 },
                 EndElement("technique_common") => break,
                 _ => return Err(illegal_event(event, "technique_common")),
             }
         }
 
-        Ok(TechniqueCommon(t))
+        if let Some(t) = t {
+            Ok(TechniqueCommon(t))
+        } else {
+            Err(Error::MissingRequiredChild {
+                parent: String::from("technique_common"),
+                child: String::from("TODO: Get tag name from generic type"),
+            })
+        }
     }
 }
 
@@ -1471,12 +1442,6 @@ pub enum TransformationElement {
     Scale(Scale),
     Skew(Skew),
     Translate(Translate),
-}
-
-impl Default for TransformationElement {
-    fn default() -> Self {
-        TransformationElement::LookAt(LookAt::default())
-    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -1708,12 +1673,6 @@ impl<'a> ColladaParser<'a> {
         }
 
         Ok(collada)
-    }
-
-    fn parse_convex_mesh(&mut self) {
-        println!("Skipping over <convex_mesh> tag");
-        println!("Warning: <convex_mesh> is not yet supported by parse_collada");
-        self.skip_to_end_element("convex_mesh");
     }
 
     fn parse_input_shared(&mut self) -> Result<InputShared> {
@@ -1996,12 +1955,6 @@ impl<'a> ColladaParser<'a> {
         println!("Skipping over <polylist> element");
         println!("Warning: <polylist> is not yet supported by parse_collada");
         self.skip_to_end_element("polylist");
-    }
-
-    fn parse_spline(&mut self) {
-        println!("Skipping over <spline> element");
-        println!("Warning: <spline> is not yet supported by parse_collada");
-        self.skip_to_end_element("spline");
     }
 
     fn parse_translate(&mut self) -> Result<Translate> {

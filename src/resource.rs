@@ -335,7 +335,7 @@ impl ResourceManager {
 /// In order to to this, it reorganizes the normals, UVs, and other vertex attributes to
 /// be in the same order as the vertex positions.
 fn geometry_to_mesh(geometry: &Geometry) -> Mesh {
-    let mesh = match geometry.data {
+    let mesh = match geometry.geometric_element {
         GeometricElement::Mesh(ref mesh) => mesh,
         _ => panic!("No mesh found within geometry")
     };
