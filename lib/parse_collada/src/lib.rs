@@ -1114,7 +1114,7 @@ collada_element!("mesh", Mesh => {
     rep child source: Source,
     rep child extra: Extra
 
-    rep enum primitive_elements: PrimitiveType {
+    rep enum primitive_elements: PrimitiveElements {
         "lines" => Lines(Lines),
         "linestrips" => Linestrips(Linestrips),
         "polygons" => Polygons(Polygons),
@@ -1365,7 +1365,7 @@ collada_element!("p", Primitive => {
 });
 
 #[derive(Debug, Clone)]
-pub enum PrimitiveType {
+pub enum PrimitiveElements {
     Lines(Lines),
     Linestrips(Linestrips),
     Polygons(Polygons),
