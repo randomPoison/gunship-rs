@@ -6,9 +6,6 @@ use std::error::Error;
 use std::rc::Rc;
 use std::cell::RefCell;
 
-use collada::{self, Collada, GeometricElement, ArrayElement, PrimitiveType, VisualScene, Geometry,
-              Node};
-
 use polygon::gl_render::{GLRender, GLMeshData, ShaderProgram};
 use polygon::geometry::mesh::Mesh;
 
@@ -16,6 +13,11 @@ use wav::Wave;
 use scene::Scene;
 use ecs::Entity;
 use component::{MeshManager, TransformManager};
+use self::collada::{Collada, Geometry, Node, VisualScene};
+use self::shader::*;
+
+mod collada;
+mod shader;
 
 #[derive(Debug, Clone)]
 pub struct ResourceManager {
@@ -315,109 +317,15 @@ impl ResourceManager {
     fn gen_mesh(&self, geometry: &Geometry, uri: &str) -> Result<GLMeshData, String> {
         assert!(!self.has_cached_mesh(uri), "Attempting to create a new mesh for {} when the uri is already in the meshes map", uri);
 
-        let mesh = geometry_to_mesh(geometry);
+        println!("generating mesh: {}", uri);
+
+        let mesh = collada::geometry_to_mesh(geometry).unwrap(); // TODO: Don't panic!
 
         let mesh_data = self.renderer.gen_mesh(&mesh);
         self.meshes.borrow_mut().insert(uri.into(), mesh_data);
 
         Ok(mesh_data)
     }
-}
-
-/// Load the mesh data from a COLLADA .dae file.
-///
-/// The data in a COLLADA files is formatted for efficiency, but isn't necessarily
-/// organized in a way that is supported by the graphics API. This method reformats the
-/// data so that it can be sent straight to the GPU without further manipulation.
-///
-/// In order to to this, it reorganizes the normals, UVs, and other vertex attributes to
-/// be in the same order as the vertex positions.
-fn geometry_to_mesh(geometry: &Geometry) -> Mesh {
-    let mesh = match geometry.geometric_element {
-        GeometricElement::Mesh(ref mesh) => mesh,
-        _ => panic!("No mesh found within geometry")
-    };
-
-    let position_data_raw = get_raw_positions(&mesh);
-    let normal_data_raw = get_normals(&mesh);
-
-    let triangles = match mesh.primitive_elements[0] {
-        PrimitiveType::Triangles(ref triangles) => triangles,
-        _ => panic!("Only triangles primitives are supported currently")
-    };
-    let primitive_indices = &triangles.p.as_ref().unwrap();
-
-    // Create a new array for the positions so we can add the w coordinate.
-    let mut position_data: Vec<f32> = Vec::with_capacity(position_data_raw.len() / 3 * 4);
-
-    // Create a new array for the normals and rearrange them to match the order of position attributes.
-    let mut normal_data: Vec<f32> = Vec::with_capacity(position_data.len());
-
-    // Iterate over the indices, rearranging the normal data to match the position data.
-    let stride = triangles.input.len();
-    let mut vertex_index_map: HashMap<(usize, usize), u32> = HashMap::new();
-    let mut indices: Vec<u32> = Vec::new();
-    let vertex_count = triangles.count * 3;
-    let mut index_count = 0;
-    for offset in 0..vertex_count {
-        // Determine the offset of the the current vertex's attributes
-        let position_index = primitive_indices[offset * stride];
-        let normal_index = primitive_indices[offset * stride + 1];
-
-        // Push the index of the vertex, either reusing an existing vertex or creating a new one.
-        let vertex_key = (position_index, normal_index);
-        let vertex_index = if vertex_index_map.contains_key(&vertex_key) {
-            // Vertex has already been assembled, reuse the index.
-            (*vertex_index_map.get(&vertex_key).unwrap()) as u32
-        } else {
-            // Assemble new vertex.
-            let vertex_index = index_count;
-            index_count += 1;
-            vertex_index_map.insert(vertex_key, vertex_index as u32);
-
-            // Append position to position data array.
-            for offset in 0..3 {
-                position_data.push(position_data_raw[position_index * 3 + offset]);
-            }
-            position_data.push(1.0);
-
-            // Append normal to normal data array.
-            for offset in 0..3 {
-                normal_data.push(normal_data_raw[normal_index * 3 + offset]);
-            }
-
-            vertex_index
-        };
-
-        indices.push(vertex_index);
-    }
-
-    let mut mesh = Mesh::from_raw_data(position_data.as_ref(), indices.as_ref());
-    mesh.add_normals(normal_data.as_ref());
-
-    mesh
-}
-
-fn get_raw_positions(mesh: &collada::Mesh) -> &[f32] {
-    // TODO: Consult the correct element (<triangles> for now) to determine which source has position data.
-    let position_data: &[f32] = match *mesh.source[0].array_element.as_ref().unwrap() {
-        ArrayElement::Float(ref float_array) => float_array.contents.as_ref(),
-        _ => panic!("Only float arrays supported for vertex position array"),
-    };
-    assert!(position_data.len() > 0);
-
-    position_data
-}
-
-fn get_normals(mesh: &collada::Mesh) -> &[f32] {
-    // TODO: Consult the correct element (<triangles> for now) to determine which source has normal data.
-    let normal_data: &[f32] = match *mesh.source[1].array_element.as_ref().unwrap() {
-        ArrayElement::Float(ref float_array) => float_array.contents.as_ref(),
-        _ => panic!("Only float arrays supported for vertex normal array")
-    };
-    assert!(normal_data.len() > 0);
-
-    normal_data
 }
 
 pub fn load_file_text<P: AsRef<Path>>(file_path: P) -> String {
@@ -432,97 +340,4 @@ pub fn load_file_text<P: AsRef<Path>>(file_path: P) -> String {
         Ok(_) => ()
     }
     contents
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum ParseShaderError {
-    NoVertProgram,
-    NoFragProgram,
-    MultipleVertShader,
-    MultipleFragShader,
-    ProgramMissingName,
-    UnmatchedBraces,
-    MissingOpeningBrace,
-    CompileError(String),
-    LinkError(String),
-}
-
-#[derive(Debug, Clone)]
-struct ShaderParser;
-
-#[derive(Debug, Clone)]
-struct ShaderProgramSrc<'a> {
-    name: &'a str,
-    src: &'a str,
-}
-
-impl ShaderParser {
-    fn parse(shader_src: &str) -> Result<Vec<ShaderProgramSrc>, ParseShaderError> {
-        let mut programs: Vec<ShaderProgramSrc> = Vec::new();
-        let mut index = 0;
-        loop {
-            let substr = &shader_src[index..];
-            let (program, end_index) = try!(ShaderParser::parse_program(substr));
-            programs.push(program);
-            index = end_index;
-
-            if programs.len() >= 2 {
-                break;
-            }
-        }
-
-        Ok(programs)
-    }
-
-    fn parse_program(src: &str) -> Result<(ShaderProgramSrc, usize), ParseShaderError> {
-        if let Some(index) = src.find("program") {
-            let program_src = src[index..].trim_left();
-            let program_name = match program_src.split_whitespace().nth(1) {
-                Some(name) => name,
-                None => return Err(ParseShaderError::ProgramMissingName),
-            };
-
-            let (program_src, end_index) = match program_src.find('{') {
-                None => return Err(ParseShaderError::MissingOpeningBrace),
-                Some(index) => {
-                    let (src, index) = try!(ShaderParser::parse_braces_contents(&program_src[index..]));
-                    (src.trim(), index)
-                }
-            };
-
-            let program = ShaderProgramSrc {
-                name: program_name,
-                src: program_src,
-            };
-            Ok((program, end_index))
-        } else {
-            return Err(ParseShaderError::NoVertProgram);
-        }
-    }
-
-    /// Parses the contents of a curly brace-delimeted block.
-    ///
-    /// Retuns a substring of the source string that contains the contents of the block without
-    /// the surrounding curly braces. Fails if there is no matching close brace.
-    fn parse_braces_contents(src: &str) -> Result<(&str, usize), ParseShaderError> {
-        assert!(src.starts_with("{"));
-
-        let mut depth = 0;
-        for (index, character) in src.chars().enumerate() {
-            match character {
-                '{' => depth += 1,
-                '}' => {
-                    depth -= 1;
-                    if depth == 0 {
-                        // We're at the end.
-                        return Ok((&src[1..index], index));
-                    }
-                },
-                _ => {}
-            }
-        }
-
-        // Uh-oh, we got to the end and never closed the braces.
-        Err(ParseShaderError::UnmatchedBraces)
-    }
 }
