@@ -1,13 +1,25 @@
 extern crate parse_collada as collada;
 
-pub use self::collada::{ArrayElement, Collada, GeometricElement, Geometry, Node, PrimitiveType, VisualScene};
+pub use self::collada::{ArrayElement, Collada, GeometricElement, Geometry, Node, PrimitiveElements, VisualScene};
 
 use polygon::geometry::mesh::Mesh;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
 pub enum Error {
+    /// Indicates that there was an input with the "NORMAL" semantic but the associated source
+    /// was missing.
+    MissingNormalSource,
+
+    /// Indicates that an <input> element specified a <source> element that was missing.
+    MissingSourceData,
+
+    /// Indicates that the <source> element with the "POSITION" semantic was missing an
+    /// array element.
     MissingPositionData,
+
+    /// Indicates that the <source> element with the "NORMAL" semantic was missing an array element.
+    MissingNormalData,
 
     /// Indicates that a <vertices> element had and <input> element with no "POSITION" semantic.
     ///
@@ -40,12 +52,13 @@ pub fn geometry_to_mesh(geometry: &Geometry) -> Result<Mesh> {
 
 fn collada_mesh_to_mesh(mesh: &collada::Mesh) -> Result<Mesh> {
     let position_data_raw = try!(get_raw_positions(&mesh));
-    let normal_data_raw = try!(get_normals(&mesh));
 
     let triangles = match mesh.primitive_elements[0] {
-        PrimitiveType::Triangles(ref triangles) => triangles,
+        PrimitiveElements::Triangles(ref triangles) => triangles,
         _ => return Err(Error::UnsupportedPrimitiveType),
     };
+
+    let normal_data_raw = try!(get_normals_for_triangles(mesh, triangles)).unwrap(); // TODO: Handle the case where there's no normal data.
     let primitive_indices = &triangles.p.as_ref().unwrap();
 
     // Create a new array for the positions so we can add the w coordinate.
@@ -99,7 +112,14 @@ fn collada_mesh_to_mesh(mesh: &collada::Mesh) -> Result<Mesh> {
     Ok(mesh)
 }
 
+/// Parses the <mesh> element to find the <source> element associated with the "POSITION" input semantic.
+///
+/// A <mesh> element is required to have a <source> element with the "POSITION" input semantic so
+/// if the COLLADA document is well-formed this should never fail. Unfortunately parse-collada is
+/// incomplete so it's still possible for a malformed document to parse successfully, hence why
+/// this function returns a Result. In the future this may no longer be necessary.
 fn get_raw_positions(mesh: &collada::Mesh) -> Result<&[f32]> {
+    // The <vertices> element will always have the "POSITION" input.
     let pos_input = try!(
         mesh.vertices.input
         .iter()
@@ -107,17 +127,23 @@ fn get_raw_positions(mesh: &collada::Mesh) -> Result<&[f32]> {
         .ok_or(Error::MissingPositionSemantic));
     let pos_source_id = &*pos_input.source;
 
+    // Find the <source> element with the "POSITION" data.
     let position_source = try!(
         mesh.source
         .iter()
         .find(|source| source.id == *pos_source_id)
         .ok_or(Error::MissingPositionSemantic));
 
-    let position_element: &collada::ArrayElement = try!(
+    // Retrieve it's array_element, which is technically optional according to the spec but is
+    // probably going to be there for the position data.
+    let position_element = try!(
         position_source.array_element
         .as_ref()
         .ok_or(Error::MissingPositionData));
 
+    // TODO: Do we care if position data is in any other format? My suspicion is that it will
+    // only ever be a float array, but if that's not the case then we need to support other
+    // formats even if they're uncommon.
     let position_data: &[f32] = match *position_element {
         ArrayElement::Float(ref float_array) => float_array.contents.as_ref(),
         _ => return Err(Error::UnsupportedSourceElement),
@@ -126,13 +152,52 @@ fn get_raw_positions(mesh: &collada::Mesh) -> Result<&[f32]> {
     Ok(position_data)
 }
 
-fn get_normals(mesh: &collada::Mesh) -> Result<&[f32]> {
-    // TODO: Consult the correct element (<triangles> for now) to determine which source has normal data.
-    let normal_data: &[f32] = match *mesh.source[1].array_element.as_ref().unwrap() {
-        ArrayElement::Float(ref float_array) => float_array.contents.as_ref(),
-        _ => panic!("Only float arrays supported for vertex normal array")
-    };
-    assert!(normal_data.len() > 0);
+fn get_normals_for_triangles<'a>(mesh: &'a collada::Mesh, triangles: &'a collada::Triangles) -> Result<Option<&'a [f32]>> {
+    // First we have to find the input with the correct semantic.
+    // Check the mesh's <vertices> element first.
+    let source_id = {
+        // Retrieve the id specified by the <input> element with the "NORMAL" semantic.
+        let source_id =
+            mesh.vertices.input
+            .iter()
+            .find(|input| input.semantic == "NORMAL")
+            .map(|input| &input.source)
+            .or_else(||
+                triangles.input
+                .iter()
+                .find(|input| input.semantic == "NORMAL")
+                .map(|input| &input.source)
+            );
 
-    Ok(normal_data)
+        // If no input has the "NORMAL" semnatic then the mesh/triangles has no normal, so we
+        // can return None.
+        match source_id {
+            Some(id) => id,
+            None => return Ok(None),
+        }
+    };
+
+    // Find source for normal data.
+    let source = try!(
+        mesh.source
+        .iter()
+        .find(|source| source.id == **source_id)
+        .ok_or(Error::MissingSourceData));
+
+    // Retrieve it's array_element, which is technically optional according to the spec but is
+    // probably going to be there for the normal data.
+    let element: &collada::ArrayElement = try!(
+        source.array_element
+        .as_ref()
+        .ok_or(Error::MissingNormalData));
+
+    // TODO: Do we care if normal data is in any other format? My suspicion is that it will
+    // only ever be a float array, but if that's not the case then we need to support other
+    // formats even if they're uncommon.
+    let normal_data = match *element {
+        ArrayElement::Float(ref float_array) => float_array.contents.as_ref(),
+        _ => return Err(Error::UnsupportedSourceElement),
+    };
+
+    Ok(Some(normal_data))
 }
