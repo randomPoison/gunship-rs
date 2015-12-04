@@ -1084,8 +1084,25 @@ collada_element!("library_visual_scenes", LibraryVisualScenes => {
     rep child extra: Extra
 });
 
-collada_element!("lines", Lines => {});
-collada_element!("linestrips", Linestrips => {});
+collada_element!("lines", Lines => {
+    req attrib count: usize
+    opt attrib name: String,
+    opt attrib material: String
+
+    opt child p: Primitive
+    rep child input: InputShared,
+    rep child extra: Extra
+});
+
+collada_element!("linestrips", Linestrips => {
+    req attrib count: usize
+    opt attrib name: String,
+    opt attrib material: String
+
+    rep child input: InputShared,
+    rep child p: Primitive,
+    rep child extra: Extra
+});
 
 collada_element!("longitude", Longitude => {
     contents: f32
@@ -1356,9 +1373,35 @@ impl ColladaElement for Param {
 }
 
 collada_element!("param", ParamReference => {});
+
+collada_element!("ph", PrimitiveHoles => {
+    req child p: Primitive
+    rep child h: Primitive
+});
+
 collada_element!("phong", Phong => {});
-collada_element!("polygons", Polygons => {});
-collada_element!("polylist", Polylist => {});
+
+collada_element!("polygons", Polygons => {
+    req attrib count: usize
+    opt attrib material: String,
+    opt attrib name: String
+
+    rep child input: InputShared,
+    rep child p: Primitive,
+    rep child ph: PrimitiveHoles,
+    rep child extra: Extra
+});
+
+collada_element!("polylist", Polylist => {
+    req attrib count: usize
+    opt attrib name: String,
+    opt attrib material: String
+
+    opt child vcount: VCount,
+    opt child p: Primitive
+    rep child input: InputShared,
+    rep child extra: Extra
+});
 
 collada_element!("p", Primitive => {
     contents: Vec<usize>
@@ -1373,6 +1416,36 @@ pub enum PrimitiveElements {
     Triangles(Triangles),
     Trifans(Trifans),
     Tristrips(Tristrips)
+}
+
+impl PrimitiveElements {
+    /// Retrieve the element's list of inputs regardless of the specific variant.
+    ///
+    /// All primitive elements have a list of <input> (shared) elements, so this utility method
+    /// retrieves the `&[InputShared]` from the primitive element regardless of the variant.
+    pub fn input(&self) -> &[InputShared] {
+        match *self {
+            PrimitiveElements::Lines(ref element)      => &*element.input,
+            PrimitiveElements::Linestrips(ref element) => &*element.input,
+            PrimitiveElements::Polygons(ref element)   => &*element.input,
+            PrimitiveElements::Polylist(ref element)   => &*element.input,
+            PrimitiveElements::Triangles(ref element)  => &*element.input,
+            PrimitiveElements::Trifans(ref element)    => &*element.input,
+            PrimitiveElements::Tristrips(ref element)  => &*element.input,
+        }
+    }
+
+    pub fn count(&self) -> usize {
+        match *self {
+            PrimitiveElements::Lines(ref element)      => element.count,
+            PrimitiveElements::Linestrips(ref element) => element.count,
+            PrimitiveElements::Polygons(ref element)   => element.count,
+            PrimitiveElements::Polylist(ref element)   => element.count,
+            PrimitiveElements::Triangles(ref element)  => element.count,
+            PrimitiveElements::Trifans(ref element)    => element.count,
+            PrimitiveElements::Tristrips(ref element)  => element.count,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -1635,8 +1708,25 @@ collada_element!("triangles", Triangles => {
     rep child extra: Extra
 });
 
-collada_element!("trifans", Trifans => {});
-collada_element!("tristrips", Tristrips => {});
+collada_element!("trifans", Trifans => {
+    req attrib count: usize
+    opt attrib name: String,
+    opt attrib material: String
+
+    rep child input: InputShared,
+    rep child p: Primitive,
+    rep child extra: Extra
+});
+
+collada_element!("tristrips", Tristrips => {
+    req attrib count: usize
+    opt attrib name: String,
+    opt attrib material: String
+
+    rep child input: InputShared,
+    rep child p: Primitive,
+    rep child extra: Extra
+});
 
 collada_element!("unit", Unit => {
     opt attrib name: String,
@@ -1698,6 +1788,10 @@ impl ColladaAttribute for UriFragment {
         Ok(UriFragment(String::from(trimmed)))
     }
 }
+
+collada_element!("vcount", VCount => {
+    contents: Vec<usize>
+});
 
 collada_element!("vertices", Vertices => {
     req attrib id: String
