@@ -81,7 +81,7 @@ pub enum BuildMeshError {
 pub struct MeshBuilder {
     position_data: Vec<Point>,
     normal_data: Vec<Vector3>,
-    texcoord_data: Vec<Vec<Vector3>>,
+    texcoord_data: Vec<Vec<Vector2>>,
 
     indices:  Vec<u32>,
 }
@@ -99,16 +99,23 @@ impl MeshBuilder {
         }
     }
 
-    pub fn add_vertex(mut self, vertex: Vertex) -> MeshBuilder {
+    pub fn add_vertex(&mut self, vertex: Vertex) {
         self.position_data.push(vertex.position);
 
         if let Some(normal) = vertex.normal {
             self.normal_data.push(normal);
         }
 
-        // TODO: Handle texcoord data.
+        // Ensure there is a list for each texcoord.
+        while self.texcoord_data.len() < vertex.texcoord.len() {
+            self.texcoord_data.push(Vec::new());
+        }
 
-        self
+        // Add each texcoord to its corresponding list.
+        let iter = vertex.texcoord.iter().zip(self.texcoord_data.iter_mut());
+        for (texcoord, texcoord_data) in iter {
+            texcoord_data.push(*texcoord);
+        }
     }
 
     pub fn add_index(mut self, index: MeshIndex) -> MeshBuilder {
@@ -128,8 +135,15 @@ impl MeshBuilder {
         self
     }
 
-    pub fn set_texcoord_data(mut self, _texcoord_data: &[Vector2], _texcoord_index: MeshIndex) -> MeshBuilder {
-        // TODO
+    pub fn set_texcoord_data(mut self, texcoord_data: &[&[Vector2]]) -> MeshBuilder {
+        if texcoord_data.len() == 0 {
+            return self;
+        }
+
+        for (src, dest) in texcoord_data.iter().zip(self.texcoord_data.iter_mut()) {
+            dest.clear();
+            dest.extend(*src);
+        }
 
         self
     }
@@ -141,15 +155,19 @@ impl MeshBuilder {
     }
 
     pub fn build(self) -> Result<Mesh, BuildMeshError> {
-        // Validate the mesh data.
-
         // The vertex count is defined by the position data, since position is the only required
         // vertex attribute.
         let vertex_count = self.position_data.len();
 
-        // TODO: Validate texcoord data.
+        // Check that there is enough attribute data for each one.
         if self.normal_data.len() != 0 && self.normal_data.len() != vertex_count {
             return Err(BuildMeshError::IncorrectAttributeCount);
+        }
+
+        for texcoord_set in &self.texcoord_data {
+            if texcoord_set.len() != vertex_count {
+                return Err(BuildMeshError::IncorrectAttributeCount);
+            }
         }
 
         // Make sure all indices at least point to a valid vertex.
@@ -162,37 +180,60 @@ impl MeshBuilder {
             }
         }
 
-        // TODO: Make sure all normals are normalized?
+        // TODO: Check for degenerate triangles? Actually, should that be a failure or a warning?
+
+        let float_count = {
+            let mut float_count =
+                self.position_data.len() * 4
+              + self.normal_data.len() * 3;
+            for texcoord_set in &self.texcoord_data {
+                float_count += texcoord_set.len() * 2;
+            }
+
+            float_count
+        };
 
         // Create the mesh.
-        let mut vertex_data =
-            Vec::<f32>::with_capacity(
-                self.position_data.len() * 4
-              + self.normal_data.len() * 3);
+        let mut vertex_data = Vec::<f32>::with_capacity(float_count);
+
+        // Setup position data.
+        let position_attrib = VertexAttribute {
+            offset: 0,
+            stride: 4,
+        };
         vertex_data.extend(Point::as_ref(&*self.position_data));
-        vertex_data.extend(Vector3::as_ref(&*self.normal_data));
 
-        // TODO: Add texcoord data.
+        // Setup normal data.
+        let normal_attrib = if self.normal_data.len() > 0 {
+            let attrib = VertexAttribute {
+                offset: vertex_data.len(),
+                stride: 3,
+            };
+            vertex_data.extend(Vector3::as_ref(&*self.normal_data));
 
+            Some(attrib)
+        } else {
+            None
+        };
+
+        // Setup texcoord data.
+        let mut texcoord_attribs = Vec::new();
+        for texcoord_set in &self.texcoord_data {
+            texcoord_attribs.push(VertexAttribute {
+                offset: vertex_data.len(),
+                stride: 2,
+            });
+            vertex_data.extend(Vector2::as_ref(&*texcoord_set));
+        }
+
+        // By our powers combined! We are! A mesh.
         Ok(Mesh {
             vertex_data: vertex_data,
             indices: self.indices,
 
-            position: VertexAttribute {
-                offset: 0,
-                stride: 4,
-            },
-
-            normal: if self.normal_data.len() > 0 {
-                Some(VertexAttribute {
-                    offset: self.position_data.len() * 4,
-                    stride: 3,
-                })
-            } else {
-                None
-            },
-
-            texcoord: Vec::new(),
+            position: position_attrib,
+            normal: normal_attrib,
+            texcoord: texcoord_attribs,
         })
     }
 }
