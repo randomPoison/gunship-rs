@@ -180,13 +180,13 @@ impl MeshBuilder {
 
             position: VertexAttribute {
                 offset: 0,
-                stride: 0, // TODO: Should stride 4 (as in every 4 floats) or 0 (as in tightly packed)? Does that change between OpenGL and DirectX?
+                stride: 4,
             },
 
             normal: if self.normal_data.len() > 0 {
                 Some(VertexAttribute {
                     offset: self.position_data.len() * 4,
-                    stride: 0, // TODO: Same as above.
+                    stride: 3,
                 })
             } else {
                 None
