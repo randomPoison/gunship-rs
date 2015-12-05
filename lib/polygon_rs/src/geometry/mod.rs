@@ -1,3 +1,3 @@
 pub mod mesh;
 
-pub use self::mesh::{Mesh, VertexAttribute};
+pub use self::mesh::*;

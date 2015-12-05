@@ -92,7 +92,7 @@ impl Point {
         }
     }
 
-    pub fn slice_as_f32_slice(raw: &[f32]) -> &[Point] {
+    pub fn slice_from_f32_slice(raw: &[f32]) -> &[Point] {
         assert!(raw.len() % 4 == 0, "To convert a slice of f32 to a slice of Point it must have a length that is a multiple of 4");
 
         unsafe {
