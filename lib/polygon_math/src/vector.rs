@@ -99,6 +99,16 @@ impl Vector3 {
         self.x * self.x + self.y * self.y + self.z * self.z
     }
 
+    // Safely reinterprets a slice of Vector3s to a slice of f32s. This is a cheap operation and
+    // does not copy any data.
+    pub fn as_ref(vectors: &[Vector3]) -> &[f32] {
+        unsafe {
+            ::std::slice::from_raw_parts(
+                vectors.as_ptr() as *const f32,
+                vectors.len() * 3)
+        }
+    }
+
     // pub fn cross(&self, rhs: Vector3) -> Vector3 {
     //     Vector3::new(
     //         self.y * rhs.z - self.z * rhs.y,
@@ -277,6 +287,21 @@ impl IndexMut<usize> for Vector3 {
             2 => &mut self.z,
             // TODO: Use `unreachable()` intrinsic in release mode.
             _ => panic!("Index {} is out of bounds for Vector3", index),
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, PartialOrd)]
+pub struct Vector2 {
+    pub x: f32,
+    pub y: f32,
+}
+
+impl Vector2 {
+    pub fn new(x: f32, y: f32) -> Vector2 {
+        Vector2 {
+            x: x,
+            y: y,
         }
     }
 }
