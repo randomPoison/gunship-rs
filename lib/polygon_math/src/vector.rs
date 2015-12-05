@@ -304,4 +304,14 @@ impl Vector2 {
             y: y,
         }
     }
+
+    pub fn as_ref(vectors: &[Vector2]) -> &[f32] {
+        use std::slice;
+
+        unsafe {
+            slice::from_raw_parts(
+                vectors.as_ptr() as *const f32,
+                vectors.len() * 2)
+        }
+    }
 }
