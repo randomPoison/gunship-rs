@@ -49,7 +49,9 @@ pub enum Error {
 
     UnsupportedGeometricElement,
     UnsupportedPrimitiveType,
-    UnsupportedSourceElement,
+
+    /// Indicates that a <source> element's array element was of a type other than <float_array>.
+    UnsupportedSourceData,
 }
 
 pub type Result<T> = ::std::result::Result<T, Error>;
@@ -111,10 +113,6 @@ fn collada_mesh_to_mesh(mesh: &collada::Mesh) -> Result<Mesh> {
         });
     }
 
-    // Retrieve the f32 arrays for position and normal data.
-    let position_data_raw = try!(get_raw_positions(&mesh));
-    let normal_data_raw = try!(get_normals_for_element(mesh, primitive));
-
     // The indices list is a just a raw list of indices. They are implicity grouped based on the
     // number of inputs for the primitive element (e.g. if there are 3 inputs for the primitive
     // then there are 3 indices per vertex). To handle this we use GroupBy to do a strided
@@ -130,15 +128,40 @@ fn collada_mesh_to_mesh(mesh: &collada::Mesh) -> Result<Mesh> {
             "VERTEX" => {
                 mesh.vertices.input
                 .iter()
-                .map(|input| &*input.semantic)
+                .map(|input| (input.semantic.as_ref(), input.source.as_ref()))
                 .collect()
             },
-            _ => vec![(&*input.semantic)],
+            _ => vec![(input.semantic.as_ref(), input.source.as_ref())],
         };
 
         // For each of the semantics at the current offset, push their info into the source map.
-        for semantic in source_ids {
-            source_map.push((offset, semantic));
+        for (semantic, source_id) in source_ids {
+            // Retrieve the <source> element for the input.
+            let source = try!(mesh.source
+            .iter()
+            .find(|source| source.id == source_id)
+            .ok_or(Error::MissingSourceData));
+
+            // Retrieve it's array_element, which is technically optional according to the spec but is
+            // probably going to be there for the position data.
+            let array_element = try!(
+                source.array_element
+                .as_ref()
+                .ok_or(Error::MissingPositionData));
+
+            // TODO: Do we care if position data is in any other format? My suspicion is that it will
+            // only ever be a float array, but if that's not the case then we need to support other
+            // formats even if they're uncommon.
+            let data = match *array_element {
+                ArrayElement::Float(ref float_array) => float_array.contents.as_ref(),
+                _ => return Err(Error::UnsupportedSourceData),
+            };
+
+            source_map.push(IndexMapper {
+                offset: offset,
+                semantic: semantic,
+                data: data,
+            });
         }
     }
 
@@ -150,41 +173,40 @@ fn collada_mesh_to_mesh(mesh: &collada::Mesh) -> Result<Mesh> {
         let mut vertex = Vertex::new(Point::origin());
 
         for (offset, index) in vertex_indices.iter().enumerate() {
-            let mut filter =
-                source_map.iter()
-                .filter(|map| map.0 == offset)
-                .map(|&(_, semantic)| semantic);
-            for semantic in filter {
-                match &*semantic {
+            for mapper in source_map.iter().filter(|mapper| mapper.offset == offset) {
+                match mapper.semantic {
                     "POSITION" => {
                         vertex.position = Point::new(
                             // TODO: Don't assume that the position data is encoded as 3 coordinate
                             // vectors. The <technique_common> element for the source should have
                             // an <accessor> describing how the data is laid out.
-                            position_data_raw[index * 3 + 0],
-                            position_data_raw[index * 3 + 1],
-                            position_data_raw[index * 3 + 2],
+                            mapper.data[index * 3 + 0],
+                            mapper.data[index * 3 + 1],
+                            mapper.data[index * 3 + 2],
                         );
                     },
                     "NORMAL" => {
-                        let normal_data = try!(
-                            normal_data_raw
-                            .ok_or(Error::MissingNormalData));
                         vertex.normal = Some(Vector3::new(
-                            normal_data[index * 3 + 0],
-                            normal_data[index * 3 + 1],
-                            normal_data[index * 3 + 2],
+                            mapper.data[index * 3 + 0],
+                            mapper.data[index * 3 + 1],
+                            mapper.data[index * 3 + 2],
                         ));
-                    }
+                    },
+                    "TEXCOORD" => {
+                        vertex.texcoord.push(Vector2::new(
+                            mapper.data[index * 2 + 0],
+                            mapper.data[index * 2 + 1],
+                        ));
+                    },
                     _ => if !unsupported_semantic_flag {
                         unsupported_semantic_flag = true;
-                        println!("WARNING: Unsupported vertex semantic {} in mesh will not be used", semantic);
+                        println!("WARNING: Unsupported vertex semantic {} in mesh will not be used", mapper.semantic);
                     },
                 }
             }
         }
 
-        mesh_builder = mesh_builder.add_vertex(vertex);
+        mesh_builder.add_vertex(vertex);
     }
 
     let indices: Vec<u32> = (0..vertex_count).collect();
@@ -195,95 +217,10 @@ fn collada_mesh_to_mesh(mesh: &collada::Mesh) -> Result<Mesh> {
     .map_err(|err| Error::BuildMeshError(err))
 }
 
-/// Parses the <mesh> element to find the <source> element associated with the "POSITION" input semantic.
-///
-/// A <mesh> element is required to have a <source> element with the "POSITION" input semantic so
-/// if the COLLADA document is well-formed this should never fail. Unfortunately parse-collada is
-/// incomplete so it's still possible for a malformed document to parse successfully, hence why
-/// this function returns a Result. In the future this may no longer be necessary.
-fn get_raw_positions(mesh: &collada::Mesh) -> Result<&[f32]> {
-    // The <vertices> element will always have the "POSITION" input.
-    let pos_input = try!(
-        mesh.vertices.input
-        .iter()
-        .find(|input| input.semantic == "POSITION")
-        .ok_or(Error::MissingPositionSemantic));
-    let pos_source_id = &*pos_input.source;
-
-    // Find the <source> element with the "POSITION" data.
-    let position_source = try!(
-        mesh.source
-        .iter()
-        .find(|source| source.id == *pos_source_id)
-        .ok_or(Error::MissingPositionSemantic));
-
-    // Retrieve it's array_element, which is technically optional according to the spec but is
-    // probably going to be there for the position data.
-    let position_element = try!(
-        position_source.array_element
-        .as_ref()
-        .ok_or(Error::MissingPositionData));
-
-    // TODO: Do we care if position data is in any other format? My suspicion is that it will
-    // only ever be a float array, but if that's not the case then we need to support other
-    // formats even if they're uncommon.
-    let position_data: &[f32] = match *position_element {
-        ArrayElement::Float(ref float_array) => float_array.contents.as_ref(),
-        _ => return Err(Error::UnsupportedSourceElement),
-    };
-
-    Ok(position_data)
-}
-
-// TODO: This shouldn't be specific to triangles, it should work for all PrimitiveElements variants
-fn get_normals_for_element<'a>(mesh: &'a collada::Mesh, element: &'a PrimitiveElements) -> Result<Option<&'a [f32]>> {
-    // First we have to find the input with the correct semantic.
-    // Check the mesh's <vertices> element first.
-    let source_id = {
-        // Retrieve the id specified by the <input> element with the "NORMAL" semantic.
-        let source_id =
-            mesh.vertices.input
-            .iter()
-            .find(|input| input.semantic == "NORMAL")
-            .map(|input| &input.source)
-            .or_else(||
-                element.input()
-                .iter()
-                .find(|input| input.semantic == "NORMAL")
-                .map(|input| &input.source)
-            );
-
-        // If no input has the "NORMAL" semnatic then the mesh/triangles has no normal, so we
-        // can return None.
-        match source_id {
-            Some(id) => id,
-            None => return Ok(None),
-        }
-    };
-
-    // Find source for normal data.
-    let source = try!(
-        mesh.source
-        .iter()
-        .find(|source| source.id == **source_id)
-        .ok_or(Error::MissingSourceData));
-
-    // Retrieve it's array_element, which is technically optional according to the spec but is
-    // probably going to be there for the normal data.
-    let element: &collada::ArrayElement = try!(
-        source.array_element
-        .as_ref()
-        .ok_or(Error::MissingNormalData));
-
-    // TODO: Do we care if normal data is in any other format? My suspicion is that it will
-    // only ever be a float array, but if that's not the case then we need to support other
-    // formats even if they're uncommon.
-    let normal_data = match *element {
-        ArrayElement::Float(ref float_array) => float_array.contents.as_ref(),
-        _ => return Err(Error::UnsupportedSourceElement),
-    };
-
-    Ok(Some(normal_data))
+struct IndexMapper<'a> {
+    offset:   usize,
+    semantic: &'a str,
+    data:     &'a [f32],
 }
 
 // TODO: Where even should this live? It's generally useful but I'm only using it here right now.

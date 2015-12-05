@@ -16,8 +16,8 @@ use component::{MeshManager, TransformManager};
 use self::collada::{Collada, Geometry, Node, VisualScene};
 use self::shader::*;
 
-mod collada;
-mod shader;
+pub mod collada;
+pub mod shader;
 
 #[derive(Debug, Clone)]
 pub struct ResourceManager {
