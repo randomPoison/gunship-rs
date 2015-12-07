@@ -78,6 +78,10 @@ pub fn geometry_to_mesh(geometry: &Geometry) -> Result<Mesh> {
 }
 
 fn collada_mesh_to_mesh(mesh: &collada::Mesh) -> Result<Mesh> {
+    if mesh.primitive_elements.len() > 1 {
+        println!("WARNING: Mesh is composed of more than one geometric primitive, which is not currently supported, only part of the mesh will be loaded");
+    }
+
     // Grab the first primitive element in the mesh.
     // TODO: Handle all primitive elements in the mesh, not just one. This is dependent on polygon
     // being able to support submeshes.
