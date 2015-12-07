@@ -4,7 +4,7 @@ pub use self::collada::{ArrayElement, Collada, GeometricElement, Geometry, Node,
 
 use math::*;
 use polygon::geometry::*;
-use std::collections::HashMap;
+use std::collections::HashSet;
 
 #[derive(Debug, Clone)]
 pub enum Error {
@@ -78,16 +78,13 @@ pub fn geometry_to_mesh(geometry: &Geometry) -> Result<Mesh> {
 }
 
 fn collada_mesh_to_mesh(mesh: &collada::Mesh) -> Result<Mesh> {
-    // First, pick a primitive element to parse into a Mesh.
+    // Grab the first primitive element in the mesh.
     // TODO: Handle all primitive elements in the mesh, not just one. This is dependent on polygon
     // being able to support submeshes.
     let primitive = try!(
         mesh.primitive_elements.first()
         .ok_or(Error::MissingPrimitiveElement));
 
-    // TODO: A mesh may have no primitive elements and still be well-formed by the COLLADA spec.
-    // We need to gracefully handle that case by either returning and error about unsupported
-    // format or return an empty mesh (which is what a mesh with no primitives is).
     let triangles = match *primitive {
         PrimitiveElements::Triangles(ref triangles) => triangles,
         _ => return Err(Error::UnsupportedPrimitiveType),
@@ -149,9 +146,9 @@ fn collada_mesh_to_mesh(mesh: &collada::Mesh) -> Result<Mesh> {
                 .as_ref()
                 .ok_or(Error::MissingPositionData));
 
-            // TODO: Do we care if position data is in any other format? My suspicion is that it will
-            // only ever be a float array, but if that's not the case then we need to support other
-            // formats even if they're uncommon.
+            // Get float data. Raw mesh data should only be float data (the only one that even
+            // remotely makes sense is int data, and even then that seems unlikely), so emit an
+            // error if the data is in the wrong format.
             let data = match *array_element {
                 ArrayElement::Float(ref float_array) => float_array.contents.as_ref(),
                 _ => return Err(Error::UnsupportedSourceData),

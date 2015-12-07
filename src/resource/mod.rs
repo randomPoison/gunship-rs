@@ -99,7 +99,7 @@ impl ResourceManager {
         Ok(())
     }
 
-    /// Sets the path to the resources director.
+    /// Sets the path to the resources directory.
     ///
     /// # Details
     ///

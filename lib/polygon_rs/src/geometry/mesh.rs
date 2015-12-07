@@ -86,9 +86,18 @@ pub struct MeshBuilder {
     indices:  Vec<u32>,
 }
 
-// TODO: I'd like to support building the mesh by specifying all of each attribute at once, since
-// that seems like a common use case for game development. We still want to support building it
-// vert-by-vert because that works best in other situations (e.g. COLLADA files).
+/// Provides a safe interface for building a mesh from raw vertex data.
+///
+/// `MeshBuilder` supports two methods for specifying mesh data: Providing a series of `Vertex`
+/// objects, or directly setting the data for each vertex attribute at once. Once all vertex data
+/// has been set calling `build()` will validate the mesh data and produce a `Mesh` object.
+///
+/// The mesh builder performs validity tests when building the mesh and mesh compilation can fail
+/// if the mesh data is invalid in some way. The following validity tests are performed:
+///
+/// - Check for different data count for different attributes (e.g. if the position attribute data
+///   for a different number of elements than the normal attribute).
+/// - Any of the indicies would be out of bounds for the given vertex data.
 impl MeshBuilder {
     pub fn new() -> MeshBuilder {
         MeshBuilder {
