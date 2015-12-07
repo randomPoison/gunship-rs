@@ -1,9 +1,10 @@
 extern crate parse_xml as xml;
 
+use std::convert::From;
 use std::fs::File;
+use std::ops::{Deref, DerefMut};
 use std::path::Path;
 use std::str::FromStr;
-use std::convert::From;
 use xml::Event::*;
 
 #[derive(Debug, Clone, Default)]
@@ -71,6 +72,7 @@ pub enum Error {
         tag: String,
         text: String,
     },
+    InvalidUriFragment(String),
     ParseBoolError {
         text: String,
         error: std::str::ParseBoolError,
@@ -87,6 +89,7 @@ pub enum Error {
         parent: String,
         child: String,
     },
+    MissingTagContents(String),
 
     /// Indicates that a child that should have appeared at most one time appeared multiple times.
     RepeatingChild {
@@ -121,6 +124,106 @@ macro_rules! collada_element {
     };
 
     ($tag_name:expr, $struct_name:ident => {
+        contents: String
+    }) => {
+        #[derive(Debug, Clone)]
+        pub struct $struct_name(String);
+
+        impl ColladaElement for $struct_name {
+            fn parse(parser: &mut ColladaParser) -> Result<$struct_name> {
+                let mut contents: Option<String> = None;
+
+                loop {
+                    let event = parser.next_event();
+                    match event {
+                        TextNode(text) => {
+                            if contents.is_some() {
+                                return Err(Error::RepeatingChild {
+                                    parent: String::from($tag_name),
+                                    child: String::from("contents"),
+                                });
+                            }
+
+                            contents = Some(try!(parse_attrib::<String>(text)));
+                        }
+
+                        EndElement($tag_name) => break,
+                        _ => return Err(illegal_event(event, $tag_name)),
+                    }
+                }
+
+                Ok($struct_name(contents.unwrap_or(String::new())))
+            }
+        }
+
+        impl Deref for $struct_name {
+            type Target = String;
+
+            fn deref(&self) -> &Self::Target {
+                &self.0
+            }
+        }
+
+        impl DerefMut for $struct_name {
+            fn deref_mut(&mut self) -> &mut Self::Target {
+                &mut self.0
+            }
+        }
+    };
+
+    ($tag_name:expr, $struct_name:ident => {
+        contents: $contents_type:ty
+    }) => {
+        #[derive(Debug, Clone)]
+        pub struct $struct_name($contents_type);
+
+        impl ColladaElement for $struct_name {
+            fn parse(parser: &mut ColladaParser) -> Result<$struct_name> {
+                let mut contents: Option<$contents_type> = None;
+
+                loop {
+                    let event = parser.next_event();
+                    match event {
+                        TextNode(text) => {
+                            if contents.is_some() {
+                                return Err(Error::RepeatingChild {
+                                    parent: String::from($tag_name),
+                                    child: String::from("contents"),
+                                });
+                            }
+
+                            contents = Some(try!(parse_attrib::<$contents_type>(text)));
+                        }
+
+                        EndElement($tag_name) => break,
+                        _ => return Err(illegal_event(event, $tag_name)),
+                    }
+                }
+
+                if contents.is_none() {
+                    return Err(Error::MissingTagContents(String::from($tag_name)));
+                }
+
+                Ok($struct_name(contents.unwrap() as $contents_type))
+            }
+        }
+
+        impl Deref for $struct_name {
+            type Target = $contents_type;
+
+            fn deref(&self) -> &Self::Target {
+                &self.0
+            }
+        }
+
+        impl DerefMut for $struct_name {
+            fn deref_mut(&mut self) -> &mut Self::Target {
+                &mut self.0
+            }
+        }
+    };
+
+    ($tag_name:expr, $struct_name:ident => {
         $(req attrib $req_attrib_name:ident: $req_attrib_type:ty),*
         $(opt attrib $opt_attrib_name:ident: $opt_attrib_type:ty),*
 
@@ -128,14 +231,18 @@ macro_rules! collada_element {
         $(opt child  $opt_child_name:ident:  $opt_child_type:ty),*
         $(rep child  $rep_child_name:ident:  $rep_child_type:ty),*
 
-        $(req enum child $req_enum_child_name:ident: $req_enum_child_type:ident {
+        $(req enum $req_enum_name:ident: $req_enum_type:ident {
             $($req_var_tag:expr => $req_var_name:ident($req_var_type:ty)),*
         }),*
-        $(opt enum child $opt_enum_child_name:ident: $opt_enum_child_type:ident {
+        $(opt enum $opt_enum_name:ident: $opt_enum_type:ident {
             $($opt_var_tag:expr => $opt_var_name:ident($opt_var_type:ty)),*
         }),*
-        // $(rep enum child ),*
+        $(rep enum $rep_enum_name:ident: $rep_enum_type:ident {
+            $($rep_var_tag:expr => $rep_var_name:ident($rep_var_type:ty)),*
+        }),*
+
         $(contents: $contents_type:ty),*
+        $(opt contents: $opt_contents_type:ty),*
     }) => {
         #[derive(Debug, Clone)]
         pub struct $struct_name {
@@ -146,10 +253,12 @@ macro_rules! collada_element {
             $(pub $opt_child_name:  Option<$opt_child_type>,)*
             $(pub $rep_child_name:  Vec<$rep_child_type>,)*
 
-            $(pub $req_enum_child_name: $req_enum_child_type,)*
-            $(pub $opt_enum_child_name: Option<$opt_enum_child_type>,)*
+            $(pub $req_enum_name: $req_enum_type,)*
+            $(pub $opt_enum_name: Option<$opt_enum_type>,)*
+            $(pub $rep_enum_name: Vec<$rep_enum_type>,)*
 
             $(pub contents: $contents_type,)*
+            $(pub contents: Option<$opt_contents_type>,)*
         }
 
         impl ColladaElement for $struct_name {
@@ -161,10 +270,12 @@ macro_rules! collada_element {
                 $(let mut $opt_child_name = None;)*
                 $(let mut $rep_child_name = Vec::new();)*
 
-                $(let mut $req_enum_child_name = None;)*
-                $(let mut $opt_enum_child_name = None;)*
+                $(let mut $req_enum_name = None;)*
+                $(let mut $opt_enum_name = None;)*
+                $(let mut $rep_enum_name = Vec::new();)*
 
                 $(let mut contents: Option<$contents_type> = None;)*
+                $(let mut contents: Option<$opt_contents_type> = None;)*
 
                 loop {
                     let event = parser.next_event();
@@ -232,15 +343,15 @@ macro_rules! collada_element {
                         $(
                             $(
                                 StartElement($req_var_tag) => {
-                                    if $req_enum_child_name.is_some() {
+                                    if $req_enum_name.is_some() {
                                         return Err(Error::RepeatingChild {
                                             parent: String::from($tag_name),
-                                            child: String::from(stringify!($req_enum_child_name)),
+                                            child: String::from(stringify!($req_enum_name)),
                                         });
                                     }
 
                                     let child: $req_var_type = try!(parse_element(parser));
-                                    $req_enum_child_name = Some($req_enum_child_type::$req_var_name(child));
+                                    $req_enum_name = Some($req_enum_type::$req_var_name(child));
                                 }
                             )*
                         )*
@@ -249,30 +360,56 @@ macro_rules! collada_element {
                         $(
                             $(
                                 StartElement($opt_var_tag) => {
-                                    if $opt_enum_child_name.is_some() {
+                                    if $opt_enum_name.is_some() {
                                         return Err(Error::RepeatingChild {
                                             parent: String::from($tag_name),
-                                            child: String::from(stringify!($opt_enum_child_name)),
+                                            child: String::from(stringify!($opt_enum_name)),
                                         });
                                     }
 
                                     let child: $opt_var_type = try!(parse_element(parser));
-                                    $opt_enum_child_name = Some($opt_enum_child_type::$opt_var_name(child));
+                                    $opt_enum_name = Some($opt_enum_type::$opt_var_name(child));
                                 }
                             )*
                         )*
 
-                        // Text node.
-                        $(TextNode(text) => {
-                            if contents.is_some() {
-                                return Err(Error::RepeatingChild {
-                                    parent: String::from($tag_name),
-                                    child: String::from(stringify!(contents)),
-                                });
-                            }
+                        // Repeating enum children.
+                        $(
+                            $(
+                                StartElement($rep_var_tag) => {
+                                    let child: $rep_var_type = try!(parse_element(parser));
+                                    $rep_enum_name.push($rep_enum_type::$rep_var_name(child));
+                                }
+                            )*
+                        )*
 
-                            contents = Some(try!(parse_attrib::<$contents_type>(text)));
-                        })*
+                        // Required text node.
+                        $(
+                            TextNode(text) => {
+                                if contents.is_some() {
+                                    return Err(Error::RepeatingChild {
+                                        parent: String::from($tag_name),
+                                        child: String::from("contents"),
+                                    });
+                                }
+
+                                contents = Some(try!(parse_attrib::<$contents_type>(text)));
+                            }
+                        )*
+
+                        // Optional text node.
+                        $(
+                            TextNode(text) => {
+                                if contents.is_some() {
+                                    return Err(Error::RepeatingChild {
+                                        parent: String::from($tag_name),
+                                        child: String::from("contents"),
+                                    });
+                                }
+
+                                contents = Some(try!(parse_attrib::<$opt_contents_type>(text)));
+                            }
+                        )*
 
                         EndElement($tag_name) => break,
                         _ => return Err(illegal_event(event, $tag_name)),
@@ -298,10 +435,10 @@ macro_rules! collada_element {
                 )*
 
                 $(
-                    if $req_enum_child_name.is_none() {
+                    if $req_enum_name.is_none() {
                         return Err(Error::MissingRequiredChild {
                             parent: String::from($tag_name),
-                            child: String::from(stringify!($req_enum_child_name)),
+                            child: String::from(stringify!($req_enum_name)),
                         });
                     }
                 )*
@@ -320,10 +457,12 @@ macro_rules! collada_element {
                     $($opt_child_name:  $opt_child_name,)*
                     $($rep_child_name:  $rep_child_name,)*
 
-                    $($req_enum_child_name: $req_enum_child_name.unwrap(),)*
-                    $($opt_enum_child_name: $opt_enum_child_name,)*
+                    $($req_enum_name: $req_enum_name.unwrap(),)*
+                    $($opt_enum_name: $opt_enum_name,)*
+                    $($rep_enum_name: $rep_enum_name,)*
 
                     $(contents: contents.unwrap() as $contents_type,)*
+                    $(contents: contents as Option<$opt_contents_type>,)*
                 })
             }
         }
@@ -456,7 +595,7 @@ impl ColladaAttribute for AltitudeMode {
 }
 
 collada_element!("ambient", AmbientFx => {
-    req enum child child: FxCommonColorOrTextureType {
+    req enum child: FxCommonColorOrTextureType {
         "color" => Color(Color),
         "param" => Param(ParamReference),
         "texture" => Texture(Texture)
@@ -575,7 +714,7 @@ collada_element!("created", Created => {
 });
 
 collada_element!("diffuse", Diffuse => {
-    req enum child child: FxCommonColorOrTextureType {
+    req enum child: FxCommonColorOrTextureType {
         "color" => Color(Color),
         "param" => Param(ParamReference),
         "texture" => Texture(Texture)
@@ -643,7 +782,7 @@ impl ColladaElement for Effect {
 }
 
 collada_element!("emission", Emission => {
-    req enum child child: FxCommonColorOrTextureType {
+    req enum child: FxCommonColorOrTextureType {
         "color" => Color(Color),
         "param" => Param(ParamReference),
         "texture" => Texture(Texture)
@@ -757,7 +896,7 @@ collada_element!("geometry", Geometry => {
     opt child asset: Asset
     rep child extra: Extra
 
-    req enum child geometric_element: GeometricElement {
+    req enum geometric_element: GeometricElement {
         "convex_mesh" => ConvexMesh(ConvexMesh),
         "mesh" => Mesh(Mesh),
         "spline" => Spline(Spline),
@@ -774,23 +913,22 @@ collada_element!("geographic_location", GeographicLocation => {
 collada_element!("IDREF_array", IdrefArray => {});
 
 collada_element!("index_of_refraction", IndexOfRefraction => {
-    req enum child child: FxCommonFloatOrParamType {
+    req enum child: FxCommonFloatOrParamType {
         "float" => Float(Float),
         "param" => Param(ParamReference)
     }
 });
 
-#[derive(Debug, Clone, Default)]
-pub struct InputShared {
-    pub offset: u32,
-    pub semantic: String,
-    pub source: String,
-    pub set: Option<u32>,
-}
+collada_element!("input", InputShared => {
+    req attrib offset: usize,
+    req attrib semantic: String,
+    req attrib source: UriFragment
+    opt attrib set: usize
+});
 
 collada_element!("input", InputUnshared => {
     req attrib semantic: String,
-    req attrib source: String
+    req attrib source: UriFragment
 });
 
 #[derive(Debug, Clone, Default)]
@@ -946,6 +1084,26 @@ collada_element!("library_visual_scenes", LibraryVisualScenes => {
     rep child extra: Extra
 });
 
+collada_element!("lines", Lines => {
+    req attrib count: usize
+    opt attrib name: String,
+    opt attrib material: String
+
+    opt child p: Primitive
+    rep child input: InputShared,
+    rep child extra: Extra
+});
+
+collada_element!("linestrips", Linestrips => {
+    req attrib count: usize
+    opt attrib name: String,
+    opt attrib material: String
+
+    rep child input: InputShared,
+    rep child p: Primitive,
+    rep child extra: Extra
+});
+
 collada_element!("longitude", Longitude => {
     contents: f32
 });
@@ -968,55 +1126,21 @@ pub struct Matrix {
     pub data: [f32; 16],
 }
 
-#[derive(Debug, Clone, Default)]
-pub struct Mesh {
-    pub source: Vec<Source>,
-    pub vertices: Vertices,
-    pub primitive_elements: Vec<PrimitiveType>,
-    pub extra: Vec<Extra>,
-}
+collada_element!("mesh", Mesh => {
+    req child vertices: Vertices
+    rep child source: Source,
+    rep child extra: Extra
 
-impl ColladaElement for Mesh {
-    fn parse(parser: &mut ColladaParser) -> Result<Mesh> {
-        let mut mesh = Mesh {
-            source: Vec::new(),
-            vertices: Vertices::new(),
-            primitive_elements: Vec::new(),
-            extra: Vec::new(),
-        };
-
-        loop {
-            let event = parser.next_event();
-            match event {
-                StartElement("source") => {
-                    let source = try!(parse_element(parser));
-                    mesh.source.push(source);
-                },
-                StartElement("vertices") => {
-                    mesh.vertices = try!(parser.parse_vertices());
-                },
-                StartElement("lines") => parser.parse_lines(),
-                StartElement("linestrips") => parser.parse_linestrips(),
-                StartElement("polygons") => parser.parse_polygons(),
-                StartElement("polylist") => parser.parse_polylist(),
-                StartElement("triangles") => {
-                    let triangles = try!(parse_element(parser));
-                    mesh.primitive_elements.push(PrimitiveType::Triangles(triangles));
-                },
-                StartElement("trifans") => parser.parse_trifans(),
-                StartElement("tristrips") => parser.parse_tristrips(),
-                StartElement("extra") => {
-                    let extra = try!(parse_element(parser));
-                    mesh.extra.push(extra);
-                },
-                EndElement("mesh") => break,
-                _ => return Err(illegal_event(event, "mesh"))
-            }
-        }
-
-        Ok(mesh)
+    rep enum primitive_elements: PrimitiveElements {
+        "lines" => Lines(Lines),
+        "linestrips" => Linestrips(Linestrips),
+        "polygons" => Polygons(Polygons),
+        "polylist" => Polylist(Polylist),
+        "triangles" => Triangles(Triangles),
+        "trifans" => Trifans(Trifans),
+        "tristrips" => Tristrips(Tristrips)
     }
-}
+});
 
 collada_element!("modified", Modified => {
     contents: String
@@ -1249,17 +1373,79 @@ impl ColladaElement for Param {
 }
 
 collada_element!("param", ParamReference => {});
+
+collada_element!("ph", PrimitiveHoles => {
+    req child p: Primitive
+    rep child h: Primitive
+});
+
 collada_element!("phong", Phong => {});
 
+collada_element!("polygons", Polygons => {
+    req attrib count: usize
+    opt attrib material: String,
+    opt attrib name: String
+
+    rep child input: InputShared,
+    rep child p: Primitive,
+    rep child ph: PrimitiveHoles,
+    rep child extra: Extra
+});
+
+collada_element!("polylist", Polylist => {
+    req attrib count: usize
+    opt attrib name: String,
+    opt attrib material: String
+
+    opt child vcount: VCount,
+    opt child p: Primitive
+    rep child input: InputShared,
+    rep child extra: Extra
+});
+
+collada_element!("p", Primitive => {
+    contents: Vec<usize>
+});
+
 #[derive(Debug, Clone)]
-pub enum PrimitiveType {
-    Lines,
-    Linestrips,
-    Polygons,
-    Polylist,
+pub enum PrimitiveElements {
+    Lines(Lines),
+    Linestrips(Linestrips),
+    Polygons(Polygons),
+    Polylist(Polylist),
     Triangles(Triangles),
-    Trifans,
-    Tristrips
+    Trifans(Trifans),
+    Tristrips(Tristrips)
+}
+
+impl PrimitiveElements {
+    /// Retrieve the element's list of inputs regardless of the specific variant.
+    ///
+    /// All primitive elements have a list of <input> (shared) elements, so this utility method
+    /// retrieves the `&[InputShared]` from the primitive element regardless of the variant.
+    pub fn input(&self) -> &[InputShared] {
+        match *self {
+            PrimitiveElements::Lines(ref element)      => &*element.input,
+            PrimitiveElements::Linestrips(ref element) => &*element.input,
+            PrimitiveElements::Polygons(ref element)   => &*element.input,
+            PrimitiveElements::Polylist(ref element)   => &*element.input,
+            PrimitiveElements::Triangles(ref element)  => &*element.input,
+            PrimitiveElements::Trifans(ref element)    => &*element.input,
+            PrimitiveElements::Tristrips(ref element)  => &*element.input,
+        }
+    }
+
+    pub fn count(&self) -> usize {
+        match *self {
+            PrimitiveElements::Lines(ref element)      => element.count,
+            PrimitiveElements::Linestrips(ref element) => element.count,
+            PrimitiveElements::Polygons(ref element)   => element.count,
+            PrimitiveElements::Polylist(ref element)   => element.count,
+            PrimitiveElements::Triangles(ref element)  => element.count,
+            PrimitiveElements::Trifans(ref element)    => element.count,
+            PrimitiveElements::Tristrips(ref element)  => element.count,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -1288,7 +1474,7 @@ collada_element!("profile_COMMON", ProfileCommon => {
 });
 
 collada_element!("reflective", Reflective => {
-    req enum child child: FxCommonColorOrTextureType {
+    req enum child: FxCommonColorOrTextureType {
         "color" => Color(Color),
         "param" => Param(ParamReference),
         "texture" => Texture(Texture)
@@ -1296,7 +1482,7 @@ collada_element!("reflective", Reflective => {
 });
 
 collada_element!("reflectivity", Reflectivity => {
-    req enum child child: FxCommonFloatOrParamType {
+    req enum child: FxCommonFloatOrParamType {
         "float" => Float(Float),
         "param" => Param(ParamReference)
     }
@@ -1390,7 +1576,7 @@ collada_element!("source", Source => {
     opt child technique_common: TechniqueCommon<Accessor>
     rep child technique: TechniqueCore
 
-    opt enum child array_element: ArrayElement {
+    opt enum array_element: ArrayElement {
         "bool_array" => Bool(BoolArray),
         "float_array" => Float(FloatArray),
         "IDREF_array" => Idref(IdrefArray),
@@ -1465,7 +1651,7 @@ collada_element!("technique", TechniqueFxCommon => {
     opt child asset: Asset
     rep child extra: Extra
 
-    req enum child shader_element: ShaderElementCommon {
+    req enum shader_element: ShaderElementCommon {
         "constant" => Constant(ConstantFx),
         "lambert" => Lambert(Lambert),
         "phong" => Phong(Phong),
@@ -1498,7 +1684,7 @@ pub struct Translate;
 collada_element!("transparent", Transparent => {
     opt attrib opaque: Opaque
 
-    req enum child child: FxCommonColorOrTextureType {
+    req enum child: FxCommonColorOrTextureType {
         "color" => Color(Color),
         "param" => Param(ParamReference),
         "texture" => Texture(Texture)
@@ -1506,70 +1692,41 @@ collada_element!("transparent", Transparent => {
 });
 
 collada_element!("transparency", Transparency => {
-    req enum child child: FxCommonFloatOrParamType {
+    req enum child: FxCommonFloatOrParamType {
         "float" => Float(Float),
         "param" => Param(ParamReference)
     }
 });
 
-#[derive(Debug, Clone, Default)]
-pub struct Triangles {
-    pub name: Option<String>,
-    pub count: usize,
-    pub material: Option<String>,
-    pub input: Vec<InputShared>,
-    pub p: Option<Vec<usize>>,
-    pub extra: Vec<Extra>,
-}
+collada_element!("triangles", Triangles => {
+    req attrib count: usize
+    opt attrib name: String,
+    opt attrib material: String
 
-impl ColladaElement for Triangles {
-    fn parse(parser: &mut ColladaParser) -> Result<Triangles> {
-        let mut triangles = Triangles {
-            name: None,
-            count: 0,
-            material: None,
-            input: Vec::new(),
-            p: None,
-            extra: Vec::new(),
-        };
+    opt child p: Primitive
+    rep child input: InputShared,
+    rep child extra: Extra
+});
 
-        loop {
-            let event = parser.next_event();
-            match event {
-                Attribute("name", name_str) => {
-                    triangles.name = Some(name_str.to_string());
-                },
-                Attribute("count", count_str) => {
-                    triangles.count = try!(usize::from_str(count_str).map_err(|err| {
-                        Error::ParseIntError {
-                            text: String::from(count_str),
-                            error: err,
-                        }
-                    }));
-                },
-                Attribute("material", material_str) => {
-                    triangles.material = Some(String::from(material_str));
-                },
-                StartElement("input") => {
-                    let input = try!(parser.parse_input_shared());
-                    triangles.input.push(input);
-                },
-                StartElement("p") => {
-                    let p = try!(parser.parse_p());
-                    triangles.p = Some(p);
-                },
-                StartElement("extra") => {
-                    let extra = try!(parse_element(parser));
-                    triangles.extra.push(extra);
-                },
-                EndElement("triangles") => break,
-                _ => return Err(illegal_event(event, "triangles"))
-            }
-        }
+collada_element!("trifans", Trifans => {
+    req attrib count: usize
+    opt attrib name: String,
+    opt attrib material: String
 
-        Ok(triangles)
-    }
-}
+    rep child input: InputShared,
+    rep child p: Primitive,
+    rep child extra: Extra
+});
+
+collada_element!("tristrips", Tristrips => {
+    req attrib count: usize
+    opt attrib name: String,
+    opt attrib material: String
+
+    rep child input: InputShared,
+    rep child p: Primitive,
+    rep child extra: Extra
+});
 
 collada_element!("unit", Unit => {
     opt attrib name: String,
@@ -1604,22 +1761,45 @@ impl ColladaElement for UpAxis {
     }
 }
 
-#[derive(Debug, Clone, Default)]
-pub struct Vertices {
-    pub id: String,
-    pub name: Option<String>,
-    pub inputs: Vec<InputUnshared>,
-}
+#[derive(Debug, Clone)]
+pub struct UriFragment(String);
 
-impl Vertices {
-    pub fn new() -> Vertices {
-        Vertices {
-            id: String::new(),
-            name: None,
-            inputs: Vec::new(),
-        }
+impl Deref for UriFragment {
+    type Target = String;
+
+    fn deref(&self) -> &String {
+        &self.0
     }
 }
+
+impl DerefMut for UriFragment {
+    fn deref_mut(&mut self) -> &mut String {
+        &mut self.0
+    }
+}
+
+impl ColladaAttribute for UriFragment {
+    fn parse(text: &str) -> Result<UriFragment> {
+        if !text.starts_with("#") {
+            return Err(Error::InvalidUriFragment(String::from(text)));
+        }
+
+        let trimmed = text.trim_left_matches("#");
+        Ok(UriFragment(String::from(trimmed)))
+    }
+}
+
+collada_element!("vcount", VCount => {
+    contents: Vec<usize>
+});
+
+collada_element!("vertices", Vertices => {
+    req attrib id: String
+    opt attrib name: String
+
+    rep child input: InputUnshared,
+    rep child extra: Extra
+});
 
 collada_element!("visual_scene", VisualScene => {
     opt attrib id: String,
@@ -1721,39 +1901,6 @@ impl<'a> ColladaParser<'a> {
         }
 
         Ok(collada)
-    }
-
-    fn parse_input_shared(&mut self) -> Result<InputShared> {
-        let mut input = InputShared {
-            offset: u32::max_value(),
-            semantic: String::new(),
-            source: String::new(),
-            set: None
-        };
-
-        loop {
-            let event = self.next_event();
-            match event {
-                Attribute("offset", offset_str) => {
-                    input.offset = u32::from_str(offset_str).unwrap();
-                },
-                Attribute("semantic", semantic_str) => {
-                    input.semantic.push_str(semantic_str);
-                },
-                Attribute("source", source_str) => {
-                    input.semantic.push_str(source_str);
-                },
-                Attribute("set", set_str) => {
-                    input.set = Some(u32::from_str(set_str).unwrap());
-                },
-                EndElement("input") => break,
-                _ => return Err(illegal_event(event, "input (shared)"))
-            }
-        }
-
-        assert!(input.offset != u32::max_value());
-
-        Ok(input)
     }
 
     fn parse_instance_camera(&mut self) -> Result<InstanceCamera> {
@@ -1885,18 +2032,6 @@ impl<'a> ColladaParser<'a> {
         self.skip_to_end_element("library_physics_scenes");
     }
 
-    fn parse_lines(&mut self) {
-        println!("Skipping over <lines> element");
-        println!("Warning: <lines> is not yet supported by parse_collada");
-        self.skip_to_end_element("lines");
-    }
-
-    fn parse_linestrips(&mut self) {
-        println!("Skipping over <linestrips> element");
-        println!("Warning: <linestrips> is not yet supported by parse_collada");
-        self.skip_to_end_element("linestrips");
-    }
-
     fn parse_lookat(&mut self) -> Result<LookAt> {
         println!("Skipping over <lookat> element");
         println!("Warning: <lookat> is not yet supported by parse_collada");
@@ -1942,85 +2077,12 @@ impl<'a> ColladaParser<'a> {
         Ok(matrix)
     }
 
-    fn parse_p(&mut self) -> Result<Vec<usize>> {
-        let mut primitives: Option<Vec<usize>> = None;
-
-        loop {
-            let event = self.next_event();
-            match event {
-                TextNode(text) => {
-                    let data = text.split_whitespace().map(|word| {
-                        let value = match usize::from_str(word) {
-                            Err(error) => return panic!("Error while parsing <float_array>: {}", error), // TODO: Return an error instead of panicking.
-                            Ok(value) => value
-                        };
-                        value
-                    }).collect::<Vec<usize>>();
-
-                    primitives = Some(data);
-                },
-                EndElement("p") => break,
-                _ => return Err(illegal_event(event, "p"))
-            }
-        }
-
-        Ok(primitives.unwrap())
-    }
-
-    fn parse_polygons(&mut self) {
-        println!("Skipping over <polygons> element");
-        println!("Warning: <polygons> is not yet supported by parse_collada");
-        self.skip_to_end_element("polygons");
-    }
-
-    fn parse_polylist(&mut self) {
-        println!("Skipping over <polylist> element");
-        println!("Warning: <polylist> is not yet supported by parse_collada");
-        self.skip_to_end_element("polylist");
-    }
-
     fn parse_translate(&mut self) -> Result<Translate> {
         println!("Skipping over <translate> element");
         println!("Warning: <translate> is not yet supported by parse_collada");
         self.skip_to_end_element("translate");
 
         Ok(Translate)
-    }
-
-    fn parse_trifans(&mut self) {
-        println!("Skipping over <trifans> element");
-        println!("Warning: <trifans> is not yet supported by parse_collada");
-        self.skip_to_end_element("trifans");
-    }
-
-    fn parse_tristrips(&mut self) {
-        println!("Skipping over <tristrips> element");
-        println!("Warning: <tristrips> is not yet supported by parse_collada");
-        self.skip_to_end_element("tristrips");
-    }
-
-    fn parse_vertices(&mut self) -> Result<Vertices> {
-        let mut vertices = Vertices::new();
-
-        loop {
-            let event = self.next_event();
-            match event {
-                Attribute("id", id_str) => {
-                    vertices.id.push_str(id_str);
-                },
-                Attribute("name", name_str) => {
-                    vertices.name = Some(String::from(name_str));
-                },
-                StartElement("input") => {
-                    let input = try!(parse_element(self));
-                    vertices.inputs.push(input);
-                },
-                EndElement("vertices") => break,
-                _ => return Err(illegal_event(event, "vertices")),
-            }
-        }
-
-        Ok(vertices)
     }
 
     /// Consumes all events until the desired one is reached.

@@ -1,0 +1,6 @@
+[clog]
+repository = "https://github.com/excaliburHisSheath/gunship-rs"
+outfile = "CHANGELOG.md"
+
+[sections]
+"Features" = ["feature", "feat"]

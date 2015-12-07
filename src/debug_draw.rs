@@ -6,7 +6,7 @@ use std::sync::Mutex;
 use math::*;
 use polygon::Camera;
 use polygon::gl_render::{GLRender, ShaderProgram, GLMeshData};
-use polygon::geometry::Mesh;
+use polygon::geometry::*;
 use resource::ResourceManager;
 
 static mut instance: *const Mutex<DebugDrawInner> = 0 as *const _;
@@ -35,7 +35,7 @@ static CUBE_VERTS: [f32; 32] =
      -0.5,  0.5, -0.5, 1.0,
      -0.5, -0.5,  0.5, 1.0,
      -0.5, -0.5, -0.5, 1.0,];
-static CUBE_INDICES: [u32; 24] =
+static CUBE_INDICES: [MeshIndex; 24] =
     [0, 1,
      1, 3,
      3, 2,
@@ -178,8 +178,13 @@ impl Drop for DebugDraw {
 }
 
 /// Creates a mesh from a list of vertices and indices.
-fn build_mesh(renderer: &GLRender, vertices: &[f32], indices: &[u32]) -> GLMeshData {
-    let mesh = Mesh::from_raw_data(vertices, indices);
+fn build_mesh(renderer: &GLRender, vertices: &[f32], indices: &[MeshIndex]) -> GLMeshData {
+    let mesh = MeshBuilder::new()
+    .set_position_data(Point::slice_from_f32_slice(vertices))
+    .set_indices(indices)
+    .build()
+    .unwrap(); // TODO: Don't panic? I think in this case panicking is a bug in the engine and is pretty legit.
+
     renderer.gen_mesh(&mesh)
 }
 

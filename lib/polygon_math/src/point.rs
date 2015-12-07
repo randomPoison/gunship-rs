@@ -91,6 +91,16 @@ impl Point {
             slice::from_raw_parts(data, len * 4)
         }
     }
+
+    pub fn slice_from_f32_slice(raw: &[f32]) -> &[Point] {
+        assert!(raw.len() % 4 == 0, "To convert a slice of f32 to a slice of Point it must have a length that is a multiple of 4");
+
+        unsafe {
+            slice::from_raw_parts(
+                raw.as_ptr() as *const Point,
+                raw.len() / 4)
+        }
+    }
 }
 
 impl Sub for Point {

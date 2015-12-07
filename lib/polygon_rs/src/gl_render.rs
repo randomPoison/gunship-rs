@@ -69,7 +69,7 @@ impl GLRender {
 
         gl.buffer_data(
             BufferTarget::ArrayBuffer,
-            &*mesh.raw_data,
+            mesh.vertex_data(),
             BufferUsage::StaticDraw);
 
         let index_buffer = gl.gen_buffer();
@@ -77,7 +77,7 @@ impl GLRender {
 
         gl.buffer_data(
             BufferTarget::ElementArrayBuffer,
-            &*mesh.indices,
+            mesh.indices(),
             BufferUsage::StaticDraw);
 
         // Unbind buffers.
@@ -89,9 +89,9 @@ impl GLRender {
             vertex_array: vertex_array,
             vertex_buffer: vertex_buffer,
             index_buffer: index_buffer,
-            position_attribute: mesh.position_attribute,
-            normal_attribute: mesh.normal_attribute,
-            element_count: mesh.indices.len(),
+            position_attribute: mesh.position(),
+            normal_attribute: mesh.normal(),
+            element_count: mesh.indices().len(),
         }
     }
 
