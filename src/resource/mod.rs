@@ -219,7 +219,11 @@ impl ResourceManager {
             &visual_scene.node[0]
         };
 
-        let mut uri = String::from(resource);
+        let uri = String::from(resource);
+        self.instantiate_node(scene, node, uri)
+    }
+
+    fn instantiate_node(&self, scene: &Scene, node: &Node, mut uri: String) -> Result<Entity, String> {
         uri.push_str(".");
         uri.push_str(node.id.as_ref().unwrap());
 
@@ -234,6 +238,7 @@ impl ResourceManager {
 
         let entity = scene.create_entity();
         {
+            // TODO: Apply the node's transform to the entity transform.
             let mut transform_manager = scene.get_manager_mut::<TransformManager>();
             transform_manager.assign(entity);
             scene.get_manager_mut::<MeshManager>()
@@ -241,9 +246,14 @@ impl ResourceManager {
         }
 
         // Instantiate each of the children and set the current node as their parent.
+        for node in &node.nodes {
+            let child = try!(self.instantiate_node(scene, node, uri.clone()));
 
+            let mut transform_manager = scene.get_manager_mut::<TransformManager>();
+            transform_manager.set_child(entity, child);
+        }
 
-        return Ok(entity);
+        Ok(entity)
     }
 
     pub fn get_shader<P: AsRef<Path> + ::std::fmt::Debug>(
