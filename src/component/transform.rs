@@ -58,25 +58,48 @@ impl TransformManager {
     }
 
     pub fn set_child(&mut self, parent: Entity, child: Entity) {
-        // Remove old transform component.
-        let transform = self.remove(child);
-
         // Get the indices of the parent.
         let (parent_row, _) = *self.indices.get(&parent).unwrap();
         let child_row = parent_row + 1;
 
+        // Move the child and all of its children to the correct row.
+        self.set_row_recursive(child, Some(parent), child_row);
+    }
+
+    fn set_row_recursive(&mut self, entity: Entity, parent: Option<Entity>, new_row: usize) {
+        debug_assert!((new_row == 0 && parent.is_none()) || (new_row > 0 && parent.is_some()));
+
+        // Remove old transform component.
+        let (old_row, _) = *self.indices.get(&entity).unwrap(); // TODO: Don't panic? If this fails an invariant somewhere else was broken.
+        let transform = self.remove(entity);
+
         // Ensure that there are enough rows for the child.
-        while self.transforms.len() < child_row + 1 {
+        while self.transforms.len() < new_row + 1 {
             self.transforms.push(Vec::new());
             self.entities.push(Vec::new());
         }
+
         // Add the child to the correct row.
-        let child_index = self.transforms[child_row].len();
-        self.transforms[child_row].push(RefCell::new(transform));
-        self.entities[child_row].push((child, Some(parent)));
+        let child_index = self.transforms[new_row].len();
+        self.transforms[new_row].push(RefCell::new(transform));
+        self.entities[new_row].push((entity, parent));
 
         // Update the index map.
-        self.indices.insert(child, (child_row, child_index));
+        self.indices.insert(entity, (new_row, child_index));
+
+        // Update all children.
+        // TODO: We shouldn't have to clone the list here, but Rust's ownership rules mean that we
+        // can't compile if we don't (which is completely valid in this case). Once we implement a
+        // more stable form of storage for transform nodes (where pointers to nodes are stable)
+        // then cloning should be able to go away.
+        for (child, maybe_parent) in self.entities[old_row + 1].clone() {
+            match maybe_parent {
+                Some(parent) if parent == entity => {
+                    self.set_row_recursive(child, Some(entity), new_row + 1);
+                },
+                _ => {},
+            }
+        }
     }
 
     pub fn update_single(&self, entity: Entity) {
@@ -402,8 +425,9 @@ pub fn transform_update(scene: &Scene, _: f32) {
 
     let transform_manager = scene.get_manager::<TransformManager>();
 
+    let mut row = 0;
     for (transform_row, entity_row) in transform_manager.transforms.iter().zip(transform_manager.entities.iter()) {
-        for (transform, &(_, parent)) in transform_row.iter().zip(entity_row.iter()) {
+        for (transform, &(entity, parent)) in transform_row.iter().zip(entity_row.iter()) {
             // Retrieve the parent's transformation matrix, using the identity
             // matrix if the transform has no parent.
             match parent {
@@ -418,5 +442,7 @@ pub fn transform_update(scene: &Scene, _: f32) {
                 }
             };
         }
+
+        row += 1;
     }
 }
