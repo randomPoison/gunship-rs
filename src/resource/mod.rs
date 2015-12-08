@@ -219,7 +219,11 @@ impl ResourceManager {
             &visual_scene.node[0]
         };
 
-        let mut uri = String::from(resource);
+        let uri = String::from(resource);
+        self.instantiate_node(scene, node, uri)
+    }
+
+    fn instantiate_node(&self, scene: &Scene, node: &Node, mut uri: String) -> Result<Entity, String> {
         uri.push_str(".");
         uri.push_str(node.id.as_ref().unwrap());
 
@@ -233,11 +237,23 @@ impl ResourceManager {
         };
 
         let entity = scene.create_entity();
-        let mut transform_manager = scene.get_manager_mut::<TransformManager>();
-        transform_manager.assign(entity);
-        scene.get_manager_mut::<MeshManager>().give_mesh(entity, mesh_data);
+        {
+            // TODO: Apply the node's transform to the entity transform.
+            let mut transform_manager = scene.get_manager_mut::<TransformManager>();
+            transform_manager.assign(entity);
+            scene.get_manager_mut::<MeshManager>()
+                .give_mesh(entity, mesh_data);
+        }
 
-        return Ok(entity);
+        // Instantiate each of the children and set the current node as their parent.
+        for node in &node.nodes {
+            let child = try!(self.instantiate_node(scene, node, uri.clone()));
+
+            let mut transform_manager = scene.get_manager_mut::<TransformManager>();
+            transform_manager.set_child(entity, child);
+        }
+
+        Ok(entity)
     }
 
     pub fn get_shader<P: AsRef<Path> + ::std::fmt::Debug>(
@@ -287,14 +303,14 @@ impl ResourceManager {
 
     fn gen_mesh_from_node(&self, node: &collada::Node, uri: &str) -> Result<GLMeshData, String> {
         let geometry_name = {
-            if node.instance_geometries.len() == 0 {
+            if node.geometry_instances.len() == 0 {
                 return Err(format!("No geometry is identified by {}", uri));
             }
-            if node.instance_geometries.len() > 1 {
+            if node.geometry_instances.len() > 1 {
                 return Err(format!("More than one geometry is identified by {}", uri));
             }
 
-            let url = &node.instance_geometries[0].url;
+            let url = &node.geometry_instances[0].url;
             &url[1..] // Skip the leading "#" character that starts all URLs.
         };
 

@@ -224,12 +224,12 @@ macro_rules! collada_element {
     };
 
     ($tag_name:expr, $struct_name:ident => {
-        $(req attrib $req_attrib_name:ident: $req_attrib_type:ty),*
-        $(opt attrib $opt_attrib_name:ident: $opt_attrib_type:ty),*
+        $(req attrib $req_attrib_str:expr => $req_attrib_name:ident: $req_attrib_type:ty),*
+        $(opt attrib $opt_attrib_str:expr => $opt_attrib_name:ident: $opt_attrib_type:ty),*
 
-        $(req child  $req_child_name:ident:  $req_child_type:ty),*
-        $(opt child  $opt_child_name:ident:  $opt_child_type:ty),*
-        $(rep child  $rep_child_name:ident:  $rep_child_type:ty),*
+        $(req child  $req_child_str:expr => $req_child_name:ident:  $req_child_type:ty),*
+        $(opt child  $opt_child_str:expr => $opt_child_name:ident:  $opt_child_type:ty),*
+        $(rep child  $rep_child_str:expr => $rep_child_name:ident:  $rep_child_type:ty),*
 
         $(req enum $req_enum_name:ident: $req_enum_type:ident {
             $($req_var_tag:expr => $req_var_name:ident($req_var_type:ty)),*
@@ -282,7 +282,7 @@ macro_rules! collada_element {
                     match event {
 
                         // Required attributes.
-                        $(Attribute(stringify!($req_attrib_name), attrib_value) => {
+                        $(Attribute($req_attrib_str, attrib_value) => {
                             if $req_attrib_name.is_some() {
                                 return Err(Error::RepeatingChild {
                                     parent: String::from($tag_name),
@@ -295,7 +295,7 @@ macro_rules! collada_element {
                         },)*
 
                         // Optional attributes.
-                        $(Attribute(stringify!($opt_attrib_name), attrib_value) => {
+                        $(Attribute($opt_attrib_str, attrib_value) => {
                             if $opt_attrib_name.is_some() {
                                 return Err(Error::RepeatingChild {
                                     parent: String::from($tag_name),
@@ -308,7 +308,7 @@ macro_rules! collada_element {
                         },)*
 
                         // Required children.
-                        $(StartElement(stringify!($req_child_name)) => {
+                        $(StartElement($req_child_str) => {
                             if $req_child_name.is_some() {
                                 return Err(Error::RepeatingChild {
                                     parent: String::from($tag_name),
@@ -321,7 +321,7 @@ macro_rules! collada_element {
                         },)*
 
                         // Optional children.
-                        $(StartElement(stringify!($opt_child_name)) => {
+                        $(StartElement($opt_child_str) => {
                             if $opt_child_name.is_some() {
                                 return Err(Error::RepeatingChild {
                                     parent: String::from($tag_name),
@@ -334,7 +334,7 @@ macro_rules! collada_element {
                         },)*
 
                         // Repeating Children.
-                        $(StartElement(stringify!($rep_child_name)) => {
+                        $(StartElement($rep_child_str) => {
                             let child = try!(parse_element(parser));
                             $rep_child_name.push(child);
                         },)*
@@ -554,17 +554,17 @@ impl<T: std::str::FromStr> ColladaAttribute for Vec<T> {
 }
 
 collada_element!("accessor", Accessor => {
-    req attrib count:  usize,
-    req attrib source: String
+    req attrib "count" => count:  usize,
+    req attrib "source" => source: String
 
-    opt attrib offset: usize,
-    opt attrib stride: usize
+    opt attrib "offset" => offset: usize,
+    opt attrib "stride" => stride: usize
 
-    rep child param: Param
+    rep child "param" => param: Param
 });
 
 collada_element!("altitude", Altitude => {
-    req attrib mode: AltitudeMode
+    req attrib "mode" => mode: AltitudeMode
 
     contents: f32
 });
@@ -603,15 +603,15 @@ collada_element!("ambient", AmbientFx => {
 });
 
 collada_element!("animation", Animation => {
-    opt attrib id: String,
-    opt attrib name: String
+    opt attrib "id" => id: String,
+    opt attrib "name" => name: String
 
-    opt child asset: Asset
-    rep child animation: Animation,
-    rep child source: Source,
-    rep child sampler: Sampler,
-    rep child channel: Channel,
-    rep child extra: Extra
+    opt child "asset" => asset: Asset
+    rep child "animation" => animation: Animation,
+    rep child "source" => source: Source,
+    rep child "sampler" => sampler: Sampler,
+    rep child "channel" => channel: Channel,
+    rep child "extra" => extra: Extra
 });
 
 collada_element!("annotate", Annotate => {});
@@ -628,19 +628,19 @@ pub enum ArrayElement {
 }
 
 collada_element!("asset", Asset => {
-    req child created: Created,
-    req child modified: Modified
+    req child "created" => created: Created,
+    req child "modified" => modified: Modified
 
-    opt child coverage: Coverage,
-    opt child keywords: Keywords,
-    opt child revision: Revision,
-    opt child subject: Subject,
-    opt child title: Title,
-    opt child unit: Unit,
-    opt child up_axis: UpAxis
+    opt child "coverage" => coverage: Coverage,
+    opt child "keywords" => keywords: Keywords,
+    opt child "revision" => revision: Revision,
+    opt child "subject" => subject: Subject,
+    opt child "title" => title: Title,
+    opt child "unit" => unit: Unit,
+    opt child "up_axis" => up_axis: UpAxis
 
-    rep child contributor: Contributor,
-    rep child extra: Extra
+    rep child "contributor" => contributor: Contributor,
+    rep child "extra" => extra: Extra
 });
 
 collada_element!("author", Author => {
@@ -662,10 +662,10 @@ collada_element!("authoring_tool", AuthoringTool => {
 collada_element!("bind", Bind => {});
 
 collada_element!("bind_material", BindMaterial => {
-    req child technique_common: TechniqueCommon<InstanceMaterial>
-    rep child param: Param,
-    rep child technique: TechniqueCore,
-    rep child extra: Extra
+    req child "technique_common" => technique_common: TechniqueCommon<InstanceMaterial>
+    rep child "param" => param: Param,
+    rep child "technique" => technique: TechniqueCore,
+    rep child "extra" => extra: Extra
 });
 
 collada_element!("bind_vertex_input", BindVertexInput => {});
@@ -674,12 +674,12 @@ collada_element!("bool_array", BoolArray => {});
 collada_element!("brep", Brep => {});
 
 collada_element!("channel", Channel => {
-    req attrib source: String,
-    req attrib target: String
+    req attrib "source" => source: String,
+    req attrib "target" => target: String
 });
 
 collada_element!("color", Color => {
-    opt attrib sid: String
+    opt attrib "sid" => sid: String
 
     contents: Vec<f32>
 });
@@ -689,13 +689,13 @@ collada_element!("comments", Comments => {
 });
 
 collada_element!("contributor", Contributor => {
-    opt child author:         Author,
-    opt child author_email:   AuthorEmail,
-    opt child author_website: AuthorWebsite,
-    opt child authoring_tool: AuthoringTool,
-    opt child comments:       Comments,
-    opt child copyright:      Copyright,
-    opt child source_data:    SourceData
+    opt child "author" => author:         Author,
+    opt child "author_email" => author_email:   AuthorEmail,
+    opt child "author_website" => author_website: AuthorWebsite,
+    opt child "authoring_tool" => authoring_tool: AuthoringTool,
+    opt child "comments" => comments:       Comments,
+    opt child "copyright" => copyright:      Copyright,
+    opt child "source_data" => source_data:    SourceData
 });
 
 collada_element!("constant", ConstantFx => {});
@@ -706,7 +706,7 @@ collada_element!("copyright", Copyright => {
 });
 
 collada_element!("coverage", Coverage => {
-    opt child geographic_location: GeographicLocation
+    opt child "geographic_location" => geographic_location: GeographicLocation
 });
 
 collada_element!("created", Created => {
@@ -790,15 +790,15 @@ collada_element!("emission", Emission => {
 });
 
 collada_element!("evaluate_scene", EvaluateScene => {
-    opt attrib id: String,
-    opt attrib name: String,
-    opt attrib sid: String,
-    opt attrib enable: bool
+    opt attrib "id" => id: String,
+    opt attrib "name" => name: String,
+    opt attrib "sid" => sid: String,
+    opt attrib "enable" => enable: bool
 
-    opt child asset: Asset
+    opt child "asset" => asset: Asset
 
-    rep child render: Render,
-    rep child extra: Extra
+    rep child "render" => render: Render,
+    rep child "extra" => extra: Extra
 });
 
 #[derive(Debug, Clone, Default)]
@@ -854,16 +854,16 @@ impl ColladaElement for Extra {
 }
 
 collada_element!("float", Float => {
-    opt attrib sid: String
+    opt attrib "sid" => sid: String
     contents: f32
 });
 
 collada_element!("float_array", FloatArray => {
-    req attrib count: usize
-    opt attrib id: String,
-    opt attrib name: String,
-    opt attrib digits: usize,
-    opt attrib magnitude: isize
+    req attrib "count" => count: usize
+    opt attrib "id" => id: String,
+    opt attrib "name" => name: String,
+    opt attrib "digits" => digits: usize,
+    opt attrib "magnitude" => magnitude: isize
 
     contents: Vec<f32>
 });
@@ -890,11 +890,11 @@ pub enum GeometricElement {
 }
 
 collada_element!("geometry", Geometry => {
-    opt attrib id: String,
-    opt attrib name: String
+    opt attrib "id" => id: String,
+    opt attrib "name" => name: String
 
-    opt child asset: Asset
-    rep child extra: Extra
+    opt child "asset" => asset: Asset
+    rep child "extra" => extra: Extra
 
     req enum geometric_element: GeometricElement {
         "convex_mesh" => ConvexMesh(ConvexMesh),
@@ -905,9 +905,9 @@ collada_element!("geometry", Geometry => {
 });
 
 collada_element!("geographic_location", GeographicLocation => {
-    req child longitude: Longitude,
-    req child latitude: Latitude,
-    req child altitude: Altitude
+    req child "longitude" => longitude: Longitude,
+    req child "latitude" => latitude: Latitude,
+    req child "altitude" => altitude: Altitude
 });
 
 collada_element!("IDREF_array", IdrefArray => {});
@@ -920,66 +920,60 @@ collada_element!("index_of_refraction", IndexOfRefraction => {
 });
 
 collada_element!("input", InputShared => {
-    req attrib offset: usize,
-    req attrib semantic: String,
-    req attrib source: UriFragment
-    opt attrib set: usize
+    req attrib "offset" => offset: usize,
+    req attrib "semantic" => semantic: String,
+    req attrib "source" => source: UriFragment
+    opt attrib "set" => set: usize
 });
 
 collada_element!("input", InputUnshared => {
-    req attrib semantic: String,
-    req attrib source: UriFragment
+    req attrib "semantic" => semantic: String,
+    req attrib "source" => source: UriFragment
 });
 
-#[derive(Debug, Clone, Default)]
-pub struct InstanceCamera;
-
-#[derive(Debug, Clone, Default)]
-pub struct InstanceController;
+collada_element!("instance_camera", InstanceCamera => {});
+collada_element!("instance_controller", InstanceController => {});
 
 collada_element!("instance_effect", InstanceEffect => {
-    req attrib url: String
-    opt attrib sid: String,
-    opt attrib name: String
+    req attrib "url" => url: String
+    opt attrib "sid" => sid: String,
+    opt attrib "name" => name: String
 
-    rep child technique_hint: TechniqueHint,
-    rep child setparam: SetParam,
-    rep child extra: Extra
+    rep child "technique_hint" => technique_hint: TechniqueHint,
+    rep child "setparam" => setparam: SetParam,
+    rep child "extra" => extra: Extra
 });
 
-#[derive(Debug, Clone, Default)]
-pub struct InstanceGeometry {
-    pub sid: Option<String>,
-    pub name: Option<String>,
-    pub url: String,
-    pub bind_material: Option<BindMaterial>,
-    pub extras: Vec<Extra>,
-}
+collada_element!("instance_geometry", InstanceGeometry => {
+    req attrib "url" => url: String
+    opt attrib "sid" => sid: String,
+    opt attrib "name" => name: String
+
+    opt child "bind_material" => bind_material: BindMaterial
+    rep child "extra" => extras: Extra
+});
 
 collada_element!("instance_kinematic_scene", InstanceKinematicScene => {});
-
-#[derive(Debug, Clone, Default)]
-pub struct InstanceLight;
+collada_element!("instance_light", InstanceLight => {});
 
 collada_element!("instance_material", InstanceMaterial => {
-    req attrib target: String,
-    req attrib symbol: String
-    opt attrib sid: String,
-    opt attrib name: String
+    req attrib "target" => target: String,
+    req attrib "symbol" => symbol: String
+    opt attrib "sid" => sid: String,
+    opt attrib "name" => name: String
 
-    rep child bind: Bind,
-    rep child bind_vertex_input: BindVertexInput,
-    rep child extra: Extra
+    rep child "bind" => bind: Bind,
+    rep child "bind_vertex_input" => bind_vertex_input: BindVertexInput,
+    rep child "extra" => extra: Extra
 });
 
-#[derive(Debug, Clone, Default)]
-pub struct InstanceNode;
-
+collada_element!("instance_node", InstanceNode => {});
 collada_element!("instance_physics_scene", InstancePhysicsScene => {});
+
 collada_element!("instance_visual_scene", InstanceVisualScene => {
-    req attrib url: String
-    opt attrib sid: String,
-    opt attrib name: String
+    req attrib "url" => url: String
+    opt attrib "sid" => sid: String,
+    opt attrib "name" => name: String
 });
 
 collada_element!("int_array", IntArray => {});
@@ -989,13 +983,13 @@ collada_element!("keywords", Keywords => {
 });
 
 collada_element!("lambert", Lambert => {
-    opt child emission: Emission,
-    opt child ambient: AmbientFx,
-    opt child diffuse: Diffuse,
-    opt child reflectivity: Reflectivity,
-    opt child transparent: Transparent,
-    opt child transparency: Transparency,
-    opt child index_of_refraction: IndexOfRefraction
+    opt child "emission" => emission: Emission,
+    opt child "ambient" => ambient: AmbientFx,
+    opt child "diffuse" => diffuse: Diffuse,
+    opt child "reflectivity" => reflectivity: Reflectivity,
+    opt child "transparent" => transparent: Transparent,
+    opt child "transparency" => transparency: Transparency,
+    opt child "index_of_refraction" => index_of_refraction: IndexOfRefraction
 });
 
 collada_element!("latitude", Latitude => {
@@ -1007,12 +1001,12 @@ collada_element!("layer", Layer => {
 });
 
 collada_element!("library_animations", LibraryAnimations => {
-    opt attrib id: String,
-    opt attrib name: String
+    opt attrib "id" => id: String,
+    opt attrib "name" => name: String
 
-    opt child asset: Asset
-    rep child animation: Animation,
-    rep child extra: Extra
+    opt child "asset" => asset: Asset
+    rep child "animation" => animation: Animation,
+    rep child "extra" => extra: Extra
 });
 
 #[derive(Debug, Clone, Default)]
@@ -1025,25 +1019,25 @@ pub struct LibraryCameras;
 pub struct LibraryControllers;
 
 collada_element!("library_effects", LibraryEffects => {
-    opt attrib id: String,
-    opt attrib name: String
+    opt attrib "id" => id: String,
+    opt attrib "name" => name: String
 
-    opt child asset: Asset
-    rep child effect: Effect,
-    rep child extra: Extra
+    opt child "asset" => asset: Asset
+    rep child "effect" => effect: Effect,
+    rep child "extra" => extra: Extra
 });
 
 #[derive(Debug, Clone, Default)]
 pub struct LibraryForceFields;
 
 collada_element!("library_geometries", LibraryGeometries => {
-    opt attrib id: String,
-    opt attrib name: String
+    opt attrib "id" => id: String,
+    opt attrib "name" => name: String
 
-    opt child asset: Asset
+    opt child "asset" => asset: Asset
 
-    rep child geometry: Geometry,
-    rep child extra: Extra
+    rep child "geometry" => geometry: Geometry,
+    rep child "extra" => extra: Extra
 });
 
 #[derive(Debug, Clone, Default)]
@@ -1053,13 +1047,13 @@ pub struct LibraryImages;
 pub struct LibraryLights;
 
 collada_element!("library_materials", LibraryMaterials => {
-    opt attrib id: String,
-    opt attrib name: String
+    opt attrib "id" => id: String,
+    opt attrib "name" => name: String
 
-    opt child asset: Asset
+    opt child "asset" => asset: Asset
 
-    rep child material: Material,
-    rep child extra: Extra
+    rep child "material" => material: Material,
+    rep child "extra" => extra: Extra
 });
 
 #[derive(Debug, Clone, Default)]
@@ -1075,61 +1069,60 @@ pub struct LibraryPhysicsModels;
 pub struct LibraryPhysicsScenes;
 
 collada_element!("library_visual_scenes", LibraryVisualScenes => {
-    opt attrib id: String,
-    opt attrib name: String
+    opt attrib "id" => id: String,
+    opt attrib "name" => name: String
 
-    opt child asset: Asset
+    opt child "asset" => asset: Asset
 
-    rep child visual_scene: VisualScene,
-    rep child extra: Extra
+    rep child "visual_scene" => visual_scene: VisualScene,
+    rep child "extra" => extra: Extra
 });
 
 collada_element!("lines", Lines => {
-    req attrib count: usize
-    opt attrib name: String,
-    opt attrib material: String
+    req attrib "count" => count: usize
+    opt attrib "name" => name: String,
+    opt attrib "material" => material: String
 
-    opt child p: Primitive
-    rep child input: InputShared,
-    rep child extra: Extra
+    opt child "p" => p: Primitive
+    rep child "input" => input: InputShared,
+    rep child "extra" => extra: Extra
 });
 
 collada_element!("linestrips", Linestrips => {
-    req attrib count: usize
-    opt attrib name: String,
-    opt attrib material: String
+    req attrib "count" => count: usize
+    opt attrib "name" => name: String,
+    opt attrib "material" => material: String
 
-    rep child input: InputShared,
-    rep child p: Primitive,
-    rep child extra: Extra
+    rep child "input" => input: InputShared,
+    rep child "p" => p: Primitive,
+    rep child "extra" => extra: Extra
 });
 
 collada_element!("longitude", Longitude => {
     contents: f32
 });
 
-#[derive(Debug, Clone, Default)]
-pub struct LookAt;
+collada_element!("lookat", LookAt => {});
 
 collada_element!("material", Material => {
-    opt attrib id: String,
-    opt attrib name: String
+    opt attrib "id" => id: String,
+    opt attrib "name" => name: String
 
-    req child instance_effect: InstanceEffect
-    opt child asset: Asset
-    rep child extra: Extra
+    req child "instance_effect" => instance_effect: InstanceEffect
+    opt child "asset" => asset: Asset
+    rep child "extra" => extra: Extra
 });
 
-#[derive(Debug, Clone, Default)]
-pub struct Matrix {
-    pub sid: Option<String>,
-    pub data: [f32; 16],
-}
+collada_element!("matrix", Matrix => {
+    opt attrib "sid" => sid: String
+
+    contents: Vec<f32>
+});
 
 collada_element!("mesh", Mesh => {
-    req child vertices: Vertices
-    rep child source: Source,
-    rep child extra: Extra
+    req child "vertices" => vertices: Vertices
+    rep child "source" => source: Source,
+    rep child "extra" => extra: Extra
 
     rep enum primitive_elements: PrimitiveElements {
         "lines" => Lines(Lines),
@@ -1147,135 +1140,39 @@ collada_element!("modified", Modified => {
 });
 
 collada_element!("Name_array", NameArray => {
-    req attrib count: usize
-    opt attrib id: String,
-    opt attrib name: String
+    req attrib "count" => count: usize
+    opt attrib "id" => id: String,
+    opt attrib "name" => name: String
 
     contents: Vec<String>
 });
+
 collada_element!("newparam", NewParam => {});
 
-#[derive(Debug, Clone, Default)]
-pub struct Node {
-    pub id: Option<String>,
-    pub name: Option<String>,
-    pub sid: Option<String>,
-    pub node_type: Option<NodeType>,
-    pub layers: Vec<String>,
-    pub asset: Option<Asset>,
-    pub transformations: Vec<TransformationElement>,
-    pub instance_cameras: Vec<InstanceCamera>,
-    pub instance_controllers: Vec<InstanceController>,
-    pub instance_geometries: Vec<InstanceGeometry>,
-    pub instance_lights: Vec<InstanceLight>,
-    pub instance_nodes: Vec<InstanceNode>,
-    pub nodes: Vec<Node>,
-    pub extras: Vec<Extra>,
-}
+collada_element!("node", Node => {
+    opt attrib "id" => id:    String,
+    opt attrib "name" => name:  String,
+    opt attrib "sid" => sid:   String,
+    opt attrib "type" => node_type:  NodeType,
+    opt attrib "layer" => layer: String
 
-impl ColladaElement for Node {
-    fn parse(parser: &mut ColladaParser) -> Result<Node> {
-        let mut node = Node {
-            id: None,
-            name: None,
-            sid: None,
-            node_type: None,
-            layers: Vec::new(),
-            asset: None,
-            transformations: Vec::new(),
-            instance_cameras: Vec::new(),
-            instance_controllers: Vec::new(),
-            instance_geometries: Vec::new(),
-            instance_lights: Vec::new(),
-            instance_nodes: Vec::new(),
-            nodes: Vec::new(),
-            extras: Vec::new(),
-        };
+    rep child "asset" => assets: Asset,
+    rep child "node" => nodes: Node,
+    rep child "instance_camera" => camera_instances: InstanceCamera,
+    rep child "instance_geometry" => geometry_instances: InstanceGeometry,
+    rep child "instance_light" => light_instances: InstanceLight,
+    rep child "instance_node" => node_instances: InstanceNode,
+    rep child "extra" => extra: Extra
 
-        loop {
-            let event = parser.next_event();
-            match event {
-                Attribute("id", id_str) => {
-                    node.id = Some(String::from(id_str));
-                },
-                Attribute("name", name_str) => {
-                    node.name = Some(String::from(name_str));
-                },
-                Attribute("sid", sid_name) => {
-                    node.sid = Some(String::from(sid_name));
-                },
-                Attribute("type", type_str) => {
-                    node.node_type = Some(try!(parse_attrib(type_str)));
-                },
-                Attribute("layer", layer_str) => {
-                    for layer in layer_str.split(" ") {
-                        node.layers.push(String::from(layer));
-                    }
-                },
-                StartElement("asset") => {
-                    let asset = try!(parse_element(parser));
-                    node.asset = Some(asset);
-                },
-                StartElement("lookat") => {
-                    let lookat = try!(parser.parse_lookat());
-                    node.transformations.push(TransformationElement::LookAt(lookat));
-                },
-                StartElement("matrix") => {
-                    let matrix = try!(parser.parse_matrix());
-                    node.transformations.push(TransformationElement::Matrix(matrix));
-                },
-                StartElement("rotate") => {
-                    let rotate = try!(parse_element(parser));
-                    node.transformations.push(TransformationElement::Rotate(rotate));
-                },
-                StartElement("scale") => {
-                    let scale = try!(parse_element(parser));
-                    node.transformations.push(TransformationElement::Scale(scale));
-                },
-                StartElement("skew") => {
-                    let skew = try!(parse_element(parser));
-                    node.transformations.push(TransformationElement::Skew(skew));
-                },
-                StartElement("translate") => {
-                    let translate = try!(parser.parse_translate());
-                    node.transformations.push(TransformationElement::Translate(translate));
-                },
-                StartElement("instance_camera") => {
-                    let instance_camera = try!(parser.parse_instance_camera());
-                    node.instance_cameras.push(instance_camera);
-                },
-                StartElement("instance_controller") => {
-                    let instance_controller = try!(parser.parse_instance_controller());
-                    node.instance_controllers.push(instance_controller);
-                },
-                StartElement("instance_geometry") => {
-                    let instance_geometry = try!(parser.parse_instance_geometry());
-                    node.instance_geometries.push(instance_geometry);
-                },
-                StartElement("instance_light") => {
-                    let instance_light = try!(parser.parse_instance_light());
-                    node.instance_lights.push(instance_light);
-                },
-                StartElement("instance_node") => {
-                    let instance_node = try!(parser.parse_instance_node());
-                    node.instance_nodes.push(instance_node);
-                },
-                StartElement("node") => {
-                    let child_node = try!(parse_element(parser));
-                    node.nodes.push(child_node);
-                },
-                StartElement("extra") => {
-                    let extra = try!(parse_element(parser));
-                    node.extras.push(extra);
-                },
-                EndElement("node") => break,
-                _ => return Err(illegal_event(event, "node")),
-            }
-        }
-
-        Ok(node)
+    rep enum transforms: TransformationElement {
+        "lookat"    => LookAt(LookAt),
+        "matrix"    => Matrix(Matrix),
+        "rotate"    => Rotate(Rotate),
+        "scale"     => Scale(Scale),
+        "skew"      => Skew(Skew),
+        "translate" => Translate(Translate)
     }
-}
+});
 
 #[derive(Debug, Clone)]
 pub enum NodeType {
@@ -1375,32 +1272,32 @@ impl ColladaElement for Param {
 collada_element!("param", ParamReference => {});
 
 collada_element!("ph", PrimitiveHoles => {
-    req child p: Primitive
-    rep child h: Primitive
+    req child "p" => p: Primitive
+    rep child "h" => h: Primitive
 });
 
 collada_element!("phong", Phong => {});
 
 collada_element!("polygons", Polygons => {
-    req attrib count: usize
-    opt attrib material: String,
-    opt attrib name: String
+    req attrib "count" => count: usize
+    opt attrib "material" => material: String,
+    opt attrib "name" => name: String
 
-    rep child input: InputShared,
-    rep child p: Primitive,
-    rep child ph: PrimitiveHoles,
-    rep child extra: Extra
+    rep child "input" => input: InputShared,
+    rep child "p" => p: Primitive,
+    rep child "ph" => ph: PrimitiveHoles,
+    rep child "extra" => extra: Extra
 });
 
 collada_element!("polylist", Polylist => {
-    req attrib count: usize
-    opt attrib name: String,
-    opt attrib material: String
+    req attrib "count" => count: usize
+    opt attrib "name" => name: String,
+    opt attrib "material" => material: String
 
-    opt child vcount: VCount,
-    opt child p: Primitive
-    rep child input: InputShared,
-    rep child extra: Extra
+    opt child "vcount" => vcount: VCount,
+    opt child "p" => p: Primitive
+    rep child "input" => input: InputShared,
+    rep child "extra" => extra: Extra
 });
 
 collada_element!("p", Primitive => {
@@ -1465,12 +1362,12 @@ collada_element!("profile_GLES2", ProfileGles2 => {});
 collada_element!("profile_GLSL", ProfileGlsl => {});
 
 collada_element!("profile_COMMON", ProfileCommon => {
-    opt attrib id: String
+    opt attrib "id" => id: String
 
-    req child technique: TechniqueFxCommon
-    opt child asset: Asset
-    rep child newparam: NewParam,
-    rep child extra: Extra
+    req child "technique" => technique: TechniqueFxCommon
+    opt child "asset" => asset: Asset
+    rep child "newparam" => newparam: NewParam,
+    rep child "extra" => extra: Extra
 });
 
 collada_element!("reflective", Reflective => {
@@ -1489,14 +1386,14 @@ collada_element!("reflectivity", Reflectivity => {
 });
 
 collada_element!("render", Render => {
-    opt attrib name: String,
-    opt attrib sid: String,
-    opt attrib camera_node: String
+    opt attrib "name" => name: String,
+    opt attrib "sid" => sid: String,
+    opt attrib "camera_node" => camera_node: String
 
-    opt child instance_material: InstanceMaterial
+    opt child "instance_material" => instance_material: InstanceMaterial
 
-    rep child layer: Layer,
-    rep child extra: Extra
+    rep child "layer" => layer: Layer,
+    rep child "extra" => extra: Extra
 });
 
 collada_element!("revision", Revision => {
@@ -1506,11 +1403,11 @@ collada_element!("revision", Revision => {
 collada_element!("rotate", Rotate => {});
 
 collada_element!("sampler", Sampler => {
-    opt attrib id: String,
-    opt attrib pre_behavior: SamplerBehavior,
-    opt attrib post_behavior: SamplerBehavior
+    opt attrib "id" => id: String,
+    opt attrib "pre_behavior" => pre_behavior: SamplerBehavior,
+    opt attrib "post_behavior" => post_behavior: SamplerBehavior
 
-    rep child input: InputUnshared
+    rep child "input" => input: InputUnshared
 });
 
 #[derive(Debug, Clone)]
@@ -1549,10 +1446,10 @@ impl ColladaAttribute for SamplerBehavior {
 collada_element!("scale", Scale => {});
 
 collada_element!("scene", Scene => {
-    opt child instance_visual_scene: InstanceVisualScene,
-    opt child instance_kinematic_scene: InstanceKinematicScene
-    rep child instance_physics_scene: InstancePhysicsScene,
-    rep child extra: Extra
+    opt child "instance_visual_scene" => instance_visual_scene: InstanceVisualScene,
+    opt child "instance_kinematic_scene" => instance_kinematic_scene: InstanceKinematicScene
+    rep child "instance_physics_scene" => instance_physics_scene: InstancePhysicsScene,
+    rep child "extra" => extra: Extra
 });
 
 collada_element!("setparam", SetParam => {});
@@ -1569,12 +1466,12 @@ collada_element!("SIDREF_array", SidrefArray => {});
 collada_element!("skew", Skew => {});
 
 collada_element!("source", Source => {
-    req attrib id: String
-    opt attrib name: String
+    req attrib "id" => id: String
+    opt attrib "name" => name: String
 
-    opt child asset: Asset,
-    opt child technique_common: TechniqueCommon<Accessor>
-    rep child technique: TechniqueCore
+    opt child "asset" => asset: Asset,
+    opt child "technique_common" => technique_common: TechniqueCommon<Accessor>
+    rep child "technique" => technique: TechniqueCore
 
     opt enum array_element: ArrayElement {
         "bool_array" => Bool(BoolArray),
@@ -1645,11 +1542,11 @@ impl ColladaElement for TechniqueCore {
 }
 
 collada_element!("technique", TechniqueFxCommon => {
-    req attrib sid: String
-    opt attrib id:  String
+    req attrib "sid" => sid: String
+    opt attrib "id" => id:  String
 
-    opt child asset: Asset
-    rep child extra: Extra
+    opt child "asset" => asset: Asset
+    rep child "extra" => extra: Extra
 
     req enum shader_element: ShaderElementCommon {
         "constant" => Constant(ConstantFx),
@@ -1678,11 +1575,10 @@ pub enum TransformationElement {
     Translate(Translate),
 }
 
-#[derive(Debug, Clone, Default)]
-pub struct Translate;
+collada_element!("translate", Translate => {});
 
 collada_element!("transparent", Transparent => {
-    opt attrib opaque: Opaque
+    opt attrib "opaque" => opaque: Opaque
 
     req enum child: FxCommonColorOrTextureType {
         "color" => Color(Color),
@@ -1699,38 +1595,38 @@ collada_element!("transparency", Transparency => {
 });
 
 collada_element!("triangles", Triangles => {
-    req attrib count: usize
-    opt attrib name: String,
-    opt attrib material: String
+    req attrib "count" => count: usize
+    opt attrib "name" => name: String,
+    opt attrib "material" => material: String
 
-    opt child p: Primitive
-    rep child input: InputShared,
-    rep child extra: Extra
+    opt child "p" => p: Primitive
+    rep child "input" => input: InputShared,
+    rep child "extra" => extra: Extra
 });
 
 collada_element!("trifans", Trifans => {
-    req attrib count: usize
-    opt attrib name: String,
-    opt attrib material: String
+    req attrib "count" => count: usize
+    opt attrib "name" => name: String,
+    opt attrib "material" => material: String
 
-    rep child input: InputShared,
-    rep child p: Primitive,
-    rep child extra: Extra
+    rep child "input" => input: InputShared,
+    rep child "p" => p: Primitive,
+    rep child "extra" => extra: Extra
 });
 
 collada_element!("tristrips", Tristrips => {
-    req attrib count: usize
-    opt attrib name: String,
-    opt attrib material: String
+    req attrib "count" => count: usize
+    opt attrib "name" => name: String,
+    opt attrib "material" => material: String
 
-    rep child input: InputShared,
-    rep child p: Primitive,
-    rep child extra: Extra
+    rep child "input" => input: InputShared,
+    rep child "p" => p: Primitive,
+    rep child "extra" => extra: Extra
 });
 
 collada_element!("unit", Unit => {
-    opt attrib name: String,
-    opt attrib meter: f32
+    opt attrib "name" => name: String,
+    opt attrib "meter" => meter: f32
 });
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1794,22 +1690,22 @@ collada_element!("vcount", VCount => {
 });
 
 collada_element!("vertices", Vertices => {
-    req attrib id: String
-    opt attrib name: String
+    req attrib "id" => id: String
+    opt attrib "name" => name: String
 
-    rep child input: InputUnshared,
-    rep child extra: Extra
+    rep child "input" => input: InputUnshared,
+    rep child "extra" => extra: Extra
 });
 
 collada_element!("visual_scene", VisualScene => {
-    opt attrib id: String,
-    opt attrib name: String
+    opt attrib "id" => id: String,
+    opt attrib "name" => name: String
 
-    opt child asset: Asset
+    opt child "asset" => asset: Asset
 
-    rep child node: Node,
-    rep child evaluate_scene: EvaluateScene,
-    rep child extra: Extra
+    rep child "node" => node: Node,
+    rep child "evaluate_scene" => evaluate_scene: EvaluateScene,
+    rep child "extra" => extra: Extra
 });
 
 pub struct ColladaParser<'a> {
@@ -1903,75 +1799,6 @@ impl<'a> ColladaParser<'a> {
         Ok(collada)
     }
 
-    fn parse_instance_camera(&mut self) -> Result<InstanceCamera> {
-        println!("Skipping over <instance_camera> element");
-        println!("Warning: <instance_camera> is not yet supported by parse_collada");
-        self.skip_to_end_element("instance_camera");
-
-        Ok(InstanceCamera)
-    }
-
-    fn parse_instance_controller(&mut self) -> Result<InstanceController> {
-        println!("Skipping over <instance_controller> element");
-        println!("Warning: <instance_controller> is not yet supported by parse_collada");
-        self.skip_to_end_element("instance_controller");
-
-        Ok(InstanceController)
-    }
-
-    fn parse_instance_geometry(&mut self) -> Result<InstanceGeometry> {
-        let mut instance_geometry = InstanceGeometry {
-            sid: None,
-            name: None,
-            url: String::new(),
-            bind_material: None,
-            extras: Vec::new(),
-        };
-
-        loop {
-            let event = self.next_event();
-            match event {
-                Attribute("sid", sid_str) => {
-                    instance_geometry.sid = Some(String::from(sid_str));
-                },
-                Attribute("name", name_str) => {
-                    instance_geometry.name = Some(String::from(name_str));
-                },
-                Attribute("url", url_str) => {
-                    instance_geometry.url.push_str(url_str);
-                },
-                StartElement("bind_material") => {
-                    let bind_material = try!(parse_element(self));
-                    instance_geometry.bind_material = Some(bind_material);
-                },
-                StartElement("extra") => {
-                    let extra = try!(parse_element(self));
-                    instance_geometry.extras.push(extra);
-                },
-                EndElement("instance_geometry") => break,
-                _ => return Err(illegal_event(event, "instance_geometry")),
-            }
-        }
-
-        Ok(instance_geometry)
-    }
-
-    fn parse_instance_light(&mut self) -> Result<InstanceLight> {
-        println!("Skipping over <instance_light> element");
-        println!("Warning: <instance_light> is not yet supported by parse_collada");
-        self.skip_to_end_element("instance_light");
-
-        Ok(InstanceLight)
-    }
-
-    fn parse_instance_node(&mut self) -> Result<InstanceNode> {
-        println!("Skipping over <instance_node> element");
-        println!("Warning: <instance_node> is not yet supported by parse_collada");
-        self.skip_to_end_element("instance_node");
-
-        Ok(InstanceNode)
-    }
-
     fn parse_library_animation_clips(&mut self) {
         println!("Skipping over <library_animation_clips> element");
         println!("Warning: <library_animation_clips> is not yet supported by parse_collada");
@@ -2030,59 +1857,6 @@ impl<'a> ColladaParser<'a> {
         println!("Skipping over <library_physics_scenes> element");
         println!("Warning: <library_physics_scenes> is not yet supported by parse_collada");
         self.skip_to_end_element("library_physics_scenes");
-    }
-
-    fn parse_lookat(&mut self) -> Result<LookAt> {
-        println!("Skipping over <lookat> element");
-        println!("Warning: <lookat> is not yet supported by parse_collada");
-        self.skip_to_end_element("lookat");
-
-        Ok(LookAt)
-    }
-
-    fn parse_matrix(&mut self) -> Result<Matrix> {
-        let mut matrix = Matrix {
-            sid: None,
-            data: [0.0; 16],
-        };
-
-        loop {
-            let event = self.next_event();
-            match event {
-                Attribute("sid", sid_str) => {
-                    matrix.sid = Some(String::from(sid_str));
-                },
-                TextNode(matrix_str) => {
-                    let f32_iter = matrix_str.split_whitespace().map(|word| {
-                        match f32::from_str(word) {
-                            Err(error) => return Err(Error::ParseFloatError {
-                                text: String::from(word),
-                                error: error,
-                            }),
-                            Ok(value) => Ok(value)
-                        }
-                    });
-                    for (data_val, result_f32) in matrix.data.iter_mut().zip(f32_iter) {
-                        match result_f32 {
-                            Ok(val) => *data_val = val,
-                            Err(error) => return Err(error),
-                        }
-                    }
-                },
-                EndElement("matrix") => break,
-                _ => return Err(illegal_event(event, "matrix")),
-            }
-        }
-
-        Ok(matrix)
-    }
-
-    fn parse_translate(&mut self) -> Result<Translate> {
-        println!("Skipping over <translate> element");
-        println!("Warning: <translate> is not yet supported by parse_collada");
-        self.skip_to_end_element("translate");
-
-        Ok(Translate)
     }
 
     /// Consumes all events until the desired one is reached.
