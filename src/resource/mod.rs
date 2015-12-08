@@ -233,9 +233,15 @@ impl ResourceManager {
         };
 
         let entity = scene.create_entity();
-        let mut transform_manager = scene.get_manager_mut::<TransformManager>();
-        transform_manager.assign(entity);
-        scene.get_manager_mut::<MeshManager>().give_mesh(entity, mesh_data);
+        {
+            let mut transform_manager = scene.get_manager_mut::<TransformManager>();
+            transform_manager.assign(entity);
+            scene.get_manager_mut::<MeshManager>()
+                .give_mesh(entity, mesh_data);
+        }
+
+        // Instantiate each of the children and set the current node as their parent.
+
 
         return Ok(entity);
     }
@@ -287,14 +293,14 @@ impl ResourceManager {
 
     fn gen_mesh_from_node(&self, node: &collada::Node, uri: &str) -> Result<GLMeshData, String> {
         let geometry_name = {
-            if node.instance_geometries.len() == 0 {
+            if node.geometry_instances.len() == 0 {
                 return Err(format!("No geometry is identified by {}", uri));
             }
-            if node.instance_geometries.len() > 1 {
+            if node.geometry_instances.len() > 1 {
                 return Err(format!("More than one geometry is identified by {}", uri));
             }
 
-            let url = &node.instance_geometries[0].url;
+            let url = &node.geometry_instances[0].url;
             &url[1..] // Skip the leading "#" character that starts all URLs.
         };
 
