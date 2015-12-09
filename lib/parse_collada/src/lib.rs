@@ -617,6 +617,23 @@ collada_element!("animation", Animation => {
 collada_element!("annotate", Annotate => {});
 
 #[derive(Debug, Clone)]
+pub enum AnyUri {
+    Local(UriFragment),
+    External(String),
+}
+
+impl ColladaAttribute for AnyUri {
+    fn parse(text: &str) -> Result<AnyUri> {
+        if text.starts_with("#") {
+            let uri_fragment = try!(parse_attrib(text));
+            Ok(AnyUri::Local(uri_fragment))
+        } else {
+            Ok(AnyUri::External(String::from(text)))
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub enum ArrayElement {
     Idref(IdrefArray),
     Name(NameArray),
@@ -945,7 +962,7 @@ collada_element!("instance_effect", InstanceEffect => {
 });
 
 collada_element!("instance_geometry", InstanceGeometry => {
-    req attrib "url" => url: String
+    req attrib "url" => url: AnyUri
     opt attrib "sid" => sid: String,
     opt attrib "name" => name: String
 
@@ -1658,7 +1675,7 @@ impl ColladaElement for UpAxis {
 }
 
 #[derive(Debug, Clone)]
-pub struct UriFragment(String);
+pub struct UriFragment(pub String);
 
 impl Deref for UriFragment {
     type Target = String;
