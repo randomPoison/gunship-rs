@@ -48,7 +48,11 @@ impl MeshManager {
     }
 
     pub fn assign(&mut self, entity: Entity, path_text: &str) -> &Mesh {
-        let mesh = self.resource_manager.get_mesh(path_text).unwrap();
+        let mesh =
+            self.resource_manager
+            .get_gpu_mesh(path_text)
+            .ok_or_else(|| format!("ERROR: Unable to assign mesh with uri {}", path_text))
+            .unwrap(); // OK to panic here, indicates a bug in gameplay code.
         self.give_mesh(entity, mesh)
     }
 
