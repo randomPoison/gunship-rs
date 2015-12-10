@@ -16,7 +16,7 @@ pub struct Input {
     mouse_down: [bool; MAX_SUPPORTED_MOUSE_BUTTONS],
     mouse_pressed: [bool; MAX_SUPPORTED_MOUSE_BUTTONS],
     mouse_released: [bool; MAX_SUPPORTED_MOUSE_BUTTONS],
-    mouse_scroll: u32,
+    mouse_scroll: i32,
 }
 
 impl Input {
@@ -77,9 +77,9 @@ impl Input {
                 self.mouse_down[index] = true;
             },
             MouseWheel(scroll_amount) => {
-                self.mouse_scroll += scroll_amount;
+                self.mouse_scroll = scroll_amount;
             }
-            _ => panic!("Unhandled message {:?} passed to Input::push_input()", message)
+            _ => panic!("Unhandled message {:?} passed to Input::push_input()", message) // TODO: Don't panic? Should be unreachable in release.
         }
     }
 
@@ -121,7 +121,7 @@ impl Input {
         self.mouse_released[button]
     }
 
-    pub fn mouse_scroll(&self) -> u32 {
+    pub fn mouse_scroll(&self) -> i32 {
         self.mouse_scroll
     }
 }

@@ -46,7 +46,7 @@ pub fn register_raw_input(hwnd: HWND) {
 
     if unsafe { user32::RegisterRawInputDevices(&devices, 1, size_of::<RAWINPUTDEVICE>() as u32) } == FALSE {
         // Registration failed. Call GetLastError for the cause of the error.
-        println!("Raw input registration failed because reasons.");
+        println!("WARNING: Raw input registration failed because reasons.");
     }
 }
 
@@ -75,13 +75,16 @@ pub fn handle_raw_input(window: &mut Window, lParam: LPARAM) {
         raw
     };
 
+    let raw_mouse = unsafe { raw.mouse() };
+
     assert!(raw.header.dwType == RIM_TYPEMOUSE);
-    assert!(raw.mouse.usFlags == MOUSE_MOVE_RELATIVE);
+    assert!(raw_mouse.usFlags == MOUSE_MOVE_RELATIVE);
 
-    window.messages.push_back(MouseMove(raw.mouse.lLastX, raw.mouse.lLastY));
+    window.messages.push_back(MouseMove(raw_mouse.lLastX, raw_mouse.lLastY));
 
-    if raw.mouse.usButtonData != 0 {
-        let button_flags = raw.mouse.usButtonData;
+
+    if raw_mouse.usButtonFlags != 0 {
+        let button_flags = raw_mouse.usButtonFlags;
         if button_flags & RI_MOUSE_LEFT_BUTTON_DOWN != 0 {
             window.messages.push_back(MouseButtonPressed(0));
         }
@@ -113,8 +116,7 @@ pub fn handle_raw_input(window: &mut Window, lParam: LPARAM) {
             window.messages.push_back(MouseButtonReleased(4));
         }
         if button_flags & RI_MOUSE_WHEEL != 0 {
-            // TODO: I don't seem to be getting information for the mouse scrooll. It tells me that it happened, but none of the fields actually contain how much the sroll was.
-            println!("{:?}", raw);
+            window.messages.push_back(MouseWheel(raw_mouse.usButtonData as i32))
         }
     }
 }

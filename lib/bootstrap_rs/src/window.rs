@@ -43,5 +43,5 @@ pub enum Message {
     /// This message is sent any time the mouse wheel is scrolled. The wrapped value
     /// is the amount the mouse wheel was scrolled, though the scale of this value
     /// is platform/driver dependent (I assume).
-    MouseWheel(u32),
+    MouseWheel(i32),
 }
