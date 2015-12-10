@@ -6,7 +6,7 @@ pub type MeshIndex = u32;
 ///
 /// Meshes are represented as list of vertex positions and a list of faces.
 /// Each face is represented as 3 indices into the vertex array.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Mesh {
     vertex_data: Vec<f32>,
     indices:     Vec<MeshIndex>,

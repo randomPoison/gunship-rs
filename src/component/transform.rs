@@ -425,9 +425,8 @@ pub fn transform_update(scene: &Scene, _: f32) {
 
     let transform_manager = scene.get_manager::<TransformManager>();
 
-    let mut row = 0;
     for (transform_row, entity_row) in transform_manager.transforms.iter().zip(transform_manager.entities.iter()) {
-        for (transform, &(entity, parent)) in transform_row.iter().zip(entity_row.iter()) {
+        for (transform, &(_, parent)) in transform_row.iter().zip(entity_row.iter()) {
             // Retrieve the parent's transformation matrix, using the identity
             // matrix if the transform has no parent.
             match parent {
@@ -442,7 +441,5 @@ pub fn transform_update(scene: &Scene, _: f32) {
                 }
             };
         }
-
-        row += 1;
     }
 }

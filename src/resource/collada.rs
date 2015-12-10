@@ -1,12 +1,22 @@
 extern crate parse_collada as collada;
 
-pub use self::collada::{ArrayElement, Collada, GeometricElement, Geometry, Node, PrimitiveElements, VisualScene};
-
 use math::*;
 use polygon::geometry::*;
-use std::collections::HashSet;
+pub use self::collada::{
+    AnyUri,
+    ArrayElement,
+    Collada,
+    GeometricElement,
+    Geometry,
+    Node,
+    PrimitiveElements,
+    UriFragment,
+    VisualScene
+};
+use std::path::Path;
+use super::{MeshNode, ResourceManager};
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum Error {
     /// Indicates an error that occurred when the MeshBuilder was validating the mesh data. If the
     /// COLLADA document passed parsing this should not occur.
@@ -17,6 +27,10 @@ pub enum Error {
         stride: usize,
         index_count: usize,
     },
+
+    /// Indicates an error in loading or parsing the original collada document (i.e. the error
+    /// ocurred within the parse-collada library).
+    ParseColladaError(collada::Error),
 
     /// Indicates that there was an input with the "NORMAL" semantic but the associated source
     /// was missing.
@@ -47,6 +61,9 @@ pub enum Error {
     /// to do with that? Like how do you define a mesh without indices?
     MissingPrimitiveIndices,
 
+    /// Indicates that a uri referenced an asset outside the document.
+    NonLocalUri(String),
+
     UnsupportedGeometricElement,
     UnsupportedPrimitiveType,
 
@@ -62,19 +79,70 @@ pub enum VertexSemantic {
     TexCoord,
 }
 
-/// Load the mesh data from a COLLADA .dae file.
-///
-/// The data in a COLLADA files is formatted for efficiency, but isn't necessarily
-/// organized in a way that is supported by the graphics API. This method reformats the
-/// data so that it can be sent straight to the GPU without further manipulation.
-///
-/// In order to to this, it reorganizes the normals, UVs, and other vertex attributes to
-/// be in the same order as the vertex positions.
-pub fn geometry_to_mesh(geometry: &Geometry) -> Result<Mesh> {
-    match geometry.geometric_element {
-        GeometricElement::Mesh(ref mesh) => collada_mesh_to_mesh(mesh),
-        _ => Err(Error::UnsupportedGeometricElement),
+/// Loads all resources from a COLLADA document and adds them to the resource manager.
+pub fn load_resources<P: AsRef<Path>>(path: P, resource_manager: &ResourceManager) -> Result<()> {
+    let path = path.as_ref();
+
+    let collada_data = try!(
+        Collada::load(&path)
+        .map_err(|error| Error::ParseColladaError(error)));
+
+    // Load all meshes from the document and add them to the resource manager.
+    if let Some(library_geometries) = collada_data.library_geometries {
+        for geometry in library_geometries.geometry {
+            // Retrieve the id for the geometry.
+            // TODO: Generate an id for the geometry if it doesn't already have one.
+            let id = match geometry.id {
+                None => {
+                    println!(
+                        "WARNING: COLLADA file {} contained a <geometry> element with no \"id\" attribute",
+                        path.display());
+                    println!("WARNING: This is unsupported because there is no way to reference that geometry to instantiate it");
+                    continue;
+                },
+                Some(id) => id,
+            };
+
+            let mesh = match geometry.geometric_element {
+                GeometricElement::Mesh(ref mesh) => try!(collada_mesh_to_mesh(mesh)),
+                _ => return Err(Error::UnsupportedGeometricElement),
+            };
+            resource_manager.add_mesh(id, mesh);
+        }
     }
+
+    // Load all multi-part meshes from the scene and add them to the resource manager.
+    if let Some(library_visual_scenes) = collada_data.library_visual_scenes {
+        for visual_scene in library_visual_scenes.visual_scene {
+            // Retrieve the id for the mesh hierarchy.
+            // TODO: Generate an id for the scene if it doesn't already have one.
+            let id = match visual_scene.id {
+                None => {
+                    println!(
+                        "WARNING: COLLADA file {} contained a <visual_scene> with no \"id\" attribute",
+                        path.display());
+                    println!("WARNING: This is unsupported because there is no way to reference that scene to instantiate it");
+                    continue;
+                },
+                Some(id) => id,
+            };
+
+            let mut mesh_node = MeshNode::new();
+
+            // Create all of the children and then create the root node.
+            for node in visual_scene.node {
+                let child = try!(convert_to_mesh_node(node));
+                mesh_node.children.push(child);
+            }
+
+            // Add to resource manager.
+            resource_manager.add_mesh_node(id, mesh_node);
+        }
+    }
+
+    // TODO: Load other resources from the document, such as animation data.
+
+    Ok(())
 }
 
 fn collada_mesh_to_mesh(mesh: &collada::Mesh) -> Result<Mesh> {
@@ -216,6 +284,27 @@ fn collada_mesh_to_mesh(mesh: &collada::Mesh) -> Result<Mesh> {
     .set_indices(&*indices)
     .build()
     .map_err(|err| Error::BuildMeshError(err))
+}
+
+fn convert_to_mesh_node(from_node: collada::Node) -> Result<MeshNode> {
+    let mut mesh_node = MeshNode::new();
+
+    for geometry_instance in from_node.geometry_instances {
+        let mesh_id = match geometry_instance.url {
+            AnyUri::Local(UriFragment(mesh_id)) => mesh_id,
+            AnyUri::External(uri) => return Err(Error::NonLocalUri(uri)),
+        };
+
+        mesh_node.mesh_ids.push(mesh_id);
+    }
+
+    // Create children.
+    for node in from_node.nodes {
+        let child = try!(convert_to_mesh_node(node));
+        mesh_node.children.push(child);
+    }
+
+    Ok(mesh_node)
 }
 
 struct IndexMapper<'a> {

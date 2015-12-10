@@ -13,7 +13,6 @@ use wav::Wave;
 use scene::Scene;
 use ecs::Entity;
 use component::{MeshManager, TransformManager};
-use self::collada::{Collada, Geometry, Node, VisualScene};
 use self::shader::*;
 
 pub mod collada;
@@ -22,12 +21,11 @@ pub mod shader;
 #[derive(Debug, Clone)]
 pub struct ResourceManager {
     renderer: Rc<GLRender>,
-    meshes: RefCell<HashMap<String, GLMeshData>>,
+    meshes: RefCell<HashMap<String, Mesh>>,
+    gpu_meshes: RefCell<HashMap<String, GLMeshData>>,
+    mesh_nodes: RefCell<HashMap<String, MeshNode>>,
     shaders: RefCell<HashMap<String, ShaderProgram>>,
     audio_clips: RefCell<HashMap<String, Rc<Wave>>>,
-
-    visual_scenes: RefCell<HashMap<String, VisualScene>>,
-    geometries: RefCell<HashMap<String, Geometry>>,
 
     resource_path: RefCell<PathBuf>,
 }
@@ -37,21 +35,16 @@ impl ResourceManager {
         ResourceManager {
             renderer: renderer,
             meshes: RefCell::new(HashMap::new()),
+            gpu_meshes: RefCell::new(HashMap::new()),
+            mesh_nodes: RefCell::new(HashMap::new()),
             shaders: RefCell::new(HashMap::new()),
             audio_clips: RefCell::new(HashMap::new()),
-
-            visual_scenes: RefCell::new(HashMap::new()),
-            geometries: RefCell::new(HashMap::new()),
 
             resource_path: RefCell::new(PathBuf::new()),
         }
     }
 
-    /// TODO: Perform validity checking on data when loading (e.g. make sure all nodes have an id).
-    pub fn load_model<P: AsRef<Path>>(&self, path: P) -> Result<(), String> {
-        let mut visual_scenes = self.visual_scenes.borrow_mut();
-        let mut geometries = self.geometries.borrow_mut();
-
+    pub fn load_resource_file<P: AsRef<Path>>(&self, path: P) -> Result<(), String> {
         let mut full_path = self.resource_path.borrow().clone();
         full_path.push(path);
         let metadata = match fs::metadata(&full_path) {
@@ -61,40 +54,14 @@ impl ResourceManager {
                 &why)),
             Ok(metadata) => metadata,
         };
+
         if !metadata.is_file() {
             return Err(format!(
                 "{} could not be loaded because it is not a file",
                 full_path.display()));
         }
-        let collada_data = match Collada::load(&full_path) {
-            Err(why) => return Err(format!(
-                "couldn't open {}: {:?}",
-                full_path.display(),
-                &why)),
-            Ok(data) => data,
-        };
 
-        // Store each of the visual scenes from the collada file.
-        for visual_scene in collada_data.library_visual_scenes.as_ref().unwrap().visual_scene.iter() {
-            let id = match visual_scene.id {
-                None => return Err(format!(
-                    "COLLADA file {} contained a <visual_scene> with no \"id\" attribute, this is unsupported.",
-                    full_path.display())),
-                Some(ref id) => id.clone(),
-            };
-            visual_scenes.insert(id, visual_scene.clone());
-        }
-
-        // Store each of the geometries so they can be referenced later.
-        for geometry in collada_data.library_geometries.as_ref().unwrap().geometry.iter() {
-            let id = match geometry.id {
-                None => return Err(format!(
-                    "COLLADA file {} contained a <geometry> with no \"id\" attribute, this is unsupported",
-                    full_path.display())),
-                Some(ref id) => id.clone(),
-            };
-            geometries.insert(id, geometry.clone());
-        }
+        collada::load_resources(full_path, self).unwrap(); // TODO: Don't panic?
 
         Ok(())
     }
@@ -111,67 +78,12 @@ impl ResourceManager {
         resource_path.push(path);
     }
 
-    pub fn get_mesh(&self, uri: &str) -> Result<GLMeshData, String> {
+    pub fn get_gpu_mesh(&self, uri: &str) -> Option<GLMeshData> {
         // Use cached mesh data if possible.
-        if let Some(mesh) = self.get_cached_mesh(uri) {
-            return Ok(mesh);
-        }
-
-        // Generate mesh data since none has ben created previously.
-        let visual_scenes = self.visual_scenes.borrow();
-
-        // TODO: Handle invalid URIs (empty, invalid characters?).
-        let mut uri_segments = uri.split(".");
-        let root = uri_segments.next().unwrap();
-        let visual_scene = match visual_scenes.get(root) {
-            None => return Err(format!(
-                "No source file {} found from which to load {}",
-                root,
-                uri)),
-            Some(visual_scene) => visual_scene,
-        };
-
-        // Get the first node in the URI.
-        let mut node = {
-            let name = uri_segments.next().unwrap();
-            let mut result: Option<&Node> = None;
-            for node in &visual_scene.node {
-                if node.id.as_ref().unwrap() == name {
-                    result = Some(node);
-                    break;
-                }
-            }
-
-            match result {
-                None => return Err(format!(
-                    "No node named {} found in scene {}",
-                    name,
-                    root)),
-                Some(node) => node,
-            }
-        };
-
-        for name in uri_segments {
-            let mut result: Option<&Node> = None;
-            for next_node in &node.nodes {
-                if next_node.id.as_ref().unwrap() == name {
-                    result = Some(next_node);
-                    break;
-                }
-            }
-
-            match result {
-                None => return Err(format!(
-                    "No node named {} found when parsing {}",
-                    name,
-                    uri)),
-                Some(next_node) =>
-                    node = next_node,
-            }
-        }
-
-        let mesh_data = self.gen_mesh_from_node(node, uri).unwrap();
-        Ok(mesh_data)
+        self.get_cached_mesh(uri)
+        .or_else(|| {
+            self.gen_gpu_mesh(uri)
+        })
     }
 
     pub fn get_audio_clip(&self, path_text: &str) -> Rc<Wave> {
@@ -188,66 +100,41 @@ impl ResourceManager {
     pub fn instantiate_model(&self, resource: &str, scene: &Scene) -> Result<Entity, String> {
         if resource.contains(".") {
             println!("WARNING: ResourceManager::instantiate_model() doesn't yet support fully qualified URIs, only root assets may be instantiated.");
+            unimplemented!();
         }
 
-        let mut uri_segments = resource.split(".");
-        let root = uri_segments.next().unwrap();
-        let visual_scenes = self.visual_scenes.borrow();
-        let visual_scene = {
-            match visual_scenes.get(root) {
-                None => return Err(format!(
-                    "No source file {} found from which to load {}",
-                    root,
-                    resource)),
-                Some(visual_scene) => visual_scene,
-            }
-        };
+        let mesh_nodes = self.mesh_nodes.borrow();
+        let root = try!(
+            mesh_nodes
+            .get(resource)
+            .ok_or_else(|| format!("No mesh node is identified by the uri {}", resource)));
 
-        let node = {
-            if visual_scene.node.len() == 0 {
-                return Err(format!(
-                    "No nodes associated with model {}",
-                    resource));
-            }
-
-            if visual_scene.node.len() > 1 {
-                println!(
-                    "WARNING: Model {} has more than one node at the root level. This is not currenlty supported, only the first node will be used.",
-                    resource);
-            }
-
-            &visual_scene.node[0]
-        };
-
-        let uri = String::from(resource);
-        self.instantiate_node(scene, node, uri)
+        self.instantiate_node(scene, root)
     }
 
-    fn instantiate_node(&self, scene: &Scene, node: &Node, mut uri: String) -> Result<Entity, String> {
-        uri.push_str(".");
-        uri.push_str(node.id.as_ref().unwrap());
-
-        let mesh_data = if let Some(mesh_data) = self.get_cached_mesh(&uri) {
-            mesh_data
-        } else {
-            match self.gen_mesh_from_node(node, &uri) {
-                Err(message) => return Err(message),
-                Ok(mesh_data) => mesh_data,
-            }
-        };
-
+    fn instantiate_node(&self, scene: &Scene, node: &MeshNode) -> Result<Entity, String> {
         let entity = scene.create_entity();
         {
-            // TODO: Apply the node's transform to the entity transform.
             let mut transform_manager = scene.get_manager_mut::<TransformManager>();
             transform_manager.assign(entity);
-            scene.get_manager_mut::<MeshManager>()
-                .give_mesh(entity, mesh_data);
+
+            for mesh_id in &node.mesh_ids {
+                let gpu_mesh = match self.get_gpu_mesh(&*mesh_id) {
+                    Some(gpu_mesh) => gpu_mesh,
+                    None => {
+                        println!("WARNING: Unable to load gpu mesh for uri {}", mesh_id);
+                        continue;
+                    }
+                };
+                scene.get_manager_mut::<MeshManager>()
+                    .give_mesh(entity, gpu_mesh);
+            }
         }
+        // TODO: Apply the node's transform to the entity transform.
 
         // Instantiate each of the children and set the current node as their parent.
-        for node in &node.nodes {
-            let child = try!(self.instantiate_node(scene, node, uri.clone()));
+        for node in &node.children {
+            let child = try!(self.instantiate_node(scene, node));
 
             let mut transform_manager = scene.get_manager_mut::<TransformManager>();
             transform_manager.set_child(entity, child);
@@ -301,46 +188,55 @@ impl ResourceManager {
         }
     }
 
-    fn gen_mesh_from_node(&self, node: &collada::Node, uri: &str) -> Result<GLMeshData, String> {
-        let geometry_name = {
-            if node.geometry_instances.len() == 0 {
-                return Err(format!("No geometry is identified by {}", uri));
-            }
-            if node.geometry_instances.len() > 1 {
-                return Err(format!("More than one geometry is identified by {}", uri));
-            }
+    pub fn add_mesh(&self, uri: String, mesh: Mesh) {
+        let mut meshes = self.meshes.borrow_mut();
 
-            let url = &node.geometry_instances[0].url;
-            &url[1..] // Skip the leading "#" character that starts all URLs.
-        };
+        if meshes.contains_key(&uri) {
+            println!("WARNING: There is already a mesh node with uri {}, it will be overriden in the resource manager by the new node", uri);
+        }
 
-        let geometries = self.geometries.borrow();
-        let geometry = geometries.get(geometry_name).unwrap();
-        self.gen_mesh(geometry, uri)
+        meshes.insert(uri.clone(), mesh);
+    }
+
+    pub fn add_mesh_node(&self, uri: String, node: MeshNode) {
+        let mut nodes = self.mesh_nodes.borrow_mut();
+
+        if nodes.contains_key(&uri) {
+            println!("WARNING: There is already a mesh node with uri {}, it will be overriden in the resource manager by the new node", uri);
+        }
+
+        nodes.insert(uri.clone(), node);
     }
 
     fn has_cached_mesh(&self, uri: &str) -> bool {
-        self.meshes.borrow().contains_key(uri)
+        self.gpu_meshes.borrow().contains_key(uri)
     }
 
     fn get_cached_mesh(&self, uri: &str) -> Option<GLMeshData> {
-        match self.meshes.borrow().get(uri) {
-            None => None,
-            Some(mesh_ref) => Some(*mesh_ref),
-        }
+        self.gpu_meshes
+        .borrow()
+        .get(uri)
+        .map(|mesh| *mesh)
     }
 
-    fn gen_mesh(&self, geometry: &Geometry, uri: &str) -> Result<GLMeshData, String> {
-        assert!(!self.has_cached_mesh(uri), "Attempting to create a new mesh for {} when the uri is already in the meshes map", uri);
+    fn gen_gpu_mesh(&self, uri: &str) -> Option<GLMeshData> {
+        // TODO: Don't do this check in release builds.
+        if self.has_cached_mesh(uri) {
+            println!("WARNING: Attempting to create a new mesh for {} when the uri is already in the meshes map", uri);
+        }
 
-        println!("generating mesh: {}", uri);
+        let meshes = self.meshes.borrow();
+        let mesh = match meshes.get(uri) {
+            Some(mesh) => mesh,
+            None => return None,
+        };
 
-        let mesh = collada::geometry_to_mesh(geometry).unwrap(); // TODO: Don't panic!
+        let mesh_data = self.renderer.gen_mesh(mesh);
+        self.gpu_meshes
+        .borrow_mut()
+        .insert(uri.into(), mesh_data);
 
-        let mesh_data = self.renderer.gen_mesh(&mesh);
-        self.meshes.borrow_mut().insert(uri.into(), mesh_data);
-
-        Ok(mesh_data)
+        Some(mesh_data)
     }
 }
 
@@ -356,4 +252,20 @@ pub fn load_file_text<P: AsRef<Path>>(file_path: P) -> String {
         Ok(_) => ()
     }
     contents
+}
+
+// TODO: Also include the node's local transform.
+#[derive(Debug, Clone)]
+pub struct MeshNode {
+    pub mesh_ids: Vec<String>,
+    pub children: Vec<MeshNode>,
+}
+
+impl MeshNode {
+    pub fn new() -> MeshNode {
+        MeshNode {
+            mesh_ids: Vec::new(),
+            children: Vec::new(),
+        }
+    }
 }
