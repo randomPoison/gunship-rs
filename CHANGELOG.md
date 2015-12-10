@@ -1,3 +1,20 @@
+<a name=""></a>
+### v0.0.4 (2015-12-10)
+
+
+#### Bug Fixes
+
+* **instantiate_model:**  fix issue where whole model wasn't instantiated ([591db7b0](https://github.com/excaliburHisSheath/gunship-rs/commit/591db7b0239f14ca10a2f86781927827413f984d))
+* **parse-collada:**  correctly interpret xs:anyURI type ([a1385042](https://github.com/excaliburHisSheath/gunship-rs/commit/a13850428ee1d2bd22f585ebb74138f6534839de), breaks [#](https://github.com/excaliburHisSheath/gunship-rs/issues/))
+* **polygon::Mesh:**  derive Clone impl for Mesh ([7fc1d2e8](https://github.com/excaliburHisSheath/gunship-rs/commit/7fc1d2e8285b83fa7d6152b1faa07a50eb83697c))
+* **transform:**  fix bug where child hierarchies aren't re-parented ([ee702628](https://github.com/excaliburHisSheath/gunship-rs/commit/ee70262839fbdb9cdccbe7155bdc5cd6a9d81f25), closes [#74](https://github.com/excaliburHisSheath/gunship-rs/issues/74))
+
+#### Breaking Changes
+
+* **parse-collada:**  correctly interpret xs:anyURI type ([a1385042](https://github.com/excaliburHisSheath/gunship-rs/commit/a13850428ee1d2bd22f585ebb74138f6534839de), breaks [#](https://github.com/excaliburHisSheath/gunship-rs/issues/))
+
+
+
 <a name="v0.0.3"></a>
 ### v0.0.3 (2015-12-07)
 
