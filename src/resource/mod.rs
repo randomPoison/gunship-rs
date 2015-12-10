@@ -44,8 +44,7 @@ impl ResourceManager {
         }
     }
 
-    pub fn load_model<P: AsRef<Path>>(&self, path: P) -> Result<(), String> {
-
+    pub fn load_resource_file<P: AsRef<Path>>(&self, path: P) -> Result<(), String> {
         let mut full_path = self.resource_path.borrow().clone();
         full_path.push(path);
         let metadata = match fs::metadata(&full_path) {
