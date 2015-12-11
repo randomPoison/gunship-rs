@@ -126,8 +126,9 @@ impl ResourceManager {
                         continue;
                     }
                 };
-                scene.get_manager_mut::<MeshManager>()
-                    .give_mesh(entity, gpu_mesh);
+
+                let mesh_manager = scene.get_manager_mut::<MeshManager>();
+                mesh_manager.give_mesh(entity, gpu_mesh);
             }
         }
         // TODO: Apply the node's transform to the entity transform.
