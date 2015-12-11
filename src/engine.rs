@@ -193,7 +193,7 @@ impl Engine {
                     transform.derived_matrix(),
                     transform.derived_normal_matrix(),
                     &camera,
-                    &mut light_manager.components().iter().map(|ref_cell| *ref_cell.borrow()));
+                    &mut light_manager.iter().map(|(light_ref, entity)| *light_ref));
             }
 
             self.debug_draw.flush_commands(&*camera);

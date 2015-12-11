@@ -129,7 +129,7 @@ use ecs::*;
 use scene::Scene;
 use debug_draw;
 use super::{EntityMap, EntitySet};
-use super::struct_component_manager::{StructComponentManager, ComponentIter};
+use super::struct_component_manager::{StructComponentManager, Iter};
 use self::grid_collision::GridCollisionSystem;
 use self::bounding_volume::{BoundingVolumeManager, bvh_update};
 use component::transform::Transform;
@@ -250,7 +250,7 @@ impl ColliderManager {
         self.callback_manager.borrow_mut().assign(entity, callback);
     }
 
-    pub fn iter(&self) -> ComponentIter<Collider> {
+    pub fn iter(&self) -> Iter<Collider> {
         self.inner.iter()
     }
 

@@ -1,10 +1,9 @@
 use std::rc::Rc;
-use std::cell::{Ref, RefMut};
 
 use scene::Scene;
 use ecs::{Entity, ComponentManager, System};
 use resource::ResourceManager;
-use super::struct_component_manager::{StructComponentManager, ComponentIter, ComponentIterMut};
+use super::struct_component_manager::{Iter, IterMut, Ref, RefMut, StructComponentManager};
 use wav::Wave;
 
 #[derive(Debug, Clone)]
@@ -63,7 +62,7 @@ impl AudioSourceManager {
         }
     }
 
-    pub fn assign(&mut self, entity: Entity, clip_name: &str) -> RefMut<AudioSource> {
+    pub fn assign(&self, entity: Entity, clip_name: &str) -> RefMut<AudioSource> {
         let audio_clip = self.resource_manager.get_audio_clip(clip_name);
         self.inner.assign(entity, AudioSource {
             audio_clip: audio_clip,
@@ -81,11 +80,11 @@ impl AudioSourceManager {
         self.inner.get_mut(entity)
     }
 
-    pub fn iter(&self) -> ComponentIter<AudioSource> {
+    pub fn iter(&self) -> Iter<AudioSource> {
         self.inner.iter()
     }
 
-    pub fn iter_mut(&self) -> ComponentIterMut<AudioSource> {
+    pub fn iter_mut(&self) -> IterMut<AudioSource> {
         self.inner.iter_mut()
     }
 }
