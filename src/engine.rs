@@ -173,15 +173,16 @@ impl Engine {
         let light_manager = scene.get_manager::<LightManager>();
 
         // Handle rendering for each camera.
-        for (mut camera, entity) in camera_manager.iter_mut() {
+        for (camera, entity) in camera_manager.iter_mut() {
 
             // TODO: Update the camera's bounds in a separate system.
-            {
+            let camera = {
                 let transform = transform_manager.get(entity);
 
-                camera.position = transform.position_derived();
-                camera.rotation = transform.rotation_derived();
-            }
+                camera.to_polygon_camera(
+                    transform.position_derived(),
+                    transform.rotation_derived())
+            };
 
             // Draw all of the meshes.
             for (mesh, entity) in mesh_manager.iter() {
@@ -196,7 +197,7 @@ impl Engine {
                     &mut light_manager.iter().map(|(light_ref, entity)| *light_ref));
             }
 
-            self.debug_draw.flush_commands(&*camera);
+            self.debug_draw.flush_commands(&camera);
         }
 
         self.renderer.swap_buffers(self.window.borrow().deref());

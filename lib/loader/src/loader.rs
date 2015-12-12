@@ -1,4 +1,5 @@
 #![feature(dynamic_lib)]
+#![allow(deprecated)]
 
 extern crate bootstrap_rs as bootstrap;
 extern crate winapi;

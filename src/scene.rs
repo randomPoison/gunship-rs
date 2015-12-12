@@ -78,6 +78,7 @@ impl Scene {
 
     pub fn register_manager<T: ComponentManager>(&mut self, manager: T) {
         let manager_id = manager_id::<T>();
+
         assert!(!self.component_managers.contains_key(&manager_id),
                 "Manager {} with ID {:?} already registered", type_name::<T>(), manager_id);
 
