@@ -21,6 +21,7 @@ pub struct StructComponentManager<T: Clone + Any> {
     /// borrows), so we track it manually. This allows us to determine where to insert new
     /// components and which elements we need to iterate over.
     filled_count: Cell<usize>,
+    entity_count: Cell<usize>,
 
     marked_for_destroy: RefCell<EntitySet>,
 }
@@ -33,6 +34,7 @@ impl<T: Clone + Any> StructComponentManager<T> {
             indices: RefCell::new(HashMap::default()),
 
             filled_count: Cell::new(0),
+            entity_count: Cell::new(0),
 
             marked_for_destroy: RefCell::new(HashSet::default()),
         };
@@ -67,6 +69,7 @@ impl<T: Clone + Any> StructComponentManager<T> {
 
         // Update filled count.
         self.filled_count.set(index + 1);
+        self.entity_count.set(self.entity_count.get() + 1);
 
         RefMut(component_slot)
     }
@@ -100,6 +103,11 @@ impl<T: Clone + Any> StructComponentManager<T> {
             entity_iter: self.entities.iter(),
         }
     }
+
+    /// Returns the number of entities with a component associated.
+    pub fn len(&self) -> usize {
+        self.entity_count.get()
+    }
 }
 
 impl<T: Clone + Any> ComponentManager for StructComponentManager<T> {
@@ -114,6 +122,8 @@ impl<T: Clone + Any> ComponentManager for StructComponentManager<T> {
 
             *component_slot = None;
             *entity_slot = None;
+
+            self.entity_count.set(self.entity_count.get() - 1);
         }
     }
 
