@@ -11,17 +11,19 @@ struct Alarm {
     remaining_time: f32,
     callback: Box<Fn(&Scene, Entity)>,
     entity: Entity,
-    id: AlarmID,
+    id: AlarmId,
     repeating: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct AlarmID(usize);
+pub struct AlarmId(usize);
 
 pub struct AlarmManager {
     id_counter: usize,
     alarms: Vec<Alarm>,
     marked_for_destroy: RefCell<EntitySet>,
+    pending_insertions: RefCell<Vec<Alarm>>,
+    pending_cancellations: RefCell<Vec<AlarmId>>,
 }
 
 impl AlarmManager {
@@ -33,10 +35,10 @@ impl AlarmManager {
         }
     }
 
-    pub fn assign<T>(&mut self, entity: Entity, duration: f32, callback: T) -> AlarmID
+    pub fn assign<T>(&mut self, entity: Entity, duration: f32, callback: T) -> AlarmId
         where T: 'static + Fn(&Scene, Entity) {
         self.id_counter += 1;
-        let id = AlarmID(self.id_counter);
+        let id = AlarmId(self.id_counter);
         let alarm = Alarm {
             start_time: duration,
             remaining_time: duration,
@@ -51,10 +53,10 @@ impl AlarmManager {
         id
     }
 
-    pub fn assign_repeating<T>(&mut self, entity: Entity, duration: f32, callback: T) -> AlarmID
+    pub fn assign_repeating<T>(&mut self, entity: Entity, duration: f32, callback: T) -> AlarmId
         where T: 'static + Fn(&Scene, Entity) {
         self.id_counter += 1;
-        let id = AlarmID(self.id_counter);
+        let id = AlarmId(self.id_counter);
         let alarm = Alarm {
             start_time: duration,
             remaining_time: duration,
@@ -69,7 +71,7 @@ impl AlarmManager {
         id
     }
 
-    pub fn cancel(&mut self, id: AlarmID) {
+    pub fn cancel(&mut self, id: AlarmId) {
         self.alarms.retain(|alarm| alarm.id != id);
     }
 
