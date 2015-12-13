@@ -78,7 +78,6 @@ impl Scene {
 
     pub fn register_manager<T: ComponentManager>(&mut self, manager: T) {
         let manager_id = manager_id::<T>();
-
         assert!(!self.component_managers.contains_key(&manager_id),
                 "Manager {} with ID {:?} already registered", type_name::<T>(), manager_id);
 
@@ -161,15 +160,20 @@ fn manager_id<T: ComponentManager>() -> ManagerId {
     ::std::any::TypeId::of::<T>()
 }
 
+/// Two cases:
+///
+/// - No template (e.g. `foo::bar::TransformManager`) just remove path (becomes `TransformManager`).
+/// - Template (e.g. `foo::bar::Manager<foo::bar::Foo>`) innermost type without leading path
+///   (becomes `Foo`).
 #[cfg(feature = "hotloading")]
 fn manager_id<T: ComponentManager>() -> ManagerId {
     let full_name = type_name::<T>();
 
     // Find first occurrence of '<' character since we know the start of the proper name has to
     // be before that.
-    let sub_str = match full_name.find("<") {
-        Some(index) => &full_name[0..index],
-        None => full_name ,
+    let sub_str = match full_name.find('<') {
+        Some(index) => &full_name[index + 1..full_name.len() - 1], // foo::Foo<foo::Bar> => foo::Bar
+        None => full_name,                                         // foo::Foo => foo::Foo
     };
 
     let slice_index = match sub_str.rfind("::") {
@@ -177,7 +181,7 @@ fn manager_id<T: ComponentManager>() -> ManagerId {
         None => 0,
     };
 
-    &full_name[slice_index..]
+    &sub_str[slice_index..]
 }
 
 fn type_name<T>() -> &'static str {
