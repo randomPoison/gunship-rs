@@ -215,7 +215,7 @@ impl ColliderManager {
     /// ======
     ///
     /// Panics if the specified entity already has a collider component.
-    pub fn assign(&mut self, entity: Entity, collider: Collider) {
+    pub fn assign(&self, entity: Entity, collider: Collider) {
         self.inner.assign(entity, collider);
     }
 
@@ -231,7 +231,7 @@ impl ColliderManager {
     /// system to be able to invoke that callback after hotloading. When associating a callback
     /// with an entity `register_callback()` does not need to be called before `assign_callback()`
     /// as `assign_callback()` will automatically handle registering a new callback.
-    pub fn register_callback<T: CollisionCallback + 'static>(&mut self, callback: T) {
+    pub fn register_callback<T: CollisionCallback + 'static>(&self, callback: T) {
         self.callback_manager.borrow_mut().register(callback);
     }
 
@@ -246,7 +246,7 @@ impl ColliderManager {
     /// be passed when invoking that callback.
     ///
     /// For more information see the module documentation.
-    pub fn assign_callback<T: CollisionCallback + 'static>(&mut self, entity: Entity, callback: T) {
+    pub fn assign_callback<T: CollisionCallback + 'static>(&self, entity: Entity, callback: T) {
         self.callback_manager.borrow_mut().assign(entity, callback);
     }
 
