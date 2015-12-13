@@ -1,9 +1,9 @@
+use collections::{EntityMap, EntitySet};
 use ecs::{ComponentManager, Entity};
 use std::any::Any;
 use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, HashSet};
 use std::ops::{Deref, DerefMut};
-use super::{EntityMap, EntitySet};
 
 const MAX_CAPACITY: usize = 1_000;
 

@@ -15,14 +15,5 @@ pub use self::camera::{Camera, CameraManager};
 pub use self::mesh::{Mesh, MeshManager};
 pub use self::light::{Light, LightManager, LightUpdateSystem};
 pub use self::audio::{AudioSource, AudioSourceManager, AudioSystem};
-pub use self::alarm::{AlarmID, AlarmManager, AlarmSystem};
+pub use self::alarm::{AlarmId, AlarmManager, AlarmSystem};
 pub use self::collider::{Collider, ColliderManager, CollisionSystem, bounding_volume, grid_collision};
-
-use std::collections::{HashMap, HashSet};
-
-use hash::*;
-
-use ecs::Entity;
-
-pub type EntityMap<T> = HashMap<Entity, T, FnvHashState>;
-pub type EntitySet = HashSet<Entity, FnvHashState>;

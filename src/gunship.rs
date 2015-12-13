@@ -16,13 +16,14 @@ pub mod stopwatch {
     pub use self::stopwatch::null::{Collector, Stopwatch};
 }
 
-pub mod engine;
-pub mod scene;
-pub mod input;
-pub mod resource;
-pub mod ecs;
+pub mod collections;
 pub mod component;
 pub mod debug_draw;
+pub mod engine;
+pub mod ecs;
+pub mod input;
+pub mod resource;
+pub mod scene;
 
 mod wav;
 
@@ -37,7 +38,7 @@ pub use self::component::camera::{CameraManager, Camera};
 pub use self::component::mesh::{MeshManager, Mesh};
 pub use self::component::light::{LightManager, Light, PointLight};
 pub use self::component::audio::{AudioSourceManager, AudioSource};
-pub use self::component::alarm::{AlarmID, AlarmManager};
+pub use self::component::alarm::{AlarmId, AlarmManager};
 pub use self::component::collider::{ColliderManager, Collider};
 pub use self::component::singleton_component_manager::SingletonComponentManager;
 pub use self::component::struct_component_manager::StructComponentManager;

@@ -4,9 +4,9 @@ use std::cell::{Cell, RefCell, Ref, RefMut};
 use math::*;
 use stopwatch::Stopwatch;
 
+use collections::{EntityMap, EntitySet};
 use ecs::{Entity, System, ComponentManager};
 use scene::Scene;
-use super::{EntityMap, EntitySet};
 
 #[derive(Debug, Clone)]
 pub struct TransformManager {

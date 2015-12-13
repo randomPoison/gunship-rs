@@ -1,8 +1,8 @@
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 
+use collections::EntitySet;
 use ecs::*;
 use scene::Scene;
-use super::EntitySet;
 
 pub type AlarmCallback = Fn(&Scene, Entity);
 

@@ -4,7 +4,8 @@ use std::iter::Zip;
 use math::*;
 use stopwatch::Stopwatch;
 
-use component::{TransformManager, EntityMap};
+use collections::EntityMap;
+use component::TransformManager;
 use scene::*;
 use ecs::*;
 use super::{CachedCollider, ColliderManager, Sphere};

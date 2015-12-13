@@ -128,7 +128,7 @@ use stopwatch::Stopwatch;
 use ecs::*;
 use scene::Scene;
 use debug_draw;
-use super::{EntityMap, EntitySet};
+use collections::{EntityMap, EntitySet};
 use super::struct_component_manager::{StructComponentManager, Iter};
 use self::grid_collision::GridCollisionSystem;
 use self::bounding_volume::{BoundingVolumeManager, bvh_update};
