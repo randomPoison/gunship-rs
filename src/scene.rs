@@ -114,8 +114,33 @@ impl Scene {
         }
     }
 
+    pub fn has_manager<T: ComponentManager>(&self) -> bool {
+        let manager_id = manager_id::<T>();
+        self.component_managers.get(&manager_id).is_some()
+    }
+
+    /// Reload a component manager for hotloading purposes.
+    ///
+    /// Clones the component manager from the old scene into the new scene.
+    ///
+    /// ## Panics
+    ///
+    /// Panics if the component manager isn't present in the old scene.
     pub fn reload_manager<T: ComponentManager + Clone>(&mut self, old_scene: &Scene) {
         self.register_manager(old_scene.get_manager::<T>().clone());
+    }
+
+    /// Reload a component manager or use a default if one was not previously registered.
+    ///
+    /// Checks the old scene if it has a component manager of the specified type registered. If so
+    /// this method behaves identically to `reload_manager()`, otherwise it registers the default
+    /// manager with the scene.
+    pub fn reload_manager_or_default<T: ComponentManager + Clone>(&mut self, old_scene: &Scene, default: T) {
+        if old_scene.has_manager::<T>() {
+            self.reload_manager::<T>(old_scene);
+        } else {
+            self.register_manager(default);
+        }
     }
 
     pub fn create_entity(&self) -> Entity {
