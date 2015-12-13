@@ -1,6 +1,5 @@
 use std::ops::{Mul, MulAssign, Div, DivAssign, Neg, Add, AddAssign, Sub, SubAssign, Index, IndexMut};
-
-use super::{IsZero, Dot};
+use super::{IsZero, Dot, Lerp};
 
 #[repr(C)] #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Vector3 {
@@ -313,5 +312,63 @@ impl Vector2 {
                 vectors.as_ptr() as *const f32,
                 vectors.len() * 2)
         }
+    }
+}
+
+impl Lerp for Vector2 {
+    fn lerp(t: f32, from: Vector2, to: Vector2) -> Vector2 {
+        from + (to - from) * t
+    }
+}
+
+impl Add for Vector2 {
+    type Output = Vector2;
+
+    fn add(self, rhs: Vector2) -> Vector2 {
+        Vector2 {
+            x: self.x + rhs.x,
+            y: self.y + rhs.y,
+        }
+    }
+}
+
+impl Sub for Vector2 {
+    type Output = Vector2;
+
+    fn sub(self, rhs: Vector2) -> Vector2 {
+        Vector2 {
+            x: self.x - rhs.x,
+            y: self.y - rhs.y,
+        }
+    }
+}
+
+impl Mul for Vector2 {
+    type Output = Vector2;
+
+    fn mul(self, rhs: Vector2) -> Vector2 {
+        Vector2 {
+            x: self.x * rhs.x,
+            y: self.y * rhs.y,
+        }
+    }
+}
+
+impl Mul<f32> for Vector2 {
+    type Output = Vector2;
+
+    fn mul(self, rhs: f32) -> Vector2 {
+        Vector2 {
+            x: self.x * rhs,
+            y: self.y * rhs,
+        }
+    }
+}
+
+impl Mul<Vector2> for f32 {
+    type Output = Vector2;
+
+    fn mul(self, rhs: Vector2) -> Vector2 {
+        rhs * self
     }
 }

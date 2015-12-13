@@ -71,3 +71,13 @@ impl<'a, T> Dot<&'a T> for T where T: Dot<T> + Copy {
 //         self.dot(*rhs)
 //     }
 // }
+
+pub trait Lerp {
+    fn lerp(t: f32, from: Self, to: Self) -> Self;
+}
+
+impl Lerp for f32 {
+    fn lerp(t: f32, from: f32, to: f32) -> f32 {
+        from + (to - from) * t
+    }
+}
