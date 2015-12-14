@@ -16,6 +16,7 @@ pub mod stopwatch {
     pub use self::stopwatch::null::{Collector, Stopwatch};
 }
 
+pub mod callback;
 pub mod collections;
 pub mod component;
 pub mod debug_draw;
