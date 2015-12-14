@@ -15,5 +15,5 @@ pub use self::camera::{Camera, CameraManager};
 pub use self::mesh::{Mesh, MeshManager};
 pub use self::light::{Light, LightManager, LightUpdateSystem};
 pub use self::audio::{AudioSource, AudioSourceManager, AudioSystem};
-pub use self::alarm::{AlarmId, AlarmManager, AlarmSystem};
+pub use self::alarm::{AlarmId, AlarmManager, alarm_update};
 pub use self::collider::{Collider, ColliderManager, CollisionSystem, bounding_volume, grid_collision};

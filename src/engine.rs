@@ -79,7 +79,7 @@ impl Engine {
             transform_update: Box::new(transform_update),
             light_update: Box::new(LightUpdateSystem),
             audio_update: Box::new(AudioSystem),
-            alarm_update: Box::new(AlarmSystem),
+            alarm_update: Box::new(alarm_update),
             collision_update: Box::new(CollisionSystem::new()),
 
             scene: Scene::new(&resource_manager, audio_source),
@@ -321,7 +321,7 @@ impl Clone for Engine {
             transform_update: Box::new(transform_update),
             light_update: Box::new(LightUpdateSystem),
             audio_update: Box::new(AudioSystem),
-            alarm_update: Box::new(AlarmSystem),
+            alarm_update: Box::new(alarm_update),
             collision_update: Box::new(CollisionSystem::new()),
 
             scene: self.scene.clone(&resource_manager),
@@ -370,7 +370,7 @@ pub fn engine_init(window: Rc<RefCell<Window>>) -> Box<Engine> {
         transform_update: Box::new(transform_update),
         light_update: Box::new(LightUpdateSystem),
         audio_update: Box::new(AudioSystem),
-        alarm_update: Box::new(AlarmSystem),
+        alarm_update: Box::new(alarm_update),
         collision_update: Box::new(CollisionSystem::new()),
 
         scene: Scene::new(&resource_manager, audio_source),
