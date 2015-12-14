@@ -117,14 +117,14 @@
 //! Currently the only back end system supported is the grid collision system. For more details
 //! see the `grid_collision` module below.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashSet};
 use std::collections::hash_state::HashState;
 use std::cell::{RefCell, Ref, RefMut};
 
-use hash::FnvHashState;
 use math::*;
 use stopwatch::Stopwatch;
 
+use callback::*;
 use ecs::*;
 use scene::Scene;
 use debug_draw;
@@ -613,25 +613,9 @@ impl ::std::fmt::Debug for CollisionCallback {
     }
 }
 
-#[cfg(not(feature="hotloading"))]
-type CallbackId = u64;
-
-#[cfg(not(feature="hotloading"))]
-fn callback_id<T: CollisionCallback + 'static>() -> CallbackId {
-    unsafe { ::std::intrinsics::type_id::<T>() }
-}
-
-#[cfg(feature="hotloading")]
-type CallbackId = String;
-
-#[cfg(feature="hotloading")]
-fn callback_id<T: CollisionCallback + 'static>() -> CallbackId {
-    unsafe { ::std::intrinsics::type_name::<T>() }.into()
-}
-
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CollisionCallbackManager {
-    callbacks: HashMap<CallbackId, Box<CollisionCallback>, FnvHashState>,
+    callbacks: CallbackManager<CollisionCallback>,
     entity_callbacks: EntityMap<Vec<CallbackId>>,
     entity_collisions: EntityMap<Vec<Entity>>,
 }
@@ -639,24 +623,23 @@ pub struct CollisionCallbackManager {
 impl CollisionCallbackManager {
     pub fn new() -> CollisionCallbackManager {
         CollisionCallbackManager {
-            callbacks: HashMap::default(),
+            callbacks: CallbackManager::new(),
             entity_callbacks: EntityMap::default(),
             entity_collisions: EntityMap::default(),
         }
     }
 
-    fn register<T: CollisionCallback + 'static>(&mut self, callback: T) {
-        let callback_id = callback_id::<T>();
-        if !self.callbacks.contains_key(&callback_id) {
-            self.callbacks.insert(callback_id.clone(), Box::new(callback));
-        }
+    fn register<T: 'static + CollisionCallback>(&mut self, callback: T) {
+        let callback_id = CallbackId::of::<T>();
+        self.callbacks.register(callback_id, Box::new(callback));
     }
 
-    fn assign<T: CollisionCallback + 'static>(&mut self, entity: Entity, callback: T) {
-        let callback_id = callback_id::<T>();
-        if !self.callbacks.contains_key(&callback_id) {
-            self.callbacks.insert(callback_id.clone(), Box::new(callback));
-        }
+    #[allow(unused_variables)]
+    fn assign<T: 'static + CollisionCallback>(&mut self, entity: Entity, callback: T) {
+        let callback_id = CallbackId::of::<T>();
+        debug_assert!(
+            self.callbacks.get(callback_id).is_some(),
+            "Cannot assign collision callback that has not been registered");
 
         // TODO: Should we allow an entity to be registered with the same callback more than once?
         //       For now I'm going to say no since it seems like that's most likely a logic error.
@@ -700,7 +683,7 @@ impl CollisionCallbackManager {
                                          .filter(|&(_, ref others)| others.len() > 0) {
             if let Some(callback_ids) = self.entity_callbacks.get(&entity) {
                 for callback_id in callback_ids.iter() {
-                    let mut callback = match self.callbacks.get_mut(callback_id) {
+                    let mut callback = match self.callbacks.get_mut(*callback_id) {
                         Some(callback) => callback,
                         None => panic!("No callback with id {:?}", callback_id),
                     };
@@ -708,17 +691,6 @@ impl CollisionCallbackManager {
                 }
             }
             others.clear();
-        }
-    }
-}
-
-impl Clone for CollisionCallbackManager {
-    // TODO: Handle re-registering callbacks when cloning.
-    fn clone(&self) -> CollisionCallbackManager {
-        CollisionCallbackManager {
-            callbacks: HashMap::default(),
-            entity_callbacks: self.entity_callbacks.clone(),
-            entity_collisions: EntityMap::default(),
         }
     }
 }
