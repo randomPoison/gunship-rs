@@ -1,3 +1,4 @@
+use collections::EntitySet;
 use std::collections::VecDeque;
 use std::fmt;
 
@@ -6,9 +7,11 @@ use scene::Scene;
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct Entity(u32);
 
+const MIN_RECYCLED_ENTITIES: usize = 1000;
+
 #[derive(Debug, Clone)]
 pub struct EntityManager {
-    entities: Vec<Entity>,
+    entities: EntitySet,
     recycled_entities: VecDeque<Entity>,
     marked_for_destroy: Vec<Entity>,
     id_counter: u32
@@ -17,7 +20,7 @@ pub struct EntityManager {
 impl EntityManager {
     pub fn new() -> EntityManager {
         EntityManager {
-            entities: Vec::new(),
+            entities: EntitySet::default(),
             recycled_entities: VecDeque::new(),
             marked_for_destroy: Vec::new(),
             id_counter: 1
@@ -25,32 +28,25 @@ impl EntityManager {
     }
 
     pub fn create(&mut self) -> Entity {
-        if let Some(entity) = self.recycled_entities.pop_front() {
-            return entity;
-        }
-
-        let entity = Entity(self.id_counter);
-        self.id_counter += 1;
-        self.entities.push(entity);
-        entity
-    }
-
-    pub fn mark_for_destroy(&mut self, entity: Entity) {
-        debug_assert!(!self.marked_for_destroy.contains(&entity), "Can't mark an entity for destruction more than once");
-        self.marked_for_destroy.push(entity);
-    }
-
-    pub fn destroy_marked(&mut self) {
-        for entity in self.marked_for_destroy.drain(0..) {
-            debug_assert!(!self.recycled_entities.iter().any(|existing| &entity == existing), "Trying to recycle entity {:?} but it is already recycled");
-            self.recycled_entities.push_back(entity)
+        if self.recycled_entities.len() > MIN_RECYCLED_ENTITIES {
+            self.recycled_entities.pop_front().unwrap()
+        } else {
+            let entity = Entity(self.id_counter);
+            self.id_counter += 1;
+            self.entities.insert(entity);
+            entity
         }
     }
 
-    pub fn destroy_immediate(&mut self, entity: Entity) {
-        debug_assert!(!self.recycled_entities.iter().any(|existing| &entity == existing), "Trying to recycle entity {:?} but it is already recycled");
+    pub fn destroy(&mut self, entity: Entity) {
+        let removed = self.entities.remove(&entity);
+        debug_assert!(removed, "Trying to destroy entity {:?} but it is not live");
 
         self.recycled_entities.push_back(entity);
+    }
+
+    pub fn is_alive(&self, entity: Entity) -> bool {
+        self.entities.contains(&entity)
     }
 }
 

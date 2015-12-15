@@ -143,6 +143,10 @@ impl Scene {
         }
     }
 
+    pub fn is_alive(&self, entity: Entity) -> bool {
+        self.entity_manager.borrow().is_alive(entity)
+    }
+
     pub fn create_entity(&self) -> Entity {
         self.entity_manager.borrow_mut().create()
     }
@@ -157,26 +161,26 @@ impl Scene {
     }
 
     pub fn destroy_entity(&self, entity: Entity) {
-        for (_, manager) in self.component_managers.iter() {
-            manager.borrow().destroy_all(entity);
-        }
-
-        let transform_manager = self.get_manager::<TransformManager>();
-        transform_manager.walk_children(entity, &mut |entity| {
+        if self.is_alive(entity) {
             for (_, manager) in self.component_managers.iter() {
                 manager.borrow().destroy_all(entity);
             }
-        });
 
-        self.entity_manager.borrow_mut().mark_for_destroy(entity);
+            let transform_manager = self.get_manager::<TransformManager>();
+            transform_manager.walk_children(entity, &mut |entity| {
+                for (_, manager) in self.component_managers.iter() {
+                    manager.borrow().destroy_all(entity);
+                }
+            });
+
+            self.entity_manager.borrow_mut().destroy(entity);
+        }
     }
 
     pub fn destroy_marked(&self) {
         for (_, manager) in self.component_managers.iter() {
             manager.borrow_mut().destroy_marked();
         }
-
-        self.entity_manager.borrow_mut().destroy_marked();
     }
 }
 
