@@ -638,7 +638,7 @@ impl CollisionCallbackManager {
     fn assign<T: 'static + CollisionCallback>(&mut self, entity: Entity, callback: T) {
         let callback_id = CallbackId::of::<T>();
         debug_assert!(
-            self.callbacks.get(callback_id).is_some(),
+            self.callbacks.get(&callback_id).is_some(),
             "Cannot assign collision callback that has not been registered");
 
         // TODO: Should we allow an entity to be registered with the same callback more than once?
@@ -683,7 +683,7 @@ impl CollisionCallbackManager {
                                          .filter(|&(_, ref others)| others.len() > 0) {
             if let Some(callback_ids) = self.entity_callbacks.get(&entity) {
                 for callback_id in callback_ids.iter() {
-                    let mut callback = match self.callbacks.get_mut(*callback_id) {
+                    let mut callback = match self.callbacks.get_mut(callback_id) {
                         Some(callback) => callback,
                         None => panic!("No callback with id {:?}", callback_id),
                     };

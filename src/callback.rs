@@ -11,12 +11,12 @@ use std::collections::HashMap;
 use std::fmt::{self, Debug};
 
 #[cfg(not(feature="hotloading"))]
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
 pub struct CallbackId(u64);
 
 #[cfg(feature="hotloading")]
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
-pub struct CallbackId(&'static str);
+#[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
+pub struct CallbackId(String);
 
 impl CallbackId {
     #[cfg(not(feature="hotloading"))]
@@ -26,7 +26,7 @@ impl CallbackId {
 
     #[cfg(feature="hotloading")]
     pub fn of<T: 'static>() -> CallbackId {
-        CallbackId(unsafe { ::std::intrinsics::type_name::<T>() })
+        CallbackId(String::from(unsafe { ::std::intrinsics::type_name::<T>() }))
     }
 }
 
@@ -48,15 +48,15 @@ impl<T: 'static + ?Sized> CallbackManager<T> {
         self.callbacks.insert(callback_id.clone(), callback);
     }
 
-    pub fn get(&self, callback_id: CallbackId) -> Option<&T> {
+    pub fn get(&self, callback_id: &CallbackId) -> Option<&T> {
         self.callbacks
-        .get(&callback_id)
+        .get(callback_id)
         .map(|box_callback| &**box_callback) // Deref from `&Box<Callback>` to `&Callback`.
     }
 
-    pub fn get_mut(&mut self, callback_id: CallbackId) -> Option<&mut T> {
+    pub fn get_mut(&mut self, callback_id: &CallbackId) -> Option<&mut T> {
         self.callbacks
-        .get_mut(&callback_id)
+        .get_mut(callback_id)
         .map(|box_callback| &mut **box_callback) // Deref from `&Box<Callback>` to `&Callback`.
     }
 }

@@ -50,7 +50,7 @@ impl AlarmManager {
     {
         let callback_id = CallbackId::of::<T>();
         debug_assert!(
-            self.callbacks.borrow().get(callback_id).is_some(),
+            self.callbacks.borrow().get(&callback_id).is_some(),
             "Cannot assign alarm callback which has not been registered");
 
         self.id_counter.set(self.id_counter.get() + 1);
@@ -70,7 +70,7 @@ impl AlarmManager {
     }
 
     #[allow(unused_variables)]
-    pub fn assign_repeating<T>(&mut self, entity: Entity, duration: f32, callback: T) -> AlarmId
+    pub fn assign_repeating<T>(&self, entity: Entity, duration: f32, callback: T) -> AlarmId
         where T: 'static + Fn(&Scene, Entity)
     {
         self.id_counter.set(self.id_counter.get() + 1);
@@ -188,7 +188,7 @@ pub fn alarm_update(scene: &Scene, delta: f32) {
         // Do callbacks.
         for alarm in &callbacks_to_trigger {
             let entity = alarm.entity;
-            let callback = callbacks.get(alarm.callback).unwrap(); // TODO: Provide better panic message.
+            let callback = callbacks.get(&alarm.callback).unwrap(); // TODO: Provide better panic message.
             callback(scene, entity);
         }
     }
