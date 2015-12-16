@@ -146,9 +146,6 @@ impl Engine {
             self.collision_update.update(scene, TARGET_FRAME_TIME_SECONDS);
             self.light_update.update(scene, TARGET_FRAME_TIME_SECONDS);
             self.audio_update.update(scene, TARGET_FRAME_TIME_SECONDS);
-
-            // Cleanup any entities that have been marked for destroy.
-            scene.destroy_marked();
         }
 
         if scene.input.key_pressed(ScanCode::F9) {
@@ -194,7 +191,7 @@ impl Engine {
                     transform.derived_matrix(),
                     transform.derived_normal_matrix(),
                     &camera,
-                    &mut light_manager.iter().map(|(light_ref, entity)| *light_ref));
+                    &mut light_manager.iter().map(|(light_ref, _)| *light_ref));
             }
 
             self.debug_draw.flush_commands(&camera);

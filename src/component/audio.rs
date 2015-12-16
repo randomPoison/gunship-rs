@@ -90,12 +90,10 @@ impl AudioSourceManager {
 }
 
 impl ComponentManager for AudioSourceManager {
-    fn destroy_all(&self, entity: Entity) {
-        self.inner.destroy_all(entity);
-    }
+    type Component = AudioSource;
 
-    fn destroy_marked(&mut self) {
-        self.inner.destroy_marked();
+    fn destroy(&self, entity: Entity) {
+        self.inner.destroy(entity);
     }
 }
 

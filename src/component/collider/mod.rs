@@ -264,18 +264,11 @@ impl ColliderManager {
 }
 
 impl ComponentManager for ColliderManager {
-    fn destroy_all(&self, entity: Entity) {
-        self.inner.destroy_all(entity);
-        self.marked_for_destroy.borrow_mut().insert(entity);
-    }
+    type Component = Collider;
 
-    fn destroy_marked(&mut self) {
-        self.inner.destroy_marked();
-        let mut marked_for_destroy = self.marked_for_destroy.borrow_mut();
-        for entity in marked_for_destroy.drain() {
-            self.callback_manager.borrow_mut().unregister_all(entity);
-            self.bvh_manager.borrow_mut().destroy_immediate(entity);
-        }
+    fn destroy(&self, entity: Entity) {
+        self.inner.destroy(entity);
+        self.marked_for_destroy.borrow_mut().insert(entity);
     }
 }
 
@@ -594,6 +587,13 @@ impl System for CollisionSystem {
         }
 
         collider_manager.callback_manager.borrow_mut().process_collisions(scene, &self.grid_system.collisions);
+
+        // Run cleanup of marked components.
+        let mut marked_for_destroy = collider_manager.marked_for_destroy.borrow_mut();
+        for entity in marked_for_destroy.drain() {
+            collider_manager.callback_manager.borrow_mut().unregister_all(entity);
+            collider_manager.bvh_manager.borrow_mut().destroy_immediate(entity);
+        }
     }
 }
 

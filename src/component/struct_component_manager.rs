@@ -111,7 +111,9 @@ impl<T: Clone + Any> StructComponentManager<T> {
 }
 
 impl<T: Clone + Any> ComponentManager for StructComponentManager<T> {
-    fn destroy_all(&self, entity: Entity) {
+    type Component = T;
+
+    fn destroy(&self, entity: Entity) {
         let maybe_index = self.indices.borrow_mut().remove(&entity);
         if let Some(index) = maybe_index {
             let mut component_slot = self.components[index].borrow_mut();
@@ -125,9 +127,6 @@ impl<T: Clone + Any> ComponentManager for StructComponentManager<T> {
 
             self.entity_count.set(self.entity_count.get() - 1);
         }
-    }
-
-    fn destroy_marked(&mut self) {
     }
 }
 

@@ -213,17 +213,10 @@ impl TransformManager {
 }
 
 impl ComponentManager for TransformManager {
-    fn destroy_all(&self, entity: Entity) {
-        self.marked_for_destroy.borrow_mut().insert(entity);
-    }
+    type Component = Transform;
 
-    fn destroy_marked(&mut self) {
-        let mut marked_for_destroy = RefCell::new(HashSet::default());
-        ::std::mem::swap(&mut marked_for_destroy, &mut self.marked_for_destroy);
-        let mut marked_for_destroy = marked_for_destroy.into_inner();
-        for entity in marked_for_destroy.drain() {
-            self.destroy_immediate(entity);
-        }
+    fn destroy(&self, entity: Entity) {
+        self.marked_for_destroy.borrow_mut().insert(entity);
     }
 }
 
@@ -423,8 +416,19 @@ impl Transform {
 pub fn transform_update(scene: &Scene, _: f32) {
     let _stopwatch = Stopwatch::new("transform update");
 
-    let transform_manager = scene.get_manager::<TransformManager>();
+    let mut transform_manager = scene.get_manager_mut::<TransformManager>();
 
+    // Process components marked for destruction.
+    {
+        let mut marked_for_destroy = RefCell::new(HashSet::default());
+        ::std::mem::swap(&mut marked_for_destroy, &mut transform_manager.marked_for_destroy);
+        let mut marked_for_destroy = marked_for_destroy.into_inner();
+        for entity in marked_for_destroy.drain() {
+            transform_manager.destroy_immediate(entity);
+        }
+    }
+
+    // Actually do the update.
     for (transform_row, entity_row) in transform_manager.transforms.iter().zip(transform_manager.entities.iter()) {
         for (transform, &(_, parent)) in transform_row.iter().zip(entity_row.iter()) {
             // Retrieve the parent's transformation matrix, using the identity

@@ -1,11 +1,20 @@
 use collections::EntitySet;
 use std::collections::VecDeque;
-use std::fmt;
+use std::fmt::{self, Debug};
 
 use scene::Scene;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct Entity(u32);
+
+impl Entity {
+    /// Retrieves the component `T` associated with this entity if one exists.
+    pub fn get_component_mut<'a: 'b, 'b, T: 'static>(&self, _: &Scene) -> Option<&'b mut T> {
+        // let manager = scene.get_manager_for::<T>();
+        // manager.get(*self) // TODO: Make this happen
+        None
+    }
+}
 
 const MIN_RECYCLED_ENTITIES: usize = 1000;
 
@@ -60,16 +69,21 @@ impl<T: ?Sized> System for T where T: FnMut(&Scene, f32) {
     }
 }
 
-pub trait ComponentManager: ::std::any::Any {
-    /// Destroy all component data associated with the entity.
-    fn destroy_all(&self, Entity);
+pub trait ComponentManager: 'static {
+    type Component;
 
-    /// Destroy all previously marked components.
-    fn destroy_marked(&mut self);
+    // fn get(&self, entity: Entity) -> &Self::Component;
+    fn destroy(&self, entity: Entity);
 }
 
-impl ::std::fmt::Debug for ComponentManager {
+impl<T> Debug for ComponentManager<Component=T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.pad("ComponentManager")
+        write!(f, "ComponentManager<{}>", type_name::<T>())
+    }
+}
+
+fn type_name<T>() -> &'static str {
+    unsafe {
+        ::std::intrinsics::type_name::<T>()
     }
 }

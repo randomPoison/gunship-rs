@@ -28,6 +28,7 @@ impl<T: Debug + Clone + Any> DerefMut for SingletonComponentManager<T> {
 }
 
 impl<T: Debug + Clone + Any> ComponentManager for SingletonComponentManager<T> {
-    fn destroy_all(&self, _: Entity) {}
-    fn destroy_marked(&mut self) {}
+    type Component = T;
+
+    fn destroy(&self, _: Entity) {}
 }

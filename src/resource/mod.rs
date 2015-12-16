@@ -127,7 +127,7 @@ impl ResourceManager {
                     }
                 };
 
-                let mesh_manager = scene.get_manager_mut::<MeshManager>();
+                let mesh_manager = scene.get_manager::<MeshManager>();
                 mesh_manager.give_mesh(entity, gpu_mesh);
             }
         }

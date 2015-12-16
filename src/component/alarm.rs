@@ -21,7 +21,7 @@ pub struct AlarmId(usize);
 #[derive(Clone)]
 pub struct AlarmManager {
     id_counter: Cell<usize>,
-    alarms: Vec<Alarm>,
+    alarms: RefCell<Vec<Alarm>>,
     callbacks: RefCell<CallbackManager<Fn(&Scene, Entity)>>,
     marked_for_destroy: RefCell<EntitySet>,
     pending_insertions: RefCell<Vec<Alarm>>,
@@ -32,7 +32,7 @@ impl AlarmManager {
     pub fn new() -> AlarmManager {
         AlarmManager {
             id_counter: Cell::new(0),
-            alarms: Vec::new(),
+            alarms: RefCell::new(Vec::new()),
             callbacks: RefCell::new(CallbackManager::new()),
             marked_for_destroy: RefCell::new(EntitySet::default()),
             pending_insertions: RefCell::new(Vec::new()),
@@ -90,15 +90,18 @@ impl AlarmManager {
     }
 
     pub fn cancel(&mut self, id: AlarmId) {
-        self.alarms.retain(|alarm| alarm.id != id);
+        // FIXME: This is wrong. When an alarm is remove the alarm after it needs to be given its
+        // remaining time in order to keep the gap between them correct.
+        self.alarms.borrow_mut().retain(|alarm| alarm.id != id);
     }
 
-    fn process_pending_insertions(&mut self) {
+    fn process_pending_insertions(&self) {
         let mut pending_insertions = self.pending_insertions.borrow_mut();
+        let mut alarms = self.alarms.borrow_mut();
         for mut new_alarm in pending_insertions.drain(..) {
             let mut insertion_index = None;
             new_alarm.remaining_time = new_alarm.start_time;
-            for (index, alarm) in self.alarms.iter().enumerate() {
+            for (index, alarm) in alarms.iter().enumerate() {
                 if new_alarm.remaining_time < alarm.remaining_time {
                     // There's less time than the current alarm, which means we should insert
                     // the new alarm before the current one.
@@ -111,58 +114,74 @@ impl AlarmManager {
             }
 
             if let Some(index) = insertion_index {
-                self.alarms.insert(index, new_alarm);
+                alarms.insert(index, new_alarm);
             } else {
                 // Alarm doesn't come before any other alarms, push it on the back.
-                self.alarms.push(new_alarm);
+                alarms.push(new_alarm);
             }
         }
     }
 }
 
 impl ComponentManager for AlarmManager {
-    fn destroy_all(&self, entity: Entity) {
+    type Component = AlarmId;
+
+    fn destroy(&self, entity: Entity) {
         self.marked_for_destroy.borrow_mut().insert(entity);
-    }
-
-    fn destroy_marked(&mut self) {
-        let mut marked_for_destroy = self.marked_for_destroy.borrow_mut();
-        for entity in marked_for_destroy.drain() {
-            // Iterate through all alarms and remove any associated with the entity.
-            loop {
-                let (index, remaining_time) = match self.alarms.iter().enumerate().find(|&(_, alarm)| alarm.entity == entity) {
-                    Some((index, alarm)) => {
-                        (index, alarm.remaining_time)
-                    }
-                    None => break,
-                };
-
-                if index < self.alarms.len() - 1 {
-                    // There's another alarm after the one wer're removing, so update it.
-                    self.alarms[index + 1].remaining_time += remaining_time;
-                }
-
-                self.alarms.remove(index);
-            }
-        }
     }
 }
 
 pub fn alarm_update(scene: &Scene, delta: f32) {
     let mut callbacks_to_trigger: Vec<Alarm> = Vec::new();
 
+    // Process alarms marked for destruction and run any cleanup from last frame before
+    // processing the alarms.
+    {
+        let alarm_manager = scene.get_manager::<AlarmManager>();
+        let mut alarms = alarm_manager.alarms.borrow_mut();
+
+        let mut marked_for_destroy = alarm_manager.marked_for_destroy.borrow_mut();
+        for entity in marked_for_destroy.drain() {
+            // Iterate through all alarms and remove any associated with the entity.
+            loop {
+                let (index, remaining_time) = {
+                    let maybe_alarm =
+                        alarms
+                        .iter()
+                        .enumerate()
+                        .find(|&(_, alarm)| alarm.entity == entity);
+                    match maybe_alarm {
+                        Some((index, alarm)) => {
+                            (index, alarm.remaining_time)
+                        }
+                        None => break,
+                    }
+                };
+
+                if index < alarms.len() - 1 {
+                    // There's another alarm after the one wer're removing, so update it.
+                    alarms[index + 1].remaining_time += remaining_time;
+                }
+
+                alarms.remove(index);
+            }
+        }
+    }
+
     // The first time we borrow the alarm manager we collect up all the alarms that need
     // to be triggered, but we need to end our borrow of the alarm manager before triggering
     // them because the callback might try to borrow the alarm manager too.
     {
-        let mut alarm_manager = scene.get_manager_mut::<AlarmManager>();
+        let alarm_manager = scene.get_manager::<AlarmManager>();
 
         alarm_manager.process_pending_insertions();
 
+        let mut alarms = alarm_manager.alarms.borrow_mut();
+
         let mut remaining_delta = delta;
-        while alarm_manager.alarms.len() > 0 {
+        while alarms.len() > 0 {
             {
-                let alarm = &mut alarm_manager.alarms[0];
+                let alarm = &mut alarms[0];
                 if remaining_delta > alarm.remaining_time {
                     // Alarm is done, invoke the callback and then remove it from the manager.
                     remaining_delta -= alarm.remaining_time;
@@ -176,7 +195,7 @@ pub fn alarm_update(scene: &Scene, delta: f32) {
 
             // If the alarm shouldn't be removed the loop breaks before this point, so we're good
             // to remove the first alarm.
-            let alarm = alarm_manager.alarms.remove(0);
+            let alarm = alarms.remove(0);
             callbacks_to_trigger.push(alarm);
         }
     }

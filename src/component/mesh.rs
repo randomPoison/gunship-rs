@@ -54,10 +54,9 @@ impl MeshManager {
 }
 
 impl ComponentManager for MeshManager {
-    fn destroy_all(&self, entity: Entity) {
-        self.inner.destroy_all(entity);
-    }
+    type Component = Mesh;
 
-    fn destroy_marked(&mut self) {
+    fn destroy(&self, entity: Entity) {
+        self.inner.destroy(entity);
     }
 }
