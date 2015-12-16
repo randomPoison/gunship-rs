@@ -18,6 +18,10 @@ struct Alarm {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AlarmId(usize);
 
+impl Component for AlarmId {
+    type Manager = AlarmManager;
+}
+
 #[derive(Clone)]
 pub struct AlarmManager {
     id_counter: Cell<usize>,

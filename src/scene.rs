@@ -3,13 +3,12 @@ use std::rc::Rc;
 use std::cell::RefCell;
 use std::intrinsics;
 use std::mem;
-use std::raw::TraitObject;
 
 use bs_audio::AudioSource;
 
 use ecs::*;
 use input::Input;
-use component::{TransformManager, CameraManager, MeshManager, LightManager, AudioSourceManager,
+use component::{TransformManager, CameraManager, LightManager, MeshManager, AudioSourceManager,
                 AlarmManager, ColliderManager};
 use resource::ResourceManager;
 
@@ -78,7 +77,7 @@ impl ComponentId {
 /// managers and input.
 pub struct Scene {
     entity_manager: RefCell<EntityManager>,
-    component_managers: HashMap<ManagerId, Box<ComponentManager<Component=()>>>,
+    component_managers: HashMap<ManagerId, Box<()>>,
     component_map: HashMap<ComponentId, ManagerId>,
     pub input: Input,
     pub audio_source: AudioSource,
@@ -129,7 +128,7 @@ impl Scene {
         scene
     }
 
-    pub fn register_manager<T: ComponentManager<Component=C>, C>(&mut self, manager: T) {
+    pub fn register_manager<T: ComponentManager<Component=C>, C: Component<Manager=T>>(&mut self, manager: T) {
         let manager_id = ManagerId::of::<T>();
         let component_id = ComponentId::of::<T>();
         assert!(
@@ -140,7 +139,7 @@ impl Scene {
             "Manager already registered for component {}", type_name::<C>());
 
         // Box the manager as a trait object to construct the data and vtable pointers.
-        let boxed_manager = Box::new(manager) as Box<ComponentManager<Component=C>>;
+        let boxed_manager = Box::new(manager);
 
         // Transmute to raw trait object to throw away type information so that we can store it
         // in the type map.
@@ -161,7 +160,7 @@ impl Scene {
                 manager_id),
         };
 
-        unsafe { downcast_manager(trait_object) }
+        unsafe { downcast_ref(trait_object) }
     }
 
     // FIXME: DANGER! DANGER! VERY BAD!
@@ -175,23 +174,20 @@ impl Scene {
                 manager_id),
         };
 
-        unsafe { downcast_manager_mut(trait_object) }
+        // Use same method as `UnsafeCell` to convert a immutable reference to a mutable pointer.
+        unsafe { downcast_mut(&mut *(trait_object as *const () as *mut ())) }
     }
 
-    pub fn get_manager_for<C: 'static>(&self) -> &ComponentManager<Component=C> {
-        let component_id = ComponentId::of::<C>();
-        let manager_id = match self.component_map.get(&component_id) {
-            Some(id) => id,
-            None => panic!("No component manager associated with component type {}", type_name::<C>()),
-        };
+    pub fn get_manager_for<C: Component<Manager=M>, M: ComponentManager<Component=C>>(&self) -> &M {
+        let manager_id = ManagerId::of::<M>();
         let manager = match self.component_managers.get(&manager_id) {
-            Some(manager) => &**manager,
+            Some(manager) => &**manager, // &Box<()> -> &()
             None => panic!("Tried to retrieve manager {} with ID {:?} but none exists",
                            type_name::<C>(),
                            manager_id),
         };
 
-        unsafe { restore_manager_trait(manager) }
+        unsafe { downcast_ref(manager) }
     }
 
     pub fn has_manager_for<C: 'static>(&self) -> bool {
@@ -251,25 +247,25 @@ impl Scene {
     }
 
     pub fn destroy_entity(&self, entity: Entity) {
-        if self.is_alive(entity) {
-            for manager in self.component_managers.values() {
-                // In this context we don't care what type of component the manager *actually* is
-                // for, so we transmute it to `ComponentManager<Component=()>` so that we can
-                // tell it to destroy the entity regardless of it's actual type. This is safe to do
-                // because the signature of `ComponentManager::destroy()` doesn't change based on
-                // the component so we're basically just calling a function pointer.
-                let manager = unsafe { restore_manager_trait::<()>(&**manager) };
-                manager.destroy(entity);
-            }
+        // TODO: Notify the component managers that an entity was asploded.
 
-            let transform_manager = self.get_manager::<TransformManager>();
-            transform_manager.walk_children(entity, &mut |entity| {
-                for (_, manager) in self.component_managers.iter() {
-                    // Same story as above.
-                    let manager = unsafe { restore_manager_trait::<()>(&**manager) };
-                    manager.destroy(entity);
-                }
-            });
+        if self.is_alive(entity) {
+            // for manager in self.component_managers.values() {
+            //     // In this context we don't care what type of component the manager *actually* is
+            //     // for, so we transmute it to `ComponentManager<Component=()>` so that we can
+            //     // tell it to destroy the entity regardless of it's actual type. This is safe to do
+            //     // because the signature of `ComponentManager::destroy()` doesn't change based on
+            //     // the component so we're basically just calling a function pointer.
+            //     manager.destroy(entity);
+            // }
+            //
+            // let transform_manager = self.get_manager::<TransformManager>();
+            // transform_manager.walk_children(entity, &mut |entity| {
+            //     for (_, manager) in self.component_managers.iter() {
+            //         // Same story as above.
+            //         manager.destroy(entity);
+            //     }
+            // });
 
             self.entity_manager.borrow_mut().destroy(entity);
         }
@@ -317,24 +313,14 @@ impl<'a, T: ComponentManager> DerefMut for ManagerRefMut<'a, T> {
 }
 */
 
-unsafe fn restore_manager_trait<'a, T>(trait_object: &'a ComponentManager<Component=()>) -> &'a ComponentManager<Component=T> {
-    mem::transmute(trait_object)
-}
-
 /// Performs an unchecked downcast from the `ComponentManager` trait object to the concrete type.
-unsafe fn downcast_manager<'a, T: ComponentManager, C>(manager: &'a ComponentManager<Component=C>) -> &'a T {
-    // Get the raw representation of the trait object.
-    let to: TraitObject = mem::transmute(manager);
-
+unsafe fn downcast_ref<'a, T>(manager: &'a ()) -> &'a T {
     // Extract the data pointer.
-    mem::transmute(to.data)
+    mem::transmute(manager)
 }
 
 /// FIXME: WARNING! WARNING! DANGER! VERY BAD!
-unsafe fn downcast_manager_mut<'a, T: ComponentManager, C>(manager: &'a ComponentManager<Component=C>) -> &'a mut T {
-    // Get the raw representation of the trait object.
-    let to: TraitObject = mem::transmute(manager);
-
+unsafe fn downcast_mut<'a, T>(manager: &'a mut ()) -> &'a mut T {
     // Extract the data pointer.
-    mem::transmute(to.data)
+    mem::transmute(manager)
 }

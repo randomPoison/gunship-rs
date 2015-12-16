@@ -1,8 +1,8 @@
 use std::rc::Rc;
 
-use scene::Scene;
-use ecs::{Entity, ComponentManager, System};
+use ecs::*;
 use resource::ResourceManager;
+use scene::Scene;
 use super::struct_component_manager::{Iter, IterMut, Ref, RefMut, StructComponentManager};
 use wav::Wave;
 
@@ -40,6 +40,10 @@ impl AudioSource {
     pub fn is_playing(&self) -> bool {
         self.is_playing
     }
+}
+
+impl Component for AudioSource {
+    type Manager = AudioSourceManager;
 }
 
 pub struct AudioSourceManager {

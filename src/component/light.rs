@@ -1,10 +1,13 @@
-use ecs::System;
+use ecs::*;
 use scene::Scene;
-use component::{StructComponentManager, TransformManager};
+use component::{DefaultManager, TransformManager};
 
 pub use polygon::light::Light;
 pub use polygon::light::PointLight;
-pub type LightManager = StructComponentManager<Light>;
+
+impl Component for Light {}
+
+pub type LightManager = DefaultManager<Light>;
 
 #[derive(Debug, Clone, Copy)]
 pub struct LightUpdateSystem;

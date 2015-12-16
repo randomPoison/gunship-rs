@@ -184,6 +184,10 @@ pub enum Collider {
     Mesh,
 }
 
+impl Component for Collider {
+    type Manager = ColliderManager;
+}
+
 /// Manages the user-facing data in the collision system.
 ///
 /// `ColliderManager` is used to assign a collision volume to entities, as well as retrieve

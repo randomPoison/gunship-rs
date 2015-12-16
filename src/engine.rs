@@ -20,7 +20,7 @@ use stopwatch::{Collector, Stopwatch};
 
 use scene::Scene;
 use resource::ResourceManager;
-use ecs::System;
+use ecs::*;
 use component::*;
 use debug_draw::DebugDraw;
 

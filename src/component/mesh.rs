@@ -1,4 +1,4 @@
-use ecs::{Entity, ComponentManager};
+use ecs::*;
 use polygon::gl_render::{GLMeshData, ShaderProgram};
 use resource::ResourceManager;
 use std::rc::Rc;
@@ -9,6 +9,10 @@ use super::struct_component_manager::*;
 pub struct Mesh {
     pub gl_mesh: GLMeshData,
     pub shader: ShaderProgram,
+}
+
+impl Component for Mesh {
+    type Manager = MeshManager;
 }
 
 pub struct MeshManager {

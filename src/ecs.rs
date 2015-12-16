@@ -1,6 +1,6 @@
 use collections::EntitySet;
+use component::DefaultManager;
 use std::collections::VecDeque;
-use std::fmt::{self, Debug};
 
 use scene::Scene;
 
@@ -69,21 +69,15 @@ impl<T: ?Sized> System for T where T: FnMut(&Scene, f32) {
     }
 }
 
-pub trait ComponentManager: 'static {
-    type Component;
+pub trait ComponentManager: 'static + Sized {
+    type Component: Component<Manager=Self>;
 
     // fn get(&self, entity: Entity) -> &Self::Component;
     fn destroy(&self, entity: Entity);
 }
 
-impl<T> Debug for ComponentManager<Component=T> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "ComponentManager<{}>", type_name::<T>())
-    }
+pub trait Component: 'static + Clone {
+    type Manager: ComponentManager<Component=Self> = DefaultManager<Self>;
 }
 
-fn type_name<T>() -> &'static str {
-    unsafe {
-        ::std::intrinsics::type_name::<T>()
-    }
-}
+impl Component for () {}

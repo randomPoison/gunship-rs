@@ -5,7 +5,7 @@ use math::*;
 use stopwatch::Stopwatch;
 
 use collections::{EntityMap, EntitySet};
-use ecs::{Entity, System, ComponentManager};
+use ecs::*;
 use scene::Scene;
 
 #[derive(Debug, Clone)]
@@ -411,6 +411,10 @@ impl Transform {
 
         self.out_of_date.set(false);
     }
+}
+
+impl Component for Transform {
+    type Manager = TransformManager;
 }
 
 pub fn transform_update(scene: &Scene, _: f32) {

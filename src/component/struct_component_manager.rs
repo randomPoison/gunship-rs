@@ -1,15 +1,23 @@
 use collections::{EntityMap, EntitySet};
-use ecs::{ComponentManager, Entity};
-use std::any::Any;
+use ecs::*;
 use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, HashSet};
 use std::ops::{Deref, DerefMut};
 
 const MAX_CAPACITY: usize = 1_000;
 
-/// A default manager for component types that can be represented as a single struct.
+/// A utilty on which to build other component managers.
+///
+/// `StructComponentManager` provides a default system for implementing a component manager for any
+/// type that can be represented as a single struct. It handles the details of assigning component
+/// data to an entity, retrieving that data, and destroying it. It also handles the details of
+/// doing all of that through only shared references. `StructComponentManager` however does not
+/// implement `ComponentManager` because it is meant to be reused within other managers that want
+/// to wrap extra behavior around the default management style. `DefaultManager` is a basic wrapper
+/// around `StructComponentManager` that implements `ComponentManager` and should be used as the
+/// default component manager when no special handling is needed.
 #[derive(Debug, Clone)]
-pub struct StructComponentManager<T: Clone + Any> {
+pub struct StructComponentManager<T: Clone> {
     components: Vec<RefCell<Option<T>>>,
     entities: Vec<RefCell<Option<Entity>>>,
     indices: RefCell<EntityMap<usize>>,
@@ -26,7 +34,7 @@ pub struct StructComponentManager<T: Clone + Any> {
     marked_for_destroy: RefCell<EntitySet>,
 }
 
-impl<T: Clone + Any> StructComponentManager<T> {
+impl<T: Clone> StructComponentManager<T> {
     pub fn new() -> StructComponentManager<T> {
         let mut manager = StructComponentManager::<T> {
             components: Vec::with_capacity(MAX_CAPACITY),
@@ -90,6 +98,22 @@ impl<T: Clone + Any> StructComponentManager<T> {
         }
     }
 
+    pub fn destroy(&self, entity: Entity) {
+        let maybe_index = self.indices.borrow_mut().remove(&entity);
+        if let Some(index) = maybe_index {
+            let mut component_slot = self.components[index].borrow_mut();
+            let mut entity_slot = self.entities[index].borrow_mut();
+
+            debug_assert!(component_slot.is_some());
+            debug_assert!(entity_slot.is_some() && entity_slot.unwrap() == entity);
+
+            *component_slot = None;
+            *entity_slot = None;
+
+            self.entity_count.set(self.entity_count.get() - 1);
+        }
+    }
+
     pub fn iter(&self) -> Iter<T> {
         Iter {
             component_iter: self.components.iter(),
@@ -107,26 +131,6 @@ impl<T: Clone + Any> StructComponentManager<T> {
     /// Returns the number of entities with a component associated.
     pub fn len(&self) -> usize {
         self.entity_count.get()
-    }
-}
-
-impl<T: Clone + Any> ComponentManager for StructComponentManager<T> {
-    type Component = T;
-
-    fn destroy(&self, entity: Entity) {
-        let maybe_index = self.indices.borrow_mut().remove(&entity);
-        if let Some(index) = maybe_index {
-            let mut component_slot = self.components[index].borrow_mut();
-            let mut entity_slot = self.entities[index].borrow_mut();
-
-            debug_assert!(component_slot.is_some());
-            debug_assert!(entity_slot.is_some() && entity_slot.unwrap() == entity);
-
-            *component_slot = None;
-            *entity_slot = None;
-
-            self.entity_count.set(self.entity_count.get() - 1);
-        }
     }
 }
 

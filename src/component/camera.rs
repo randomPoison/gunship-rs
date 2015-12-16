@@ -1,8 +1,9 @@
-use component::StructComponentManager;
+use component::DefaultManager;
+use ecs::*;
 use math::*;
 use std::f32::consts::PI;
 
-pub type CameraManager = StructComponentManager<Camera>;
+pub type CameraManager = DefaultManager<Camera>;
 
 #[derive(Debug, Clone)]
 pub struct Camera
@@ -26,6 +27,8 @@ impl Camera {
         }
     }
 }
+
+impl Component for Camera {}
 
 impl Default for Camera {
     fn default() -> Camera {

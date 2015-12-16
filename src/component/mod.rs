@@ -8,8 +8,11 @@ pub mod singleton_component_manager;
 pub mod struct_component_manager;
 pub mod collider;
 
+use ecs::*;
+use self::struct_component_manager::StructComponentManager;
+use std::ops::Deref;
+
 pub use self::singleton_component_manager::SingletonComponentManager;
-pub use self::struct_component_manager::StructComponentManager;
 pub use self::transform::{Transform, TransformManager, transform_update};
 pub use self::camera::{Camera, CameraManager};
 pub use self::mesh::{Mesh, MeshManager};
@@ -17,3 +20,28 @@ pub use self::light::{Light, LightManager, LightUpdateSystem};
 pub use self::audio::{AudioSource, AudioSourceManager, AudioSystem};
 pub use self::alarm::{AlarmId, AlarmManager, alarm_update};
 pub use self::collider::{Collider, ColliderManager, CollisionSystem, bounding_volume, grid_collision};
+
+#[derive(Debug, Clone)]
+pub struct DefaultManager<T: Component + Clone>(StructComponentManager<T>);
+
+impl<T: 'static + Component<Manager=DefaultManager<T>> + Clone> DefaultManager<T> {
+    pub fn new() -> DefaultManager<T> {
+        DefaultManager(StructComponentManager::new())
+    }
+}
+
+impl<T: Component<Manager=DefaultManager<T>> + Clone> ComponentManager for DefaultManager<T> {
+    type Component = T;
+
+    fn destroy(&self, entity: Entity) {
+        self.0.destroy(entity);
+    }
+}
+
+impl<T: Component + Clone> Deref for DefaultManager<T> {
+    type Target = StructComponentManager<T>;
+
+    fn deref(&self) -> &StructComponentManager<T> {
+        &self.0
+    }
+}
