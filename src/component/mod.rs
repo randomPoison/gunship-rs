@@ -9,6 +9,7 @@ pub mod struct_component_manager;
 pub mod collider;
 
 use ecs::*;
+use scene::Scene;
 use self::struct_component_manager::StructComponentManager;
 use std::ops::Deref;
 
@@ -32,6 +33,10 @@ impl<T: 'static + Component<Manager=DefaultManager<T>> + Clone> DefaultManager<T
 
 impl<T: Component<Manager=DefaultManager<T>> + Clone> ComponentManager for DefaultManager<T> {
     type Component = T;
+
+    fn register(scene: &mut Scene) {
+        scene.register_manager(Self::new())
+    }
 
     fn destroy(&self, entity: Entity) {
         self.0.destroy(entity);

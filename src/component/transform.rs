@@ -215,6 +215,10 @@ impl TransformManager {
 impl ComponentManager for TransformManager {
     type Component = Transform;
 
+    fn register(scene: &mut Scene) {
+        scene.register_manager(TransformManager::new());
+    }
+
     fn destroy(&self, entity: Entity) {
         self.marked_for_destroy.borrow_mut().insert(entity);
     }

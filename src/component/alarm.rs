@@ -130,6 +130,10 @@ impl AlarmManager {
 impl ComponentManager for AlarmManager {
     type Component = AlarmId;
 
+    fn register(scene: &mut Scene) {
+        scene.register_manager(AlarmManager::new());
+    }
+
     fn destroy(&self, entity: Entity) {
         self.marked_for_destroy.borrow_mut().insert(entity);
     }

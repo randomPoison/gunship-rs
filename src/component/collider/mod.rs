@@ -270,6 +270,10 @@ impl ColliderManager {
 impl ComponentManager for ColliderManager {
     type Component = Collider;
 
+    fn register(scene: &mut Scene) {
+        scene.register_manager(ColliderManager::new());
+    }
+
     fn destroy(&self, entity: Entity) {
         self.inner.destroy(entity);
         self.marked_for_destroy.borrow_mut().insert(entity);

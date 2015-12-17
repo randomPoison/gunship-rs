@@ -96,6 +96,11 @@ impl AudioSourceManager {
 impl ComponentManager for AudioSourceManager {
     type Component = AudioSource;
 
+    fn register(scene: &mut Scene) {
+        let audio_manager = AudioSourceManager::new(scene.resource_manager());
+        scene.register_manager(audio_manager);
+    }
+
     fn destroy(&self, entity: Entity) {
         self.inner.destroy(entity);
     }

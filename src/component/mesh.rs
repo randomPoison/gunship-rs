@@ -1,6 +1,7 @@
 use ecs::*;
 use polygon::gl_render::{GLMeshData, ShaderProgram};
 use resource::ResourceManager;
+use scene::Scene;
 use std::rc::Rc;
 use super::struct_component_manager::*;
 
@@ -59,6 +60,11 @@ impl MeshManager {
 
 impl ComponentManager for MeshManager {
     type Component = Mesh;
+
+    fn register(scene: &mut Scene) {
+        let mesh_manager = MeshManager::new(scene.resource_manager());
+        scene.register_manager(mesh_manager);
+    }
 
     fn destroy(&self, entity: Entity) {
         self.inner.destroy(entity);

@@ -72,7 +72,7 @@ impl<T: ?Sized> System for T where T: FnMut(&Scene, f32) {
 pub trait ComponentManager: 'static + Sized {
     type Component: Component<Manager=Self>;
 
-    // fn get(&self, entity: Entity) -> &Self::Component;
+    fn register(scene: &mut Scene);
     fn destroy(&self, entity: Entity);
 }
 

@@ -4,12 +4,10 @@ use std::cell::RefCell;
 use std::intrinsics;
 use std::mem;
 
-use bs_audio::AudioSource;
-
 use ecs::*;
 use input::Input;
-use component::{TransformManager, CameraManager, LightManager, MeshManager, AudioSourceManager,
-                AlarmManager, ColliderManager};
+use component::{Transform, Camera, Light, Mesh, AudioSource,
+                AlarmId, Collider};
 use resource::ResourceManager;
 
 #[cfg(not(feature = "hotloading"))]
@@ -51,26 +49,6 @@ impl ManagerId {
     }
 }
 
-#[cfg(not(feature = "hotloading"))]
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-struct ComponentId(u64);
-
-#[cfg(feature = "hotloading")]
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-struct ComponentId(String);
-
-impl ComponentId {
-    #[cfg(not(feature="hotloading"))]
-    pub fn of<T: 'static>() -> ComponentId {
-        ComponentId(unsafe { ::std::intrinsics::type_id::<T>() })
-    }
-
-    #[cfg(feature="hotloading")]
-    pub fn of<T: 'static>() -> ComponentId {
-        ComponentId(String::from(unsafe { ::std::intrinsics::type_name::<T>() }))
-    }
-}
-
 /// Contains all the data that defines the current state of the world.
 ///
 /// This is passed into systems in System::update(). It can be used access component
@@ -78,30 +56,29 @@ impl ComponentId {
 pub struct Scene {
     entity_manager: RefCell<EntityManager>,
     component_managers: HashMap<ManagerId, Box<()>>,
-    component_map: HashMap<ComponentId, ManagerId>,
     pub input: Input,
-    pub audio_source: AudioSource,
+    pub audio_source: ::bs_audio::AudioSource, // FIXME: This is a hot mess, the scene should not have to hold on to the audio source.
     resource_manager: Rc<ResourceManager>,
 }
 
 impl Scene {
-    pub fn new(resource_manager: &Rc<ResourceManager>, audio_source: AudioSource) -> Scene {
+    pub fn new(resource_manager: &Rc<ResourceManager>, audio_source: ::bs_audio::AudioSource) -> Scene {
         let mut scene = Scene {
             entity_manager: RefCell::new(EntityManager::new()),
             component_managers: HashMap::new(),
-            component_map: HashMap::new(),
             input: Input::new(),
             audio_source: audio_source,
             resource_manager: resource_manager.clone(),
         };
 
-        scene.register_manager(TransformManager::new());
-        scene.register_manager(CameraManager::new());
-        scene.register_manager(LightManager::new());
-        scene.register_manager(MeshManager::new(resource_manager.clone()));
-        scene.register_manager(AudioSourceManager::new(resource_manager.clone()));
-        scene.register_manager(AlarmManager::new());
-        scene.register_manager(ColliderManager::new());
+        // Register internal component managers.
+        scene.register_component::<Transform>();
+        scene.register_component::<Camera>();
+        scene.register_component::<Light>();
+        scene.register_component::<Mesh>();
+        scene.register_component::<AudioSource>();
+        scene.register_component::<AlarmId>();
+        scene.register_component::<Collider>();
 
         scene
     }
@@ -110,33 +87,32 @@ impl Scene {
         let mut scene = Scene {
             entity_manager: RefCell::new(self.entity_manager.borrow().clone()),
             component_managers: HashMap::new(),
-            component_map: HashMap::new(),
             input: self.input.clone(),
             audio_source: self.audio_source.clone(),
             resource_manager: resource_manager.clone(),
         };
 
         // Reload internal component managers.
-        scene.reload_manager::<TransformManager>(self);
-        scene.reload_manager::<CameraManager>(self);
-        scene.reload_manager::<LightManager>(self);
-        scene.reload_manager::<AlarmManager>(self);
-        scene.reload_manager::<ColliderManager>(self);
-        scene.register_manager(self.get_manager::<MeshManager>().clone(resource_manager.clone()));
-        scene.register_manager(self.get_manager::<AudioSourceManager>().clone(resource_manager.clone()));
+        scene.reload_component::<Transform>(self);
+        scene.reload_component::<Camera>(self);
+        scene.reload_component::<Light>(self);
+        scene.reload_component::<Mesh>(self);
+        scene.reload_component::<AudioSource>(self);
+        scene.reload_component::<AlarmId>(self);
+        scene.reload_component::<Collider>(self);
 
         scene
     }
 
-    pub fn register_manager<T: ComponentManager<Component=C>, C: Component<Manager=T>>(&mut self, manager: T) {
+    pub fn register_component<C: Component>(&mut self) {
+        C::Manager::register(self);
+    }
+
+    pub fn register_manager<T: ComponentManager>(&mut self, manager: T) {
         let manager_id = ManagerId::of::<T>();
-        let component_id = ComponentId::of::<T>();
         assert!(
             !self.component_managers.contains_key(&manager_id),
             "Manager {} with ID {:?} already registered", type_name::<T>(), manager_id);
-        assert!(
-            !self.component_map.contains_key(&component_id),
-            "Manager already registered for component {}", type_name::<C>());
 
         // Box the manager as a trait object to construct the data and vtable pointers.
         let boxed_manager = Box::new(manager);
@@ -147,7 +123,6 @@ impl Scene {
 
         // Add the manager to the type map and the component id to the component map.
         self.component_managers.insert(manager_id.clone(), boxed_trait_object);
-        self.component_map.insert(component_id, manager_id);
     }
 
     pub fn get_manager<T: ComponentManager>(&self) -> &T {
@@ -178,8 +153,8 @@ impl Scene {
         unsafe { downcast_mut(&mut *(trait_object as *const () as *mut ())) }
     }
 
-    pub fn get_manager_for<C: Component<Manager=M>, M: ComponentManager<Component=C>>(&self) -> &M {
-        let manager_id = ManagerId::of::<M>();
+    pub fn get_manager_for<C: Component>(&self) -> &C::Manager {
+        let manager_id = ManagerId::of::<C::Manager>();
         let manager = match self.component_managers.get(&manager_id) {
             Some(manager) => &**manager, // &Box<()> -> &()
             None => panic!("Tried to retrieve manager {} with ID {:?} but none exists",
@@ -190,12 +165,8 @@ impl Scene {
         unsafe { downcast_ref(manager) }
     }
 
-    pub fn has_manager_for<C: 'static>(&self) -> bool {
-        let component_id = ComponentId::of::<C>();
-        let manager_id = match self.component_map.get(&component_id) {
-            Some(id) => id,
-            None => panic!("No component manager associated with component type {}", type_name::<C>()),
-        };
+    pub fn has_manager_for<C: Component>(&self) -> bool {
+        let manager_id = ManagerId::of::<C::Manager>();
 
         self.component_managers.contains_key(&manager_id)
     }
@@ -203,6 +174,10 @@ impl Scene {
     pub fn has_manager<T: ComponentManager>(&self) -> bool {
         let manager_id = ManagerId::of::<T>();
         self.component_managers.contains_key(&manager_id)
+    }
+
+    pub fn reload_component<T: Component>(&mut self, _old_scene: &Scene) {
+        panic!("Hotloading is currently broken, please come back later");
     }
 
     /// Reload a component manager for hotloading purposes.
@@ -237,8 +212,8 @@ impl Scene {
         self.entity_manager.borrow_mut().create()
     }
 
-    pub fn resource_manager(&self) -> &ResourceManager {
-        &*self.resource_manager
+    pub fn resource_manager(&self) -> Rc<ResourceManager> {
+        self.resource_manager.clone()
     }
 
     /// Instantiates an instance of the model in the scene, returning the root entity.
@@ -247,9 +222,9 @@ impl Scene {
     }
 
     pub fn destroy_entity(&self, entity: Entity) {
-        // TODO: Notify the component managers that an entity was asploded.
-
         if self.is_alive(entity) {
+            // FIXME: Notify the component managers that an entity was asploded.
+
             // for manager in self.component_managers.values() {
             //     // In this context we don't care what type of component the manager *actually* is
             //     // for, so we transmute it to `ComponentManager<Component=()>` so that we can
@@ -313,14 +288,14 @@ impl<'a, T: ComponentManager> DerefMut for ManagerRefMut<'a, T> {
 }
 */
 
-/// Performs an unchecked downcast from the `ComponentManager` trait object to the concrete type.
-unsafe fn downcast_ref<'a, T>(manager: &'a ()) -> &'a T {
-    // Extract the data pointer.
+/// Performs an unchecked downcast from `&()` trait object to the concrete type.
+unsafe fn downcast_ref<T>(manager: &()) -> &T {
+    // We're just transmuting a pointer to `()` to a pointer to `T`.
     mem::transmute(manager)
 }
 
-/// FIXME: WARNING! WARNING! DANGER! VERY BAD!
-unsafe fn downcast_mut<'a, T>(manager: &'a mut ()) -> &'a mut T {
-    // Extract the data pointer.
+/// Performs an unchecked downcast from `&()` trait object to the concrete type.
+unsafe fn downcast_mut<T>(manager: &mut ()) -> &mut T {
+    // We're just transmuting a pointer to `()` to a pointer to `T`.
     mem::transmute(manager)
 }
