@@ -1,0 +1,8 @@
+[package]
+name = "serialize"
+version = "0.0.0"
+authors = ["David LeGare <excaliburhissheath@gmail.com>"]
+
+[[bin]]
+name = "serialize"
+path = "src/lib.rs"
