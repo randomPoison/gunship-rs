@@ -39,7 +39,7 @@ pub trait Serializer: Sized {
     //
     // - If `T: Copy` then some writers would be able to handle `Option<T>` differently (e.g. write
     //   write the bytes directly).
-    fn write_option<T>(&mut self, value: Option<&T>) -> Result<(), Self::Error>
+    fn write_option<T>(&mut self, maybe_value: Option<&T>) -> Result<(), Self::Error>
         where T: Serialize<Self>;
 
     // ===============

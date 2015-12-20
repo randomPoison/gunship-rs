@@ -47,10 +47,6 @@ impl Error for ByteWriterError {
     fn description(&self) -> &str {
         "Byte writer error"
     }
-
-    fn cause(&self) -> Option<&Error> {
-        None
-    }
 }
 
 pub mod static_serialize {

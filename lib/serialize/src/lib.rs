@@ -23,6 +23,7 @@
 
 pub mod byte;
 pub mod dynamic_serialize;
+pub mod json;
 pub mod static_serialize;
 
 pub use std::error::Error;
@@ -30,6 +31,7 @@ pub use std::error::Error;
 #[allow(dead_code)]
 fn main() {
     use byte::*;
+    use json::*;
     use static_serialize::Serialize as StaticSerialize;
     use static_serialize::Serializer as StaticSerializer;
 
@@ -38,6 +40,7 @@ fn main() {
         count: usize,
         keys: (bool, bool),
         name: String,
+        float: f32,
     }
 
     impl<T: StaticSerializer> StaticSerialize<T> for Foo {
@@ -47,21 +50,26 @@ fn main() {
             try!(target.struct_member("count", &self.count));
             try!(target.struct_member("keys", &self.keys));
             try!(target.struct_member("name", &self.name));
+            try!(target.struct_member("float", &self.float));
 
             target.end_struct("Foo")
         }
     }
 
     let mut byte_writer = ByteWriter::new();
+    let mut json_writer = JsonWriter::new();
 
     let foo = Foo {
-        count: 10,
+        count: 0xFF00FF00,
         keys: (true, false),
         name: "Hello, World!".into(),
+        float: 3.14159,
     };
 
     foo.serialize(&mut byte_writer).unwrap();
+    foo.serialize(&mut json_writer).unwrap();
 
-    println!("foo: {:?}", foo);
+    println!("foo: {:#?}", foo);
     println!("foo bytes: {:?}", byte_writer);
+    println!("foo json: {}", json_writer);
 }
