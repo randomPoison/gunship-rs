@@ -50,6 +50,7 @@ impl Error for ByteWriterError {
 }
 
 pub mod static_serialize {
+    use Enum;
     use static_serialize::*;
     use super::{ByteWriter, ByteWriterError};
 
@@ -171,6 +172,17 @@ pub mod static_serialize {
             Ok(())
         }
 
+        fn write_iter<T, U>(&mut self, values: T) -> Result<(), Self::Error>
+            where T: Iterator<Item=U>,
+                  U: Serialize<Self>,
+        {
+            for value in values {
+                try!(value.serialize(self));
+            }
+
+            Ok(())
+        }
+
         /// `ByteWriter` doesn't serialize structural information, so this is a no-op.
         fn start_struct(&mut self, _name: &'static str) -> Result<(), Self::Error> {
             Ok(())
@@ -204,6 +216,18 @@ pub mod static_serialize {
 
         /// `ByteWriter` doesn't serialize structural information, so this is a no-op.
         fn end_tuple(&mut self) -> Result<(), Self::Error> {
+            Ok(())
+        }
+
+        /// Writes the descriminant as a `usize` to the buffer.
+        fn enum_variant<T>(&mut self, variant: &T, _has_contents: bool) -> Result<(), Self::Error>
+            where T: Enum + Serialize<Self>
+        {
+            self.write_usize(variant.value())
+        }
+
+        /// `ByteWriter` doesn't serialize structural information, so this is a no-op.
+        fn end_enum(&mut self) -> Result<(), Self::Error> {
             Ok(())
         }
     }

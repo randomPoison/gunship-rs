@@ -5,8 +5,11 @@ use std::fmt::{self, Display, Formatter};
 #[derive(Debug, Clone, Default)]
 pub struct JsonWriter {
     buffer: String,
+
+    // TODO: Represent these as a stack.
     depth: usize,
     written_first_struct_member: bool,
+    enum_had_contents: bool,
 }
 
 impl JsonWriter {
@@ -15,6 +18,7 @@ impl JsonWriter {
             buffer: String::new(),
             depth: 0,
             written_first_struct_member: false,
+            enum_had_contents: false,
         }
     }
 
@@ -56,6 +60,7 @@ impl error::Error for JsonWriterError {
 }
 
 pub mod serialize_static {
+    use Enum;
     use static_serialize::*;
     use std::fmt::Write;
     use super::{JsonWriter, JsonWriterError};
@@ -193,6 +198,34 @@ pub mod serialize_static {
             Ok(())
         }
 
+        fn write_iter<T, U>(&mut self, mut values: T) -> Result<(), Self::Error>
+            where T: Iterator<Item=U>,
+                  U: Serialize<Self>,
+        {
+            // Write opening brace.
+            self.buffer.push_str("[");
+            self.depth += 1;
+
+            // Write first element without leading comma.
+            if let Some(value) = values.next() {
+                self.new_line();
+                try!(value.serialize(self));
+            }
+
+            // Write remaining elements with leading commas.
+            for value in values {
+                self.buffer.push_str(",");
+                self.new_line();
+                try!(value.serialize(self));
+            }
+
+            // Write closing brace.
+            self.depth -= 1;
+            self.new_line();
+            self.buffer.push_str("]");
+            Ok(())
+        }
+
         fn start_struct(&mut self, _name: &'static str) -> Result<(), Self::Error> {
             // TODO: Keep track of struct name for validation purposes.
 
@@ -261,6 +294,32 @@ pub mod serialize_static {
             self.new_line();
             self.buffer.push_str("]");
             Ok(())
+        }
+
+        fn enum_variant<T>(&mut self, variant: &T, has_contents: bool) -> Result<(), Self::Error>
+            where T: Enum + Serialize<Self>
+        {
+            if has_contents {
+                // Serialize enum as object.
+                try!(self.start_struct("EnumVariant"));
+                self.new_line();
+                try!(self.write_str(variant.name()));
+                self.buffer.push_str(": ");
+                self.enum_had_contents = true;
+            } else {
+                try!(self.write_str(variant.name()));
+                self.enum_had_contents = false;
+            }
+
+            Ok(())
+        }
+
+        fn end_enum(&mut self) -> Result<(), Self::Error> {
+            if self.enum_had_contents {
+                self.end_struct("EnumVariant")
+            } else {
+                Ok(())
+            }
         }
     }
 }

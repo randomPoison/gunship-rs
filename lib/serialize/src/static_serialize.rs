@@ -1,4 +1,4 @@
-use Error;
+use {Enum, Error};
 
 /// Represents a target for static serialization.
 ///
@@ -48,6 +48,9 @@ pub trait Serializer: Sized {
 
     fn write_slice<T>(&mut self, values: &[T]) -> Result<(), Self::Error>
         where T: Serialize<Self>;
+    fn write_iter<T, U>(&mut self, values: T) -> Result<(), Self::Error>
+        where T: Iterator<Item=U>,
+              U: Serialize<Self>;
 
     fn start_struct(&mut self, name: &'static str) -> Result<(), Self::Error>;
     fn struct_member<T>(&mut self, name: &'static str, value: &T) -> Result<(), Self::Error>
@@ -58,6 +61,11 @@ pub trait Serializer: Sized {
     fn tuple_element<T>(&mut self, index: usize, value: &T) -> Result<(), Self::Error>
         where T: Serialize<Self>;
     fn end_tuple(&mut self) -> Result<(), Self::Error>;
+
+    /// Starts serialization of an enum variant.
+    fn enum_variant<T>(&mut self, variant: &T, has_contents: bool) -> Result<(), Self::Error>
+        where T: Enum + Serialize<Self>;
+    fn end_enum(&mut self) -> Result<(), Self::Error>;
 }
 
 pub trait Serialize<Target: Serializer>: 'static {
