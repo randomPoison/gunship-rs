@@ -176,6 +176,11 @@ impl Scene {
         self.component_managers.contains_key(&manager_id)
     }
 
+    pub fn get_component<T: Component>(&self, entity: Entity) -> Option<&T> {
+        let manager = self.get_manager_for::<T>();
+        manager.get(entity)
+    }
+
     pub fn reload_component<T: Component>(&mut self, _old_scene: &Scene) {
         panic!("Hotloading is currently broken, please come back later");
     }
@@ -252,41 +257,6 @@ fn type_name<T>() -> &'static str {
         intrinsics::type_name::<T>()
     }
 }
-
-/*
-pub struct ManagerRef<'a, T: ComponentManager> {
-    manager: Ref<'a, Box<ComponentManager>>,
-    _phantom: PhantomData<T>,
-}
-
-impl<'a, T: ComponentManager> Deref for ManagerRef<'a, T> {
-    type Target = T;
-
-    fn deref<'b>(&'b self) -> &'b T {
-        unsafe { downcast_manager(self.manager.deref().deref()) }
-    }
-}
-
-pub struct ManagerRefMut<'a, T: ComponentManager> {
-    manager: RefMut<'a, Box<ComponentManager>>,
-    _phantom: PhantomData<T>,
-}
-
-impl<'a, T: ComponentManager> Deref for ManagerRefMut<'a, T> {
-    type Target = T;
-
-    fn deref<'b>(&'b self) -> &'b T {
-        unsafe { downcast_manager(self.manager.deref().deref()) }
-    }
-}
-
-impl<'a, T: ComponentManager> DerefMut for ManagerRefMut<'a, T> {
-    fn deref_mut<'b>(&'b mut self) -> &'b mut T {
-        let manager = self.manager.deref_mut().deref_mut();
-        unsafe { downcast_manager_mut(manager) }
-    }
-}
-*/
 
 /// Performs an unchecked downcast from `&()` trait object to the concrete type.
 unsafe fn downcast_ref<T>(manager: &()) -> &T {

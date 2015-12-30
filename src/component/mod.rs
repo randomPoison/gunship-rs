@@ -11,7 +11,7 @@ pub mod collider;
 use ecs::*;
 use scene::Scene;
 use self::struct_component_manager::StructComponentManager;
-use std::ops::Deref;
+use std::ops::{Deref, DerefMut};
 
 pub use self::singleton_component_manager::SingletonComponentManager;
 pub use self::transform::{Transform, TransformManager, transform_update};
@@ -48,5 +48,11 @@ impl<T: Component + Clone> Deref for DefaultManager<T> {
 
     fn deref(&self) -> &StructComponentManager<T> {
         &self.0
+    }
+}
+
+impl<T: Component + Clone> DerefMut for DefaultManager<T> {
+    fn deref_mut(&mut self) -> &mut StructComponentManager<T> {
+        &mut self.0
     }
 }

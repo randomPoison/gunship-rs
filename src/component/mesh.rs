@@ -36,7 +36,7 @@ impl MeshManager {
         }
     }
 
-    pub fn assign(&self, entity: Entity, path_text: &str) -> RefMut<Mesh> {
+    pub fn assign(&mut self, entity: Entity, path_text: &str) -> &mut Mesh {
         let mesh =
             self.resource_manager
             .get_gpu_mesh(path_text)
@@ -45,7 +45,7 @@ impl MeshManager {
         self.give_mesh(entity, mesh)
     }
 
-    pub fn give_mesh(&self, entity: Entity, mesh: GLMeshData) -> RefMut<Mesh> {
+    pub fn give_mesh(&mut self, entity: Entity, mesh: GLMeshData) -> &mut Mesh {
         let shader = self.resource_manager.get_shader("shaders/forward_phong.glsl").unwrap();
         self.inner.assign(entity, Mesh {
             gl_mesh: mesh,

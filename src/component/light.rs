@@ -14,7 +14,7 @@ pub struct LightUpdateSystem;
 
 impl System for LightUpdateSystem {
     fn update(&mut self, scene: &Scene, _delta: f32) {
-        let light_manager = scene.get_manager::<LightManager>();
+        let mut light_manager = scene.get_manager_mut::<LightManager>(); // FIXME: Is bad, use new system.
         let transform_manager = scene.get_manager::<TransformManager>();
 
         for (mut light, entity) in light_manager.iter_mut() {

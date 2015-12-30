@@ -3,7 +3,7 @@ use std::rc::Rc;
 use ecs::*;
 use resource::ResourceManager;
 use scene::Scene;
-use super::struct_component_manager::{Iter, IterMut, Ref, RefMut, StructComponentManager};
+use super::struct_component_manager::{Iter, IterMut, StructComponentManager};
 use wav::Wave;
 
 #[derive(Debug, Clone)]
@@ -66,7 +66,7 @@ impl AudioSourceManager {
         }
     }
 
-    pub fn assign(&self, entity: Entity, clip_name: &str) -> RefMut<AudioSource> {
+    pub fn assign(&mut self, entity: Entity, clip_name: &str) -> &mut AudioSource {
         let audio_clip = self.resource_manager.get_audio_clip(clip_name);
         self.inner.assign(entity, AudioSource {
             audio_clip: audio_clip,
@@ -76,19 +76,15 @@ impl AudioSourceManager {
         })
     }
 
-    pub fn get(&self, entity: Entity) -> Option<Ref<AudioSource>> {
+    pub fn get(&self, entity: Entity) -> Option<&AudioSource> {
         self.inner.get(entity)
-    }
-
-    pub fn get_mut(&self, entity: Entity) -> Option<RefMut<AudioSource>> {
-        self.inner.get_mut(entity)
     }
 
     pub fn iter(&self) -> Iter<AudioSource> {
         self.inner.iter()
     }
 
-    pub fn iter_mut(&self) -> IterMut<AudioSource> {
+    pub fn iter_mut(&mut self) -> IterMut<AudioSource> {
         self.inner.iter_mut()
     }
 }
@@ -110,7 +106,7 @@ pub struct AudioSystem;
 
 impl System for AudioSystem {
     fn update(&mut self, scene: &Scene, delta: f32) {
-        let audio_source_manager = scene.get_manager::<AudioSourceManager>();
+        let mut audio_source_manager = scene.get_manager_mut::<AudioSourceManager>(); // FIXME: Very bad, use new system.
 
         // TODO: Use a better method to filter out audio sources that aren't playing.
         for mut audio_source in audio_source_manager.iter_mut()

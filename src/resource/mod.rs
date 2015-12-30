@@ -127,7 +127,7 @@ impl ResourceManager {
                     }
                 };
 
-                let mesh_manager = scene.get_manager::<MeshManager>();
+                let mesh_manager = scene.get_manager_mut::<MeshManager>(); // FIXME: No mutable borrows!
                 mesh_manager.give_mesh(entity, gpu_mesh);
             }
         }

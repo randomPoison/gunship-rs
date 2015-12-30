@@ -7,15 +7,6 @@ use scene::Scene;
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct Entity(u32);
 
-impl Entity {
-    /// Retrieves the component `T` associated with this entity if one exists.
-    pub fn get_component_mut<'a: 'b, 'b, T: 'static>(&self, _: &Scene) -> Option<&'b mut T> {
-        // let manager = scene.get_manager_for::<T>();
-        // manager.get(*self) // TODO: Make this happen
-        None
-    }
-}
-
 const MIN_RECYCLED_ENTITIES: usize = 1000;
 
 #[derive(Debug, Clone)]
@@ -73,6 +64,8 @@ pub trait ComponentManager: 'static + Sized {
     type Component: Component<Manager=Self>;
 
     fn register(scene: &mut Scene);
+    // fn assign(&self, entity: Entity) -> &mut Self::Component;
+    fn get(&self, _entity: Entity) -> Option<&Self::Component> { None }
     fn destroy(&self, entity: Entity);
 }
 

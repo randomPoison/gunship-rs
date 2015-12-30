@@ -170,7 +170,7 @@ impl Engine {
         let light_manager = scene.get_manager::<LightManager>();
 
         // Handle rendering for each camera.
-        for (camera, entity) in camera_manager.iter_mut() {
+        for (camera, entity) in camera_manager.iter() {
 
             // TODO: Update the camera's bounds in a separate system.
             let camera = {
