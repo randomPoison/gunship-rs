@@ -2,11 +2,10 @@ use std::rc::Rc;
 use std::cell::RefCell;
 use std::thread;
 use std::ops::Deref;
-use std::any::{Any, TypeId};
 use std::collections::HashMap;
-use std::intrinsics;
-use std::raw::TraitObject;
+use std::intrinsics::type_name;
 use std::mem;
+use std::ptr;
 use std::time::Duration;
 
 use bootstrap;
@@ -16,6 +15,7 @@ use bootstrap::window::Message::*;
 use bootstrap::time::Timer;
 use bs_audio;
 use polygon::gl_render::GLRender;
+use singleton::Singleton;
 use stopwatch::{Collector, Stopwatch};
 
 use scene::Scene;
@@ -27,15 +27,15 @@ use debug_draw::DebugDraw;
 pub const TARGET_FRAME_TIME_SECONDS: f32 = 1.0 / 60.0;
 pub const TARGET_FRAME_TIME_MS: f32 = TARGET_FRAME_TIME_SECONDS * 1000.0;
 
+static mut INSTANCE: *mut Engine = 0 as *mut _;
+
 pub struct Engine {
     window: Rc<RefCell<Window>>, // TODO: This doesn't need to be an Rc<RefCell<>> when we're not doing hotloading.
     renderer: Rc<GLRender>,
-    resource_manager: Rc<ResourceManager>,
+    resource_manager: Box<ResourceManager>,
 
-    systems: Vec<Box<System>>,
-    debug_systems: Vec<Box<System>>,
-    system_indices: HashMap<TypeId, usize>,
-    system_names: HashMap<String, TypeId>,
+    systems: HashMap<SystemId, Box<System>>,
+    debug_systems: HashMap<SystemId, Box<System>>,
 
     transform_update: Box<System>,
     light_update: Box<System>,
@@ -52,46 +52,84 @@ pub struct Engine {
 }
 
 impl Engine {
-    pub fn new() -> Engine {
-        let instance = bootstrap::init();
-        let window = Window::new("Rust Window", instance);
-        let renderer = Rc::new(GLRender::new(window.borrow().deref()));
-        let resource_manager = Rc::new(ResourceManager::new(renderer.clone()));
-
-        let audio_source = match bs_audio::init() {
-            Ok(audio_source) => audio_source,
-            Err(error) => {
-                // TODO: Rather than panicking, create a null audio system and keep running.
-                panic!("Error while initialzing audio subsystem: {}", error)
-            },
+    /// Starts the engine's main loop, blocking until the game shuts down.
+    ///
+    /// This function starts the engine's internal update loop which handles the details of
+    /// processing input from the OS, invoking game code, and rendering each frame. This function
+    /// blocks until the engine recieves a message to being the shutdown process, at which point it
+    /// will end the update loop and perform any necessary shutdown and cleanup procedures. Once
+    /// those have completed this function will return.
+    ///
+    /// Panics if the engine hasn't been created yet.
+    pub fn start() {
+        let instance = unsafe {
+            debug_assert!(!INSTANCE.is_null(), "Cannot retrieve Engine instance because none exists");
+            &mut *INSTANCE
         };
 
-        Engine {
-            window: window.clone(),
-            renderer: renderer.clone(),
-            resource_manager: resource_manager.clone(),
+        // Run main loop.
+        instance.main_loop();
 
-            systems: Vec::new(),
-            debug_systems: Vec::new(),
-            system_indices: HashMap::new(),
-            system_names: HashMap::new(),
-
-            transform_update: Box::new(transform_update),
-            light_update: Box::new(LightUpdateSystem),
-            audio_update: Box::new(AudioSystem),
-            alarm_update: Box::new(alarm_update),
-            collision_update: Box::new(CollisionSystem::new()),
-
-            scene: Scene::new(&resource_manager, audio_source),
-
-            debug_draw: DebugDraw::new(renderer.clone(), &*resource_manager),
-
-            close: false,
-            debug_pause: false,
-        }
+        // Perform cleanup.
+        unsafe { Engine::destroy_instance(); }
     }
 
-    pub fn update(&mut self) {
+    /// Retrieves a reference to current scene.
+    ///
+    /// Panics if the engine hasn't been created yet.
+    pub fn scene<'a>() -> &'a Scene {
+        let instance = Engine::instance();
+        &instance.scene
+    }
+
+    /// Retrieves a reference to the resource manager.
+    ///
+    /// TODO: The resource manager should probably be a singleton too since it's already setup to
+    /// be used through shared references.
+    pub fn resource_manager<'a>() -> &'a ResourceManager {
+        let instance = Engine::instance();
+        &*instance.resource_manager
+    }
+
+    fn main_loop(&mut self) {
+        let timer = Timer::new();
+        let mut collector = Collector::new().unwrap();
+
+        loop {
+            let _stopwatch = Stopwatch::new("loop");
+
+            let start_time = timer.now();
+
+            self.update();
+            self.draw();
+
+            if self.close {
+                break;
+            }
+
+            if !cfg!(feature="timing")
+            && timer.elapsed_ms(start_time) > TARGET_FRAME_TIME_MS {
+                println!("WARNING: Missed frame time. Frame time: {}ms, target frame time: {}ms", timer.elapsed_ms(start_time), TARGET_FRAME_TIME_MS);
+            }
+
+            // Wait for target frame time.
+            let mut remaining_time_ms = TARGET_FRAME_TIME_MS - timer.elapsed_ms(start_time);
+            while remaining_time_ms > 1.0 {
+                thread::sleep(Duration::from_millis(remaining_time_ms as u64));
+                remaining_time_ms = TARGET_FRAME_TIME_MS - timer.elapsed_ms(start_time);
+            }
+
+            while remaining_time_ms > 0.0 {
+                remaining_time_ms = TARGET_FRAME_TIME_MS - timer.elapsed_ms(start_time);
+            }
+
+            // TODO: Don't flip buffers until end of frame time?
+        };
+
+        collector.flush_to_file("stopwatch.csv");
+    }
+
+    fn update(&mut self) {
         let _stopwatch = Stopwatch::new("update");
 
         let scene = &mut self.scene;
@@ -130,13 +168,13 @@ impl Engine {
             self.alarm_update.update(scene, TARGET_FRAME_TIME_SECONDS);
 
             // Update systems.
-            for system in self.systems.iter_mut() {
+            for (_, system) in self.systems.iter_mut() {
                 system.update(scene, TARGET_FRAME_TIME_SECONDS);
             }
         }
 
         // Update debug systems always forever.
-        for system in self.debug_systems.iter_mut() {
+        for (_, system) in self.debug_systems.iter_mut() {
             system.update(scene, TARGET_FRAME_TIME_SECONDS);
         }
 
@@ -158,7 +196,7 @@ impl Engine {
     }
 
     #[cfg(not(feature="no-draw"))]
-    pub fn draw(&mut self) {
+    fn draw(&mut self) {
         let _stopwatch = Stopwatch::new("draw");
 
         self.renderer.clear();
@@ -201,102 +239,11 @@ impl Engine {
     }
 
     #[cfg(feature="no-draw")]
-    pub fn draw(&mut self) {}
+    fn draw(&mut self) {}
 
-    pub fn main_loop(&mut self) {
-        let timer = Timer::new();
-        let mut collector = Collector::new().unwrap();
-
-        loop {
-            let _stopwatch = Stopwatch::new("loop");
-
-            let start_time = timer.now();
-
-            self.update();
-            self.draw();
-
-            if self.close {
-                break;
-            }
-
-            if !cfg!(feature="timing")
-            && timer.elapsed_ms(start_time) > TARGET_FRAME_TIME_MS {
-                println!("WARNING: Missed frame time. Frame time: {}ms, target frame time: {}ms", timer.elapsed_ms(start_time), TARGET_FRAME_TIME_MS);
-            }
-
-            // Wait for target frame time.
-            let mut remaining_time_ms = TARGET_FRAME_TIME_MS - timer.elapsed_ms(start_time);
-            while remaining_time_ms > 1.0 {
-                thread::sleep(Duration::from_millis(remaining_time_ms as u64));
-                remaining_time_ms = TARGET_FRAME_TIME_MS - timer.elapsed_ms(start_time);
-            }
-
-            while remaining_time_ms > 0.0 {
-                remaining_time_ms = TARGET_FRAME_TIME_MS - timer.elapsed_ms(start_time);
-            }
-
-            // TODO: Don't flip buffers until end of frame time?
-        };
-
-        collector.flush_to_file("stopwatch.csv");
-    }
-
-    pub fn register_system<T: Any + System>(&mut self, system: T) {
-        let system_id = TypeId::of::<T>();
-        assert!(!self.system_indices.contains_key(&system_id),
-                "System {} with ID {:?} already registered", type_name::<T>(), system_id);
-
-        let index = self.systems.len();
-        self.systems.push(Box::new(system));
-        self.system_indices.insert(system_id, index);
-        self.system_names.insert(type_name::<T>().into(), system_id);
-    }
-
-    pub fn register_debug_system<T: Any + System>(&mut self, system: T) {
-        self.debug_systems.push(Box::new(system));
-    }
-
-    pub fn get_system<T: Any + System>(&self) -> &T {
-        let system_id = TypeId::of::<T>();
-        let index =
-            *self.system_indices.get(&system_id)
-            .expect(&format!("Trying to retrive system {} but no index found", type_name::<T>()));
-        let system = &*self.systems[index];
-
-        unsafe {
-            // Get the raw representation of the trait object.
-            let to: TraitObject = mem::transmute(system);
-
-            // Extract the data pointer.
-            mem::transmute(to.data)
-        }
-    }
-
-    pub fn get_system_by_name<T: Any + System>(&self) -> &T {
-        let system_id = self.system_names.get(type_name::<T>()).unwrap();
-        let index =
-            *self.system_indices.get(system_id)
-            .expect(&format!("Trying to retrive system {} but no index found", type_name::<T>()));
-        let system = &*self.systems[index];
-
-        unsafe {
-            // Get the raw representation of the trait object.
-            let to: TraitObject = mem::transmute(system);
-
-            // Extract the data pointer.
-            mem::transmute(to.data)
-        }
-    }
-
-    pub fn scene(&self) -> &Scene {
-        &self.scene
-    }
-
-    pub fn scene_mut(&mut self) -> &mut Scene {
-        &mut self.scene
-    }
-
-    pub fn close(&self) -> bool {
+    // HACK: Used for hotloading, isn't even really needed for that but serves as a reminder that
+    // hotloading needs to be reworked.
+    fn close(&self) -> bool {
         self.close
     }
 }
@@ -310,10 +257,8 @@ impl Clone for Engine {
             renderer: self.renderer.clone(),
             resource_manager: resource_manager.clone(),
 
-            systems: Vec::new(),
-            debug_systems: Vec::new(),
-            system_indices: HashMap::new(),
-            system_names: HashMap::new(),
+            systems: HashMap::new(),
+            debug_systems: HashMap::new(),
 
             transform_update: Box::new(transform_update),
             light_update: Box::new(LightUpdateSystem),
@@ -321,7 +266,7 @@ impl Clone for Engine {
             alarm_update: Box::new(alarm_update),
             collision_update: Box::new(CollisionSystem::new()),
 
-            scene: self.scene.clone(&resource_manager),
+            scene: self.scene.clone(),
 
             debug_draw: DebugDraw::new(self.renderer.clone(), &*resource_manager),
 
@@ -333,16 +278,165 @@ impl Clone for Engine {
     }
 }
 
-fn type_name<T>() -> &'static str {
-    unsafe {
-        intrinsics::type_name::<T>()
+unsafe impl Singleton for Engine {
+    /// Creates the instance of the singleton.
+    fn set_instance(engine: Engine) {
+        assert!(unsafe { INSTANCE.is_null() }, "Cannot create more than one Engine instance");
+        let boxed_engine = Box::new(engine);
+        unsafe {
+            INSTANCE = Box::into_raw(boxed_engine);
+        }
+    }
+
+    /// Retrieves an immutable reference to the singleton instance.
+    ///
+    /// This function is unsafe because there is no way of know
+    fn instance() -> &'static Self {
+        unsafe {
+            debug_assert!(!INSTANCE.is_null(), "Cannot retrieve Engine instance because none exists");
+            &*INSTANCE
+        }
+    }
+
+    /// Destroys the instance of the singleton.
+    unsafe fn destroy_instance() {
+        let ptr = mem::replace(&mut INSTANCE, ptr::null_mut());
+        Box::from_raw(ptr);
     }
 }
+
+pub struct EngineBuilder {
+    systems: HashMap<SystemId, Box<System>>,
+    debug_systems: HashMap<SystemId, Box<System>>,
+    managers: HashMap<ManagerId, Box<()>>,
+}
+
+/// A builder for configuring the components and systems registered with the game engine.
+///
+/// Component managers and systems cannot be changed once the engine has been instantiated so they
+/// must be provided all together when the instance is created. `EngineBuilder` provides an
+/// interface for gathering all managers and systems to be provided to the engine.
+impl EngineBuilder {
+    pub fn new() -> EngineBuilder {
+        EngineBuilder {
+            systems: HashMap::new(),
+            debug_systems: HashMap::new(),
+            managers: HashMap::new(),
+        }
+    }
+
+    /// Consumes the builder and creates the `Engine` instance.
+    ///
+    /// No `Engine` object is returned because this method instantiates the engine singleton.
+    pub fn build(mut self) {
+        let engine = {
+            // Register internal component managers.
+            self.register_component::<Transform>();
+            self.register_component::<Camera>();
+            self.register_component::<Light>();
+            self.register_component::<Mesh>();
+            self.register_component::<AudioSource>();
+            self.register_component::<AlarmId>();
+            self.register_component::<Collider>();
+
+            let instance = bootstrap::init();
+            let window = Window::new("Rust Window", instance);
+            let renderer = Rc::new(GLRender::new(window.borrow().deref()));
+            let resource_manager = Box::new(ResourceManager::new(renderer.clone()));
+            let debug_draw = DebugDraw::new(renderer.clone(), &*resource_manager);
+
+            let audio_source = match bs_audio::init() {
+                Ok(audio_source) => audio_source,
+                Err(error) => {
+                    // TODO: Rather than panicking, create a null audio system and keep running.
+                    panic!("Error while initialzing audio subsystem: {}", error)
+                },
+            };
+
+            Engine {
+                window: window.clone(),
+                renderer: renderer.clone(),
+                resource_manager: resource_manager,
+
+                systems: HashMap::new(),
+                debug_systems: HashMap::new(),
+
+                transform_update: Box::new(transform_update),
+                light_update: Box::new(LightUpdateSystem),
+                audio_update: Box::new(AudioSystem),
+                alarm_update: Box::new(alarm_update),
+                collision_update: Box::new(CollisionSystem::new()),
+
+                scene: Scene::new(audio_source),
+
+                debug_draw: debug_draw,
+
+                close: false,
+                debug_pause: false,
+            }
+        };
+        Engine::set_instance(engine);
+    }
+
+    /// Registers the manager for the specified component type.
+    ///
+    /// Defers internally to `register_manager()`.
+    pub fn register_component<T: Component>(&mut self) {
+        T::Manager::register(self);
+    }
+
+    /// Registers the specified manager with the engine.
+    ///
+    /// Defers internally to `ComponentManager::register()`.
+    pub fn register_manager<T: ComponentManager>(&mut self, manager: T) {
+        let manager_id = ManagerId::of::<T>();
+        assert!(
+            !self.managers.contains_key(&manager_id),
+            "Manager {} with ID {:?} already registered", unsafe { type_name::<T>() }, &manager_id);
+
+        // Box the manager as a trait object to construct the data and vtable pointers.
+        let boxed_manager = Box::new(manager);
+
+        // Transmute to raw trait object to throw away type information so that we can store it
+        // in the type map.
+        let boxed_trait_object = unsafe { mem::transmute(boxed_manager) };
+
+        // Add the manager to the type map and the component id to the component map.
+        self.managers.insert(manager_id, boxed_trait_object);
+    }
+
+    /// Registers the system with the engine.
+    pub fn register_system<T: System>(&mut self, system: T) {
+        let system_id = SystemId::of::<T>();
+
+        assert!(
+            !self.systems.contains_key(&system_id),
+            "System {} with ID {:?} already registered", unsafe { type_name::<T>() }, &system_id);
+
+        self.systems.insert(system_id, Box::new(system));
+    }
+
+    /// Registers the debug system with the engine.
+    pub fn register_debug_system<T: System>(&mut self, system: T) {
+        let system_id = SystemId::of::<T>();
+
+        assert!(
+            !self.debug_systems.contains_key(&system_id),
+            "System {} with ID {:?} already registered", unsafe { type_name::<T>() }, &system_id);
+
+        self.debug_systems.insert(system_id, Box::new(system));
+    }
+}
+
+// ==========================
+// HOTLOADING MAGIC FUNCTIONS
+// ==========================
 
 #[no_mangle]
 pub fn engine_init(window: Rc<RefCell<Window>>) -> Box<Engine> {
     let renderer = Rc::new(GLRender::new(window.borrow().deref()));
-    let resource_manager = Rc::new(ResourceManager::new(renderer.clone()));
+    let resource_manager = Box::new(ResourceManager::new(renderer.clone()));
+    let debug_draw = DebugDraw::new(renderer.clone(), &*resource_manager);
 
     let audio_source = match bs_audio::init() {
         Ok(audio_source) => {
@@ -357,12 +451,10 @@ pub fn engine_init(window: Rc<RefCell<Window>>) -> Box<Engine> {
     Box::new(Engine {
         window: window,
         renderer: renderer.clone(),
-        resource_manager: resource_manager.clone(),
+        resource_manager: resource_manager,
 
-        systems: Vec::new(),
-        debug_systems: Vec::new(),
-        system_indices: HashMap::new(),
-        system_names: HashMap::new(),
+        systems: HashMap::new(),
+        debug_systems: HashMap::new(),
 
         transform_update: Box::new(transform_update),
         light_update: Box::new(LightUpdateSystem),
@@ -370,9 +462,9 @@ pub fn engine_init(window: Rc<RefCell<Window>>) -> Box<Engine> {
         alarm_update: Box::new(alarm_update),
         collision_update: Box::new(CollisionSystem::new()),
 
-        scene: Scene::new(&resource_manager, audio_source),
+        scene: Scene::new(audio_source),
 
-        debug_draw: DebugDraw::new(renderer.clone(), &*resource_manager),
+        debug_draw: debug_draw,
 
         close: false,
         debug_pause: false,

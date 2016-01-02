@@ -9,8 +9,10 @@ pub mod struct_component_manager;
 pub mod collider;
 
 use ecs::*;
+use engine::*;
 use scene::Scene;
 use self::struct_component_manager::StructComponentManager;
+use std::boxed::FnBox;
 use std::ops::{Deref, DerefMut};
 
 pub use self::singleton_component_manager::SingletonComponentManager;
@@ -23,19 +25,31 @@ pub use self::alarm::{AlarmId, AlarmManager, alarm_update};
 pub use self::collider::{Collider, ColliderManager, CollisionSystem, bounding_volume, grid_collision};
 
 #[derive(Debug, Clone)]
-pub struct DefaultManager<T: Component + Clone>(StructComponentManager<T>);
+pub struct DefaultManager<T: Component>(StructComponentManager<T>);
 
-impl<T: 'static + Component<Manager=DefaultManager<T>> + Clone> DefaultManager<T> {
+impl<T> DefaultManager<T>
+    where T: Component<Manager=DefaultManager<T>>
+{
     pub fn new() -> DefaultManager<T> {
         DefaultManager(StructComponentManager::new())
     }
 }
 
-impl<T: Component<Manager=DefaultManager<T>> + Clone> ComponentManager for DefaultManager<T> {
+fn default_update<T>(scene: &Scene, delta: f32)
+    where T: Component<Manager=DefaultManager<T>>
+{
+    let mut manager = unsafe { scene.get_manager_mut::<DefaultManager<T>>() };
+    manager.0.update(scene, delta);
+}
+
+impl<T> ComponentManager for DefaultManager<T>
+    where T: Component<Manager=DefaultManager<T>>
+{
     type Component = T;
 
-    fn register(scene: &mut Scene) {
-        scene.register_manager(Self::new())
+    fn register(builder: &mut EngineBuilder) {
+        builder.register_manager(Self::new());
+        builder.register_system(default_update::<T>);
     }
 
     fn destroy(&self, entity: Entity) {
@@ -43,7 +57,7 @@ impl<T: Component<Manager=DefaultManager<T>> + Clone> ComponentManager for Defau
     }
 }
 
-impl<T: Component + Clone> Deref for DefaultManager<T> {
+impl<T: Component> Deref for DefaultManager<T> {
     type Target = StructComponentManager<T>;
 
     fn deref(&self) -> &StructComponentManager<T> {
@@ -51,8 +65,20 @@ impl<T: Component + Clone> Deref for DefaultManager<T> {
     }
 }
 
-impl<T: Component + Clone> DerefMut for DefaultManager<T> {
+impl<T: Component> DerefMut for DefaultManager<T> {
     fn deref_mut(&mut self) -> &mut StructComponentManager<T> {
         &mut self.0
+    }
+}
+
+pub struct DefaultMessage<T>(Box<FnBox(&mut T)>)
+    where T: Component;
+
+impl<T: Component<Message=DefaultMessage<T>>> Message for DefaultMessage<T> {
+    type Target = T;
+
+    fn apply(self, component: &mut T) {
+        let inner = self.0;
+        inner.call_once((component,));
     }
 }

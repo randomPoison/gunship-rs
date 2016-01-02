@@ -1,12 +1,12 @@
-use std::collections::{HashMap, HashSet};
-use std::cell::{Cell, RefCell, Ref, RefMut};
-
-use math::*;
-use stopwatch::Stopwatch;
-
 use collections::{EntityMap, EntitySet};
 use ecs::*;
-use scene::Scene;
+use engine::*;
+use math::*;
+use scene::*;
+use std::collections::{HashMap, HashSet};
+use std::cell::{Cell, RefCell, Ref, RefMut};
+use stopwatch::Stopwatch;
+use super::DefaultMessage;
 
 #[derive(Debug, Clone)]
 pub struct TransformManager {
@@ -215,8 +215,8 @@ impl TransformManager {
 impl ComponentManager for TransformManager {
     type Component = Transform;
 
-    fn register(scene: &mut Scene) {
-        scene.register_manager(TransformManager::new());
+    fn register(builder: &mut EngineBuilder) {
+        builder.register_manager(TransformManager::new());
     }
 
     fn destroy(&self, entity: Entity) {
@@ -419,12 +419,13 @@ impl Transform {
 
 impl Component for Transform {
     type Manager = TransformManager;
+    type Message = DefaultMessage<Transform>;
 }
 
 pub fn transform_update(scene: &Scene, _: f32) {
     let _stopwatch = Stopwatch::new("transform update");
 
-    let mut transform_manager = scene.get_manager_mut::<TransformManager>();
+    let mut transform_manager = unsafe { scene.get_manager_mut::<TransformManager>() };
 
     // Process components marked for destruction.
     {

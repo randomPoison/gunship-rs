@@ -1,5 +1,5 @@
 use ecs::*;
-use scene::Scene;
+use engine::*;
 use std::fmt::Debug;
 use std::ops::{Deref, DerefMut};
 
@@ -29,8 +29,8 @@ impl<T: Component<Manager=SingletonComponentManager<T>> + Debug + Clone + Defaul
 impl<T: Component<Manager=SingletonComponentManager<T>> + Debug + Clone + Default> ComponentManager for SingletonComponentManager<T> {
     type Component = T;
 
-    fn register(scene: &mut Scene) {
-        scene.register_manager(Self::default());
+    fn register(builder: &mut EngineBuilder) {
+        builder.register_manager(Self::default());
     }
 
     fn destroy(&self, _: Entity) {}

@@ -1,8 +1,8 @@
-use std::rc::Rc;
-
 use ecs::*;
-use resource::ResourceManager;
+use engine::*;
 use scene::Scene;
+use std::rc::Rc;
+use super::DefaultMessage;
 use super::struct_component_manager::{Iter, IterMut, StructComponentManager};
 use wav::Wave;
 
@@ -44,31 +44,20 @@ impl AudioSource {
 
 impl Component for AudioSource {
     type Manager = AudioSourceManager;
+    type Message = DefaultMessage<AudioSource>;
 }
 
-pub struct AudioSourceManager {
-    resource_manager: Rc<ResourceManager>,
-    inner: StructComponentManager<AudioSource>,
-}
+#[derive(Debug, Clone)]
+pub struct AudioSourceManager(StructComponentManager<AudioSource>);
 
 impl AudioSourceManager {
-    pub fn new(resource_manager: Rc<ResourceManager>) -> AudioSourceManager {
-        AudioSourceManager {
-            resource_manager: resource_manager,
-            inner: StructComponentManager::new(),
-        }
-    }
-
-    pub fn clone(&self, resource_manager: Rc<ResourceManager>) -> AudioSourceManager {
-        AudioSourceManager {
-            resource_manager: resource_manager,
-            inner: self.inner.clone(),
-        }
+    pub fn new() -> AudioSourceManager {
+        AudioSourceManager(StructComponentManager::new())
     }
 
     pub fn assign(&mut self, entity: Entity, clip_name: &str) -> &mut AudioSource {
-        let audio_clip = self.resource_manager.get_audio_clip(clip_name);
-        self.inner.assign(entity, AudioSource {
+        let audio_clip = Engine::resource_manager().get_audio_clip(clip_name);
+        self.0.assign(entity, AudioSource {
             audio_clip: audio_clip,
             offset:     0,
             is_playing: false,
@@ -77,28 +66,28 @@ impl AudioSourceManager {
     }
 
     pub fn get(&self, entity: Entity) -> Option<&AudioSource> {
-        self.inner.get(entity)
+        self.0.get(entity)
     }
 
     pub fn iter(&self) -> Iter<AudioSource> {
-        self.inner.iter()
+        self.0.iter()
     }
 
     pub fn iter_mut(&mut self) -> IterMut<AudioSource> {
-        self.inner.iter_mut()
+        self.0.iter_mut()
     }
 }
 
 impl ComponentManager for AudioSourceManager {
     type Component = AudioSource;
 
-    fn register(scene: &mut Scene) {
-        let audio_manager = AudioSourceManager::new(scene.resource_manager());
-        scene.register_manager(audio_manager);
+    fn register(builder: &mut EngineBuilder) {
+        let audio_manager = AudioSourceManager::new();
+        builder.register_manager(audio_manager);
     }
 
     fn destroy(&self, entity: Entity) {
-        self.inner.destroy(entity);
+        self.0.destroy(entity);
     }
 }
 
@@ -106,7 +95,7 @@ pub struct AudioSystem;
 
 impl System for AudioSystem {
     fn update(&mut self, scene: &Scene, delta: f32) {
-        let mut audio_source_manager = scene.get_manager_mut::<AudioSourceManager>(); // FIXME: Very bad, use new system.
+        let mut audio_source_manager = unsafe { scene.get_manager_mut::<AudioSourceManager>() }; // FIXME: Very bad, use new system.
 
         // TODO: Use a better method to filter out audio sources that aren't playing.
         for mut audio_source in audio_source_manager.iter_mut()

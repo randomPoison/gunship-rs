@@ -115,7 +115,7 @@ impl ResourceManager {
     fn instantiate_node(&self, scene: &Scene, node: &MeshNode) -> Result<Entity, String> {
         let entity = scene.create_entity();
         {
-            let mut transform_manager = scene.get_manager_mut::<TransformManager>();
+            let mut transform_manager = unsafe { scene.get_manager_mut::<TransformManager>() };
             transform_manager.assign(entity);
 
             for mesh_id in &node.mesh_ids {
@@ -127,7 +127,7 @@ impl ResourceManager {
                     }
                 };
 
-                let mesh_manager = scene.get_manager_mut::<MeshManager>(); // FIXME: No mutable borrows!
+                let mesh_manager = unsafe { scene.get_manager_mut::<MeshManager>() }; // FIXME: No mutable borrows!
                 mesh_manager.give_mesh(entity, gpu_mesh);
             }
         }
@@ -137,7 +137,7 @@ impl ResourceManager {
         for node in &node.children {
             let child = try!(self.instantiate_node(scene, node));
 
-            let mut transform_manager = scene.get_manager_mut::<TransformManager>();
+            let mut transform_manager = unsafe { scene.get_manager_mut::<TransformManager>() };
             transform_manager.set_child(entity, child);
         }
 

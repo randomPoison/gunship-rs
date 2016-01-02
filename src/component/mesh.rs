@@ -1,8 +1,7 @@
 use ecs::*;
+use engine::*;
 use polygon::gl_render::{GLMeshData, ShaderProgram};
-use resource::ResourceManager;
-use scene::Scene;
-use std::rc::Rc;
+use super::DefaultMessage;
 use super::struct_component_manager::*;
 
 
@@ -14,59 +13,51 @@ pub struct Mesh {
 
 impl Component for Mesh {
     type Manager = MeshManager;
+    type Message = DefaultMessage<Mesh>;
 }
 
-pub struct MeshManager {
-    inner: StructComponentManager<Mesh>,
-    resource_manager: Rc<ResourceManager>,
-}
+#[derive(Debug, Clone)]
+pub struct MeshManager(StructComponentManager<Mesh>);
 
 impl MeshManager {
-    pub fn new(resource_manager: Rc<ResourceManager>) -> MeshManager {
-        MeshManager {
-            inner: StructComponentManager::new(),
-            resource_manager: resource_manager,
-        }
-    }
-
-    pub fn clone(&self, resource_manager: Rc<ResourceManager>) -> MeshManager {
-        MeshManager {
-            inner: self.inner.clone(),
-            resource_manager: resource_manager,
-        }
+    pub fn new() -> MeshManager {
+        MeshManager(StructComponentManager::new())
     }
 
     pub fn assign(&mut self, entity: Entity, path_text: &str) -> &mut Mesh {
         let mesh =
-            self.resource_manager
+            Engine::resource_manager()
             .get_gpu_mesh(path_text)
             .ok_or_else(|| format!("ERROR: Unable to assign mesh with uri {}", path_text))
-            .unwrap(); // OK to panic here, indicates a bug in gameplay code.
+            .unwrap(); // TODO: Provide better panic message (it's okay to panic here though, indicates a bug in game code).
         self.give_mesh(entity, mesh)
     }
 
     pub fn give_mesh(&mut self, entity: Entity, mesh: GLMeshData) -> &mut Mesh {
-        let shader = self.resource_manager.get_shader("shaders/forward_phong.glsl").unwrap();
-        self.inner.assign(entity, Mesh {
+        let shader =
+            Engine::resource_manager()
+            .get_shader("shaders/forward_phong.glsl")
+            .unwrap(); // TODO: Provide better panic message (or maybe DON'T PANIC!?).
+        self.0.assign(entity, Mesh {
             gl_mesh: mesh,
             shader: shader,
         })
     }
 
     pub fn iter(&self) -> Iter<Mesh> {
-        self.inner.iter()
+        self.0.iter()
     }
 }
 
 impl ComponentManager for MeshManager {
     type Component = Mesh;
 
-    fn register(scene: &mut Scene) {
-        let mesh_manager = MeshManager::new(scene.resource_manager());
-        scene.register_manager(mesh_manager);
+    fn register(builder: &mut EngineBuilder) {
+        let mesh_manager = MeshManager::new();
+        builder.register_manager(mesh_manager);
     }
 
     fn destroy(&self, entity: Entity) {
-        self.inner.destroy(entity);
+        self.0.destroy(entity);
     }
 }

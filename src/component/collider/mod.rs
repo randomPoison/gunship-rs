@@ -117,22 +117,22 @@
 //! Currently the only back end system supported is the grid collision system. For more details
 //! see the `grid_collision` module below.
 
+use callback::*;
+use collections::{EntityMap, EntitySet};
+use component::transform::Transform;
+use debug_draw;
+use ecs::*;
+use engine::*;
+use math::*;
+use scene::Scene;
+use self::bounding_volume::{BoundingVolumeManager, bvh_update};
+use self::grid_collision::GridCollisionSystem;
+use std::cell::{RefCell, Ref, RefMut};
 use std::collections::{HashSet};
 use std::collections::hash_state::HashState;
-use std::cell::{RefCell, Ref, RefMut};
-
-use math::*;
 use stopwatch::Stopwatch;
-
-use callback::*;
-use ecs::*;
-use scene::Scene;
-use debug_draw;
-use collections::{EntityMap, EntitySet};
+use super::DefaultMessage;
 use super::struct_component_manager::{StructComponentManager, Iter};
-use self::grid_collision::GridCollisionSystem;
-use self::bounding_volume::{BoundingVolumeManager, bvh_update};
-use component::transform::Transform;
 
 pub mod grid_collision;
 pub mod bounding_volume;
@@ -186,6 +186,7 @@ pub enum Collider {
 
 impl Component for Collider {
     type Manager = ColliderManager;
+    type Message = DefaultMessage<Collider>;
 }
 
 /// Manages the user-facing data in the collision system.
@@ -270,8 +271,8 @@ impl ColliderManager {
 impl ComponentManager for ColliderManager {
     type Component = Collider;
 
-    fn register(scene: &mut Scene) {
-        scene.register_manager(ColliderManager::new());
+    fn register(builder: &mut EngineBuilder) {
+        builder.register_manager(ColliderManager::new());
     }
 
     fn destroy(&self, entity: Entity) {

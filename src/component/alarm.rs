@@ -1,9 +1,10 @@
-use std::cell::{Cell, RefCell};
-
 use callback::*;
 use collections::EntitySet;
 use ecs::*;
+use engine::*;
 use scene::Scene;
+use std::cell::{Cell, RefCell};
+use super::DefaultMessage;
 
 #[derive(Debug, Clone)]
 struct Alarm {
@@ -20,6 +21,7 @@ pub struct AlarmId(usize);
 
 impl Component for AlarmId {
     type Manager = AlarmManager;
+    type Message = DefaultMessage<AlarmId>;
 }
 
 #[derive(Clone)]
@@ -130,8 +132,8 @@ impl AlarmManager {
 impl ComponentManager for AlarmManager {
     type Component = AlarmId;
 
-    fn register(scene: &mut Scene) {
-        scene.register_manager(AlarmManager::new());
+    fn register(builder: &mut EngineBuilder) {
+        builder.register_manager(AlarmManager::new());
     }
 
     fn destroy(&self, entity: Entity) {

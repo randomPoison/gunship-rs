@@ -1,5 +1,6 @@
 use collections::{EntityMap, EntitySet};
 use ecs::*;
+use scene::Scene;
 use std::cell::RefCell;
 
 const MAX_PENDING: usize = 1_000;
@@ -15,7 +16,7 @@ const MAX_PENDING: usize = 1_000;
 /// around `StructComponentManager` that implements `ComponentManager` and should be used as the
 /// default component manager when no special handling is needed.
 #[derive(Debug, Clone)]
-pub struct StructComponentManager<T: Clone> {
+pub struct StructComponentManager<T: Component> {
     components: Vec<T>,
     entities: Vec<Entity>,
     indices: EntityMap<usize>,
@@ -25,7 +26,7 @@ pub struct StructComponentManager<T: Clone> {
     marked_for_destroy: RefCell<EntitySet>,
 }
 
-impl<T: Clone> StructComponentManager<T> {
+impl<T: Component> StructComponentManager<T> {
     pub fn new() -> StructComponentManager<T> {
         StructComponentManager {
             components: Vec::new(),
@@ -63,6 +64,10 @@ impl<T: Clone> StructComponentManager<T> {
         }
     }
 
+    pub fn update(&mut self, _scene: &Scene, _delta: f32) {
+        println!("StructComponentManager::update()");
+    }
+
     pub fn destroy(&self, entity: Entity) {
         self.marked_for_destroy.borrow_mut().insert(entity);
     }
@@ -91,7 +96,7 @@ pub struct Iter<'a, T: 'a> {
     entity_iter: ::std::slice::Iter<'a, Entity>,
 }
 
-impl<'a, T: 'a + Clone> Iterator for Iter<'a, T> {
+impl<'a, T: 'a + Component> Iterator for Iter<'a, T> {
     type Item = (&'a T, Entity);
 
     fn next(&mut self) -> Option<(&'a T, Entity)> {
@@ -103,12 +108,12 @@ impl<'a, T: 'a + Clone> Iterator for Iter<'a, T> {
     }
 }
 
-pub struct IterMut<'a, T: 'a + Clone> {
+pub struct IterMut<'a, T: 'a + Component> {
     component_iter: ::std::slice::IterMut<'a, T>,
     entity_iter: ::std::slice::Iter<'a, Entity>,
 }
 
-impl<'a, T: 'a + Clone> Iterator for IterMut<'a, T> {
+impl<'a, T: 'a + Component> Iterator for IterMut<'a, T> {
     type Item = (&'a mut T, Entity);
 
     fn next(&mut self) -> Option<(&'a mut T, Entity)> {

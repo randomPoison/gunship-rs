@@ -1,8 +1,9 @@
 use collections::EntitySet;
-use component::DefaultManager;
-use std::collections::VecDeque;
-
+use component::{DefaultManager, DefaultMessage};
+use engine::EngineBuilder;
 use scene::Scene;
+use std::collections::VecDeque;
+use std::intrinsics;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct Entity(u32);
@@ -50,11 +51,12 @@ impl EntityManager {
     }
 }
 
-pub trait System {
+pub trait System: 'static {
     fn update(&mut self, scene: &Scene, delta: f32);
 }
 
-impl<T: ?Sized> System for T where T: FnMut(&Scene, f32) {
+impl<T: ?Sized> System for T
+    where T: 'static + FnMut(&Scene, f32) {
     fn update(&mut self, scene: &Scene, delta: f32) {
         self.call_mut((scene, delta));
     }
@@ -63,14 +65,103 @@ impl<T: ?Sized> System for T where T: FnMut(&Scene, f32) {
 pub trait ComponentManager: 'static + Sized {
     type Component: Component<Manager=Self>;
 
-    fn register(scene: &mut Scene);
-    // fn assign(&self, entity: Entity) -> &mut Self::Component;
+    fn register(builder: &mut EngineBuilder);
+    // fn apply(&mut self, entity: Entity, message: <Self::Component as Component>::Message);
     fn get(&self, _entity: Entity) -> Option<&Self::Component> { None }
     fn destroy(&self, entity: Entity);
 }
 
 pub trait Component: 'static + Clone {
     type Manager: ComponentManager<Component=Self> = DefaultManager<Self>;
+    type Message: Message<Target=Self> = DefaultMessage<Self>;
 }
 
-impl Component for () {}
+pub trait Message: 'static + Sized {
+    type Target: Component<Message=Self>;
+
+    fn apply(self, component: &mut Self::Target);
+}
+
+// ===============================
+// CUSTOM TYPE IDS
+// ===============================
+
+#[cfg(not(feature = "hotloading"))]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ManagerId(u64);
+
+#[cfg(feature = "hotloading")]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ManagerId(&'static str);
+
+impl ManagerId {
+    #[cfg(not(feature = "hotloading"))]
+    pub fn of<T: ComponentManager>() -> ManagerId {
+        unsafe { ManagerId(intrinsics::type_id::<T>()) }
+    }
+
+    /// Two cases:
+    ///
+    /// - No template (e.g. `foo::bar::TransformManager`) just remove path (becomes `TransformManager`).
+    /// - Template (e.g. `foo::bar::Manager<foo::bar::Foo>`) innermost type without leading path
+    ///   (becomes `Foo`).
+    #[cfg(feature = "hotloading")]
+    pub fn of<T: ComponentManager>() -> ManagerId {
+        let full_name = unsafe { intrinsics::type_name::<T>() };
+
+        // Find first occurrence of '<' character since we know the start of the proper name has to
+        // be before that.
+        let sub_str = match full_name.find('<') {
+            Some(index) => &full_name[index + 1..full_name.len() - 1], // foo::Foo<foo::Bar> => foo::Bar
+            None => full_name,                                         // foo::Foo => foo::Foo
+        };
+
+        let slice_index = match sub_str.rfind("::") {
+            Some(last_index) => last_index + 2,
+            None => 0,
+        };
+
+        ManagerId(&sub_str[slice_index..])
+    }
+}
+
+#[cfg(not(feature = "hotloading"))]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct SystemId(u64);
+
+#[cfg(feature = "hotloading")]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct SystemId(&'static str);
+
+impl SystemId {
+    #[cfg(not(feature = "hotloading"))]
+    pub fn of<T: System>() -> SystemId {
+        unsafe { SystemId(intrinsics::type_id::<T>()) }
+    }
+
+    /// Two cases:
+    ///
+    /// - No template (e.g. `foo::bar::TransformManager`) just remove path (becomes `TransformManager`).
+    /// - Template (e.g. `foo::bar::Manager<foo::bar::Foo>`) innermost type without leading path
+    ///   (becomes `Foo`).
+    #[cfg(feature = "hotloading")]
+    pub fn of<T: System>() -> SystemId {
+        let full_name = unsafe {
+            intrinsics::type_name::<T>()
+        };
+
+        // Find first occurrence of '<' character since we know the start of the proper name has to
+        // be before that.
+        let sub_str = match full_name.find('<') {
+            Some(index) => &full_name[index + 1..full_name.len() - 1], // foo::Foo<foo::Bar> => foo::Bar
+            None => full_name,                                         // foo::Foo => foo::Foo
+        };
+
+        let slice_index = match sub_str.rfind("::") {
+            Some(last_index) => last_index + 2,
+            None => 0,
+        };
+
+        SystemId(&sub_str[slice_index..])
+    }
+}
