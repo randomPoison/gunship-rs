@@ -78,6 +78,8 @@ impl AudioSourceManager {
     }
 }
 
+impl ComponentManagerBase for AudioSourceManager {}
+
 impl ComponentManager for AudioSourceManager {
     type Component = AudioSource;
 

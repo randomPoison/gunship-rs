@@ -129,6 +129,8 @@ impl AlarmManager {
     }
 }
 
+impl ComponentManagerBase for AlarmManager {}
+
 impl ComponentManager for AlarmManager {
     type Component = AlarmId;
 

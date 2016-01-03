@@ -1,11 +1,48 @@
 use std::collections::HashMap;
 use std::cell::RefCell;
 use std::intrinsics::type_name;
+use std::fmt::{Debug, Error, Formatter};
 use std::mem;
+use std::ops::{Deref, DerefMut};
 
 use ecs::*;
 use engine::*;
 use input::Input;
+
+pub struct ManagerMap(HashMap<ManagerId, Box<ComponentManagerBase>>);
+
+impl ManagerMap {
+    pub fn new() -> ManagerMap {
+        ManagerMap(HashMap::default())
+    }
+}
+
+impl Clone for ManagerMap {
+    fn clone(&self) -> ManagerMap {
+        ManagerMap::new()
+    }
+}
+
+impl Debug for ManagerMap {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
+        // TODO: Actually list all of the manager Ids.
+        write!(f, "ManagerMap")
+    }
+}
+
+impl Deref for ManagerMap {
+    type Target = HashMap<ManagerId, Box<ComponentManagerBase>>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for ManagerMap {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
 
 /// Contains all the data that defines the current state of the world.
 ///
@@ -14,16 +51,16 @@ use input::Input;
 #[derive(Debug, Clone)]
 pub struct Scene {
     entity_manager: RefCell<EntityManager>,
-    component_managers: HashMap<ManagerId, Box<()>>,
+    managers: ManagerMap,
     pub input: Input,
     pub audio_source: ::bs_audio::AudioSource, // FIXME: This is a hot mess, the scene should not have to hold on to the audio source.
 }
 
 impl Scene {
-    pub fn new(audio_source: ::bs_audio::AudioSource) -> Scene {
+    pub fn new(audio_source: ::bs_audio::AudioSource, managers: ManagerMap) -> Scene {
         Scene {
             entity_manager: RefCell::new(EntityManager::new()),
-            component_managers: HashMap::new(),
+            managers: managers,
             input: Input::new(),
             audio_source: audio_source,
         }
@@ -31,7 +68,7 @@ impl Scene {
 
     pub fn get_manager<T: ComponentManager>(&self) -> &T {
         let manager_id = ManagerId::of::<T>();
-        let trait_object = match self.component_managers.get(&manager_id) {
+        let trait_object = match self.managers.get(&manager_id) {
             Some(trait_object) => &**trait_object,
             None => panic!(
                 "Tried to retrieve manager {} with ID {:?} but none exists",
@@ -44,7 +81,7 @@ impl Scene {
 
     pub unsafe fn get_manager_mut<T: ComponentManager>(&self) -> &mut T {
         let manager_id = ManagerId::of::<T>();
-        let trait_object = match self.component_managers.get(&manager_id) {
+        let trait_object = match self.managers.get(&manager_id) {
             Some(trait_object) => &**trait_object,
             None => panic!(
                 "Tried to retrieve manager {} with ID {:?} but none exists",
@@ -53,12 +90,12 @@ impl Scene {
         };
 
         // Use same method as `UnsafeCell` to convert a immutable reference to a mutable pointer.
-        downcast_mut(&mut *(trait_object as *const () as *mut ()))
+        downcast_mut(trait_object)
     }
 
     pub fn get_manager_for<C: Component>(&self) -> &C::Manager {
         let manager_id = ManagerId::of::<C::Manager>();
-        let manager = match self.component_managers.get(&manager_id) {
+        let manager = match self.managers.get(&manager_id) {
             Some(manager) => &**manager, // &Box<()> -> &()
             None => panic!("Tried to retrieve manager {} with ID {:?} but none exists",
                            unsafe { type_name::<C>() },
@@ -71,12 +108,12 @@ impl Scene {
     pub fn has_manager_for<C: Component>(&self) -> bool {
         let manager_id = ManagerId::of::<C::Manager>();
 
-        self.component_managers.contains_key(&manager_id)
+        self.managers.contains_key(&manager_id)
     }
 
     pub fn has_manager<T: ComponentManager>(&self) -> bool {
         let manager_id = ManagerId::of::<T>();
-        self.component_managers.contains_key(&manager_id)
+        self.managers.contains_key(&manager_id)
     }
 
     pub fn get_component<T: Component>(&self, entity: Entity) -> Option<&T> {
@@ -129,7 +166,7 @@ impl Scene {
         if self.is_alive(entity) {
             // FIXME: Notify the component managers that an entity was asploded.
 
-            // for manager in self.component_managers.values() {
+            // for manager in self.managers.values() {
             //     // In this context we don't care what type of component the manager *actually* is
             //     // for, so we transmute it to `ComponentManager<Component=()>` so that we can
             //     // tell it to destroy the entity regardless of it's actual type. This is safe to do
@@ -140,7 +177,7 @@ impl Scene {
             //
             // let transform_manager = self.get_manager::<TransformManager>();
             // transform_manager.walk_children(entity, &mut |entity| {
-            //     for (_, manager) in self.component_managers.iter() {
+            //     for (_, manager) in self.managers.iter() {
             //         // Same story as above.
             //         manager.destroy(entity);
             //     }
@@ -152,13 +189,23 @@ impl Scene {
 }
 
 /// Performs an unchecked downcast from `&()` trait object to the concrete type.
-unsafe fn downcast_ref<T>(manager: &()) -> &T {
-    // We're just transmuting a pointer to `()` to a pointer to `T`.
-    mem::transmute(manager)
+unsafe fn downcast_ref<'a, T>(manager: &'a ComponentManagerBase) -> &'a T {
+    use std::raw::TraitObject;
+
+    // Get the underlying trait object representation.
+    let trait_object: TraitObject = mem::transmute(manager);
+
+    // Cast the data pointer to the correct type and dereference it.
+    &*(trait_object.data as *const T)
 }
 
 /// Performs an unchecked downcast from `&()` trait object to the concrete type.
-unsafe fn downcast_mut<T>(manager: &mut ()) -> &mut T {
-    // We're just transmuting a pointer to `()` to a pointer to `T`.
-    mem::transmute(manager)
+unsafe fn downcast_mut<'a, T>(manager: &'a ComponentManagerBase) -> &'a mut T {
+    use std::raw::TraitObject;
+
+    // Get the underlying trait object representation.
+    let trait_object: TraitObject = mem::transmute(manager);
+
+    // Cast the data pointer to the correct type and dereference it.
+    &mut *(trait_object.data as *mut T)
 }

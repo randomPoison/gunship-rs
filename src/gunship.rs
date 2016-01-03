@@ -54,5 +54,5 @@ pub use self::component::collider::{ColliderManager, Collider};
 pub use self::component::singleton_component_manager::SingletonComponentManager;
 pub use self::singleton::Singleton;
 
-// TODO: These are only needed for hotloading support.
-pub use self::engine::{engine_init, engine_update_and_render};
+// // TODO: These are only needed for hotloading support.
+// pub use self::engine::{engine_init, engine_update_and_render};

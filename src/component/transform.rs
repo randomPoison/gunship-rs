@@ -212,6 +212,8 @@ impl TransformManager {
     }
 }
 
+impl ComponentManagerBase for TransformManager {}
+
 impl ComponentManager for TransformManager {
     type Component = Transform;
 

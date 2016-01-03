@@ -49,6 +49,8 @@ impl MeshManager {
     }
 }
 
+impl ComponentManagerBase for MeshManager {}
+
 impl ComponentManager for MeshManager {
     type Component = Mesh;
 

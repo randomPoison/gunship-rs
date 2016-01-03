@@ -268,6 +268,8 @@ impl ColliderManager {
     }
 }
 
+impl ComponentManagerBase for ColliderManager {}
+
 impl ComponentManager for ColliderManager {
     type Component = Collider;
 

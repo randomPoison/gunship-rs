@@ -42,6 +42,14 @@ fn default_update<T>(scene: &Scene, delta: f32)
     manager.0.update(scene, delta);
 }
 
+impl<T> ComponentManagerBase for DefaultManager<T>
+    where T: Component<Manager=DefaultManager<T>>
+{
+    fn update(&mut self) {
+        self.0.process_messages();
+    }
+}
+
 impl<T> ComponentManager for DefaultManager<T>
     where T: Component<Manager=DefaultManager<T>>
 {
@@ -80,5 +88,14 @@ impl<T: Component<Message=DefaultMessage<T>>> Message for DefaultMessage<T> {
     fn apply(self, component: &mut T) {
         let inner = self.0;
         inner.call_once((component,));
+    }
+}
+
+impl<T, U> From<U> for DefaultMessage<T>
+    where T: Component,
+          U: 'static + FnOnce(&mut T),
+{
+    fn from(callback: U) -> DefaultMessage<T> {
+        DefaultMessage(Box::new(callback))
     }
 }

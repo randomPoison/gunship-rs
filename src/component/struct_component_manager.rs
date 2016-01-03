@@ -2,8 +2,45 @@ use collections::{EntityMap, EntitySet};
 use ecs::*;
 use scene::Scene;
 use std::cell::RefCell;
+use std::fmt::{Debug, Error, Formatter, Write};
+use std::intrinsics::type_name;
+use std::ops::*;
 
 const MAX_PENDING: usize = 1_000;
+
+struct MessageMap<T: Component>(EntityMap<Vec<T::Message>>);
+
+impl<T: Component> MessageMap<T> {
+    fn new() -> MessageMap<T> {
+        MessageMap(EntityMap::default())
+    }
+}
+
+impl<T: Component> Clone for MessageMap<T> {
+    fn clone(&self) -> MessageMap<T> {
+        MessageMap::new()
+    }
+}
+
+impl<T: Component> Deref for MessageMap<T> {
+    type Target = EntityMap<Vec<T::Message>>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<T: Component> DerefMut for MessageMap<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl<T: Component> Debug for MessageMap<T> {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
+        write!(f, "{}", unsafe { type_name::<Self>() })
+    }
+}
 
 /// A utilty on which to build other component managers.
 ///
@@ -24,6 +61,7 @@ pub struct StructComponentManager<T: Component> {
     // TODO: Convert to a non-resizable dynamicially allocated array.
     new_components: Vec<(Entity, T)>,
     marked_for_destroy: RefCell<EntitySet>,
+    messages: RefCell<MessageMap<T>>,
 }
 
 impl<T: Component> StructComponentManager<T> {
@@ -35,6 +73,7 @@ impl<T: Component> StructComponentManager<T> {
 
             new_components: Vec::with_capacity(MAX_PENDING),
             marked_for_destroy: RefCell::new(EntitySet::default()),
+            messages: RefCell::new(MessageMap::new()),
         }
     }
 
@@ -57,11 +96,9 @@ impl<T: Component> StructComponentManager<T> {
     }
 
     pub fn get(&self, entity: Entity) -> Option<&T> {
-        if let Some(index) = self.indices.get(&entity) {
-            Some(&self.components[*index])
-        } else {
-            None
-        }
+        self.indices
+        .get(&entity)
+        .map(|index| &self.components[*index])
     }
 
     pub fn update(&mut self, _scene: &Scene, _delta: f32) {
@@ -88,6 +125,34 @@ impl<T: Component> StructComponentManager<T> {
 
     pub fn len(&self) -> usize {
         self.entities.len() + self.new_components.len()
+    }
+
+    /// Passes a message to the component associated with the specified entity.
+    pub fn send_message<M: Into<T::Message>>(&self, entity: Entity, message: M) {
+        let mut messages = self.messages.borrow_mut();
+        messages
+        .entry(entity)
+        .or_insert(Vec::new())
+        .push(message.into());
+    }
+
+    /// Applies all pending messages to their target components.
+    pub fn process_messages(&mut self) {
+        let mut messages = self.messages.borrow_mut();
+        for (entity, mut messages) in messages.drain() {
+            if let Some(index) = self.indices.get(&entity) {
+                let component = &mut self.components[*index];
+                for message in messages.drain(..) {
+                    message.apply(component);
+                }
+            } else {
+                // TODO: Panic or error? That could probably be configured at runtime.
+                panic!(
+                    "Attempted to pass message to {} of {:?} which does not exist",
+                    unsafe { type_name::<T>() },
+                    entity);
+            }
+        }
     }
 }
 

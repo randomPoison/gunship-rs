@@ -18,7 +18,7 @@ use polygon::gl_render::GLRender;
 use singleton::Singleton;
 use stopwatch::{Collector, Stopwatch};
 
-use scene::Scene;
+use scene::*;
 use resource::ResourceManager;
 use ecs::*;
 use component::*;
@@ -240,12 +240,6 @@ impl Engine {
 
     #[cfg(feature="no-draw")]
     fn draw(&mut self) {}
-
-    // HACK: Used for hotloading, isn't even really needed for that but serves as a reminder that
-    // hotloading needs to be reworked.
-    fn close(&self) -> bool {
-        self.close
-    }
 }
 
 impl Clone for Engine {
@@ -308,7 +302,7 @@ unsafe impl Singleton for Engine {
 pub struct EngineBuilder {
     systems: HashMap<SystemId, Box<System>>,
     debug_systems: HashMap<SystemId, Box<System>>,
-    managers: HashMap<ManagerId, Box<()>>,
+    managers: ManagerMap,
 }
 
 /// A builder for configuring the components and systems registered with the game engine.
@@ -317,28 +311,31 @@ pub struct EngineBuilder {
 /// must be provided all together when the instance is created. `EngineBuilder` provides an
 /// interface for gathering all managers and systems to be provided to the engine.
 impl EngineBuilder {
+    /// Creates a new `EngineBuilder` object.
     pub fn new() -> EngineBuilder {
-        EngineBuilder {
+        let mut builder = EngineBuilder {
             systems: HashMap::new(),
             debug_systems: HashMap::new(),
-            managers: HashMap::new(),
-        }
+            managers: ManagerMap::new(),
+        };
+
+        // Register internal component managers.
+        builder.register_component::<Transform>();
+        builder.register_component::<Camera>();
+        builder.register_component::<Light>();
+        builder.register_component::<Mesh>();
+        builder.register_component::<AudioSource>();
+        builder.register_component::<AlarmId>();
+        builder.register_component::<Collider>();
+
+        builder
     }
 
     /// Consumes the builder and creates the `Engine` instance.
     ///
     /// No `Engine` object is returned because this method instantiates the engine singleton.
-    pub fn build(mut self) {
+    pub fn build(self) {
         let engine = {
-            // Register internal component managers.
-            self.register_component::<Transform>();
-            self.register_component::<Camera>();
-            self.register_component::<Light>();
-            self.register_component::<Mesh>();
-            self.register_component::<AudioSource>();
-            self.register_component::<AlarmId>();
-            self.register_component::<Collider>();
-
             let instance = bootstrap::init();
             let window = Window::new("Rust Window", instance);
             let renderer = Rc::new(GLRender::new(window.borrow().deref()));
@@ -358,8 +355,8 @@ impl EngineBuilder {
                 renderer: renderer.clone(),
                 resource_manager: resource_manager,
 
-                systems: HashMap::new(),
-                debug_systems: HashMap::new(),
+                systems: self.systems,
+                debug_systems: self.debug_systems,
 
                 transform_update: Box::new(transform_update),
                 light_update: Box::new(LightUpdateSystem),
@@ -367,7 +364,7 @@ impl EngineBuilder {
                 alarm_update: Box::new(alarm_update),
                 collision_update: Box::new(CollisionSystem::new()),
 
-                scene: Scene::new(audio_source),
+                scene: Scene::new(audio_source, self.managers),
 
                 debug_draw: debug_draw,
 
@@ -388,6 +385,7 @@ impl EngineBuilder {
     /// Registers the specified manager with the engine.
     ///
     /// Defers internally to `ComponentManager::register()`.
+
     pub fn register_manager<T: ComponentManager>(&mut self, manager: T) {
         let manager_id = ManagerId::of::<T>();
         assert!(
@@ -397,12 +395,8 @@ impl EngineBuilder {
         // Box the manager as a trait object to construct the data and vtable pointers.
         let boxed_manager = Box::new(manager);
 
-        // Transmute to raw trait object to throw away type information so that we can store it
-        // in the type map.
-        let boxed_trait_object = unsafe { mem::transmute(boxed_manager) };
-
         // Add the manager to the type map and the component id to the component map.
-        self.managers.insert(manager_id, boxed_trait_object);
+        self.managers.insert(manager_id, boxed_manager);
     }
 
     /// Registers the system with the engine.
@@ -431,6 +425,11 @@ impl EngineBuilder {
 // ==========================
 // HOTLOADING MAGIC FUNCTIONS
 // ==========================
+
+
+/*
+// FIXME: Hotloading is completely broken for the time being, it's going to need some heavy
+// refactoring before it's going to work again.
 
 #[no_mangle]
 pub fn engine_init(window: Rc<RefCell<Window>>) -> Box<Engine> {
@@ -499,3 +498,5 @@ pub fn do_collision_update(engine: &mut Engine) {
     engine.transform_update.update(scene, TARGET_FRAME_TIME_SECONDS);
     engine.collision_update.update(scene, TARGET_FRAME_TIME_SECONDS);
 }
+
+*/

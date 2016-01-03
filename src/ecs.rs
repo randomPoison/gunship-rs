@@ -62,7 +62,11 @@ impl<T: ?Sized> System for T
     }
 }
 
-pub trait ComponentManager: 'static + Sized {
+pub trait ComponentManagerBase: 'static {
+    fn update(&mut self) {}
+}
+
+pub trait ComponentManager: ComponentManagerBase + Sized {
     type Component: Component<Manager=Self>;
 
     fn register(builder: &mut EngineBuilder);
@@ -82,9 +86,9 @@ pub trait Message: 'static + Sized {
     fn apply(self, component: &mut Self::Target);
 }
 
-// ===============================
+// ===============
 // CUSTOM TYPE IDS
-// ===============================
+// ===============
 
 #[cfg(not(feature = "hotloading"))]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
