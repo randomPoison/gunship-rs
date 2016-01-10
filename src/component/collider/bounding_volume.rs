@@ -356,7 +356,7 @@ pub fn bvh_update(scene: &Scene, _delta: f32) {
     };
 
     for (collider, entity) in collider_manager.iter() {
-        let transform = transform_manager.get(entity);
+        let transform = transform_manager.get(entity).unwrap(); // TOOD: Don't panic?
 
         let cached_collider = CachedCollider::from_collider_transform(&*collider, &*transform);
         let aabb = AABB::from_collider(&cached_collider);

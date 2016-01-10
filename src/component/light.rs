@@ -18,7 +18,7 @@ impl System for LightUpdateSystem {
         let transform_manager = scene.get_manager::<TransformManager>();
 
         for (mut light, entity) in light_manager.iter_mut() {
-            let light_transform = transform_manager.get(entity);
+            let light_transform = transform_manager.get(entity).unwrap(); // TODO: Don't panic.
             match &mut *light {
                 &mut Light::Point(ref mut point_light) => {
                     point_light.position = light_transform.position();

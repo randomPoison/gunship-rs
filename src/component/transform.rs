@@ -1,128 +1,143 @@
 use collections::{EntityMap, EntitySet};
-use ecs::*;
+use ecs::{ComponentManager, ComponentManagerBase, Component, Entity};
 use engine::*;
 use math::*;
 use scene::*;
-use std::collections::{HashMap, HashSet};
-use std::cell::{Cell, RefCell, Ref, RefMut};
+use std::cell::RefCell;
+use std::ptr;
 use stopwatch::Stopwatch;
 use super::DefaultMessage;
 
+/// HACK: Used to keep the data rows from reallocating and invalidating all of the pointers.
+const ROW_CAPACITY: usize = 1_000;
+
+/// Component manager for the `Transform` component.
 #[derive(Debug, Clone)]
 pub struct TransformManager {
-    transforms: Vec<Vec<RefCell<Transform>>>,
-    entities: Vec<Vec<(Entity, Option<Entity>)>>,
-
     /// A map between the entity owning the transform and the location of the transform.
     ///
     /// The first value of the mapped tuple is the row containing the transform, the
     /// second is the index of the transform within that row.
-    indices: EntityMap<(usize, usize)>,
+    transforms: EntityMap<Box<Transform>>,
+
+    /// The actual data for each transform.
+    ///
+    /// TODO: This documentation should be public, but it's not clear where it should go.
+    ///
+    /// Transform data is kept compact in rows for SUPER EFFICIENT UPDATES(tm). Each row represents
+    /// a depth in the hierarchy and each row is updated in turn which guarantees that by the time
+    /// a transform is updated it's parent will already have been updated. It also allows for
+    /// transforms to be rearranged to keep only dirty transforms next to each other. This method
+    /// is adopted from [Ogre](http://www.ogre3d.org/).
+    transform_data: Vec<Vec<TransformData>>,
 
     marked_for_destroy: RefCell<EntitySet>,
+
+    // HACK: This should just be a static, but we don't have const initialization so that would be
+    // too much a pain to manually initialize all that junk.
+    dummy_transform_data: Box<TransformData>,
 }
 
 impl TransformManager {
     pub fn new() -> TransformManager {
-        let mut transform_manager = TransformManager {
-            transforms: Vec::new(),
-            entities: Vec::new(),
-            indices: HashMap::default(),
-            marked_for_destroy: RefCell::new(HashSet::default()),
-        };
+        TransformManager {
+            transforms: EntityMap::default(),
+            transform_data: vec![Vec::with_capacity(ROW_CAPACITY)],
+            marked_for_destroy: RefCell::new(EntitySet::default()),
 
-        transform_manager.transforms.push(Vec::new());
-        transform_manager.entities.push(Vec::new());
-        transform_manager
-    }
+            dummy_transform_data: Box::new(TransformData {
+                parent:    0 as *const _,
+                transform: 0 as *mut _,
+                index:     0,
+                row:       0,
 
-    pub fn assign(&mut self, entity: Entity) -> RefMut<Transform> {
-        let index = self.transforms[0].len();
-        self.transforms[0].push(RefCell::new(Transform::new()));
-        self.entities[0].push((entity, None));
+                position: Point::origin(),
+                rotation: Quaternion::identity(),
+                scale:    Vector3::one(),
 
-        assert!(self.transforms[0].len() == self.entities[0].len());
-
-        self.indices.insert(entity, (0, index));
-        self.transforms[0][index].borrow_mut()
-    }
-
-    pub fn get(&self, entity: Entity) -> Ref<Transform> {
-        let (row, index) = *self.indices.get(&entity).expect("Transform manager does not contain a transform for the given entity.");
-        self.transforms[row][index].borrow()
-    }
-
-    pub fn get_mut(&self, entity: Entity) -> RefMut<Transform> {
-        let (row, index) = *self.indices.get(&entity).expect("Transform manager does not contain a transform for the given entity.");
-        self.transforms[row][index].borrow_mut()
-    }
-
-    pub fn set_child(&mut self, parent: Entity, child: Entity) {
-        // Get the indices of the parent.
-        let (parent_row, _) = *self.indices.get(&parent).unwrap();
-        let child_row = parent_row + 1;
-
-        // Move the child and all of its children to the correct row.
-        self.set_row_recursive(child, Some(parent), child_row);
-    }
-
-    fn set_row_recursive(&mut self, entity: Entity, parent: Option<Entity>, new_row: usize) {
-        debug_assert!((new_row == 0 && parent.is_none()) || (new_row > 0 && parent.is_some()));
-
-        // Remove old transform component.
-        let (old_row, _) = *self.indices.get(&entity).unwrap(); // TODO: Don't panic? If this fails an invariant somewhere else was broken.
-        let transform = self.remove(entity);
-
-        // Ensure that there are enough rows for the child.
-        while self.transforms.len() < new_row + 1 {
-            self.transforms.push(Vec::new());
-            self.entities.push(Vec::new());
-        }
-
-        // Add the child to the correct row.
-        let child_index = self.transforms[new_row].len();
-        self.transforms[new_row].push(RefCell::new(transform));
-        self.entities[new_row].push((entity, parent));
-
-        // Update the index map.
-        self.indices.insert(entity, (new_row, child_index));
-
-        // Update all children.
-        // TODO: We shouldn't have to clone the list here, but Rust's ownership rules mean that we
-        // can't compile if we don't (which is completely valid in this case). Once we implement a
-        // more stable form of storage for transform nodes (where pointers to nodes are stable)
-        // then cloning should be able to go away.
-        for (child, maybe_parent) in self.entities[old_row + 1].clone() {
-            match maybe_parent {
-                Some(parent) if parent == entity => {
-                    self.set_row_recursive(child, Some(entity), new_row + 1);
-                },
-                _ => {},
-            }
+                position_derived: Point::origin(),
+                rotation_derived: Quaternion::identity(),
+                scale_derived:    Vector3::one(),
+                matrix_derived:   Matrix4::identity(),
+            }),
         }
     }
 
-    pub fn update_single(&self, entity: Entity) {
-        let transform = self.get(entity);
+    pub fn assign(&mut self, entity: Entity) -> &Transform {
+        // It's only possible for there to be outstanding references to the boxed `Transform`
+        // objects, so no mutation can cause any memory unsafety. We still have to manually update
+        // the data pointers for any moved transforms, but that is an internal detail that doesn't
+        // leak to client code.
 
-        let (row, index) = *self.indices.get(&entity).expect("Transform manager does not contain a transform for the given entity.");
-        let (_, parent) = self.entities[row][index];
-        match parent {
-            None => {
-                DUMMY_TRANSFORM.with(|parent| {
-                    transform.update(parent);
-                })
-            },
-            Some(parent) => {
-                // First update parent.
-                self.update_single(parent);
+        // Create boxed transform so we can create the transform data and give it a pointer to the
+        // transform object.
+        let mut transform = Box::new(Transform {
+            entity:   entity,
+            parent:   None,
+            children: Vec::new(),
+            data:     ptr::null_mut(),
+            messages: RefCell::new(Vec::new()),
+        });
 
-                // Now update self with the parent's updated transform.
-                let parent_transform = self.get(parent);
-                transform.update(&*parent_transform);
-            }
-        }
+        // Get the row for root transforms.
+        let row = &mut self.transform_data[0];
+
+        // HACK: This is our way of ensuring that pushing to the Vec doesn't reallocate. Switch to
+        // a non-reallocating data structure (link list of cache line-sized blocks).
+        assert!(row.len() < ROW_CAPACITY, "Tried to add transform data to row 0 but it is at capacity");
+
+        // Add a new `TransformData` for the the transform.
+        let index = row.len();
+        row.push(TransformData {
+            parent:           &*self.dummy_transform_data as *const _,
+            transform:        &mut *transform as *mut _,
+            row:              0,
+            index:            index,
+
+            position:         Point::origin(),
+            rotation:         Quaternion::identity(),
+            scale:            Vector3::one(),
+
+            position_derived: Point::origin(),
+            rotation_derived: Quaternion::identity(),
+            scale_derived:    Vector3::one(),
+            matrix_derived:   Matrix4::identity(),
+        });
+
+        // Give the transform a pointer to its data.
+        let data = unsafe { row.get_unchecked(index) };
+        transform.data = data as *const _ as *mut _; // `UnsafeCell` level dark magic.
+
+        // Add to the transform map.
+        self.transforms.insert(entity, transform);
+        &**self.transforms.get(&entity).unwrap()
     }
+
+    pub fn get(&self, entity: Entity) -> Option<&Transform> {
+        self.transforms.get(&entity).map(|boxed_transform| &**boxed_transform)
+    }
+
+    // pub fn update_single(&self, entity: Entity) {
+    //     let transform = self.get(entity);
+    //
+    //     let (row, index) = *self.indices.get(&entity).expect("Transform manager does not contain a transform for the given entity.");
+    //     let (_, parent) = self.entities[row][index];
+    //     match parent {
+    //         None => {
+    //             DUMMY_TRANSFORM.with(|parent| {
+    //                 transform.update(parent);
+    //             })
+    //         },
+    //         Some(parent) => {
+    //             // First update parent.
+    //             self.update_single(parent);
+    //
+    //             // Now update self with the parent's updated transform.
+    //             let parent_transform = self.get(parent);
+    //             transform.update(&*parent_transform);
+    //         }
+    //     }
+    // }
 
     /// Walks the transform hierarchy depth-first, invoking `callback` with each entity and its transform.
     ///
@@ -130,17 +145,13 @@ impl TransformManager {
     ///
     /// The callback is also invoked for the root entity. If the root entity does not have a transform
     /// the callback is never invoked.
-    pub fn walk_hierarchy<F: FnMut(Entity, &mut Transform)>(&self, entity: Entity, callback: &mut F) {
-        if let Some(&(row, index)) = self.indices.get(&entity) {
-            let mut transform = self.transforms[row][index].borrow_mut();
-            callback(entity, &mut *transform);
+    pub fn walk_hierarchy<F: FnMut(Entity, &Transform)>(&self, entity: Entity, callback: &mut F) {
+        if let Some(transform) = self.transforms.get(&entity) {
+            callback(entity, &*transform);
 
-            let child_row = row + 1;
-            if self.transforms.len() > child_row {
-                for (child_index, _) in self.entities[child_row].iter().enumerate().filter(|&(_, &(_, parent))| parent.unwrap() == entity) {
-                    let (child_entity, _) = self.entities[child_row][child_index];
-                    self.walk_hierarchy(child_entity, callback);
-                }
+            // Recursively walk children.
+            for child_entity in &transform.children {
+                self.walk_hierarchy(*child_entity, callback);
             }
         }
     }
@@ -153,15 +164,12 @@ impl TransformManager {
     /// the callback is never invoked. Note that the transform itself is not passed to the callback,
     /// if you need to access the transform use `walk_hierarchy()` instead.
     pub fn walk_children<F: FnMut(Entity)>(&self, entity: Entity, callback: &mut F) {
-        if let Some(&(row, _)) = self.indices.get(&entity) {
+        if let Some(transform) = self.transforms.get(&entity) {
             callback(entity);
 
-            let child_row = row + 1;
-            if self.transforms.len() > child_row {
-                for (child_index, _) in self.entities[child_row].iter().enumerate().filter(|&(_, &(_, parent))| parent.unwrap() == entity) {
-                    let (child_entity, _) = self.entities[child_row][child_index];
-                    self.walk_children(child_entity, callback);
-                }
+            // Recursively walk children.
+            for child_entity in &transform.children {
+                self.walk_children(*child_entity, callback);
             }
         }
     }
@@ -183,32 +191,114 @@ impl TransformManager {
         self.remove(entity);
     }
 
-    // Removes and returns the transform associated with the given entity.
-    //
-    // # Details
-    //
-    // NOTE: This does not handle updating/removing children. So be warned.
-    fn remove(&mut self, entity: Entity) -> Transform {
-        // Retrieve indices of removed entity and the one it's swapped with.
-        let (row, index) = self.indices.remove(&entity).unwrap();
-        debug_assert!(self.transforms[row].len() == self.entities[row].len());
+    // ========================
+    // PRIVATE HELPER FUNCTIONS
+    // ========================
 
-        // Remove transform and the associate entity.
-        let (removed_entity, _) = self.entities[row].swap_remove(index);
-        debug_assert!(removed_entity == entity);
+    fn get_mut(&mut self, entity: Entity) -> Option<&'static mut Transform> {
+        self.transforms
+        .get_mut(&entity)
+        .map(|transform| {
+            let ptr = &mut **transform as *mut _;
+            unsafe { &mut *ptr }
+        })
+    }
 
-        // Update the index mapping for the moved entity, but only if the one we removed
-        // wasn't the only one in the row (or the last one in the row).
-        if index != self.entities[row].len() {
-            let (moved_entity, _) = self.entities[row][index];
-            self.indices.insert(moved_entity, (row, index));
+    fn process_destroyed(&mut self) {
+        let mut marked_for_destroy = RefCell::new(EntitySet::default());
+        ::std::mem::swap(&mut marked_for_destroy, &mut self.marked_for_destroy);
+        let mut marked_for_destroy = marked_for_destroy.into_inner();
+        for entity in marked_for_destroy.drain() {
+            self.destroy_immediate(entity);
+        }
+    }
+
+    fn update_transforms(&mut self) {
+        for row in self.transform_data.iter_mut() {
+            // TODO: The transforms in a row can be processed independently so they should be done
+            // in parallel.
+            for transform_data in row.iter_mut() {
+                transform_data.update();
+            }
+        }
+    }
+
+    fn set_parent(&mut self, entity: Entity, parent: Entity) {
+        // Remove the moved entity from its parent's list of children.
+        if let Some(old_parent) = self.get(entity).unwrap().parent { // TODO: Can this unwrap fail?
+            let mut old_parent = self.get_mut(old_parent).unwrap(); // TODO: Can this unwrap fail? I think it indicates a bug within the library. What if the old parent was destroyed?
+            let index = old_parent.children.iter().position(|&child| child == entity).unwrap(); // TODO: Don't panic!
+            old_parent.children.swap_remove(index);
         }
 
-        // Defer removing the transform until the very end to avoid a bunch of memcpys.
-        // Transform is a pretty fat struct so if we remove it, cache it to a variable,
-        // and then return it at the end we wind up with 2 or 3 memcpys. Doing it all at
-        // once at the end (hopefully) means only a single memcpy.
-        self.transforms[row].swap_remove(index).into_inner()
+        // Add the moved entity to its new parent's list of children.
+        let parent_row = {
+            let mut parent_transform = self.get_mut(parent).unwrap(); // TODO: Don't panic? Panicing here would mean an error within Gunship.
+            parent_transform.children.push(parent);
+            parent_transform.data().row
+        };
+
+        // Recursively move the transform data for this transform and all of its children to their
+        // new rows.
+        self.set_row_recursive(entity, parent_row + 1);
+    }
+
+    /// Moves a transform to the specified row and moves its children to the rows below.
+    fn set_row_recursive(&mut self, entity: Entity, new_row_index: usize) {
+        let mut transform = self.get_mut(entity).unwrap();
+        let data_ptr = transform.data;
+
+        // Get information needed to remove the data from its current row.
+        let (row, index) = {
+            let data = unsafe { &*transform.data };
+            (data.row, data.index)
+        };
+
+        // Move transform data out of old row.
+        let data = self.transform_data[row].swap_remove(index);
+
+        // If the data wasn't at the end of the row then another data was moved to its position. We
+        // need to update any pointers to that data. That means the Transform and the data for its
+        // children.
+        if self.transform_data[row].len() > index {
+            unsafe { &mut *data_ptr }.fix_pointers(self);
+        }
+
+        // Make sure there are enough rows for the new data.
+        while self.transform_data.len() <= new_row_index {
+            self.transform_data.push(Vec::with_capacity(ROW_CAPACITY));
+        }
+
+        // Add the transform data to its new row and fix any pointers to it.
+        let data_ptr = {
+            let new_row = &mut self.transform_data[new_row_index];
+            assert!(new_row.len() < ROW_CAPACITY, "Tried to add data to row {} but it was full", new_row_index);
+            new_row.push(data);
+            let index = new_row.len() - 1;
+            &mut new_row[index] as *mut TransformData
+        };
+        unsafe { &mut *data_ptr }.fix_pointers(self);
+
+        // Repeate for all of its children forever.
+        for child_entity in transform.children.iter().cloned() {
+            self.set_row_recursive(child_entity, new_row_index + 1);
+        }
+    }
+
+    // Removes the transform associated with the given entity.
+    fn remove(&mut self, entity: Entity) {
+        // Remove the transform from the transform map.
+        let transform = self.transforms.remove(&entity).unwrap(); // TODO: Don't panic? Is it possible to get to this point and the transform doesn't exist?
+        let data_ptr = transform.data;
+
+        // Remove the transform data from its row.
+        let data = transform.data_mut();
+        let data = self.transform_data[data.row].swap_remove(data.index);
+
+        // Make sure that if we moved another data node that we fix up its pointers.
+        if self.transform_data[data.row].len() > data.index {
+            unsafe { &mut *data_ptr }.fix_pointers(self);
+        }
     }
 }
 
@@ -225,8 +315,6 @@ impl ComponentManager for TransformManager {
         self.marked_for_destroy.borrow_mut().insert(entity);
     }
 }
-
-thread_local!(static DUMMY_TRANSFORM: Transform = Transform::new());
 
 /// TODO: This should be module-level documentation.
 ///
@@ -252,170 +340,154 @@ thread_local!(static DUMMY_TRANSFORM: Transform = Transform::new());
 /// directly to achieve best performance.
 #[derive(Debug, Clone)]
 pub struct Transform {
-    position:         Point,
-    rotation:         Quaternion,
-    scale:            Vector3,
-    local_matrix:     Cell<Matrix4>,
-    position_derived: Cell<Point>,
-    rotation_derived: Cell<Quaternion>,
-    scale_derived:    Cell<Vector3>,
-    matrix_derived:   Cell<Matrix4>,
-    out_of_date:      Cell<bool>,
+    entity:   Entity,
+    parent:   Option<Entity>,
+    children: Vec<Entity>,
+    data:     *mut TransformData,
+    messages: RefCell<Vec<Message>>,
 }
 
 impl Transform {
-    pub fn new() -> Transform {
-        Transform {
-            position:         Point::origin(),
-            rotation:         Quaternion::identity(),
-            scale:            Vector3::one(),
-            local_matrix:     Cell::new(Matrix4::identity()),
-            position_derived: Cell::new(Point::origin()),
-            rotation_derived: Cell::new(Quaternion::identity()),
-            scale_derived:    Cell::new(Vector3::one()),
-            matrix_derived:   Cell::new(Matrix4::identity()),
-            out_of_date:      Cell::new(false),
-        }
+    /// Sends a message to the transform to make itself a child of the specified entity.
+    pub fn set_parent(&self, parent: Entity) {
+        unimplemented!();
     }
 
+    pub fn add_child(&self, child: Entity) {
+        unimplemented!();
+    }
+
+    /// Gets the local postion of the transform.
     pub fn position(&self) -> Point {
-        self.position
+        let data = unsafe { &*self.data };
+        data.position
     }
 
-    pub fn set_position(&mut self, new_position: Point) {
-        self.position = new_position;
-        self.out_of_date.set(true);
+    /// Sets the local position of the transform.
+    pub fn set_position(&self, new_position: Point) {
+        unimplemented!();
     }
 
+    /// Gets the location rotation of the transform.
     pub fn rotation(&self) -> Quaternion {
-        self.rotation
+        let data = unsafe { &*self.data };
+        data.rotation
     }
 
-    pub fn set_rotation(&mut self, new_rotation: Quaternion) {
-        self.rotation = new_rotation;
-        self.out_of_date.set(true);
+    /// Sets the local rotation of the transform.
+    pub fn set_rotation(&self, new_rotation: Quaternion) {
+        unimplemented!();
     }
 
+    /// Gets the local scale of the transform.
     pub fn scale(&self) -> Vector3 {
-        self.scale
+        let data = unsafe { &*self.data };
+        data.scale
     }
 
-    pub fn set_scale(&mut self, new_scale: Vector3) {
-        self.scale = new_scale;
-        self.out_of_date.set(true);
+    /// Sets the local scale of the transform.
+    pub fn set_scale(&self, new_scale: Vector3) {
+        unimplemented!();
     }
 
-    /// Retrieves the derived position of the transform.
+    /// Gets the derived position of the transform.
     ///
     /// In debug builds this method asserts if the transform is out of date.
     pub fn position_derived(&self) -> Point {
-        assert!(!self.out_of_date.get());
-
-        self.position_derived.get()
+        let data = unsafe { &*self.data };
+        data.position_derived
     }
 
-    /// Retrieves the derived rotation of the transform.
+    /// Gets the derived rotation of the transform.
     ///
     /// In debug builds this method asserts if the transform is out of date.
     pub fn rotation_derived(&self) -> Quaternion {
-        assert!(!self.out_of_date.get());
-
-        self.rotation_derived.get()
+        let data = unsafe { &*self.data };
+        data.rotation_derived
     }
 
-    /// Retrieves the derived scale of the transform.
+    /// Gets the derived scale of the transform.
     ///
     /// In debug builds this method asserts if the transform is out of date.
     pub fn scale_derived(&self) -> Vector3 {
-        assert!(!self.out_of_date.get());
-
-        self.scale_derived.get()
+        let data = unsafe { &*self.data };
+        data.scale_derived
     }
 
-    /// Retrieves the composite matrix representing the local transform.
-    ///
-    /// # Details
-    ///
-    /// The composite matrix combines the affine matrices representing translation,
-    /// scale, and rotation into a single transformation matrix. The local maxtrix does
-    /// not include the parent's transformation. The local matrix transforms a local point
-    /// into the parent's coordinate system.
-    pub fn local_matrix(&self) -> Matrix4 {
-        if self.out_of_date.get() {
-            let local_matrix =
-                Matrix4::from_point(self.position)
-                * (self.rotation.as_matrix4() * Matrix4::from_scale_vector(self.scale));
-            self.local_matrix.set(local_matrix);
-        }
-
-        self.local_matrix.get()
-    }
-
+    /// Gets the world-space matrix for the transform.
     pub fn derived_matrix(&self) -> Matrix4 {
-        assert!(!self.out_of_date.get());
-
-        self.matrix_derived.get()
+        let data = unsafe { &*self.data };
+        data.matrix_derived
     }
 
+    /// Gets the world-space normal matrix for the transform.
+    ///
+    /// The normal matrix is used to transform the vertex normals of meshes. The normal is
+    /// calculated as the inverse transpose of the transform's world matrix.
     pub fn derived_normal_matrix(&self) -> Matrix4 {
-        assert!(!self.out_of_date.get());
+        let data = unsafe { &*self.data };
 
-        let inverse =
-            Matrix4::from_scale_vector(1.0 / self.scale_derived.get())
-          * (self.rotation_derived.get().as_matrix4().transpose()
-          *  Matrix4::from_point(-self.position_derived.get()));
+        let inv_scale = Matrix4::from_scale_vector(1.0 / data.scale_derived);
+        let inv_rotation = data.rotation_derived.as_matrix4().transpose();
+        let inv_translation = Matrix4::from_point(-data.position_derived);
 
+        let inverse = inv_scale * (inv_rotation * inv_translation);
         inverse.transpose()
     }
 
-    pub fn translate(&mut self, translation: Vector3) {
-        self.position = self.position + translation;
-        self.out_of_date.set(true);
+    /// Translates the transform in its local space.
+    pub fn translate(&self, translation: Vector3) {
+        unimplemented!();
     }
 
-    pub fn rotate(&mut self, rotation: Quaternion) {
-        self.rotation = self.rotation * rotation;
-        self.out_of_date.set(true);
+    /// Rotates the transform in its local space.
+    pub fn rotate(&self, rotation: Quaternion) {
+        unimplemented!();
     }
 
-    pub fn look_at(&mut self, interest: Point, up: Vector3) {
-        let forward = interest - self.position;
-        self.rotation = Quaternion::look_rotation(forward, up);
-        self.out_of_date.set(true);
+    /// Overrides the transform's orientation to look at the specified point.
+    pub fn look_at(&self, interest: Point, up: Vector3) {
+        unimplemented!();
     }
 
-    pub fn look_direction(&mut self, forward: Vector3, up: Vector3) {
-        self.rotation = Quaternion::look_rotation(forward, up);
-        self.out_of_date.set(true);
+    /// Overrides the transform's orientation to look in the specified direction.
+    pub fn look_direction(&self, forward: Vector3, up: Vector3) {
+        unimplemented!();
     }
 
+    /// Gets the transform's local forward direction.
+    ///
+    /// The forward direction is the negative z axis.
     pub fn forward(&self) -> Vector3 {
-        let matrix = Matrix3::from_quaternion(self.rotation);
+        // TODO: Make this not dumb and slow.
+        let matrix = Matrix3::from_quaternion(self.rotation());
         -matrix.z_part()
     }
 
+    /// Gets the transform's local right direction.
+    ///
+    /// The right direction is the positive x axis.
     pub fn right(&self) -> Vector3 {
-        let matrix = Matrix3::from_quaternion(self.rotation);
+        // TODO: Make this not dumb and slow.
+        let matrix = Matrix3::from_quaternion(self.rotation());
         matrix.x_part()
     }
 
+    /// Gets the transform's local up direction.
+    ///
+    /// The up direction is the positive y axis.
     pub fn up(&self) -> Vector3 {
-        let matrix = Matrix3::from_quaternion(self.rotation);
+        // TODO: Make this not dumb and slow.
+        let matrix = Matrix3::from_quaternion(self.rotation());
         matrix.y_part()
     }
 
-    /// Updates the local and derived matrices for the transform.
-    fn update(&self, parent: &Transform) {
-        let local_matrix = self.local_matrix();
+    fn data(&self) -> &TransformData {
+        unsafe { &*self.data }
+    }
 
-        let derived_matrix = parent.derived_matrix() * local_matrix;
-        self.matrix_derived.set(derived_matrix);
-
-        self.position_derived.set(derived_matrix.translation_part());
-        self.rotation_derived.set(parent.rotation_derived() * self.rotation);
-        self.scale_derived.set(self.scale * parent.scale_derived());
-
-        self.out_of_date.set(false);
+    fn data_mut(&self) -> &mut TransformData {
+        unsafe { &mut *self.data }
     }
 }
 
@@ -424,37 +496,77 @@ impl Component for Transform {
     type Message = DefaultMessage<Transform>;
 }
 
+#[derive(Debug, Clone)]
+struct TransformData {
+    /// A pointer to the parent's transform data.
+    ///
+    /// Even if the node is at the root (and therefore has no parent) this will still point to a
+    /// dummy `TransformData` that that has all identity values.
+    parent:           *const TransformData,
+    transform:        *mut Transform,
+    row:              usize,
+    index:            usize,
+
+    position:         Point,
+    rotation:         Quaternion,
+    scale:            Vector3,
+
+    position_derived: Point,
+    rotation_derived: Quaternion,
+    scale_derived:    Vector3,
+    matrix_derived:   Matrix4,
+}
+
+impl TransformData {
+    /// Updates the derived transform data.
+    fn update(&mut self) {
+        let parent = unsafe { &*self.parent };
+
+        let local_matrix = self.local_matrix();
+
+        self.matrix_derived = parent.matrix_derived * local_matrix;
+
+        self.position_derived = self.matrix_derived.translation_part();
+        self.rotation_derived = parent.rotation_derived * self.rotation;
+        self.scale_derived    = self.scale * parent.scale_derived;
+    }
+
+    fn local_matrix(&self) -> Matrix4 {
+        let position = Matrix4::from_point(self.position);
+        let rotation = Matrix4::from_quaternion(self.rotation);
+        let scale    = Matrix4::from_scale_vector(self.scale);
+
+        position * (rotation * scale)
+    }
+
+    /// Corrects all pointers that are supposed to point to this object.
+    ///
+    /// `TransformData` objects need to relocate in memory in order to maintain cache coherency and
+    /// improve performance, so when one is moved any pointers that are supposed to point to it
+    /// need to be updated with its new location in memory. Only the data's transform and its child
+    /// data objects will have pointers to it, so we can safely correct all pointers.
+    fn fix_pointers(&mut self, transform_manager: &mut TransformManager) {
+        // Fix the transforms pointer back to the data object.
+        let mut transform = unsafe { &mut *self.transform };
+        transform.data = self as *mut _;
+
+        // Retrieve the data for each child transform and update its parent pointer.
+        for child in transform.children.iter().cloned() {
+            let child_transform = transform_manager.get(child).unwrap(); // TODO: Don't panic!
+            let mut child_data = child_transform.data_mut();
+            child_data.parent = self as *mut _;
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct Message;
+
 pub fn transform_update(scene: &Scene, _: f32) {
     let _stopwatch = Stopwatch::new("transform update");
 
     let mut transform_manager = unsafe { scene.get_manager_mut::<TransformManager>() };
 
-    // Process components marked for destruction.
-    {
-        let mut marked_for_destroy = RefCell::new(HashSet::default());
-        ::std::mem::swap(&mut marked_for_destroy, &mut transform_manager.marked_for_destroy);
-        let mut marked_for_destroy = marked_for_destroy.into_inner();
-        for entity in marked_for_destroy.drain() {
-            transform_manager.destroy_immediate(entity);
-        }
-    }
-
-    // Actually do the update.
-    for (transform_row, entity_row) in transform_manager.transforms.iter().zip(transform_manager.entities.iter()) {
-        for (transform, &(_, parent)) in transform_row.iter().zip(entity_row.iter()) {
-            // Retrieve the parent's transformation matrix, using the identity
-            // matrix if the transform has no parent.
-            match parent {
-                None => {
-                    DUMMY_TRANSFORM.with(|parent| {
-                        transform.borrow().update(parent);
-                    });
-                },
-                Some(parent) => {
-                    let parent_transform = transform_manager.get(parent);
-                    transform.borrow().update(&*parent_transform);
-                }
-            };
-        }
-    }
+    transform_manager.process_destroyed();
+    transform_manager.update_transforms();
 }

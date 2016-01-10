@@ -212,7 +212,7 @@ impl Engine {
 
             // TODO: Update the camera's bounds in a separate system.
             let camera = {
-                let transform = transform_manager.get(entity);
+                let transform = transform_manager.get(entity).unwrap(); // TODO: Don't panic?
 
                 camera.to_polygon_camera(
                     transform.position_derived(),
@@ -221,7 +221,7 @@ impl Engine {
 
             // Draw all of the meshes.
             for (mesh, entity) in mesh_manager.iter() {
-                let transform = transform_manager.get(entity);
+                let transform = transform_manager.get(entity).unwrap(); // TODO: Don't panic?
 
                 self.renderer.draw_mesh(
                     &mesh.gl_mesh,
