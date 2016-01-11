@@ -37,7 +37,7 @@ pub struct Engine {
     systems: HashMap<SystemId, Box<System>>,
     debug_systems: HashMap<SystemId, Box<System>>,
 
-    transform_update: Box<System>,
+    // TODO: Replace explicit update ordering with something more automatic (e.g. dependency hierarchy).
     light_update: Box<System>,
     audio_update: Box<System>,
     alarm_update: Box<System>,
@@ -178,7 +178,7 @@ impl Engine {
             system.update(scene, TARGET_FRAME_TIME_SECONDS);
         }
 
-        self.transform_update.update(scene, TARGET_FRAME_TIME_SECONDS);
+        // NOTE: Transform update used to go here.
 
         if !self.debug_pause || scene.input.key_pressed(ScanCode::F11) {
             self.collision_update.update(scene, TARGET_FRAME_TIME_SECONDS);
@@ -254,7 +254,6 @@ impl Clone for Engine {
             systems: HashMap::new(),
             debug_systems: HashMap::new(),
 
-            transform_update: Box::new(transform_update),
             light_update: Box::new(LightUpdateSystem),
             audio_update: Box::new(AudioSystem),
             alarm_update: Box::new(alarm_update),
@@ -358,7 +357,6 @@ impl EngineBuilder {
                 systems: self.systems,
                 debug_systems: self.debug_systems,
 
-                transform_update: Box::new(transform_update),
                 light_update: Box::new(LightUpdateSystem),
                 audio_update: Box::new(AudioSystem),
                 alarm_update: Box::new(alarm_update),

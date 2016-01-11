@@ -93,6 +93,8 @@ impl ComponentManager for AudioSourceManager {
     }
 }
 
+derive_Singleton!(AudioSourceManager);
+
 pub struct AudioSystem;
 
 impl System for AudioSystem {

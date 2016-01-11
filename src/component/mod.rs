@@ -16,7 +16,7 @@ use std::boxed::FnBox;
 use std::ops::{Deref, DerefMut};
 
 pub use self::singleton_component_manager::SingletonComponentManager;
-pub use self::transform::{Transform, TransformManager, transform_update};
+pub use self::transform::{Transform, TransformManager};
 pub use self::camera::{Camera, CameraManager};
 pub use self::mesh::{Mesh, MeshManager};
 pub use self::light::{Light, LightManager, LightUpdateSystem};
@@ -25,10 +25,13 @@ pub use self::alarm::{AlarmId, AlarmManager, alarm_update};
 pub use self::collider::{Collider, ColliderManager, CollisionSystem, bounding_volume, grid_collision};
 
 #[derive(Debug, Clone)]
-pub struct DefaultManager<T: Component>(StructComponentManager<T>);
+pub struct DefaultManager<T>(StructComponentManager<T>)
+    where T: Component,
+          T::Message: Message<Target=T>;
 
 impl<T> DefaultManager<T>
-    where T: Component<Manager=DefaultManager<T>>
+    where T: Component<Manager=DefaultManager<T>>,
+          T::Message: Message<Target=T>,
 {
     pub fn new() -> DefaultManager<T> {
         DefaultManager(StructComponentManager::new())
@@ -36,14 +39,16 @@ impl<T> DefaultManager<T>
 }
 
 fn default_update<T>(scene: &Scene, delta: f32)
-    where T: Component<Manager=DefaultManager<T>>
+    where T: Component<Manager=DefaultManager<T>>,
+          T::Message: Message<Target=T>,
 {
     let mut manager = unsafe { scene.get_manager_mut::<DefaultManager<T>>() };
     manager.0.update(scene, delta);
 }
 
 impl<T> ComponentManagerBase for DefaultManager<T>
-    where T: Component<Manager=DefaultManager<T>>
+    where T: Component<Manager=DefaultManager<T>>,
+          T::Message: Message<Target=T>,
 {
     fn update(&mut self) {
         self.0.process_messages();
@@ -51,7 +56,8 @@ impl<T> ComponentManagerBase for DefaultManager<T>
 }
 
 impl<T> ComponentManager for DefaultManager<T>
-    where T: Component<Manager=DefaultManager<T>>
+    where T: Component<Manager=DefaultManager<T>>,
+          T::Message: Message<Target=T>,
 {
     type Component = T;
 
@@ -65,7 +71,10 @@ impl<T> ComponentManager for DefaultManager<T>
     }
 }
 
-impl<T: Component> Deref for DefaultManager<T> {
+impl<T> Deref for DefaultManager<T>
+    where T: Component<Manager=DefaultManager<T>>,
+          T::Message: Message<Target=T>,
+{
     type Target = StructComponentManager<T>;
 
     fn deref(&self) -> &StructComponentManager<T> {
@@ -73,7 +82,10 @@ impl<T: Component> Deref for DefaultManager<T> {
     }
 }
 
-impl<T: Component> DerefMut for DefaultManager<T> {
+impl<T> DerefMut for DefaultManager<T>
+    where T: Component<Manager=DefaultManager<T>>,
+          T::Message: Message<Target=T>,
+{
     fn deref_mut(&mut self) -> &mut StructComponentManager<T> {
         &mut self.0
     }

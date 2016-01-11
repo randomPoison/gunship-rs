@@ -188,6 +188,8 @@ impl Scene {
     }
 }
 
+derive_Singleton!(Scene);
+
 /// Performs an unchecked downcast from `&()` trait object to the concrete type.
 unsafe fn downcast_ref<'a, T>(manager: &'a ComponentManagerBase) -> &'a T {
     use std::raw::TraitObject;

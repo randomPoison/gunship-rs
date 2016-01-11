@@ -1,5 +1,4 @@
 use collections::EntitySet;
-use component::{DefaultManager, DefaultMessage};
 use engine::EngineBuilder;
 use scene::Scene;
 use std::collections::VecDeque;
@@ -76,10 +75,12 @@ pub trait ComponentManager: ComponentManagerBase + Sized {
 }
 
 pub trait Component: 'static + Clone {
-    type Manager: ComponentManager<Component=Self> = DefaultManager<Self>;
-    type Message: Message<Target=Self> = DefaultMessage<Self>;
+    type Manager: ComponentManager<Component=Self>;
+    type Message;
 }
 
+/// Helper trait used to allow generic component managers like `DefaultManager` and
+/// `SingletonManager` to support custom message types.
 pub trait Message: 'static + Sized {
     type Target: Component<Message=Self>;
 

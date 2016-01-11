@@ -143,6 +143,8 @@ impl ComponentManager for AlarmManager {
     }
 }
 
+derive_Singleton!(AlarmManager);
+
 pub fn alarm_update(scene: &Scene, delta: f32) {
     let mut callbacks_to_trigger: Vec<Alarm> = Vec::new();
 

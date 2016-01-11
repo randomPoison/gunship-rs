@@ -1,5 +1,4 @@
 use component::DefaultManager;
-use ecs::*;
 use math::*;
 use std::f32::consts::PI;
 
@@ -28,7 +27,7 @@ impl Camera {
     }
 }
 
-impl Component for Camera {}
+derive_Component!(Camera);
 
 impl Default for Camera {
     fn default() -> Camera {

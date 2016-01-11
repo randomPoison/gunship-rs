@@ -2,11 +2,9 @@ use collections::{EntityMap, EntitySet};
 use ecs::{ComponentManager, ComponentManagerBase, Component, Entity};
 use engine::*;
 use math::*;
-use scene::*;
+use std::{mem, ptr};
 use std::cell::RefCell;
-use std::ptr;
 use stopwatch::Stopwatch;
-use super::DefaultMessage;
 
 /// HACK: Used to keep the data rows from reallocating and invalidating all of the pointers.
 const ROW_CAPACITY: usize = 1_000;
@@ -63,54 +61,11 @@ impl TransformManager {
         }
     }
 
-    pub fn assign(&mut self, entity: Entity) -> &Transform {
-        // It's only possible for there to be outstanding references to the boxed `Transform`
-        // objects, so no mutation can cause any memory unsafety. We still have to manually update
-        // the data pointers for any moved transforms, but that is an internal detail that doesn't
-        // leak to client code.
-
-        // Create boxed transform so we can create the transform data and give it a pointer to the
-        // transform object.
-        let mut transform = Box::new(Transform {
-            entity:   entity,
-            parent:   None,
-            children: Vec::new(),
-            data:     ptr::null_mut(),
-            messages: RefCell::new(Vec::new()),
-        });
-
-        // Get the row for root transforms.
-        let row = &mut self.transform_data[0];
-
-        // HACK: This is our way of ensuring that pushing to the Vec doesn't reallocate. Switch to
-        // a non-reallocating data structure (link list of cache line-sized blocks).
-        assert!(row.len() < ROW_CAPACITY, "Tried to add transform data to row 0 but it is at capacity");
-
-        // Add a new `TransformData` for the the transform.
-        let index = row.len();
-        row.push(TransformData {
-            parent:           &*self.dummy_transform_data as *const _,
-            transform:        &mut *transform as *mut _,
-            row:              0,
-            index:            index,
-
-            position:         Point::origin(),
-            rotation:         Quaternion::identity(),
-            scale:            Vector3::one(),
-
-            position_derived: Point::origin(),
-            rotation_derived: Quaternion::identity(),
-            scale_derived:    Vector3::one(),
-            matrix_derived:   Matrix4::identity(),
-        });
-
-        // Give the transform a pointer to its data.
-        let data = unsafe { row.get_unchecked(index) };
-        transform.data = data as *const _ as *mut _; // `UnsafeCell` level dark magic.
-
-        // Add to the transform map.
-        self.transforms.insert(entity, transform);
-        &**self.transforms.get(&entity).unwrap()
+    pub fn assign(&self, entity: Entity) -> &Transform {
+        // Use `UnsafeCell` trick to get a mutable reference. This is for the convenience of not having to
+        // wrap all the members in `RefCell` when we know it's safe.
+        let ptr = self as *const TransformManager as *mut TransformManager;
+        unsafe { &mut *ptr }.assign_impl(entity)
     }
 
     pub fn get(&self, entity: Entity) -> Option<&Transform> {
@@ -195,6 +150,56 @@ impl TransformManager {
     // PRIVATE HELPER FUNCTIONS
     // ========================
 
+    fn assign_impl(&mut self, entity: Entity) -> &Transform {
+        // It's only possible for there to be outstanding references to the boxed `Transform`
+        // objects, so no mutation can cause any memory unsafety. We still have to manually update
+        // the data pointers for any moved transforms, but that is an internal detail that doesn't
+        // leak to client code.
+
+        // Create boxed transform so we can create the transform data and give it a pointer to the
+        // transform object.
+        let mut transform = Box::new(Transform {
+            entity:   entity,
+            parent:   None,
+            children: Vec::new(),
+            data:     ptr::null_mut(),
+            messages: RefCell::new(Vec::new()),
+        });
+
+        // Get the row for root transforms.
+        let row = &mut self.transform_data[0];
+
+        // HACK: This is our way of ensuring that pushing to the Vec doesn't reallocate. Switch to
+        // a non-reallocating data structure (link list of cache line-sized blocks).
+        assert!(row.len() < ROW_CAPACITY, "Tried to add transform data to row 0 but it is at capacity");
+
+        // Add a new `TransformData` for the the transform.
+        let index = row.len();
+        row.push(TransformData {
+            parent:           &*self.dummy_transform_data as *const _,
+            transform:        &mut *transform as *mut _,
+            row:              0,
+            index:            index,
+
+            position:         Point::origin(),
+            rotation:         Quaternion::identity(),
+            scale:            Vector3::one(),
+
+            position_derived: Point::origin(),
+            rotation_derived: Quaternion::identity(),
+            scale_derived:    Vector3::one(),
+            matrix_derived:   Matrix4::identity(),
+        });
+
+        // Give the transform a pointer to its data.
+        let data = unsafe { row.get_unchecked(index) };
+        transform.data = data as *const _ as *mut _; // `UnsafeCell` level dark magic.
+
+        // Add to the transform map.
+        self.transforms.insert(entity, transform);
+        &**self.transforms.get(&entity).unwrap()
+    }
+
     fn get_mut(&mut self, entity: Entity) -> Option<&'static mut Transform> {
         self.transforms
         .get_mut(&entity)
@@ -202,6 +207,27 @@ impl TransformManager {
             let ptr = &mut **transform as *mut _;
             unsafe { &mut *ptr }
         })
+    }
+
+    fn process_messages(&mut self) {
+        for (_, transform) in self.transforms.clone() { // TODO: Don't clone the list every frame TT_TT
+            // Remove the messages list from the transform so we don't have a borrow on it.
+            let mut messages = mem::replace(&mut *transform.messages.borrow_mut(), Vec::new());
+            for message in messages.drain(..) {
+                match message {
+                    Message::SetParent(parent) => {
+                        self.set_parent(transform.entity, parent);
+                    },
+                    Message::AddChild(child) => {
+                        self.set_parent(child, transform.entity);
+                    },
+                    _ => unimplemented!(),
+                }
+            }
+
+            // Put the messages list back so it doesn't loose its allocation.
+            mem::replace(&mut *transform.messages.borrow_mut(), messages);
+        }
     }
 
     fn process_destroyed(&mut self) {
@@ -245,7 +271,7 @@ impl TransformManager {
 
     /// Moves a transform to the specified row and moves its children to the rows below.
     fn set_row_recursive(&mut self, entity: Entity, new_row_index: usize) {
-        let mut transform = self.get_mut(entity).unwrap();
+        let transform = self.get_mut(entity).unwrap();
         let data_ptr = transform.data;
 
         // Get information needed to remove the data from its current row.
@@ -302,7 +328,15 @@ impl TransformManager {
     }
 }
 
-impl ComponentManagerBase for TransformManager {}
+impl ComponentManagerBase for TransformManager {
+    fn update(&mut self) {
+        let _stopwatch = Stopwatch::new("transform update");
+
+        self.process_messages();
+        self.process_destroyed();
+        self.update_transforms();
+    }
+}
 
 impl ComponentManager for TransformManager {
     type Component = Transform;
@@ -350,11 +384,11 @@ pub struct Transform {
 impl Transform {
     /// Sends a message to the transform to make itself a child of the specified entity.
     pub fn set_parent(&self, parent: Entity) {
-        unimplemented!();
+        self.messages.borrow_mut().push(Message::SetParent(parent));
     }
 
     pub fn add_child(&self, child: Entity) {
-        unimplemented!();
+        self.messages.borrow_mut().push(Message::AddChild(child));
     }
 
     /// Gets the local postion of the transform.
@@ -365,7 +399,7 @@ impl Transform {
 
     /// Sets the local position of the transform.
     pub fn set_position(&self, new_position: Point) {
-        unimplemented!();
+        self.messages.borrow_mut().push(Message::SetPosition(new_position));
     }
 
     /// Gets the location rotation of the transform.
@@ -376,7 +410,7 @@ impl Transform {
 
     /// Sets the local rotation of the transform.
     pub fn set_rotation(&self, new_rotation: Quaternion) {
-        unimplemented!();
+        self.messages.borrow_mut().push(Message::SetOrientation(new_rotation));
     }
 
     /// Gets the local scale of the transform.
@@ -387,7 +421,7 @@ impl Transform {
 
     /// Sets the local scale of the transform.
     pub fn set_scale(&self, new_scale: Vector3) {
-        unimplemented!();
+        self.messages.borrow_mut().push(Message::SetScale(new_scale));
     }
 
     /// Gets the derived position of the transform.
@@ -437,22 +471,28 @@ impl Transform {
 
     /// Translates the transform in its local space.
     pub fn translate(&self, translation: Vector3) {
-        unimplemented!();
+        self.messages.borrow_mut().push(Message::Translate(translation));
     }
 
     /// Rotates the transform in its local space.
     pub fn rotate(&self, rotation: Quaternion) {
-        unimplemented!();
+        self.messages.borrow_mut().push(Message::Rotate(rotation));
     }
 
     /// Overrides the transform's orientation to look at the specified point.
     pub fn look_at(&self, interest: Point, up: Vector3) {
-        unimplemented!();
+        self.messages.borrow_mut().push(Message::LookAt {
+            interest: interest,
+            up:       up,
+        });
     }
 
     /// Overrides the transform's orientation to look in the specified direction.
     pub fn look_direction(&self, forward: Vector3, up: Vector3) {
-        unimplemented!();
+        self.messages.borrow_mut().push(Message::LookDirection {
+            forward: forward,
+            up:      up,
+        });
     }
 
     /// Gets the transform's local forward direction.
@@ -493,7 +533,7 @@ impl Transform {
 
 impl Component for Transform {
     type Manager = TransformManager;
-    type Message = DefaultMessage<Transform>;
+    type Message = Message;
 }
 
 #[derive(Debug, Clone)]
@@ -560,13 +600,24 @@ impl TransformData {
 }
 
 #[derive(Debug, Clone)]
-struct Message;
+pub enum Message {
+    SetParent(Entity),
+    AddChild(Entity),
 
-pub fn transform_update(scene: &Scene, _: f32) {
-    let _stopwatch = Stopwatch::new("transform update");
+    SetPosition(Point),
+    Translate(Vector3),
 
-    let mut transform_manager = unsafe { scene.get_manager_mut::<TransformManager>() };
+    SetScale(Vector3),
 
-    transform_manager.process_destroyed();
-    transform_manager.update_transforms();
+    SetOrientation(Quaternion),
+    Rotate(Quaternion),
+
+    LookAt {
+        interest: Point,
+        up:       Vector3,
+    },
+    LookDirection {
+        forward: Vector3,
+        up:      Vector3,
+    },
 }

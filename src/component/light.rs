@@ -5,7 +5,7 @@ use component::{DefaultManager, TransformManager};
 pub use polygon::light::Light;
 pub use polygon::light::PointLight;
 
-impl Component for Light {}
+derive_Component!(Light);
 
 pub type LightManager = DefaultManager<Light>;
 

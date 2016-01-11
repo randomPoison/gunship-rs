@@ -63,3 +63,5 @@ impl ComponentManager for MeshManager {
         self.0.destroy(entity);
     }
 }
+
+derive_Singleton!(MeshManager);

@@ -53,7 +53,10 @@ impl<T: Component> Debug for MessageMap<T> {
 /// around `StructComponentManager` that implements `ComponentManager` and should be used as the
 /// default component manager when no special handling is needed.
 #[derive(Debug, Clone)]
-pub struct StructComponentManager<T: Component> {
+pub struct StructComponentManager<T>
+    where T: Component,
+          T::Message: Message<Target=T>,
+{
     components: Vec<T>,
     entities: Vec<Entity>,
     indices: EntityMap<usize>,
@@ -64,7 +67,10 @@ pub struct StructComponentManager<T: Component> {
     messages: RefCell<MessageMap<T>>,
 }
 
-impl<T: Component> StructComponentManager<T> {
+impl<T> StructComponentManager<T>
+    where T: Component,
+          T::Message: Message<Target=T>,
+{
     pub fn new() -> StructComponentManager<T> {
         StructComponentManager {
             components: Vec::new(),

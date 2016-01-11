@@ -5,13 +5,17 @@ use std::fmt::Debug;
 use std::ops::{Deref, DerefMut};
 
 #[derive(Debug, Clone)]
-pub struct SingletonComponentManager<T: Component<Manager=SingletonComponentManager<T>> + Debug + Clone + Default> {
+pub struct SingletonComponentManager<T>
+    where T: Component<Manager=SingletonComponentManager<T>> + Debug + Clone + Default,
+          T::Message: Message<Target=T>,
+{
     data: T,
     messages: RefCell<Vec<T::Message>>,
 }
 
 impl<T> SingletonComponentManager<T>
-    where T: Component<Manager=SingletonComponentManager<T>> + Debug + Clone + Default
+    where T: Component<Manager=SingletonComponentManager<T>> + Debug + Clone + Default,
+          T::Message: Message<Target=T>,
 {
     pub fn new(data: T) -> SingletonComponentManager<T> {
         SingletonComponentManager {
@@ -26,7 +30,8 @@ impl<T> SingletonComponentManager<T>
 }
 
 impl<T> Deref for SingletonComponentManager<T>
-    where T: Component<Manager=SingletonComponentManager<T>> + Debug + Clone + Default
+    where T: Component<Manager=SingletonComponentManager<T>> + Debug + Clone + Default,
+          T::Message: Message<Target=T>,
 {
     type Target = T;
 
@@ -36,15 +41,17 @@ impl<T> Deref for SingletonComponentManager<T>
 }
 
 impl<T> DerefMut for SingletonComponentManager<T>
-    where T: Component<Manager=SingletonComponentManager<T>> + Debug + Clone + Default
+    where T: Component<Manager=SingletonComponentManager<T>> + Debug + Clone + Default,
+          T::Message: Message<Target=T>,
 {
     fn deref_mut(&mut self) -> &mut T {
         &mut self.data
     }
 }
 
-impl<T> ComponentManagerBase for SingletonComponentManager<T>
-    where T: Component<Manager=SingletonComponentManager<T>> + Debug + Clone + Default
+impl<T, U> ComponentManagerBase for SingletonComponentManager<T>
+    where T: Component<Manager=SingletonComponentManager<T>, Message=U> + Debug + Clone + Default,
+          U: Message<Target=T>,
 {
     fn update(&mut self) {
         let mut messages = self.messages.borrow_mut();
@@ -54,8 +61,9 @@ impl<T> ComponentManagerBase for SingletonComponentManager<T>
     }
 }
 
-impl<T> ComponentManager for SingletonComponentManager<T>
-    where T: Component<Manager=SingletonComponentManager<T>> + Debug + Clone + Default
+impl<T, U> ComponentManager for SingletonComponentManager<T>
+    where T: Component<Manager=SingletonComponentManager<T>, Message=U> + Debug + Clone + Default,
+          U: Message<Target=T>,
 {
     type Component = T;
 

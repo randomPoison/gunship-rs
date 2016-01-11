@@ -24,6 +24,9 @@ pub mod stopwatch {
     pub use self::stopwatch::null::{Collector, Stopwatch};
 }
 
+#[macro_use]
+pub mod macros;
+
 pub mod callback;
 pub mod collections;
 pub mod component;

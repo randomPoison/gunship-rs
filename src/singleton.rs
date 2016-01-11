@@ -1,9 +1,3 @@
-macro_rules! derive_singleton {
-    ($type_name: ident) => {
-
-    }
-}
-
 /// A trait defining a common interface for singleton objects.
 ///
 /// While it is rarely useful to be able to act generically over any singleton type (and it's not
