@@ -13,6 +13,7 @@ use engine::*;
 use scene::Scene;
 use self::struct_component_manager::StructComponentManager;
 use std::boxed::FnBox;
+use std::fmt::Debug;
 use std::ops::{Deref, DerefMut};
 
 pub use self::singleton_component_manager::SingletonComponentManager;
@@ -26,11 +27,11 @@ pub use self::collider::{Collider, ColliderManager, CollisionSystem, bounding_vo
 
 #[derive(Debug, Clone)]
 pub struct DefaultManager<T>(StructComponentManager<T>)
-    where T: Component,
+    where T: Component + Clone + Debug,
           T::Message: Message<Target=T>;
 
 impl<T> DefaultManager<T>
-    where T: Component<Manager=DefaultManager<T>>,
+    where T: Component<Manager=DefaultManager<T>> + Clone + Debug,
           T::Message: Message<Target=T>,
 {
     pub fn new() -> DefaultManager<T> {
@@ -39,7 +40,7 @@ impl<T> DefaultManager<T>
 }
 
 fn default_update<T>(scene: &Scene, delta: f32)
-    where T: Component<Manager=DefaultManager<T>>,
+    where T: Component<Manager=DefaultManager<T>> + Clone + Debug,
           T::Message: Message<Target=T>,
 {
     let mut manager = unsafe { scene.get_manager_mut::<DefaultManager<T>>() };
@@ -47,7 +48,7 @@ fn default_update<T>(scene: &Scene, delta: f32)
 }
 
 impl<T> ComponentManagerBase for DefaultManager<T>
-    where T: Component<Manager=DefaultManager<T>>,
+    where T: Component<Manager=DefaultManager<T>> + Clone + Debug,
           T::Message: Message<Target=T>,
 {
     fn update(&mut self) {
@@ -56,7 +57,7 @@ impl<T> ComponentManagerBase for DefaultManager<T>
 }
 
 impl<T> ComponentManager for DefaultManager<T>
-    where T: Component<Manager=DefaultManager<T>>,
+    where T: Component<Manager=DefaultManager<T>> + Clone + Debug,
           T::Message: Message<Target=T>,
 {
     type Component = T;
@@ -72,7 +73,7 @@ impl<T> ComponentManager for DefaultManager<T>
 }
 
 impl<T> Deref for DefaultManager<T>
-    where T: Component<Manager=DefaultManager<T>>,
+    where T: Component<Manager=DefaultManager<T>> + Clone + Debug,
           T::Message: Message<Target=T>,
 {
     type Target = StructComponentManager<T>;
@@ -83,7 +84,7 @@ impl<T> Deref for DefaultManager<T>
 }
 
 impl<T> DerefMut for DefaultManager<T>
-    where T: Component<Manager=DefaultManager<T>>,
+    where T: Component<Manager=DefaultManager<T>> + Clone + Debug,
           T::Message: Message<Target=T>,
 {
     fn deref_mut(&mut self) -> &mut StructComponentManager<T> {

@@ -24,7 +24,7 @@ impl MeshManager {
         MeshManager(StructComponentManager::new())
     }
 
-    pub fn assign(&mut self, entity: Entity, path_text: &str) -> &mut Mesh {
+    pub fn assign(&mut self, entity: Entity, path_text: &str) -> &Mesh {
         let mesh =
             Engine::resource_manager()
             .get_gpu_mesh(path_text)
@@ -33,7 +33,7 @@ impl MeshManager {
         self.give_mesh(entity, mesh)
     }
 
-    pub fn give_mesh(&mut self, entity: Entity, mesh: GLMeshData) -> &mut Mesh {
+    pub fn give_mesh(&mut self, entity: Entity, mesh: GLMeshData) -> &Mesh {
         let shader =
             Engine::resource_manager()
             .get_shader("shaders/forward_phong.glsl")

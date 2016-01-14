@@ -1,4 +1,4 @@
-use collections::{EntityMap, EntitySet};
+use collections::{Array, EntityMap, EntitySet};
 use ecs::*;
 use scene::Scene;
 use std::cell::RefCell;
@@ -6,7 +6,7 @@ use std::fmt::{Debug, Error, Formatter, Write};
 use std::intrinsics::type_name;
 use std::ops::*;
 
-const MAX_PENDING: usize = 1_000;
+const MAX_COMPONENTS: usize = 1_000;
 
 struct MessageMap<T: Component>(EntityMap<Vec<T::Message>>);
 
@@ -54,55 +54,49 @@ impl<T: Component> Debug for MessageMap<T> {
 /// default component manager when no special handling is needed.
 #[derive(Debug, Clone)]
 pub struct StructComponentManager<T>
-    where T: Component,
+    where T: Component + Clone + Debug,
           T::Message: Message<Target=T>,
 {
-    components: Vec<T>,
-    entities: Vec<Entity>,
-    indices: EntityMap<usize>,
+    components: Array<T>,
+    entities: Array<Entity>,
+    indices: RefCell<EntityMap<usize>>,
 
-    // TODO: Convert to a non-resizable dynamicially allocated array.
-    new_components: Vec<(Entity, T)>,
     marked_for_destroy: RefCell<EntitySet>,
     messages: RefCell<MessageMap<T>>,
 }
 
 impl<T> StructComponentManager<T>
-    where T: Component,
+    where T: Component + Clone + Debug,
           T::Message: Message<Target=T>,
 {
     pub fn new() -> StructComponentManager<T> {
         StructComponentManager {
-            components: Vec::new(),
-            entities: Vec::new(),
-            indices: EntityMap::default(),
+            components: Array::new(MAX_COMPONENTS),
+            entities: Array::new(MAX_COMPONENTS),
+            indices: RefCell::new(EntityMap::default()),
 
-            new_components: Vec::with_capacity(MAX_PENDING),
             marked_for_destroy: RefCell::new(EntitySet::default()),
             messages: RefCell::new(MessageMap::new()),
         }
     }
 
-    pub fn assign(&mut self, entity: Entity, component: T) -> &mut T {
+    pub fn assign(&self, entity: Entity, component: T) -> &T {
         debug_assert!(
-            !self.indices.contains_key(&entity),
+            !self.indices.borrow().contains_key(&entity),
             "Component already assign to entity {:?}",
             entity);
-        debug_assert!(
-            self.new_components.len() <= MAX_PENDING,
-            "Maximum pending components reached, maybe don't try to create more than {} components a frame",
-            MAX_PENDING);
 
-        let index = self.new_components.len();
+        let index = self.components.len();
 
-        self.new_components.push((entity, component));
-        self.indices.insert(entity, index);
+        self.components.push(component);
+        self.indices.borrow_mut().insert(entity, index);
 
-        &mut self.new_components[index].1
+        &self.components[index]
     }
 
     pub fn get(&self, entity: Entity) -> Option<&T> {
         self.indices
+        .borrow()
         .get(&entity)
         .map(|index| &self.components[*index])
     }
@@ -130,7 +124,7 @@ impl<T> StructComponentManager<T>
     }
 
     pub fn len(&self) -> usize {
-        self.entities.len() + self.new_components.len()
+        self.entities.len()
     }
 
     /// Passes a message to the component associated with the specified entity.
@@ -146,7 +140,7 @@ impl<T> StructComponentManager<T>
     pub fn process_messages(&mut self) {
         let mut messages = self.messages.borrow_mut();
         for (entity, mut messages) in messages.drain() {
-            if let Some(index) = self.indices.get(&entity) {
+            if let Some(index) = self.indices.borrow().get(&entity) {
                 let component = &mut self.components[*index];
                 for message in messages.drain(..) {
                     message.apply(component);

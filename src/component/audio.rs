@@ -55,7 +55,7 @@ impl AudioSourceManager {
         AudioSourceManager(StructComponentManager::new())
     }
 
-    pub fn assign(&mut self, entity: Entity, clip_name: &str) -> &mut AudioSource {
+    pub fn assign(&mut self, entity: Entity, clip_name: &str) -> &AudioSource {
         let audio_clip = Engine::resource_manager().get_audio_clip(clip_name);
         self.0.assign(entity, AudioSource {
             audio_clip: audio_clip,

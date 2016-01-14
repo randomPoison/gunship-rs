@@ -1,8 +1,10 @@
+use ecs::Entity;
+use hash::*;
 use std::collections::{HashMap, HashSet};
 
-use hash::*;
+pub use self::array::Array;
 
-use ecs::Entity;
+pub mod array;
 
 pub type EntityMap<T> = HashMap<Entity, T, FnvHashState>;
 pub type EntitySet = HashSet<Entity, FnvHashState>;
