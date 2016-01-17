@@ -10,7 +10,6 @@ pub mod collider;
 
 use ecs::*;
 use engine::*;
-use scene::Scene;
 use self::struct_component_manager::StructComponentManager;
 use std::boxed::FnBox;
 use std::fmt::Debug;
@@ -39,14 +38,6 @@ impl<T> DefaultManager<T>
     }
 }
 
-fn default_update<T>(scene: &Scene, delta: f32)
-    where T: Component<Manager=DefaultManager<T>> + Clone + Debug,
-          T::Message: Message<Target=T>,
-{
-    let mut manager = unsafe { scene.get_manager_mut::<DefaultManager<T>>() };
-    manager.0.update(scene, delta);
-}
-
 impl<T> ComponentManagerBase for DefaultManager<T>
     where T: Component<Manager=DefaultManager<T>> + Clone + Debug,
           T::Message: Message<Target=T>,
@@ -64,7 +55,6 @@ impl<T> ComponentManager for DefaultManager<T>
 
     fn register(builder: &mut EngineBuilder) {
         builder.register_manager(Self::new());
-        builder.register_system(default_update::<T>);
     }
 
     fn destroy(&self, entity: Entity) {

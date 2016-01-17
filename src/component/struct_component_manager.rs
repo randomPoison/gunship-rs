@@ -89,6 +89,7 @@ impl<T> StructComponentManager<T>
         let index = self.components.len();
 
         self.components.push(component);
+        self.entities.push(entity);
         self.indices.borrow_mut().insert(entity, index);
 
         &self.components[index]

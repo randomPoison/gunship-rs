@@ -79,6 +79,11 @@ pub trait Component: 'static + Clone {
     type Message;
 }
 
+/// Trait for defining behavior that is associated with a specific component.
+pub trait ComponentUpdate {
+    fn update(&mut self);
+}
+
 /// Helper trait used to allow generic component managers like `DefaultManager` and
 /// `SingletonManager` to support custom message types.
 pub trait Message: 'static + Sized {

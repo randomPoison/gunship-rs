@@ -220,7 +220,7 @@ impl ColliderManager {
     /// ======
     ///
     /// Panics if the specified entity already has a collider component.
-    pub fn assign(&mut self, entity: Entity, collider: Collider) {
+    pub fn assign(&self, entity: Entity, collider: Collider) {
         self.inner.assign(entity, collider);
     }
 
