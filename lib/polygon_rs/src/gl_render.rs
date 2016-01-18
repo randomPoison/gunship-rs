@@ -211,14 +211,12 @@ impl GLRender {
 
         if let Some(light_position_location) = shader.light_position {
             // Render first light without blending so it overrides any objects behind it.
-            if let Some(light) = lights.next() {
-                let light_position = match light {
-                    Light::Point(ref point_light) => point_light.position
-                };
-                let light_position_view = light_position * view_transform;
-
-                gl.uniform_4f(light_position_location, light_position_view.as_array());
-
+            // We also render it with light strength 0 so it only renders ambient color.
+            {
+                gl.uniform_4f(light_position_location, Point::origin().as_array());
+                if let Some(light_strength_location) = shader.light_strength {
+                    gl.uniform_1f(light_strength_location, 0.0);
+                }
                 gl.disable(ServerCapability::Blend);
                 gl.draw_elements(
                     DrawMode::Triangles,
@@ -237,24 +235,24 @@ impl GLRender {
                 gl.uniform_4f(ambient_location, ambient_color.as_array());
             }
 
-            // TODO: What's the deal with this nasty construct? Can we do this with an actual `for` loop?
-            loop { match lights.next() {
-                Some(light) => {
-                    let light_position = match light {
-                        Light::Point(ref point_light) => point_light.position
-                    };
-                    let light_position_view = light_position * view_transform;
+            for light in lights {
+                let light_position = match light {
+                    Light::Point(ref point_light) => point_light.position
+                };
+                let light_position_view = light_position * view_transform;
 
-                    gl.uniform_4f(light_position_location, light_position_view.as_array());
+                gl.uniform_4f(light_position_location, light_position_view.as_array());
+                if let Some(light_strength_location) = shader.light_strength {
+                    // TODO: Use the light's actual strength value.
+                    gl.uniform_1f(light_strength_location, 1.0);
+                }
 
-                    gl.draw_elements(
-                        DrawMode::Triangles,
-                        mesh.element_count as i32,
-                        IndexType::UnsignedInt,
-                        0);
-                },
-                None => break,
-            } }
+                gl.draw_elements(
+                    DrawMode::Triangles,
+                    mesh.element_count as i32,
+                    IndexType::UnsignedInt,
+                    0);
+            }
         }
 
         gl.enable(ServerCapability::DepthTest);
@@ -445,6 +443,7 @@ pub struct ShaderProgram {
     view_normal_transform: Option<UniformLocation>,
     normal_transform:      Option<UniformLocation>,
     light_position:        Option<UniformLocation>,
+    light_strength:        Option<UniformLocation>,
     camera_position:       Option<UniformLocation>,
     surface_color:         Option<UniformLocation>,
     global_ambient:        Option<UniformLocation>,
@@ -467,6 +466,7 @@ impl ShaderProgram {
             normal_transform:      gl.get_uniform(program_object, b"normalTransform\0"),
             camera_position:       gl.get_uniform(program_object, b"cameraPosition\0"),
             light_position:        gl.get_uniform(program_object, b"lightPosition\0"),
+            light_strength:        gl.get_uniform(program_object, b"lightStrength\0"),
             surface_color:         gl.get_uniform(program_object, b"surfaceColor\0"),
             global_ambient:        gl.get_uniform(program_object, b"globalAmbient\0"),
         }

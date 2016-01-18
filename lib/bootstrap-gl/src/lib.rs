@@ -461,6 +461,8 @@ gen_proc_loader! {
         fn enable_vertex_attrib_array(attrib: AttributeLocation),
     glGetUniformLocation:
         fn get_uniform_location(program: ProgramObject, uniform_name: *const i8) -> i32,
+    glUniform1f:
+        fn uniform_1f(uniform: UniformLocation, value: f32),
     glUniformMatrix4fv:
         fn uniform_matrix_4fv(
             uniform: UniformLocation,
