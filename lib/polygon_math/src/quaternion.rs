@@ -1,4 +1,4 @@
-use std::ops::Mul;
+use std::ops::{Mul, MulAssign};
 use std::f32::consts::PI;
 
 use vector::Vector3;
@@ -265,6 +265,12 @@ impl Mul<Quaternion> for Quaternion {
             y: (self.w * rhs.y) - (self.x * rhs.z) + (self.y * rhs.w) + (self.z * rhs.x),
             z: (self.w * rhs.z) + (self.x * rhs.y) - (self.y * rhs.x) + (self.z * rhs.w),
         }.normalized()
+    }
+}
+
+impl MulAssign<Quaternion> for Quaternion {
+    fn mul_assign(&mut self, rhs: Quaternion) {
+        *self = *self * rhs; // TODO: No temp object? We'll have to see if LLVM can optimize it away.
     }
 }
 
