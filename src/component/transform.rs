@@ -72,28 +72,6 @@ impl TransformManager {
         self.transforms.get(&entity).map(|boxed_transform| &**boxed_transform)
     }
 
-    // pub fn update_single(&self, entity: Entity) {
-    //     let transform = self.get(entity);
-    //
-    //     let (row, index) = *self.indices.get(&entity).expect("Transform manager does not contain a transform for the given entity.");
-    //     let (_, parent) = self.entities[row][index];
-    //     match parent {
-    //         None => {
-    //             DUMMY_TRANSFORM.with(|parent| {
-    //                 transform.update(parent);
-    //             })
-    //         },
-    //         Some(parent) => {
-    //             // First update parent.
-    //             self.update_single(parent);
-    //
-    //             // Now update self with the parent's updated transform.
-    //             let parent_transform = self.get(parent);
-    //             transform.update(&*parent_transform);
-    //         }
-    //     }
-    // }
-
     /// Walks the transform hierarchy depth-first, invoking `callback` with each entity and its transform.
     ///
     /// # Details
@@ -210,7 +188,11 @@ impl TransformManager {
     }
 
     fn process_messages(&mut self) {
-        for (_, transform) in self.transforms.clone() { // TODO: Don't clone the list every frame TT_TT
+        let transforms = {
+            let ptr = &self.transforms as *const EntityMap<Box<Transform>>;
+            unsafe { &*ptr }
+        };
+        for (_, transform) in transforms {
             // Remove the messages list from the transform so we don't have a borrow on it.
             let mut messages = mem::replace(&mut *transform.messages.borrow_mut(), Vec::new());
             for message in messages.drain(..) {
@@ -221,7 +203,29 @@ impl TransformManager {
                     Message::AddChild(child) => {
                         self.set_parent(child, transform.entity);
                     },
-                    _ => unimplemented!(),
+                    Message::SetPosition(position) => {
+                        transform.data_mut().position = position;
+                    },
+                    Message::Translate(translation) => {
+                        transform.data_mut().position += translation;
+                    },
+                    Message::SetScale(scale) => {
+                        transform.data_mut().scale = scale;
+                    },
+                    Message::SetOrientation(orientation) => {
+                        transform.data_mut().rotation = orientation;
+                    },
+                    Message::Rotate(rotation) => {
+                        transform.data_mut().rotation *= rotation; // TODO: Is this the right order for quaternion multiplication? I can never remember.
+                    },
+                    Message::LookAt { interest, up } => {
+                        let data = transform.data_mut();
+                        let forward = interest - data.position;
+                        data.rotation = Quaternion::look_rotation(forward, up);
+                    },
+                    Message::LookDirection { forward, up } => {
+                        transform.data_mut().rotation = Quaternion::look_rotation(forward, up);
+                    },
                 }
             }
 
@@ -599,6 +603,9 @@ impl TransformData {
     }
 }
 
+// TODO: Provide a way to specify the space in which the transformation should take place, currently
+// all transformations are in local space but it's often valueable to be able to set the transform's
+// world coordinates.
 #[derive(Debug, Clone)]
 pub enum Message {
     SetParent(Entity),
