@@ -186,6 +186,15 @@ impl Scene {
             self.entity_manager.borrow_mut().destroy(entity);
         }
     }
+
+    // TODO: How do we make this private? I think scene has to be a submodule under engine. We might
+    // move `Engine` into the root gunship module which would allow it to access private members
+    // everywhere which is helpful.
+    pub fn update_managers(&mut self) {
+        for (_, manager) in self.managers.iter_mut() {
+            manager.update();
+        }
+    }
 }
 
 derive_Singleton!(Scene);

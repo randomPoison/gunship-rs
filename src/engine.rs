@@ -171,6 +171,9 @@ impl Engine {
             for (_, system) in self.systems.iter_mut() {
                 system.update(scene, TARGET_FRAME_TIME_SECONDS);
             }
+
+            // Update component managers.
+            scene.update_managers();
         }
 
         // Update debug systems always forever.
@@ -209,7 +212,6 @@ impl Engine {
 
         // Handle rendering for each camera.
         for (camera, entity) in camera_manager.iter() {
-
             // TODO: Update the camera's bounds in a separate system.
             let camera = {
                 let transform = transform_manager.get(entity).unwrap(); // TODO: Don't panic?
