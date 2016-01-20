@@ -70,7 +70,7 @@ pub trait ComponentManager: ComponentManagerBase + Sized {
 
     fn register(builder: &mut EngineBuilder);
     // fn apply(&mut self, entity: Entity, message: <Self::Component as Component>::Message);
-    fn get(&self, _entity: Entity) -> Option<&Self::Component> { None }
+    fn get(&self, entity: Entity) -> Option<&Self::Component>;
     fn destroy(&self, entity: Entity);
 }
 

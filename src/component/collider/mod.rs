@@ -277,6 +277,10 @@ impl ComponentManager for ColliderManager {
         builder.register_manager(ColliderManager::new());
     }
 
+    fn get(&self, entity: Entity) -> Option<&Self::Component> {
+        self.inner.get(entity)
+    }
+
     fn destroy(&self, entity: Entity) {
         self.inner.destroy(entity);
         self.marked_for_destroy.borrow_mut().insert(entity);

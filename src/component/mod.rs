@@ -57,6 +57,10 @@ impl<T> ComponentManager for DefaultManager<T>
         builder.register_manager(Self::new());
     }
 
+    fn get(&self, entity: Entity) -> Option<&Self::Component> {
+        self.0.get(entity)
+    }
+
     fn destroy(&self, entity: Entity) {
         self.0.destroy(entity);
     }

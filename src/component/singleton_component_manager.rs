@@ -71,6 +71,10 @@ impl<T, U> ComponentManager for SingletonComponentManager<T>
         builder.register_manager(SingletonComponentManager::new(T::default()));
     }
 
+    fn get(&self, _entity: Entity) -> Option<&Self::Component> {
+        panic!("Singleton components do not need to be retreived, they can be derefenced from the manager");
+    }
+
     fn destroy(&self, _: Entity) {}
 }
 
@@ -146,6 +150,10 @@ impl<T, U> ComponentManager for SingletonComponentUpdateManager<T>
 
     fn register(builder: &mut EngineBuilder) {
         builder.register_manager(SingletonComponentUpdateManager::new(T::default()));
+    }
+
+    fn get(&self, _entity: Entity) -> Option<&Self::Component> {
+        panic!("Singleton components do not need to be retreived, they can be derefenced from the manager");
     }
 
     fn destroy(&self, _: Entity) {}

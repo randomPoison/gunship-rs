@@ -68,10 +68,6 @@ impl TransformManager {
         unsafe { &mut *ptr }.assign_impl(entity)
     }
 
-    pub fn get(&self, entity: Entity) -> Option<&Transform> {
-        self.transforms.get(&entity).map(|boxed_transform| &**boxed_transform)
-    }
-
     /// Walks the transform hierarchy depth-first, invoking `callback` with each entity and its transform.
     ///
     /// # Details
@@ -349,6 +345,10 @@ impl ComponentManager for TransformManager {
         builder.register_manager(TransformManager::new());
     }
 
+    fn get(&self, entity: Entity) -> Option<&Transform> {
+        self.transforms.get(&entity).map(|boxed_transform| &**boxed_transform)
+    }
+
     fn destroy(&self, entity: Entity) {
         self.marked_for_destroy.borrow_mut().insert(entity);
     }
@@ -448,8 +448,7 @@ impl Transform {
     ///
     /// In debug builds this method asserts if the transform is out of date.
     pub fn scale_derived(&self) -> Vector3 {
-        let data = unsafe { &*self.data };
-        data.scale_derived
+        self.data().scale_derived
     }
 
     /// Gets the world-space matrix for the transform.
@@ -573,6 +572,8 @@ impl TransformData {
         self.position_derived = self.matrix_derived.translation_part();
         self.rotation_derived = parent.rotation_derived * self.rotation;
         self.scale_derived    = self.scale * parent.scale_derived;
+
+        println!("scale {:?}, parent scale: {:?}, derived scale {:?}", &self.scale, &parent.scale_derived, &self.scale_derived);
     }
 
     fn local_matrix(&self) -> Matrix4 {

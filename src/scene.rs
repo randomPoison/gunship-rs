@@ -66,6 +66,10 @@ impl Scene {
         }
     }
 
+    pub fn get<C: Component>(&self, entity: Entity) -> Option<&C> {
+        self.manager_for::<C>().get(entity)
+    }
+
     pub fn get_manager<T: ComponentManager>(&self) -> &T {
         let manager_id = ManagerId::of::<T>();
         let trait_object = match self.managers.get(&manager_id) {
@@ -93,7 +97,7 @@ impl Scene {
         downcast_mut(trait_object)
     }
 
-    pub fn get_manager_for<C: Component>(&self) -> &C::Manager {
+    pub fn manager_for<C: Component>(&self) -> &C::Manager {
         let manager_id = ManagerId::of::<C::Manager>();
         let manager = match self.managers.get(&manager_id) {
             Some(manager) => &**manager, // &Box<()> -> &()
@@ -117,7 +121,7 @@ impl Scene {
     }
 
     pub fn get_component<T: Component>(&self, entity: Entity) -> Option<&T> {
-        let manager = self.get_manager_for::<T>();
+        let manager = self.manager_for::<T>();
         manager.get(entity)
     }
 

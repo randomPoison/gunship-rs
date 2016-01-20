@@ -138,6 +138,10 @@ impl ComponentManager for AlarmManager {
         builder.register_manager(AlarmManager::new());
     }
 
+    fn get(&self, _entity: Entity) -> Option<&Self::Component> {
+        unimplemented!();
+    }
+
     fn destroy(&self, entity: Entity) {
         self.marked_for_destroy.borrow_mut().insert(entity);
     }

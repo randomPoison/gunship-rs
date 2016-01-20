@@ -88,6 +88,10 @@ impl ComponentManager for AudioSourceManager {
         builder.register_manager(audio_manager);
     }
 
+    fn get(&self, entity: Entity) -> Option<&Self::Component> {
+        self.0.get(entity)
+    }
+
     fn destroy(&self, entity: Entity) {
         self.0.destroy(entity);
     }

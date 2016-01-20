@@ -81,13 +81,12 @@ impl<T> StructComponentManager<T>
     }
 
     pub fn assign(&self, entity: Entity, component: T) -> &T {
-        debug_assert!(
+        assert!(
             !self.indices.borrow().contains_key(&entity),
             "Component already assign to entity {:?}",
             entity);
 
         let index = self.components.len();
-
         self.components.push(component);
         self.entities.push(entity);
         self.indices.borrow_mut().insert(entity, index);

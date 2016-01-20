@@ -59,6 +59,10 @@ impl ComponentManager for MeshManager {
         builder.register_manager(mesh_manager);
     }
 
+    fn get(&self, entity: Entity) -> Option<&Self::Component> {
+        self.0.get(entity)
+    }
+
     fn destroy(&self, entity: Entity) {
         self.0.destroy(entity);
     }
