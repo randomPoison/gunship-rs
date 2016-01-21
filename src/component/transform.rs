@@ -3,6 +3,7 @@ use ecs::{ComponentManager, ComponentManagerBase, Component, Entity};
 use engine::*;
 use math::*;
 use std::{mem, ptr};
+use std::fmt::{self, Debug, Formatter};
 use std::cell::RefCell;
 use stopwatch::Stopwatch;
 
@@ -258,25 +259,31 @@ impl TransformManager {
         }
 
         // Add the moved entity to its new parent's list of children.
-        let parent_row = {
+        let parent_data = {
             let mut parent_transform = self.get_mut(parent).unwrap(); // TODO: Don't panic? Panicing here would mean an error within Gunship.
-            parent_transform.children.push(parent);
-            parent_transform.data().row
+            parent_transform.children.push(entity);
+            parent_transform.data_mut()
         };
+
+        // Update the entity's parent.
+        {
+            let transform = self.get_mut(entity).unwrap();
+            transform.parent = Some(parent);
+            transform.data_mut().parent = parent_data as *mut _;
+        }
 
         // Recursively move the transform data for this transform and all of its children to their
         // new rows.
-        self.set_row_recursive(entity, parent_row + 1);
+        self.set_row_recursive(entity, parent_data.row + 1);
     }
 
     /// Moves a transform to the specified row and moves its children to the rows below.
     fn set_row_recursive(&mut self, entity: Entity, new_row_index: usize) {
         let transform = self.get_mut(entity).unwrap();
-        let data_ptr = transform.data;
 
         // Get information needed to remove the data from its current row.
         let (row, index) = {
-            let data = unsafe { &*transform.data };
+            let data = transform.data();
             (data.row, data.index)
         };
 
@@ -287,7 +294,7 @@ impl TransformManager {
         // need to update any pointers to that data. That means the Transform and the data for its
         // children.
         if self.transform_data[row].len() > index {
-            unsafe { &mut *data_ptr }.fix_pointers(self);
+            transform.data_mut().fix_pointers(self);
         }
 
         // Make sure there are enough rows for the new data.
@@ -376,7 +383,7 @@ impl ComponentManager for TransformManager {
 /// that their local transformation is also their world transformation. If a transform is
 /// known to be at the root of the hierarchy it is recommended that its local values be modified
 /// directly to achieve best performance.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Transform {
     entity:   Entity,
     parent:   Option<Entity>,
@@ -534,6 +541,24 @@ impl Transform {
     }
 }
 
+impl Debug for Transform {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
+        write!(
+            f,
+            "Transform {{ entity: {:?}, parent: {:?}, children: {:?}, position: {:?}, orientation: {:?}, scale: {:?}, position_derived: {:?}, orientation_derived: {:?}, scale_derived: {:?} }}",
+            self.entity,
+            self.parent,
+            &self.children,
+            self.data().position,
+            self.data().rotation,
+            self.data().scale,
+            self.data().position_derived,
+            self.data().rotation_derived,
+            self.data().scale_derived,
+        )
+    }
+}
+
 impl Component for Transform {
     type Manager = TransformManager;
     type Message = Message;
@@ -572,8 +597,6 @@ impl TransformData {
         self.position_derived = self.matrix_derived.translation_part();
         self.rotation_derived = parent.rotation_derived * self.rotation;
         self.scale_derived    = self.scale * parent.scale_derived;
-
-        println!("scale {:?}, parent scale: {:?}, derived scale {:?}", &self.scale, &parent.scale_derived, &self.scale_derived);
     }
 
     fn local_matrix(&self) -> Matrix4 {
