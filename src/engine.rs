@@ -91,6 +91,10 @@ impl Engine {
         &*instance.resource_manager
     }
 
+    pub fn window() -> Rc<RefCell<Window>> {
+        Engine::instance().window.clone()
+    }
+
     fn main_loop(&mut self) {
         let timer = Timer::new();
         let mut collector = Collector::new().unwrap();

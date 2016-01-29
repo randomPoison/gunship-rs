@@ -1,10 +1,27 @@
 use std::collections::HashSet;
 
+use bootstrap;
 use bootstrap::window::Message;
 use bootstrap::window::Message::*;
+use engine::Engine;
+
 pub use bootstrap::input::ScanCode;
 
 pub const MAX_SUPPORTED_MOUSE_BUTTONS: usize = 5;
+
+pub fn set_cursor(visible: bool) {
+    bootstrap::input::set_cursor_visibility(visible);
+}
+
+pub fn set_capture(capture: bool) {
+    if capture {
+        let window = Engine::window();
+        let (top, left, bottom, right) = window.borrow().get_rect();
+        bootstrap::input::set_cursor_bounds(top, left, bottom, right);
+    } else {
+        bootstrap::input::clear_cursor_bounds();
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct Input {

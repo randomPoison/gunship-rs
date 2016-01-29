@@ -119,6 +119,16 @@ impl Window {
 
         self.messages.pop_front()
     }
+
+    pub fn get_rect(&self) -> (i32, i32, i32, i32) {
+        let mut rect: RECT = unsafe { mem::uninitialized() };
+        let result = unsafe {
+            user32::GetWindowRect(self.handle, &mut rect)
+        };
+
+        assert!(result != 0, "Failed to get window rect");
+        (rect.top, rect.left, rect.bottom, rect.right)
+    }
 }
 
 impl Drop for Window {

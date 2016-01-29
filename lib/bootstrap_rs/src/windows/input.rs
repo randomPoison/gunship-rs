@@ -36,6 +36,29 @@ use window::Window;
 //     }
 // }
 
+pub fn set_cursor_visibility(visible: bool) {
+    unsafe { user32::ShowCursor(visible as i32); }
+}
+
+pub fn set_cursor_bounds(top: i32, left: i32, bottom: i32, right: i32) {
+    let rect = RECT {
+        top: top,
+        left: left,
+        bottom: bottom,
+        right: right,
+    };
+
+    unsafe {
+        user32::ClipCursor(&rect);
+    }
+}
+
+pub fn clear_cursor_bounds() {
+    unsafe {
+        user32::ClipCursor(ptr::null());
+    }
+}
+
 pub fn register_raw_input(hwnd: HWND) {
     let devices = RAWINPUTDEVICE {
         usUsagePage: 0x01,
