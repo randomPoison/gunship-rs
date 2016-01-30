@@ -70,6 +70,18 @@ impl Bitmap {
             data: image_data.into(),
         })
     }
+
+    pub fn width(&self) -> usize {
+        self.width
+    }
+
+    pub fn height(&self) -> usize {
+        self.height
+    }
+
+    pub fn data(&self) -> &[u8] {
+        &*self.data
+    }
 }
 
 #[repr(u32)]
