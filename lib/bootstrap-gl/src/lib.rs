@@ -73,6 +73,10 @@ impl VertexBufferObject {
     }
 }
 
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TextureObject(u32);
+
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ServerCapability {
@@ -316,6 +320,12 @@ impl Context {
     pub fn unbind_buffer(&self, target: BufferTarget) {
         self.loader.bind_buffer(target, VertexBufferObject::null());
     }
+
+    pub fn gen_texture(&self) -> TextureObject {
+        let mut texture_object = TextureObject(0);
+        self.gen_textures(1, &mut texture_object);
+        texture_object
+    }
 }
 
 impl Drop for Context {
@@ -479,6 +489,23 @@ gen_proc_loader! {
         fn depth_func(func: Comparison),
     glBlendFunc:
         fn blend_func(src_factor: SourceFactor, dest_factor: DestFactor),
+    glGenTextures:
+        fn gen_textures(count: u32, textures: *mut TextureObject),
+    glBindTexture:
+        fn bind_texture(target: TextureBindTarget, texture: TextureObject),
+    glTexImage2D:
+        fn texture_image_2d(
+            target:          Texture2dTarget,
+            level:           i32,
+            internal_format: TextureInternalFormat,
+            width:           i32,
+            height:          i32,
+            border:          i32,
+            format:          TextureFormat,
+            data_type:       TextureDataType,
+            data:            *const ()),
+    glDeleteTextures:
+        fn delete_textures(count: u32, textures: *mut TextureObject),
 }
 
 impl Debug for Loader {
@@ -492,6 +519,135 @@ impl Clone for Loader {
     fn clone(&self) -> Loader {
         Loader::new()
     }
+}
+
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TextureBindTarget {
+    // GL_TEXTURE_1D,
+    Texture2d = 0x0DE1,
+    Texture3d = 0x806F,
+    CubeMap   = 0x8513,
+}
+
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Texture2dTarget {
+    Texture2d        = 0x0DE1,
+    CubeMapPositiveX = 0x8515,
+    CubeMapNegativeX = 0x8516,
+    CubeMapPositiveY = 0x8517,
+    CubeMapNegativeY = 0x8518,
+    CubeMapPositiveZ = 0x8519,
+    CubeMapNegativeZ = 0x851A,
+    // GL_PROXY_TEXTURE_2D,
+    // GL_PROXY_TEXTURE_CUBE_MAP,
+}
+
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TextureDataType {
+    Byte          = 0x1400,
+    UnsignedByte  = 0x1401,
+    // GL_BITMAP,
+    Short         = 0x1402,
+    UnsignedShort = 0x1403,
+    Int           = 0x1404,
+    UnsignedInt   = 0x1405,
+    Float         = 0x1406,
+    // GL_UNSIGNED_BYTE_3_3_2,
+    // GL_UNSIGNED_BYTE_2_3_3_REV,
+    // GL_UNSIGNED_SHORT_5_6_5,
+    // GL_UNSIGNED_SHORT_5_6_5_REV,
+    // GL_UNSIGNED_SHORT_4_4_4_4,
+    // GL_UNSIGNED_SHORT_4_4_4_4_REV,
+    // GL_UNSIGNED_SHORT_5_5_5_1,
+    // GL_UNSIGNED_SHORT_1_5_5_5_REV,
+    // GL_UNSIGNED_INT_8_8_8_8,
+    // GL_UNSIGNED_INT_8_8_8_8_REV,
+    // GL_UNSIGNED_INT_10_10_10_2,
+    // GL_UNSIGNED_INT_2_10_10_10_REV,
+}
+
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TextureInternalFormat {
+    One = 1,
+    Two = 2,
+    Three = 3,
+    Four = 4,
+    Rgb = 0x1907,
+    Rgba = 0x1908,
+    // GL_ALPHA,
+    // GL_ALPHA4,
+    // GL_ALPHA8,
+    // GL_ALPHA12,
+    // GL_ALPHA16,
+    // GL_COMPRESSED_ALPHA,
+    // GL_COMPRESSED_LUMINANCE,
+    // GL_COMPRESSED_LUMINANCE_ALPHA,
+    // GL_COMPRESSED_INTENSITY,
+    // GL_COMPRESSED_RGB,
+    // GL_COMPRESSED_RGBA,
+    // GL_DEPTH_COMPONENT,
+    // GL_DEPTH_COMPONENT16,
+    // GL_DEPTH_COMPONENT24,
+    // GL_DEPTH_COMPONENT32,
+    // GL_LUMINANCE,
+    // GL_LUMINANCE4,
+    // GL_LUMINANCE8,
+    // GL_LUMINANCE12,
+    // GL_LUMINANCE16,
+    // GL_LUMINANCE_ALPHA,
+    // GL_LUMINANCE4_ALPHA4,
+    // GL_LUMINANCE6_ALPHA2,
+    // GL_LUMINANCE8_ALPHA8,
+    // GL_LUMINANCE12_ALPHA4,
+    // GL_LUMINANCE12_ALPHA12,
+    // GL_LUMINANCE16_ALPHA16,
+    // GL_INTENSITY,
+    // GL_INTENSITY4,
+    // GL_INTENSITY8,
+    // GL_INTENSITY12,
+    // GL_INTENSITY16,
+    // GL_R3_G3_B2,
+    // GL_RGB4,
+    // GL_RGB5,
+    // GL_RGB8,
+    // GL_RGB10,
+    // GL_RGB12,
+    // GL_RGB16,
+    // GL_RGBA2,
+    // GL_RGBA4,
+    // GL_RGB5_A1,
+    // GL_RGBA8,
+    // GL_RGB10_A2,
+    // GL_RGBA12,
+    // GL_RGBA16,
+    // GL_SLUMINANCE,
+    // GL_SLUMINANCE8,
+    // GL_SLUMINANCE_ALPHA,
+    // GL_SLUMINANCE8_ALPHA8,
+    // GL_SRGB,
+    // GL_SRGB8,
+    // GL_SRGB_ALPHA,
+    // GL_SRGB8_ALPHA8,
+}
+
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TextureFormat {
+    Rgb  = 0x1907,
+    Rgba = 0x1908,
+    Bgr  = 0x80E0,
+    Bgra = 0x80E1,
+    // GL_COLOR_INDEX,
+    // GL_RED,
+    // GL_GREEN,
+    // GL_BLUE,
+    // GL_ALPHA,
+    // GL_LUMINANCE,
+    // GL_LUMINANCE_ALPHA,
 }
 
 #[repr(u32)]
