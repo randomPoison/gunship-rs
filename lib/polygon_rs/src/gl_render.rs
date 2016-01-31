@@ -263,6 +263,13 @@ impl GLRender {
                     IndexType::UnsignedInt,
                     0);
             }
+        } else {
+            // Shader doesn't accept lights, so just draw without setting light values.
+            gl.draw_elements(
+                DrawMode::Triangles,
+                mesh.element_count as i32,
+                IndexType::UnsignedInt,
+                0);
         }
 
         gl.enable(ServerCapability::DepthTest);
