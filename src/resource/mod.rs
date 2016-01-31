@@ -143,14 +143,14 @@ impl ResourceManager {
         Ok(entity)
     }
 
-    pub fn get_shader<P: AsRef<Path> + ::std::fmt::Debug>(
+    pub fn get_shader<P: AsRef<Path>>(
         &self,
         shader_path: P
     ) -> Result<ShaderProgram, ParseShaderError> {
         {
             let path_str = shader_path.as_ref().to_str().expect(&*format!(
                 "shader path {:?} contains invalid unicode characters",
-                shader_path));
+                shader_path.as_ref()));
             if let Some(shader) = self.shaders.borrow().get(path_str) {
                 return Ok(shader.clone());
             }
@@ -163,7 +163,7 @@ impl ResourceManager {
                 .to_str()
                 .expect(&*format!(
                     "shader path {:?} contains invalid unicode characters",
-                    shader_path))
+                    shader_path.as_ref()))
                 .into();
 
             let mut full_path = self.resource_path.borrow().clone();
