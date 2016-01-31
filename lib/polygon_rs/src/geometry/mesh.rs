@@ -74,7 +74,18 @@ pub enum BuildMeshError {
 
     /// Indicates that one or more attributes had a count that did not match the total number of
     /// vertices.
-    IncorrectAttributeCount,
+    IncorrectAttributeCount {
+        attribute: VertexAttributeType,
+        expected: usize,
+        actual: usize,
+    },
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum VertexAttributeType {
+    Position,
+    Normal,
+    Texcoord,
 }
 
 /// Provides a safe interface for building a mesh from raw vertex data.
@@ -159,11 +170,19 @@ impl MeshBuilder {
 
         // Check that there is enough attribute data for each one.
         if self.normal_data.len() != 0 && self.normal_data.len() != vertex_count {
-            return Err(BuildMeshError::IncorrectAttributeCount);
+            return Err(BuildMeshError::IncorrectAttributeCount {
+                attribute: VertexAttributeType::Normal,
+                expected: vertex_count,
+                actual: self.normal_data.len(),
+            });
         }
 
-        if self.texcoord_data.len() != vertex_count {
-            return Err(BuildMeshError::IncorrectAttributeCount);
+        if self.texcoord_data.len() != 0 && self.texcoord_data.len() != vertex_count {
+            return Err(BuildMeshError::IncorrectAttributeCount {
+                attribute: VertexAttributeType::Texcoord,
+                expected: vertex_count,
+                actual: self.texcoord_data.len(),
+            });
         }
 
         // Make sure all indices at least point to a valid vertex.
