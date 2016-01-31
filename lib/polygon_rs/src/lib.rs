@@ -1,5 +1,6 @@
 extern crate bootstrap_gl as gl;
 extern crate bootstrap_rs as bootstrap;
+extern crate parse_bmp as bmp;
 extern crate polygon_math as math;
 
 pub mod camera;

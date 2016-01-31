@@ -1,29 +1,17 @@
-use std::ptr;
-use std::mem;
-
+use bmp::Bitmap;
 use bootstrap::window::Window;
+use camera::Camera;
+use geometry::mesh::{Mesh, VertexAttribute};
 use gl;
 use gl::*;
-
-use math::*;
-
-use geometry::mesh::{Mesh, VertexAttribute};
-use camera::Camera;
 use light::Light;
+use math::*;
+use std::ptr;
+use std::mem;
 
 #[derive(Debug, Clone)]
 pub struct GLRender {
     gl: gl::Context,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct GLMeshData {
-    vertex_array: VertexArrayObject,
-    vertex_buffer: VertexBufferObject,
-    index_buffer: VertexBufferObject,
-    pub position_attribute: VertexAttribute,
-    pub normal_attribute: Option<VertexAttribute>,
-    element_count: usize,
 }
 
 impl GLRender {
@@ -86,13 +74,33 @@ impl GLRender {
         gl.bind_buffer(BufferTarget::ElementArrayBuffer, VertexBufferObject::null());
 
         GLMeshData {
-            vertex_array: vertex_array,
-            vertex_buffer: vertex_buffer,
-            index_buffer: index_buffer,
+            vertex_array:       vertex_array,
+            vertex_buffer:      vertex_buffer,
+            index_buffer:       index_buffer,
             position_attribute: mesh.position(),
-            normal_attribute: mesh.normal(),
-            element_count: mesh.indices().len(),
+            normal_attribute:   mesh.normal(),
+            uv_attribute:       None,
+            element_count:      mesh.indices().len(),
         }
+    }
+
+    pub fn gen_texture(&self, bitmap: &Bitmap) -> TextureObject {
+        let gl = &self.gl;
+
+        let texture = gl.gen_texture();
+        gl.bind_texture(TextureBindTarget::Texture2d, texture);
+        gl.texture_image_2d(
+            Texture2dTarget::Texture2d,
+            0,
+            TextureInternalFormat::Rgba,
+            bitmap.width() as i32,
+            bitmap.height() as i32,
+            0,
+            TextureFormat::Bgra,
+            TextureDataType::UnsignedByte,
+            bitmap.data().as_ptr() as *const _);
+
+        texture
     }
 
     /// SUPER BAD LACK OF SAFETY, should be using RAII and some proper resource management, but
@@ -428,12 +436,24 @@ impl GLRender {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct GLMeshData {
+    vertex_array: VertexArrayObject,
+    vertex_buffer: VertexBufferObject,
+    index_buffer: VertexBufferObject,
+    pub position_attribute: VertexAttribute,
+    pub normal_attribute: Option<VertexAttribute>,
+    pub uv_attribute: Option<VertexAttribute>,
+    element_count: usize,
+}
+
 #[derive(Debug, Clone)]
 pub struct ShaderProgram {
-    program_object: ProgramObject,
+    program_object:        ProgramObject,
 
     vertex_position:       Option<AttributeLocation>,
     vertex_normal:         Option<AttributeLocation>,
+    vertex_uv:             Option<AttributeLocation>,
 
     model_transform:       Option<UniformLocation>,
     view_transform:        Option<UniformLocation>,
@@ -442,11 +462,13 @@ pub struct ShaderProgram {
     model_view_projection: Option<UniformLocation>,
     view_normal_transform: Option<UniformLocation>,
     normal_transform:      Option<UniformLocation>,
+
     light_position:        Option<UniformLocation>,
     light_strength:        Option<UniformLocation>,
+    global_ambient:        Option<UniformLocation>,
+
     camera_position:       Option<UniformLocation>,
     surface_color:         Option<UniformLocation>,
-    global_ambient:        Option<UniformLocation>,
 }
 
 impl ShaderProgram {
@@ -456,6 +478,7 @@ impl ShaderProgram {
 
             vertex_position:       gl.get_attrib(program_object, b"vertexPosition\0"),
             vertex_normal:         gl.get_attrib(program_object, b"vertexNormal\0"),
+            vertex_uv:             gl.get_attrib(program_object, b"vertexUv\0"),
 
             model_transform:       gl.get_uniform(program_object, b"modelTransform\0"),
             view_transform:        gl.get_uniform(program_object, b"viewTransform\0"),
