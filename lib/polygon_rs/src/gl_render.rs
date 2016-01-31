@@ -153,16 +153,18 @@ impl GLRender {
             mesh.position_attribute.offset * mem::size_of::<f32>());
         gl.enable_vertex_attrib_array(position_attrib);
 
-        let normal_attrib = shader.vertex_normal
-            .expect("Could not get vertexNormal attribute");
-        gl.vertex_attrib_pointer(
-            normal_attrib,
-            3,
-            GLType::Float,
-            false,
-            (mesh.normal_attribute.unwrap().stride * mem::size_of::<f32>()) as i32,
-            mesh.normal_attribute.unwrap().offset * mem::size_of::<f32>());
-        gl.enable_vertex_attrib_array(normal_attrib);
+        if let Some(mesh_normal) = mesh.normal_attribute {
+            if let Some(shader_normal) = shader.vertex_normal {
+                gl.vertex_attrib_pointer(
+                    shader_normal,
+                    3,
+                    GLType::Float,
+                    false,
+                    (mesh_normal.stride * mem::size_of::<f32>()) as i32,
+                    mesh_normal.offset * mem::size_of::<f32>());
+                gl.enable_vertex_attrib_array(shader_normal);
+            }
+        }
 
         // Set uniform transforms.
         if let Some(model_transform_location) = shader.model_transform {
