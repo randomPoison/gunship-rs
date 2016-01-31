@@ -1,19 +1,17 @@
-use std::collections::HashMap;
-use std::io::prelude::*;
-use std::fs::{self, File};
-use std::path::{Path, PathBuf};
-use std::error::Error;
-use std::rc::Rc;
+use component::{MeshManager, TransformManager};
+use ecs::Entity;
+use scene::Scene;
+use self::shader::*;
 use std::cell::RefCell;
-
+use std::collections::HashMap;
+use std::error::Error;
+use std::fs::{self, File};
+use std::io::prelude::*;
+use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use polygon::gl_render::{GLRender, GLMeshData, ShaderProgram};
 use polygon::geometry::mesh::Mesh;
-
 use wav::Wave;
-use scene::Scene;
-use ecs::Entity;
-use component::{MeshManager, TransformManager};
-use self::shader::*;
 
 pub mod collada;
 pub mod shader;
@@ -190,14 +188,14 @@ impl ResourceManager {
         }
     }
 
-    pub fn add_mesh(&self, uri: String, mesh: Mesh) {
+    pub fn add_mesh<U: Into<String> + AsRef<str>>(&self, uri: U, mesh: Mesh) {
         let mut meshes = self.meshes.borrow_mut();
 
-        if meshes.contains_key(&uri) {
-            println!("WARNING: There is already a mesh node with uri {}, it will be overriden in the resource manager by the new node", uri);
+        if meshes.contains_key(uri.as_ref()) {
+            println!("WARNING: There is already a mesh node with uri {}, it will be overriden in the resource manager by the new node", uri.as_ref());
         }
 
-        meshes.insert(uri.clone(), mesh);
+        meshes.insert(uri.into(), mesh);
     }
 
     pub fn add_mesh_node(&self, uri: String, node: MeshNode) {
