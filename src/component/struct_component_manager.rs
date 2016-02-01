@@ -1,107 +1,191 @@
-use std::collections::HashMap;
-use std::slice::Iter;
-use std::cell::{RefCell, Ref, RefMut};
+use collections::{Array, EntityMap, EntitySet};
+use ecs::*;
+use scene::Scene;
+use std::cell::RefCell;
+use std::fmt::{Debug, Error, Formatter, Write};
+use std::intrinsics::type_name;
+use std::ops::*;
 
-use ecs::{Entity, ComponentManager};
+const MAX_COMPONENTS: usize = 1_000;
 
-/// A default implementation for a component manager that can be represented
-/// as a single struct.
-#[derive(Clone)]
-pub struct StructComponentManager<T: Clone> {
-    components: Vec<RefCell<T>>,
-    entities: Vec<Entity>,
-    indices: HashMap<Entity, usize>,
+struct MessageMap<T: Component>(EntityMap<Vec<T::Message>>);
+
+impl<T: Component> MessageMap<T> {
+    fn new() -> MessageMap<T> {
+        MessageMap(EntityMap::default())
+    }
 }
 
-impl<T: Clone> StructComponentManager<T> {
+impl<T: Component> Clone for MessageMap<T> {
+    fn clone(&self) -> MessageMap<T> {
+        MessageMap::new()
+    }
+}
+
+impl<T: Component> Deref for MessageMap<T> {
+    type Target = EntityMap<Vec<T::Message>>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<T: Component> DerefMut for MessageMap<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl<T: Component> Debug for MessageMap<T> {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
+        write!(f, "{}", unsafe { type_name::<Self>() })
+    }
+}
+
+/// A utilty on which to build other component managers.
+///
+/// `StructComponentManager` provides a default system for implementing a component manager for any
+/// type that can be represented as a single struct. It handles the details of assigning component
+/// data to an entity, retrieving that data, and destroying it. It also handles the details of
+/// doing all of that through only shared references. `StructComponentManager` however does not
+/// implement `ComponentManager` because it is meant to be reused within other managers that want
+/// to wrap extra behavior around the default management style. `DefaultManager` is a basic wrapper
+/// around `StructComponentManager` that implements `ComponentManager` and should be used as the
+/// default component manager when no special handling is needed.
+#[derive(Debug, Clone)]
+pub struct StructComponentManager<T>
+    where T: Component + Clone + Debug,
+          T::Message: Message<Target=T>,
+{
+    components: Array<T>,
+    entities: Array<Entity>,
+    indices: RefCell<EntityMap<usize>>,
+
+    marked_for_destroy: RefCell<EntitySet>,
+    messages: RefCell<MessageMap<T>>,
+}
+
+impl<T> StructComponentManager<T>
+    where T: Component + Clone + Debug,
+          T::Message: Message<Target=T>,
+{
     pub fn new() -> StructComponentManager<T> {
         StructComponentManager {
-            components: Vec::new(),
-            entities: Vec::new(),
-            indices: HashMap::new(),
+            components: Array::new(MAX_COMPONENTS),
+            entities: Array::new(MAX_COMPONENTS),
+            indices: RefCell::new(EntityMap::default()),
+
+            marked_for_destroy: RefCell::new(EntitySet::default()),
+            messages: RefCell::new(MessageMap::new()),
         }
     }
 
-    pub fn assign(&mut self, entity: Entity, component: T) -> RefMut<T> {
-        assert!(!self.indices.contains_key(&entity));
+    pub fn assign(&self, entity: Entity, component: T) -> &T {
+        assert!(
+            !self.indices.borrow().contains_key(&entity),
+            "Component already assign to entity {:?}",
+            entity);
 
         let index = self.components.len();
-        self.components.push(RefCell::new(component));
+        self.components.push(component);
         self.entities.push(entity);
-        self.indices.insert(entity, index);
+        self.indices.borrow_mut().insert(entity, index);
 
-        self.components[index].borrow_mut()
+        &self.components[index]
     }
 
-    pub fn get(&self, entity: Entity) -> Ref<T> {
-        assert!(self.indices.contains_key(&entity));
-
-        let index = *self.indices.get(&entity).unwrap();
-        self.components[index].borrow()
+    pub fn get(&self, entity: Entity) -> Option<&T> {
+        self.indices
+        .borrow()
+        .get(&entity)
+        .map(|index| &self.components[*index])
     }
 
-    pub fn get_mut(&self, entity: Entity) -> RefMut<T> {
-        assert!(self.indices.contains_key(&entity));
-
-        let index = *self.indices.get(&entity).unwrap();
-        self.components[index].borrow_mut()
+    pub fn update(&mut self, _scene: &Scene, _delta: f32) {
+        println!("StructComponentManager::update()");
     }
 
-    pub fn components(&self) -> &Vec<RefCell<T>> {
-        &self.components
+    pub fn destroy(&self, entity: Entity) {
+        self.marked_for_destroy.borrow_mut().insert(entity);
     }
 
-    pub fn entities(&self) -> &Vec<Entity> {
-        &self.entities
-    }
-
-    pub fn iter(&self) -> ComponentIter<T> {
-        ComponentIter {
+    pub fn iter(&self) -> Iter<T> {
+        Iter {
             component_iter: self.components.iter(),
             entity_iter: self.entities.iter(),
         }
     }
 
-    pub fn iter_mut(&self) -> ComponentIterMut<T> {
-        ComponentIterMut {
-            component_iter: self.components.iter(),
+    pub fn iter_mut(&mut self) -> IterMut<T> {
+        IterMut {
+            component_iter: self.components.iter_mut(),
             entity_iter: self.entities.iter(),
         }
     }
-}
 
-impl<T: Clone> ComponentManager for StructComponentManager<T> {
-}
+    pub fn len(&self) -> usize {
+        self.entities.len()
+    }
 
-pub struct ComponentIter<'a, T: 'a> {
-    component_iter: Iter<'a, RefCell<T>>,
-    entity_iter: Iter<'a, Entity>,
-}
+    /// Passes a message to the component associated with the specified entity.
+    pub fn send_message<M: Into<T::Message>>(&self, entity: Entity, message: M) {
+        let mut messages = self.messages.borrow_mut();
+        messages
+        .entry(entity)
+        .or_insert(Vec::new())
+        .push(message.into());
+    }
 
-impl<'a, T: 'a + Clone> Iterator for ComponentIter<'a, T> {
-    type Item = (Ref<'a, T>, Entity);
-
-    fn next(&mut self) -> Option<(Ref<'a, T>, Entity)> {
-        match self.component_iter.next() {
-            None => None,
-            Some(component) => Some((component.borrow(), *self.entity_iter.next().unwrap()))
+    /// Applies all pending messages to their target components.
+    pub fn process_messages(&mut self) {
+        let mut messages = self.messages.borrow_mut();
+        for (entity, mut messages) in messages.drain() {
+            if let Some(index) = self.indices.borrow().get(&entity) {
+                let component = &mut self.components[*index];
+                for message in messages.drain(..) {
+                    message.apply(component);
+                }
+            } else {
+                // TODO: Panic or error? That could probably be configured at runtime.
+                panic!(
+                    "Attempted to pass message to {} of {:?} which does not exist",
+                    unsafe { type_name::<T>() },
+                    entity);
+            }
         }
     }
 }
 
-pub struct ComponentIterMut<'a, T: 'a + Clone> {
-    component_iter: Iter<'a, RefCell<T>>,
-    entity_iter: Iter<'a, Entity>,
+pub struct Iter<'a, T: 'a> {
+    component_iter: ::std::slice::Iter<'a, T>,
+    entity_iter: ::std::slice::Iter<'a, Entity>,
 }
 
+impl<'a, T: 'a + Component> Iterator for Iter<'a, T> {
+    type Item = (&'a T, Entity);
 
-impl<'a, T: 'a + Clone> Iterator for ComponentIterMut<'a, T> {
-    type Item = (RefMut<'a, T>, Entity);
+    fn next(&mut self) -> Option<(&'a T, Entity)> {
+        if let (Some(component), Some(entity)) = (self.component_iter.next(), self.entity_iter.next()) {
+            Some((component, *entity))
+        } else {
+            None
+        }
+    }
+}
 
-    fn next(&mut self) -> Option<(RefMut<'a, T>, Entity)> {
-        match self.component_iter.next() {
-            None => None,
-            Some(component) => Some((component.borrow_mut(), *self.entity_iter.next().unwrap()))
+pub struct IterMut<'a, T: 'a + Component> {
+    component_iter: ::std::slice::IterMut<'a, T>,
+    entity_iter: ::std::slice::Iter<'a, Entity>,
+}
+
+impl<'a, T: 'a + Component> Iterator for IterMut<'a, T> {
+    type Item = (&'a mut T, Entity);
+
+    fn next(&mut self) -> Option<(&'a mut T, Entity)> {
+        if let (Some(component), Some(entity)) = (self.component_iter.next(), self.entity_iter.next()) {
+            Some((component, *entity))
+        } else {
+            None
         }
     }
 }

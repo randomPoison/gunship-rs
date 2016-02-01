@@ -1,9 +1,9 @@
-use std::ops::Mul;
+use std::ops::{Mul, MulAssign};
 use std::f32::consts::PI;
 
 use vector::Vector3;
-use matrix::Matrix4;
-use super::{IsZero, Clamp};
+use matrix::*;
+use super::{IsZero, Clamp, Dot};
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct Quaternion {
@@ -82,9 +82,17 @@ impl Quaternion {
       * Quaternion::axis_angle(Vector3::new(0.0, 0.0, 1.0), z)
     }
 
+    pub fn from_vector3(angles: Vector3) -> Quaternion {
+        Quaternion::from_eulers(angles.x, angles.y, angles.z)
+    }
+
     /// Converts the quaternion to the corresponding rotation matrix.
-    pub fn as_matrix(&self) -> Matrix4 {
+    pub fn as_matrix4(self) -> Matrix4 {
         Matrix4::from_quaternion(self)
+    }
+
+    pub fn as_matrix3(self) -> Matrix3 {
+        Matrix3::from_quaternion(self)
     }
 
     /// Retrieves the rotation represented by the quaternion as a rotation about an axis.
@@ -257,6 +265,12 @@ impl Mul<Quaternion> for Quaternion {
             y: (self.w * rhs.y) - (self.x * rhs.z) + (self.y * rhs.w) + (self.z * rhs.x),
             z: (self.w * rhs.z) + (self.x * rhs.y) - (self.y * rhs.x) + (self.z * rhs.w),
         }.normalized()
+    }
+}
+
+impl MulAssign<Quaternion> for Quaternion {
+    fn mul_assign(&mut self, rhs: Quaternion) {
+        *self = *self * rhs; // TODO: No temp object? We'll have to see if LLVM can optimize it away.
     }
 }
 

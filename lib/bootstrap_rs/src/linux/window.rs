@@ -12,7 +12,6 @@ use window::Message;
 use input::ScanCode;
 
 #[derive(Debug, Clone)]
-#[allow(raw_pointer_derive)]
 pub struct Window {
     pub display: *mut xlib::Display,
     pub window: xlib::Window,

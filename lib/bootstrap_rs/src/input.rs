@@ -1,3 +1,6 @@
+#[cfg(windows)]
+pub use windows::input::{set_cursor_visibility, set_cursor_bounds, clear_cursor_bounds};
+
 #[repr(u32)]
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 pub enum ScanCode {
@@ -39,7 +42,14 @@ pub enum ScanCode {
     Key9 = '9' as u32,
 
     // TODO: Are these reasonable values for these codes?
-    Space = 32 as u32,
+    // These values were taken from the values observed from keypresses on my windows keyboard.
+    // They're convenient for now because it means I can just reinterpret the scancodes I get from
+    // Windows, but I don't know if these values make sense in a cross-platform context.
+    Space    = 32 as u32,
+    F9       = 120 as u32,
+    F10      = 121 as u32,
+    F11      = 122 as u32,
+    BackTick = 192 as u32,
 
     Unsupported,
 }

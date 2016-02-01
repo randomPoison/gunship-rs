@@ -1,3 +1,6 @@
+#![feature(raw, augmented_assignments, op_assign_traits)]
+#![cfg_attr(test, feature(test))]
+
 pub mod point;
 pub mod vector;
 pub mod matrix;
@@ -8,8 +11,8 @@ pub mod quaternion;
 mod test;
 
 pub use self::point::Point;
-pub use self::vector::Vector3;
-pub use self::matrix::Matrix4;
+pub use self::vector::{Vector2, Vector3};
+pub use self::matrix::{Matrix3, Matrix4};
 pub use self::color::Color;
 pub use self::quaternion::Quaternion;
 
@@ -32,5 +35,49 @@ pub trait Clamp {
 impl Clamp for f32 {
     fn clamp(self, min: f32, max: f32) -> f32 {
         f32::min(f32::max(self, min), max)
+    }
+}
+
+pub trait Dot<Other=Self> {
+    type Output;
+
+    fn dot(self, rhs: Other) -> Self::Output;
+}
+
+impl Dot for [f32; 3] {
+    type Output = f32;
+
+    fn dot(self, rhs: [f32; 3]) -> f32 {
+        self[0] * rhs[0]
+      + self[1] * rhs[1]
+      + self[2] * rhs[2]
+    }
+}
+
+// Doesn't cause ICE.
+impl<'a, T> Dot<&'a T> for T where T: Dot<T> + Copy {
+    type Output = T::Output;
+
+    fn dot(self, rhs: &T) -> Self::Output {
+        self.dot(*rhs)
+    }
+}
+
+// // Causes ICE.
+// impl<'a, T, U> Dot<&'a U> for T where T: Dot<U>, U: Copy {
+//     type Output = T::Output;
+//
+//     fn dot(self, rhs: &U) -> Self::Output {
+//         self.dot(*rhs)
+//     }
+// }
+
+pub trait Lerp {
+    fn lerp(t: f32, from: Self, to: Self) -> Self;
+}
+
+impl Lerp for f32 {
+    fn lerp(t: f32, from: f32, to: f32) -> f32 {
+        from + (to - from) * t
     }
 }

@@ -1,6 +1,5 @@
+#![feature(op_assign_traits)]
 #![cfg_attr(windows, feature(str_utf16))]
-
-extern crate gl;
 
 #[cfg(target_os = "macos")]
 #[macro_use]
@@ -25,6 +24,5 @@ pub mod macos;
 pub use macos::init::init;
 
 pub mod window;
-pub mod gl_utils;
 pub mod input;
 pub mod time;

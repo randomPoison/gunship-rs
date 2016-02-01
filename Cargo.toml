@@ -1,28 +1,47 @@
 [package]
 
 name = "gunship"
-version = "0.0.1"
+version = "0.0.4"
 authors = ["David LeGare <excaliburhissheath@gmail.com>"]
 
 [lib]
 name = "gunship"
 
-[dependencies.bootstrap_rs]
-version = "*"
-path = "lib/bootstrap_rs"
+[features]
+timing = []
+hotloading = []
+no-draw = []
 
-[dependencies.bootstrap_audio]
-version = "*"
-path = "lib/bootstrap_audio"
+[dependencies]
+bootstrap_rs    = { path = "lib/bootstrap_rs" }
+bootstrap_audio = { path = "lib/bootstrap_audio" }
+hash            = { path = "lib/hash" }
+parse_collada   = { path = "lib/parse_collada" }
+polygon         = { path = "lib/polygon_rs" }
+polygon_math    = { path = "lib/polygon_math" }
+stopwatch       = { path = "lib/stopwatch" }
 
-[dependencies.parse_collada]
-version = "*"
-path = "lib/parse_collada"
+[dev_dependencies]
+rand = "*"
 
-[dependencies.polygon_rs]
-version = "*"
-path = "lib/polygon_rs"
+# [profile.dev]
+# opt-level = 1
 
-[dependencies.polygon_math]
-version = "*"
-path = "lib/polygon_math"
+[profile.release]
+# lto = true
+debug = true
+
+[profile.bench]
+lto = true
+
+[[example]]
+name = "create_destroy"
+path = "examples/benchmarks/create_destroy.rs"
+
+[[example]]
+name = "circle_movement"
+path = "examples/benchmarks/circle_movement.rs"
+
+[[example]]
+name = "circle_collision"
+path = "examples/benchmarks/circle_collision.rs"

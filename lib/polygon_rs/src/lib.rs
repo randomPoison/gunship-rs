@@ -1,13 +1,13 @@
-#![feature(convert)]
-
-extern crate gl;
-
-#[macro_use]
-extern crate polygon_math as math;
+extern crate bootstrap_gl as gl;
 extern crate bootstrap_rs as bootstrap;
+extern crate polygon_math as math;
 
-#[macro_use]
+pub mod camera;
 pub mod geometry;
 pub mod gl_render;
-pub mod camera;
 pub mod light;
+
+pub use camera::Camera;
+pub use geometry::*;
+pub use gl_render::{GLRender, ShaderProgram};
+pub use light::{Light, PointLight};

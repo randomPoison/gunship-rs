@@ -1,18 +1,15 @@
+extern crate winapi;
+extern crate opengl32;
+extern crate gdi32;
+
 use std::mem;
 use std::ffi::CString;
 
-use windows::winapi::{
-    HGLRC, PIXELFORMATDESCRIPTOR, WORD,
-    PFD_DRAW_TO_WINDOW, PFD_TYPE_RGBA, PFD_MAIN_PLANE, PFD_DOUBLEBUFFER, PFD_SUPPORT_OPENGL
-};
-use windows::opengl32;
-use windows::gdi32;
+use self::winapi::*;
 
-use gl;
+use bootstrap::window::Window;
 
-use windows::window::Window;
-
-pub type GLContext = HGLRC;
+pub type Context = HGLRC;
 
 pub fn init(window: &Window) {
     let device_context = window.dc;
@@ -54,7 +51,7 @@ pub fn init(window: &Window) {
     };
 }
 
-pub fn create_context(window: &Window) -> GLContext {
+pub fn create_context(window: &Window) -> Context {
     let device_context = window.dc;
 
     // create context and make it current
@@ -64,19 +61,20 @@ pub fn create_context(window: &Window) -> GLContext {
         render_context
     };
 
-    set_proc_loader();
-
     context
 }
 
-pub fn set_proc_loader() {
-    // provide method for loading functions
-    gl::load_with(|s| {
-        let string = CString::new(s);
-        unsafe {
-            opengl32::wglGetProcAddress(string.unwrap().as_ptr())
-        }
-    });
+pub fn destroy_context(context: Context) {
+    unsafe {
+        opengl32::wglDeleteContext(context);
+    }
+}
+
+pub fn proc_loader(proc_name: &str) -> Option<extern "C" fn()> {
+    let string = CString::new(proc_name);
+    Some(unsafe {
+        mem::transmute(opengl32::wglGetProcAddress(string.unwrap().as_ptr()))
+    })
 }
 
 pub fn swap_buffers(_window: &Window) {

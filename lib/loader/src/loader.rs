@@ -1,4 +1,5 @@
-#![feature(std_misc)]
+#![feature(dynamic_lib)]
+#![allow(deprecated)]
 
 extern crate bootstrap_rs as bootstrap;
 extern crate winapi;
@@ -26,15 +27,13 @@ type EngineDrop = fn(Box<()>);
 type GameInit = fn(&mut ());
 type GameReload = fn(&(), &());
 
-const SRC_LIB: &'static str = "target/debug/hotload.dll";
-
-fn update_dll(dest: &str, last_modified: &mut u64) -> bool {
-    let modified = match file_modified(SRC_LIB) {
+fn update_dll(src_lib: &str, dest: &str, last_modified: &mut u64) -> bool {
+    let modified = match file_modified(src_lib) {
         Ok(modified) => modified,
         Err(_) => return false,
     };
     if modified > *last_modified {
-        println!("copy result: {:?}", fs::copy(SRC_LIB, dest));
+        println!("copy result: {:?}", fs::copy(src_lib, dest));
         *last_modified = modified;
         true
     } else {
@@ -66,21 +65,21 @@ fn load_engine_procs(lib: &DynamicLibrary) -> (EngineUpdateAndRender, EngineClos
 /// - Keep track of the temp files made and then delete them when done running.
 /// - Support reloading game code.
 /// - Reload the windows message proc when the engine is reloaded.
-fn main() {
+pub fn run_loader(src_lib: &str) {
     let mut counter = 0..;
 
     // Statically create a window and load the renderer for the engine.
     let instance = bootstrap::init();
     let window = Window::new("Gunship Game", instance);
-    bootstrap::windows::gl::set_proc_loader();
     let mut temp_paths: Vec<String> = Vec::new();
+
 
     // Open the game as a dynamic library.
     let mut last_modified = 0;
     let (mut _lib, mut engine, mut engine_update_and_render, mut engine_close, mut engine_drop) = {
         let lib_path = format!("gunship_lib_{}.dll", counter.next().unwrap().to_string());
-        if !update_dll(&lib_path, &mut last_modified) {
-            panic!("Unable to find library {} for dynamic loading", SRC_LIB);
+        if !update_dll(src_lib, &lib_path, &mut last_modified) {
+            panic!("Unable to find library {} for dynamic loading", src_lib);
         }
         let lib = match DynamicLibrary::open(Some(Path::new(&lib_path))) {
             Ok(lib) => lib,
@@ -112,7 +111,7 @@ fn main() {
 
         // Only reload if file has changed.
         let lib_path = format!("gunship_lib_{}.dll", counter.next().unwrap());
-        if update_dll(&lib_path, &mut last_modified) {
+        if update_dll(src_lib, &lib_path, &mut last_modified) {
             if let Ok(lib) = DynamicLibrary::open(Some(Path::new(&lib_path))) {
 
                 let engine_reload = unsafe {

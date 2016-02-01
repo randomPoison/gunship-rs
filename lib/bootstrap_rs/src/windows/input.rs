@@ -1,4 +1,4 @@
-use std::mem::size_of;
+use std::mem::{self, size_of};
 use std::ptr;
 
 use windows::winapi::*;
@@ -36,6 +36,29 @@ use window::Window;
 //     }
 // }
 
+pub fn set_cursor_visibility(visible: bool) {
+    unsafe { user32::ShowCursor(visible as i32); }
+}
+
+pub fn set_cursor_bounds(top: i32, left: i32, bottom: i32, right: i32) {
+    let rect = RECT {
+        top: top,
+        left: left,
+        bottom: bottom,
+        right: right,
+    };
+
+    unsafe {
+        user32::ClipCursor(&rect);
+    }
+}
+
+pub fn clear_cursor_bounds() {
+    unsafe {
+        user32::ClipCursor(ptr::null());
+    }
+}
+
 pub fn register_raw_input(hwnd: HWND) {
     let devices = RAWINPUTDEVICE {
         usUsagePage: 0x01,
@@ -46,7 +69,7 @@ pub fn register_raw_input(hwnd: HWND) {
 
     if unsafe { user32::RegisterRawInputDevices(&devices, 1, size_of::<RAWINPUTDEVICE>() as u32) } == FALSE {
         // Registration failed. Call GetLastError for the cause of the error.
-        println!("Raw input registration failed because reasons.");
+        println!("WARNING: Raw input registration failed because reasons.");
     }
 }
 
@@ -62,25 +85,8 @@ pub fn handle_raw_input(window: &mut Window, lParam: LPARAM) {
             size_of::<RAWINPUTHEADER>() as u32);
     }
 
-    let mut raw = RAWINPUT {
-        header: RAWINPUTHEADER {
-            dwType: 0,
-            dwSize: 0,
-            hDevice: ptr::null_mut(),
-            wParam: 0,
-        },
-        mouse: RAWMOUSE {
-            usFlags: 0,
-            usButtonFlags: 0,
-            usButtonData: 0,
-            ulRawButtons: 0,
-            lLastX: 0,
-            lLastY: 0,
-            ulExtraInformation: 0,
-        }
-    };
-
-    unsafe {
+    let raw = unsafe {
+        let mut raw = mem::uninitialized::<RAWINPUT>();
         assert!(
             user32::GetRawInputData(
                 lParam as HRAWINPUT,
@@ -89,15 +95,19 @@ pub fn handle_raw_input(window: &mut Window, lParam: LPARAM) {
                 &mut size,
                 size_of::<RAWINPUTHEADER>() as u32)
             == size);
-    }
+        raw
+    };
+
+    let raw_mouse = unsafe { raw.mouse() };
 
     assert!(raw.header.dwType == RIM_TYPEMOUSE);
-    assert!(raw.mouse.usFlags == MOUSE_MOVE_RELATIVE);
+    assert!(raw_mouse.usFlags == MOUSE_MOVE_RELATIVE);
 
-    window.messages.push_back(MouseMove(raw.mouse.lLastX, raw.mouse.lLastY));
+    window.messages.push_back(MouseMove(raw_mouse.lLastX, raw_mouse.lLastY));
 
-    if raw.mouse.usButtonData != 0 {
-        let button_flags = raw.mouse.usButtonData;
+
+    if raw_mouse.usButtonFlags != 0 {
+        let button_flags = raw_mouse.usButtonFlags;
         if button_flags & RI_MOUSE_LEFT_BUTTON_DOWN != 0 {
             window.messages.push_back(MouseButtonPressed(0));
         }
@@ -129,8 +139,7 @@ pub fn handle_raw_input(window: &mut Window, lParam: LPARAM) {
             window.messages.push_back(MouseButtonReleased(4));
         }
         if button_flags & RI_MOUSE_WHEEL != 0 {
-            // TODO: I don't seem to be getting information for the mouse scrooll. It tells me that it happened, but none of the fields actually contain how much the sroll was.
-            println!("{:?}", raw);
+            window.messages.push_back(MouseWheel(raw_mouse.usButtonData as i32))
         }
     }
 }

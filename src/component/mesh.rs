@@ -1,78 +1,71 @@
-use std::collections::HashMap;
-use std::slice::Iter;
-use std::rc::Rc;
-use std::cell::RefCell;
+use ecs::*;
+use engine::*;
+use polygon::gl_render::{GLMeshData, ShaderProgram};
+use super::DefaultMessage;
+use super::struct_component_manager::*;
 
-use polygon::gl_render::GLMeshData;
 
-use ecs::{Entity, ComponentManager};
-use resource::ResourceManager;
-
-pub type Mesh = GLMeshData;
-
-pub struct MeshManager {
-    resource_manager: Rc<RefCell<ResourceManager>>,
-    meshes: Vec<GLMeshData>,
-    entities: Vec<Entity>,
-    indices: HashMap<Entity, usize>,
+#[derive(Debug, Clone)]
+pub struct Mesh {
+    pub gl_mesh: GLMeshData,
+    pub shader: ShaderProgram,
 }
+
+impl Component for Mesh {
+    type Manager = MeshManager;
+    type Message = DefaultMessage<Mesh>;
+}
+
+#[derive(Debug, Clone)]
+pub struct MeshManager(StructComponentManager<Mesh>);
 
 impl MeshManager {
-    pub fn new(resource_manager: Rc<RefCell<ResourceManager>>) -> MeshManager {
-        MeshManager {
-            resource_manager: resource_manager,
-            meshes: Vec::new(),
-            entities: Vec::new(),
-            indices: HashMap::new(),
-        }
+    pub fn new() -> MeshManager {
+        MeshManager(StructComponentManager::new())
     }
 
-    pub fn clone(&self, resource_manager: Rc<RefCell<ResourceManager>>) -> MeshManager {
-        MeshManager {
-            resource_manager: resource_manager,
-            meshes: self.meshes.clone(),
-            entities: self.entities.clone(),
-            indices: self.indices.clone(),
-        }
+    pub fn assign(&self, entity: Entity, path_text: &str) -> &Mesh {
+        let mesh =
+            Engine::resource_manager()
+            .get_gpu_mesh(path_text)
+            .ok_or_else(|| format!("ERROR: Unable to assign mesh with uri {}", path_text))
+            .unwrap(); // TODO: Provide better panic message (it's okay to panic here though, indicates a bug in game code).
+        self.give_mesh(entity, mesh)
     }
 
-    pub fn assign(&mut self, entity: Entity, path_text: &str) -> &GLMeshData {
-        assert!(!self.indices.contains_key(&entity));
-
-        let index = self.meshes.len();
-        self.meshes.push(self.resource_manager.borrow_mut().get_mesh(path_text));
-        self.entities.push(entity);
-        self.indices.insert(entity, index);
-        &self.meshes[index]
+    pub fn give_mesh(&self, entity: Entity, mesh: GLMeshData) -> &Mesh {
+        let shader =
+            Engine::resource_manager()
+            .get_shader("shaders/forward_phong.glsl")
+            .unwrap(); // TODO: Provide better panic message (or maybe DON'T PANIC!?).
+        self.0.assign(entity, Mesh {
+            gl_mesh: mesh,
+            shader: shader,
+        })
     }
 
-    pub fn meshes(&self) -> &Vec<GLMeshData> {
-        &self.meshes
-    }
-
-    pub fn iter(&self) -> MeshIter {
-        MeshIter {
-            mesh_iter: self.meshes.iter(),
-            entity_iter: self.entities.iter()
-        }
+    pub fn iter(&self) -> Iter<Mesh> {
+        self.0.iter()
     }
 }
+
+impl ComponentManagerBase for MeshManager {}
 
 impl ComponentManager for MeshManager {
-}
+    type Component = Mesh;
 
-pub struct MeshIter<'a> {
-    mesh_iter: Iter<'a, GLMeshData>,
-    entity_iter: Iter<'a, Entity>,
-}
+    fn register(builder: &mut EngineBuilder) {
+        let mesh_manager = MeshManager::new();
+        builder.register_manager(mesh_manager);
+    }
 
-impl<'a> Iterator for MeshIter<'a> {
-    type Item = (&'a GLMeshData, Entity);
+    fn get(&self, entity: Entity) -> Option<&Self::Component> {
+        self.0.get(entity)
+    }
 
-    fn next(&mut self) -> Option<(&'a GLMeshData, Entity)> {
-        match self.mesh_iter.next() {
-            None => None,
-            Some(mesh) => Some((mesh, *self.entity_iter.next().unwrap()))
-        }
+    fn destroy(&self, entity: Entity) {
+        self.0.destroy(entity);
     }
 }
+
+derive_Singleton!(MeshManager);

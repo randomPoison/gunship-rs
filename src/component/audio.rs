@@ -1,10 +1,9 @@
-use std::collections::HashMap;
-use std::rc::Rc;
-use std::cell::{RefCell, Ref, RefMut};
-
+use ecs::*;
+use engine::*;
 use scene::Scene;
-use ecs::{Entity, ComponentManager, System};
-use resource::ResourceManager;
+use std::rc::Rc;
+use super::DefaultMessage;
+use super::struct_component_manager::{Iter, IterMut, StructComponentManager};
 use wav::Wave;
 
 #[derive(Debug, Clone)]
@@ -43,77 +42,72 @@ impl AudioSource {
     }
 }
 
-pub struct AudioSourceManager {
-    resource_manager: Rc<RefCell<ResourceManager>>,
-    audio_sources:    Vec<RefCell<AudioSource>>,
-    entities:         Vec<Entity>,
-    indices:          HashMap<Entity, usize>,
+impl Component for AudioSource {
+    type Manager = AudioSourceManager;
+    type Message = DefaultMessage<AudioSource>;
 }
 
+#[derive(Debug, Clone)]
+pub struct AudioSourceManager(StructComponentManager<AudioSource>);
+
 impl AudioSourceManager {
-    pub fn new(resource_manager: Rc<RefCell<ResourceManager>>) -> AudioSourceManager {
-        AudioSourceManager {
-            resource_manager: resource_manager,
-            audio_sources:    Vec::new(),
-            entities:         Vec::new(),
-            indices:          HashMap::new(),
-        }
+    pub fn new() -> AudioSourceManager {
+        AudioSourceManager(StructComponentManager::new())
     }
 
-    pub fn clone(&self, resource_manager: Rc<RefCell<ResourceManager>>) -> AudioSourceManager {
-        AudioSourceManager {
-            resource_manager: resource_manager,
-            audio_sources:    self.audio_sources.clone(),
-            entities:         self.entities.clone(),
-            indices:          self.indices.clone(),
-        }
-    }
-
-    pub fn assign(&mut self, entity: Entity, clip_name: &str) -> RefMut<AudioSource> {
-        assert!(!self.indices.contains_key(&entity));
-
-        let mut resource_manager = self.resource_manager.borrow_mut();
-        let audio_clip = resource_manager.get_audio_clip(clip_name);
-        let index = self.audio_sources.len();
-        self.audio_sources.push(RefCell::new(AudioSource {
+    pub fn assign(&mut self, entity: Entity, clip_name: &str) -> &AudioSource {
+        let audio_clip = Engine::resource_manager().get_audio_clip(clip_name);
+        self.0.assign(entity, AudioSource {
             audio_clip: audio_clip,
             offset:     0,
             is_playing: false,
             looping:    false,
-        }));
-        self.entities.push(entity);
-        self.indices.insert(entity, index);
-
-        self.audio_sources[index].borrow_mut()
+        })
     }
 
-    pub fn get(&mut self, entity: Entity) -> Ref<AudioSource> {
-        assert!(self.indices.contains_key(&entity));
-
-        let index = *self.indices.get(&entity).unwrap();
-        self.audio_sources[index].borrow()
+    pub fn get(&self, entity: Entity) -> Option<&AudioSource> {
+        self.0.get(entity)
     }
 
-    pub fn get_mut(&self, entity: Entity) -> RefMut<AudioSource> {
-        assert!(self.indices.contains_key(&entity));
+    pub fn iter(&self) -> Iter<AudioSource> {
+        self.0.iter()
+    }
 
-        let index = *self.indices.get(&entity).unwrap();
-        self.audio_sources[index].borrow_mut()
+    pub fn iter_mut(&mut self) -> IterMut<AudioSource> {
+        self.0.iter_mut()
     }
 }
+
+impl ComponentManagerBase for AudioSourceManager {}
 
 impl ComponentManager for AudioSourceManager {
+    type Component = AudioSource;
+
+    fn register(builder: &mut EngineBuilder) {
+        let audio_manager = AudioSourceManager::new();
+        builder.register_manager(audio_manager);
+    }
+
+    fn get(&self, entity: Entity) -> Option<&Self::Component> {
+        self.0.get(entity)
+    }
+
+    fn destroy(&self, entity: Entity) {
+        self.0.destroy(entity);
+    }
 }
+
+derive_Singleton!(AudioSourceManager);
 
 pub struct AudioSystem;
 
 impl System for AudioSystem {
     fn update(&mut self, scene: &Scene, delta: f32) {
-        let audio_source_manager = scene.get_manager::<AudioSourceManager>();
+        let mut audio_source_manager = unsafe { scene.get_manager_mut::<AudioSourceManager>() }; // FIXME: Very bad, use new system.
 
         // TODO: Use a better method to filter out audio sources that aren't playing.
-        for mut audio_source in audio_source_manager.audio_sources.iter()
-                                .map(|ref_cell| ref_cell.borrow_mut())
+        for mut audio_source in audio_source_manager.iter_mut()
+                                .map(|(audio_source, _)| audio_source)
                                 .filter(|audio_source| audio_source.is_playing) {
             // Create an iterator over the samples using the data from the audio clip.
             let total_samples = {

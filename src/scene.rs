@@ -1,183 +1,226 @@
 use std::collections::HashMap;
-use std::any::{Any, TypeId};
-use std::rc::Rc;
-use std::cell::{RefCell, Ref, RefMut};
-use std::ops::{Deref, DerefMut};
-use std::intrinsics;
+use std::cell::RefCell;
+use std::intrinsics::type_name;
+use std::fmt::{Debug, Error, Formatter};
 use std::mem;
-use std::raw::TraitObject;
-use std::marker::PhantomData;
+use std::ops::{Deref, DerefMut};
 
-use bs_audio::AudioSource;
-
-use ecs::{Entity, EntityManager, ComponentManager};
+use ecs::*;
+use engine::*;
 use input::Input;
-use component::{TransformManager, CameraManager, MeshManager, LightManager, AudioSourceManager, AlarmManager};
-use resource::ResourceManager;
+
+pub struct ManagerMap(HashMap<ManagerId, Box<ComponentManagerBase>>);
+
+impl ManagerMap {
+    pub fn new() -> ManagerMap {
+        ManagerMap(HashMap::default())
+    }
+}
+
+impl Clone for ManagerMap {
+    fn clone(&self) -> ManagerMap {
+        ManagerMap::new()
+    }
+}
+
+impl Debug for ManagerMap {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
+        // TODO: Actually list all of the manager Ids.
+        write!(f, "ManagerMap")
+    }
+}
+
+impl Deref for ManagerMap {
+    type Target = HashMap<ManagerId, Box<ComponentManagerBase>>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for ManagerMap {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
 
 /// Contains all the data that defines the current state of the world.
 ///
 /// This is passed into systems in System::update(). It can be used access component
 /// managers and input.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Scene {
     entity_manager: RefCell<EntityManager>,
-    component_managers: HashMap<TypeId, RefCell<Box<Any>>>,
-    /// This value is only needed in debug builds.
-    manager_id_by_name: HashMap<String, TypeId>,
+    managers: ManagerMap,
     pub input: Input,
-    pub audio_source: AudioSource,
+    pub audio_source: ::bs_audio::AudioSource, // FIXME: This is a hot mess, the scene should not have to hold on to the audio source.
 }
 
 impl Scene {
-    pub fn new(resource_manager: &Rc<RefCell<ResourceManager>>, audio_source: AudioSource) -> Scene {
-        let mut scene = Scene {
+    pub fn new(audio_source: ::bs_audio::AudioSource, managers: ManagerMap) -> Scene {
+        Scene {
             entity_manager: RefCell::new(EntityManager::new()),
-            component_managers: HashMap::new(),
-            manager_id_by_name: HashMap::new(),
+            managers: managers,
             input: Input::new(),
             audio_source: audio_source,
-        };
-
-        scene.register_manager(TransformManager::new());
-        scene.register_manager(CameraManager::new());
-        scene.register_manager(LightManager::new());
-        scene.register_manager(MeshManager::new(resource_manager.clone()));
-        scene.register_manager(AudioSourceManager::new(resource_manager.clone()));
-        scene.register_manager(AlarmManager::new());
-
-        scene
-    }
-
-    pub fn clone(&self, resource_manager: &Rc<RefCell<ResourceManager>>) -> Scene {
-        let mut scene = Scene {
-            entity_manager: RefCell::new(self.entity_manager.borrow().clone()),
-            component_managers: HashMap::new(),
-            manager_id_by_name: HashMap::new(),
-            input: self.input.clone(),
-            audio_source: self.audio_source.clone(),
-        };
-
-        // Reload internal component managers.
-        scene.register_manager(self.get_manager_by_name::<TransformManager>().clone());
-        scene.register_manager(self.get_manager_by_name::<CameraManager>().clone());
-        scene.register_manager(self.get_manager_by_name::<LightManager>().clone());
-        scene.register_manager(self.get_manager_by_name::<MeshManager>().clone(resource_manager.clone()));
-        scene.register_manager(self.get_manager_by_name::<AudioSourceManager>().clone(resource_manager.clone()));
-        scene.register_manager(self.get_manager_by_name::<AlarmManager>().clone());
-
-        scene
-    }
-
-    pub fn register_manager<T: Any + ComponentManager>(&mut self, manager: T) {
-        let manager_id = TypeId::of::<T>();
-        assert!(!self.component_managers.contains_key(&manager_id),
-                "Manager {} with ID {:?} already registered", type_name::<T>(), manager_id);
-
-        self.component_managers.insert(manager_id, RefCell::new(Box::new(manager)));
-
-        // TODO: Only do this when hotloading support is enabled.
-        self.manager_id_by_name.insert(type_name::<T>().into(), manager_id);
-    }
-
-    pub fn get_manager<T: Any + ComponentManager>(&self) -> ManagerRef<T> {
-        let manager_id = TypeId::of::<T>();
-        let manager = self.component_managers
-            .get(&manager_id)
-            .expect(&format!("Tried to retrieve manager {} with ID {:?} but none exists", type_name::<T>(), manager_id));
-
-        ManagerRef {
-            manager: manager.borrow(),
-            _phantom: PhantomData,
         }
     }
 
-    pub fn get_manager_mut<T: Any + ComponentManager>(&self) -> ManagerRefMut<T> {
-        let manager_id = TypeId::of::<T>();
-        let manager = self.component_managers
-            .get(&manager_id)
-            .expect(&format!("Tried to retrieve manager {} with ID {:?} but none exists", type_name::<T>(), manager_id));
-
-        ManagerRefMut {
-            manager: manager.borrow_mut(),
-            _phantom: PhantomData,
-        }
+    pub fn get<C: Component>(&self, entity: Entity) -> Option<&C> {
+        self.manager_for::<C>().get(entity)
     }
 
-    pub fn remove_manager<T: Any + ComponentManager>(&mut self) -> Box<T> {
-        let manager_id = TypeId::of::<T>();
-        let manager = self.component_managers
-            .remove(&manager_id)
-            .expect(&format!("Tried to remove manager {} with ID {:?} but none exists", type_name::<T>(), manager_id));
+    pub fn get_manager<T: ComponentManager>(&self) -> &T {
+        let manager_id = ManagerId::of::<T>();
+        let trait_object = match self.managers.get(&manager_id) {
+            Some(trait_object) => &**trait_object,
+            None => panic!(
+                "Tried to retrieve manager {} with ID {:?} but none exists",
+                unsafe { type_name::<T>() },
+                manager_id),
+        };
 
-        // TODO: Only do this when hotloading is enabled.
-        self.manager_id_by_name.remove(type_name::<T>().into());
+        unsafe { downcast_ref(trait_object) }
+    }
 
-        manager.into_inner().downcast().unwrap()
+    pub unsafe fn get_manager_mut<T: ComponentManager>(&self) -> &mut T {
+        let manager_id = ManagerId::of::<T>();
+        let trait_object = match self.managers.get(&manager_id) {
+            Some(trait_object) => &**trait_object,
+            None => panic!(
+                "Tried to retrieve manager {} with ID {:?} but none exists",
+                type_name::<T>(),
+                manager_id),
+        };
+
+        // Use same method as `UnsafeCell` to convert a immutable reference to a mutable pointer.
+        downcast_mut(trait_object)
+    }
+
+    pub fn manager_for<C: Component>(&self) -> &C::Manager {
+        let manager_id = ManagerId::of::<C::Manager>();
+        let manager = match self.managers.get(&manager_id) {
+            Some(manager) => &**manager, // &Box<()> -> &()
+            None => panic!("Tried to retrieve manager {} with ID {:?} but none exists",
+                           unsafe { type_name::<C>() },
+                           manager_id),
+        };
+
+        unsafe { downcast_ref(manager) }
+    }
+
+    pub fn has_manager_for<C: Component>(&self) -> bool {
+        let manager_id = ManagerId::of::<C::Manager>();
+
+        self.managers.contains_key(&manager_id)
+    }
+
+    pub fn has_manager<T: ComponentManager>(&self) -> bool {
+        let manager_id = ManagerId::of::<T>();
+        self.managers.contains_key(&manager_id)
+    }
+
+    pub fn get_component<T: Component>(&self, entity: Entity) -> Option<&T> {
+        let manager = self.manager_for::<T>();
+        manager.get(entity)
+    }
+
+    pub fn reload_component<T: Component>(&mut self, _old_scene: &Scene) {
+        panic!("Hotloading is currently broken, please come back later");
+    }
+
+    // /// Reload a component manager for hotloading purposes.
+    // ///
+    // /// Clones the component manager from the old scene into the new scene.
+    // ///
+    // /// ## Panics
+    // ///
+    // /// Panics if the component manager isn't present in the old scene.
+    // pub fn reload_manager<T: ComponentManager + Clone>(&mut self, old_scene: &Scene) {
+    //     self.register_manager(old_scene.get_manager::<T>().clone());
+    // }
+
+    // /// Reload a component manager or use a default if one was not previously registered.
+    // ///
+    // /// Checks the old scene if it has a component manager of the specified type registered. If so
+    // /// this method behaves identically to `reload_manager()`, otherwise it registers the default
+    // /// manager with the scene.
+    // pub fn reload_manager_or_default<T: ComponentManager + Clone>(&mut self, old_scene: &Scene, default: T) {
+    //     if old_scene.has_manager::<T>() {
+    //         self.reload_manager::<T>(old_scene);
+    //     } else {
+    //         self.register_manager(default);
+    //     }
+    // }
+
+    pub fn is_alive(&self, entity: Entity) -> bool {
+        self.entity_manager.borrow().is_alive(entity)
     }
 
     pub fn create_entity(&self) -> Entity {
         self.entity_manager.borrow_mut().create()
     }
 
-    /// TODO: We don't need this if hotloading isn't enabled.
-    /// TODO: Allow this to handle reloading managers that are new by returning an Option<&T>.
-    pub fn get_manager_by_name<T: Any + ComponentManager>(&self) -> &T {
-        let manager_id = self.manager_id_by_name
-            .get(type_name::<T>())
-            .expect(&format!("Tried to remove manager {} by name but none exists", type_name::<T>()));
+    /// Instantiates an instance of the model in the scene, returning the root entity.
+    pub fn instantiate_model(&self, resource: &str) -> Entity {
+        Engine::resource_manager().instantiate_model(resource, self).unwrap()
+    }
 
-        let manager = self.component_managers
-            .get(&manager_id)
-            .expect(&format!("Tried to remove manager {} by name with ID {:?} but none exists", type_name::<T>(), manager_id));
+    pub fn destroy_entity(&self, entity: Entity) {
+        if self.is_alive(entity) {
+            // FIXME: Notify the component managers that an entity was asploded.
 
-        // Perform an unchecked downcast. We know this works because we stored the manager
-        // by its type, but we can't use `Any::downcast_ref()` because the type id will be
-        // different across different DLLs.
-        unsafe {
-            // Get the raw representation of the trait object.
-            let to: TraitObject = mem::transmute(manager.borrow().deref().deref());
+            // for manager in self.managers.values() {
+            //     // In this context we don't care what type of component the manager *actually* is
+            //     // for, so we transmute it to `ComponentManager<Component=()>` so that we can
+            //     // tell it to destroy the entity regardless of it's actual type. This is safe to do
+            //     // because the signature of `ComponentManager::destroy()` doesn't change based on
+            //     // the component so we're basically just calling a function pointer.
+            //     manager.destroy(entity);
+            // }
+            //
+            // let transform_manager = self.get_manager::<TransformManager>();
+            // transform_manager.walk_children(entity, &mut |entity| {
+            //     for (_, manager) in self.managers.iter() {
+            //         // Same story as above.
+            //         manager.destroy(entity);
+            //     }
+            // });
 
-            // Extract the data pointer.
-            mem::transmute(to.data)
+            self.entity_manager.borrow_mut().destroy(entity);
+        }
+    }
+
+    // TODO: How do we make this private? I think scene has to be a submodule under engine. We might
+    // move `Engine` into the root gunship module which would allow it to access private members
+    // everywhere which is helpful.
+    pub fn update_managers(&mut self) {
+        for (_, manager) in self.managers.iter_mut() {
+            manager.update();
         }
     }
 }
 
-fn type_name<T>() -> &'static str {
-    unsafe {
-        intrinsics::type_name::<T>()
-    }
+derive_Singleton!(Scene);
+
+/// Performs an unchecked downcast from `&()` trait object to the concrete type.
+unsafe fn downcast_ref<'a, T>(manager: &'a ComponentManagerBase) -> &'a T {
+    use std::raw::TraitObject;
+
+    // Get the underlying trait object representation.
+    let trait_object: TraitObject = mem::transmute(manager);
+
+    // Cast the data pointer to the correct type and dereference it.
+    &*(trait_object.data as *const T)
 }
 
-pub struct ManagerRef<'a, T: Any + ComponentManager> {
-    manager: Ref<'a, Box<Any>>,
-    _phantom: PhantomData<T>,
-}
+/// Performs an unchecked downcast from `&()` trait object to the concrete type.
+unsafe fn downcast_mut<'a, T>(manager: &'a ComponentManagerBase) -> &'a mut T {
+    use std::raw::TraitObject;
 
-impl<'a, T: Any + ComponentManager> Deref for ManagerRef<'a, T> {
-    type Target = T;
+    // Get the underlying trait object representation.
+    let trait_object: TraitObject = mem::transmute(manager);
 
-    fn deref<'b>(&'b self) -> &'b T {
-        self.manager.downcast_ref().unwrap()
-    }
-}
-
-pub struct ManagerRefMut<'a, T: Any + ComponentManager> {
-    manager: RefMut<'a, Box<Any>>,
-    _phantom: PhantomData<T>,
-}
-
-impl<'a, T: Any + ComponentManager> Deref for ManagerRefMut<'a, T> {
-    type Target = T;
-
-    fn deref<'b>(&'b self) -> &'b T {
-        self.manager.downcast_ref().unwrap()
-    }
-}
-
-impl<'a, T: Any + ComponentManager> DerefMut for ManagerRefMut<'a, T> {
-    fn deref_mut<'b>(&'b mut self) -> &'b mut T {
-        self.manager.downcast_mut().unwrap()
-    }
+    // Cast the data pointer to the correct type and dereference it.
+    &mut *(trait_object.data as *mut T)
 }
