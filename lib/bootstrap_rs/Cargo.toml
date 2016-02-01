@@ -2,6 +2,7 @@
 name = "bootstrap_rs"
 version = "0.0.0"
 authors = ["David LeGare <excaliburhissheath@gmail.com>"]
+build = "build.rs"
 
 [dependencies]
 winapi = "*"
@@ -19,4 +20,4 @@ core-foundation = "*"
 
 # [dependencies.x11]
 # version = "*"
-# features = ["glx", "xlib"]s
+# features = ["glx", "xlib"]
