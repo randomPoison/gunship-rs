@@ -5,6 +5,7 @@ use geometry::mesh::{Mesh, VertexAttribute};
 use gl;
 use gl::*;
 use light::Light;
+use material::*;
 use math::*;
 use std::ptr;
 use std::mem;
@@ -44,7 +45,7 @@ impl GLRender {
         }
     }
 
-    pub fn gen_mesh(&self, mesh: &Mesh) -> GLMeshData {
+    pub fn gen_mesh(&self, mesh: &Mesh) -> GpuMesh {
         let gl = &self.gl;
 
         // Generate array buffer.
@@ -73,7 +74,7 @@ impl GLRender {
         gl.bind_buffer(BufferTarget::ArrayBuffer, VertexBufferObject::null());
         gl.bind_buffer(BufferTarget::ElementArrayBuffer, VertexBufferObject::null());
 
-        GLMeshData {
+        GpuMesh {
             vertex_array:       vertex_array,
             vertex_buffer:      vertex_buffer,
             index_buffer:       index_buffer,
@@ -105,7 +106,7 @@ impl GLRender {
 
     /// SUPER BAD LACK OF SAFETY, should be using RAII and some proper resource management, but
     /// that will have to wait until we get a real rendering system.
-    pub fn delete_mesh(&self, mesh: GLMeshData) {
+    pub fn delete_mesh(&self, mesh: GpuMesh) {
         self.gl.delete_buffer(mesh.vertex_buffer);
         self.gl.delete_buffer(mesh.index_buffer);
         self.gl.delete_vertex_array(mesh.vertex_array);
@@ -113,8 +114,8 @@ impl GLRender {
 
     pub fn draw_mesh(
         &self,
-        mesh: &GLMeshData,
-        shader: &ShaderProgram,
+        mesh: &GpuMesh,
+        material: &Material,
         model_transform: Matrix4,
         normal_transform: Matrix4,
         camera: &Camera,
@@ -139,6 +140,7 @@ impl GLRender {
         gl.bind_buffer(BufferTarget::ElementArrayBuffer, mesh.index_buffer);
 
         // Set the shader to use.
+        let shader = material.shader();
         shader.set_active(gl);
 
         // Specify the layout of the vertex data.
@@ -217,6 +219,18 @@ impl GLRender {
 
         if let Some(camera_position_location) = shader.camera_position {
             gl.uniform_4f(camera_position_location, camera.position.as_array());
+        }
+
+        // Apply material attributes.
+        for (name, property) in material.properties() {
+            match *property {
+                MaterialProperty::Color(color) => {
+
+                },
+                MaterialProperty::Texture(ref texture) => {
+
+                },
+            }
         }
 
         if let Some(light_position_location) = shader.light_position {
@@ -313,9 +327,9 @@ impl GLRender {
                 view_projection.raw_data());
         }
 
-        if let Some(surface_color_location) = shader.surface_color {
-            gl.uniform_4f(surface_color_location, Color::new(1.0, 1.0, 1.0, 1.0).as_array());
-        }
+        // if let Some(surface_color_location) = shader.surface_color {
+        //     gl.uniform_4f(surface_color_location, Color::new(1.0, 1.0, 1.0, 1.0).as_array());
+        // }
 
         gl.draw_arrays(DrawMode::Lines, 0, 6);
 
@@ -326,7 +340,7 @@ impl GLRender {
         &self,
         camera: &Camera,
         shader: &ShaderProgram,
-        mesh: &GLMeshData,
+        mesh: &GpuMesh,
         model_transform: Matrix4,
         color: Color,
     ) {
@@ -391,9 +405,9 @@ impl GLRender {
                 model_view_projection.raw_data());
         }
 
-        if let Some(surface_color_location) = shader.surface_color {
-            gl.uniform_4f(surface_color_location, color.as_array());
-        }
+        // if let Some(surface_color_location) = shader.surface_color {
+        //     gl.uniform_4f(surface_color_location, color.as_array());
+        // }
 
         gl.draw_elements(
             DrawMode::Lines,
@@ -446,7 +460,7 @@ impl GLRender {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct GLMeshData {
+pub struct GpuMesh {
     vertex_array: VertexArrayObject,
     vertex_buffer: VertexBufferObject,
     index_buffer: VertexBufferObject,
@@ -477,7 +491,6 @@ pub struct ShaderProgram {
     global_ambient:        Option<UniformLocation>,
 
     camera_position:       Option<UniformLocation>,
-    surface_color:         Option<UniformLocation>,
 }
 
 impl ShaderProgram {
@@ -499,7 +512,6 @@ impl ShaderProgram {
             camera_position:       gl.get_uniform(program_object, b"cameraPosition\0"),
             light_position:        gl.get_uniform(program_object, b"lightPosition\0"),
             light_strength:        gl.get_uniform(program_object, b"lightStrength\0"),
-            surface_color:         gl.get_uniform(program_object, b"surfaceColor\0"),
             global_ambient:        gl.get_uniform(program_object, b"globalAmbient\0"),
         }
     }
@@ -507,4 +519,12 @@ impl ShaderProgram {
     pub fn set_active(&self, gl: &gl::Context) {
         gl.use_program(self.program_object);
     }
+}
+
+/// Represents texture data that has been sent to the GPU.
+#[derive(Debug, Clone)]
+pub struct GpuTexture(TextureObject);
+
+struct ShaderProperty {
+    attrib: AttributeLocation,
 }
