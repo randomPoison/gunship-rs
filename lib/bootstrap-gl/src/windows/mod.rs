@@ -1,18 +1,20 @@
 extern crate winapi;
 extern crate opengl32;
 extern crate gdi32;
+extern crate user32;
 
 use std::mem;
 use std::ffi::CString;
 
 use self::winapi::*;
 
-use bootstrap::window::Window;
-
 pub type Context = HGLRC;
 
-pub fn init(window: &Window) {
-    let device_context = window.dc;
+pub fn init() {
+    let device_context = unsafe {
+        let hwnd = user32::GetActiveWindow();
+        user32::GetDC(hwnd)
+    };
 
     let pfd = PIXELFORMATDESCRIPTOR {
         nSize: mem::size_of::<PIXELFORMATDESCRIPTOR>() as WORD,
@@ -51,8 +53,11 @@ pub fn init(window: &Window) {
     };
 }
 
-pub fn create_context(window: &Window) -> Context {
-    let device_context = window.dc;
+pub fn create_context() -> Context {
+    let device_context = unsafe {
+        let hwnd = user32::GetActiveWindow();
+        user32::GetDC(hwnd)
+    };
 
     // create context and make it current
     let context = unsafe {
@@ -70,14 +75,14 @@ pub fn destroy_context(context: Context) {
     }
 }
 
-pub fn proc_loader(proc_name: &str) -> Option<extern "C" fn()> {
+pub fn load_proc(proc_name: &str) -> Option<extern "C" fn()> {
     let string = CString::new(proc_name);
     Some(unsafe {
         mem::transmute(opengl32::wglGetProcAddress(string.unwrap().as_ptr()))
     })
 }
 
-pub fn swap_buffers(_window: &Window) {
+pub fn swap_buffers() {
     unsafe {
         gdi32::SwapBuffers(opengl32::wglGetCurrentDC()); // TODO maybe pass in the DC?
     }
