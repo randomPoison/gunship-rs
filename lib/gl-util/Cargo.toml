@@ -1,0 +1,11 @@
+[package]
+
+name = "gl-util"
+version = "0.0.1"
+authors = ["David LeGare <excaliburhissheath@gmail.com>"]
+
+[dependencies]
+bootstrap-gl = { version = "0.0", path = "../bootstrap-gl" }
+
+[dev_dependencies]
+bootstrap_rs = { version = "0.0", path = "../bootstrap_rs" }
