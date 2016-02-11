@@ -42,6 +42,16 @@ pub type f16 = u16;
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AttributeLocation(u32);
+
+impl AttributeLocation {
+    pub fn from_index(index: u32) -> AttributeLocation {
+        AttributeLocation(index)
+    }
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BufferName(u32);
 
 impl BufferName {
@@ -83,8 +93,55 @@ pub enum BufferUsage {
     DynamicCopy = 0x88EA,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct ObjectName(u32);
+/// TODO: Custom derive for Debug to show which flags are set.
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ClearBufferMask {
+    Depth = 0x00000100,
+    Stencil = 0x00000400,
+    Color = 0x00004000,
+}
+
+impl BitOr for ClearBufferMask {
+    type Output = ClearBufferMask;
+
+    fn bitor(self, rhs: ClearBufferMask) -> ClearBufferMask {
+        unsafe { mem::transmute(self as u32 | rhs as u32) }
+    }
+}
+
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DrawMode {
+    Points = 0x0000,
+    Lines = 0x0001,
+    LineLoop = 0x0002,
+    LineStrip = 0x0003,
+    Triangles = 0x0004,
+    TriangleStrip = 0x0005,
+    TriangleFan = 0x0006,
+    Quads = 0x0007,
+    // GL_QUAD_STRIP
+    // GL_POLYGON
+}
+
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GlType {
+    Byte = 0x1400,
+    UnsignedByte = 0x1401,
+    Short = 0x1402,
+    UnsignedShort = 0x1403,
+    Float = 0x1406,
+    Fixed = 0x140C,
+    Int = 0x1404,
+    UnsignedInt = 0x1405,
+    HalfFloat = 0x140B,
+    Double = 0x140A,
+    // GL_INT_2_10_10_10_REV
+    // GL_UNSIGNED_INT_2_10_10_10_REV
+    // GL_UNSIGNED_INT_10F_11F_11F_REV
+}
 
 /// TODO: Use NonZero here so that Option<VertexArrayName>::None can be used instead of 0.
 #[repr(C)]
@@ -96,6 +153,8 @@ impl VertexArrayName {
         VertexArrayName(0)
     }
 }
+
+// =============== OLD UNSORTED TYPES ========================== //
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -298,29 +357,7 @@ pub struct ProgramObject(u32);
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct AttributeLocation(u32);
-
-#[repr(C)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct UniformLocation(u32);
-
-#[repr(u32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum GLType {
-    Byte          = 0x1400,
-    UnsignedByte  = 0x1401,
-    Short         = 0x1402,
-    UnsignedShort = 0x1403,
-    Float         = 0x1406,
-    Fixed         = 0x140C,
-    Int           = 0x1404,
-    UnsignedInt   = 0x1405,
-    HalfFloat     = 0x140B,
-    Double        = 0x140A,
-    // GL_INT_2_10_10_10_REV
-    // GL_UNSIGNED_INT_2_10_10_10_REV
-    // GL_UNSIGNED_INT_10F_11F_11F_REV
-}
 
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -352,38 +389,6 @@ pub enum ProgramParam {
     ActiveUniformMaxLength   = 0x8B87,
     ActiveAttributes         = 0x8B89,
     ActiveAttributeMaxLength = 0x8B8A,
-}
-
-/// TODO: Custom derive for Debug to show which flags are set.
-#[repr(u32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ClearBufferMask {
-    Depth   = 0x00000100,
-    Stencil = 0x00000400,
-    Color   = 0x00004000,
-}
-
-impl BitOr for ClearBufferMask {
-    type Output = ClearBufferMask;
-
-    fn bitor(self, rhs: ClearBufferMask) -> ClearBufferMask {
-        unsafe { mem::transmute(self as u32 | rhs as u32) }
-    }
-}
-
-#[repr(u32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DrawMode {
-    Points        = 0x0000,
-    Lines         = 0x0001,
-    LineLoop      = 0x0002,
-    LineStrip     = 0x0003,
-    Triangles     = 0x0004,
-    TriangleStrip = 0x0005,
-    TriangleFan   = 0x0006,
-    Quads         = 0x0007,
-    // GL_QUAD_STRIP
-    // GL_POLYGON
 }
 
 #[repr(u32)]

@@ -165,6 +165,27 @@ pub fn destroy_context(context: platform::Context) {
 gl_proc!(glBindBuffer:
     fn bind_buffer(target: BufferTarget, buffer: BufferName));
 
+/// Binds a named vertex array object.
+///
+/// [Wiki page](https://www.opengl.org/wiki/GLAPI/glBindVertexArray)
+///
+/// Core since version 3.0
+///
+/// Binds the vertex array object with `name`. `name` is the name of a vertex array object
+/// previously returned from a call to `gen_vertex_arrays`, or zero to break the existing vertex
+/// array object binding.
+///
+/// If no vertex array object with name array​ exists, one is created when array​ is first bound.
+/// If the bind is successful no change is made to the state of the vertex array object, and any
+/// previous vertex array object binding is broken.
+///
+/// # Errors
+///
+/// - `GL_INVALID_OPERATION` is generated if array​ is not zero or the name of a vertex array
+///   object previously returned from a call to `gen_vertex_arrays`.
+gl_proc!(glBindVertexArray:
+    fn bind_vertex_array(name: VertexArrayName));
+
 /// Creates and initializes a buffer object's data store.
 ///
 /// [Wiki page](https://www.opengl.org/wiki/GLAPI/glBufferData)
@@ -220,6 +241,39 @@ gl_proc!(glBindBuffer:
 gl_proc!(glBufferData:
     fn buffer_data(target: BufferTarget, size: isize, data: *const (), usage: BufferUsage));
 
+/// Clears buffers to preset values.
+///
+/// [Wiki page](https://www.opengl.org/wiki/GLAPI/glClear)
+///
+/// Core since version 1.0
+///
+/// Sets the bitplane area of the window to values previously selected by `clear_color`,
+/// `clear_depth`, and `clear_stencil`. Multiple color buffers can be cleared simultaneously by
+/// selecting more than one buffer at a time using `draw_buffers`.
+///
+/// The pixel ownership test, the scissor test, dithering, and the buffer writemasks affect the
+/// operation of `clear`. The scissor box bounds the cleared region. Alpha function, blend
+/// function, logical operation, stenciling, texture mapping, and depth-buffering are ignored by
+/// `clear`.
+///
+/// `clear` takes a single argument that is the bitwise OR of several values indicating which
+/// buffer is to be cleared.
+///
+/// The values are as follows:
+///
+/// - `ClearBufferMask::Color` - Indicates the buffers currently enabled for color writing.
+/// - `ClearBufferMask::Depth` - Indicates the depth buffer.
+/// - `ClearBufferMask::Stencil` - Indicates the stencil buffer.
+///
+/// The value to which each buffer is cleared depends on the setting of the clear value for that
+/// buffer.
+///
+/// # Notes
+///
+/// - If a buffer is not present, then a `clear` call directed at that buffer has no effect.
+gl_proc!(glClear:
+    fn clear(mask: ClearBufferMask));
+
 gl_proc!(glClearColor:
     fn clear_color(red: f32, green: f32, blue: f32, alpha: f32));
 
@@ -270,8 +324,82 @@ gl_proc!(glDeleteVertexArrays:
 gl_proc!(glDisable:
     fn disable(capability: ServerCapability));
 
+/// Disables a generic vertex attribute array.
+///
+/// [Wiki page](https://www.opengl.org/wiki/GLAPI/glEnableVertexAttribArray)
+///
+/// Core since version 2.0
+///
+/// Disables the generic vertex attribute array specified by `attrib`. By default, all client-side
+/// capabilities are disabled, including all generic vertex attribute arrays. If enabled the
+/// values in the generic vertex attribute array will be accessed and used for rendering when
+/// calls are made to vertex array commands such as `draw_arrays`, `draw_elements`,
+/// `draw_range_elements`, `multi_draw_elements`, or `multi_draw_arrays`.
+///
+/// # Errors
+///
+/// - `GL_INVALID_VALUE` is generated if the index represented by `attrib` is greater than or
+///   equal to `GL_MAX_VERTEX_ATTRIBS`.
+/// - `GL_INVALID_OPERATION` is generated if no vertex array object is bound.
+gl_proc!(glDisableVertexAttribArray:
+    fn disable_vertex_attrib_array(attrib: AttributeLocation));
+
+/// Renders primitives from array data.
+///
+/// [Wiki page](https://www.opengl.org/wiki/GLAPI/glDrawArrays)
+///
+/// Core since version 1.1
+///
+/// Specifies multiple geometric primitives with very few subroutine calls. Instead of calling a
+/// GL procedure to pass each individual vertex, normal, texture coordinate, edge flag, or color,
+/// you can prespecify separate arrays of vertices, normals, and colors and use them to construct
+/// a sequence of primitives with a single call to `draw_arrays`.
+///
+/// When `draw_arrays` is called it uses `count​` sequential elements from each enabled array to
+/// construct a sequence of geometric primitives beginning with element `first​`. `mode​` specifies
+/// what kind of primitives are constructed and how the array elements construct those primitives.
+///
+/// Vertex attributes that are modified by `draw_arrays` have an unspecified value after
+/// `draw_arrays` returns. Attributes that aren't modified remain well defined.
+///
+/// # Notes
+///
+/// - `GL_LINE_STRIP_ADJACENCY`, `GL_LINES_ADJACENCY`, `GL_TRIANGLE_STRIP_ADJACENCY`, and
+///   `GL_TRIANGLES_ADJACENCY` are available only if the GL version is 3.2 or greater.
+///
+/// # Errors
+///
+/// - `GL_INVALID_VALUE` is generated if `count​` is negative.
+/// - `GL_INVALID_OPERATION` is generated if a non-zero buffer object name is bound to an enabled
+///    array and the buffer object's data store is currently mapped.
+/// - `GL_INVALID_OPERATION` is generated if a geometry shader is active and mode​ is incompatible
+///    with the input primitive type of the geometry shader in the currently installed program
+///    object.
+gl_proc!(glDrawArrays:
+    fn draw_arrays(mode: DrawMode, first: i32, count: i32));
+
 gl_proc!(glEnable:
     fn enable(capability: ServerCapability));
+
+/// Enables a generic vertex attribute array.
+///
+/// [Wiki page](https://www.opengl.org/wiki/GLAPI/glEnableVertexAttribArray)
+///
+/// Core since version 2.0
+///
+/// Enables the generic vertex attribute array specified by `attrib`. By default, all client-side
+/// capabilities are disabled, including all generic vertex attribute arrays. If enabled the
+/// values in the generic vertex attribute array will be accessed and used for rendering when
+/// calls are made to vertex array commands such as `draw_arrays`, `draw_elements`,
+/// `draw_range_elements`, `multi_draw_elements`, or `multi_draw_arrays`.
+///
+/// # Errors
+///
+/// - `GL_INVALID_VALUE` is generated if the index represented by `attrib` is greater than or
+///   equal to `GL_MAX_VERTEX_ATTRIBS`.
+/// - `GL_INVALID_OPERATION` is generated if no vertex array object is bound.
+gl_proc!(glEnableVertexAttribArray:
+    fn enable_vertex_attrib_array(attrib: AttributeLocation));
 
 /// Generates buffer object names.
 ///
@@ -317,6 +445,90 @@ gl_proc!(glGenBuffers:
 gl_proc!(glGenVertexArrays:
     fn gen_vertex_arrays(num_arrays: i32, arrays: *mut VertexArrayName));
 
+/// Defines an array of generic vertex attribute data.
+///
+/// [Wiki page](https://www.opengl.org/wiki/GLAPI/glVertexAttribPointer)
+///
+/// Core since version 2.0
+///
+/// Specifies the location and data format of the array of generic vertex attributes to use when
+/// rendering.
+///
+/// If normalized​ is set to `true` it indicates that values stored in an integer format are to be
+/// mapped to the range [-1,1] (for signed values) or [0,1] (for unsigned values) when they are
+/// accessed and converted to floating point. Otherwise, values will be converted to floats
+/// directly without normalization.
+///
+/// `vertex_attrib_pointer` specifies state for a generic vertex attribute array associated with a
+/// shader attribute variable declared with 64-bit double precision components. `gl_type`​ must be
+/// `Double`.
+///
+/// If offset is not 0 a non-zero named buffer object must be bound to the `BufferTarget::Array`
+/// target (see `bind_buffer`), otherwise an error is generated. `offset` is treated as a byte
+/// offset into the buffer object's data store. The buffer object binding
+/// (`GL_ARRAY_BUFFER_BINDING`) is saved as generic vertex attribute array state
+/// (`GL_VERTEX_ATTRIB_ARRAY_BUFFER_BINDING`) for `attrib`​.
+///
+/// When a generic vertex attribute array is specified `size​`, `gl_type​`, `normalized​`, `stride​`,
+/// and `offset` are saved as vertex array state, in addition to the current vertex array buffer
+/// object binding.
+///
+/// To enable and disable a generic vertex attribute array, call `enable_vertex_attrib_array` and
+/// `disable_vertex_attrib_array`. If enabled the generic vertex attribute array is used when
+/// `draw_arrays`, `multi_draw_arrays`, `draw_elements`, `multi_draw_elements`, or
+/// `draw_range_elements` is called.
+///
+/// # Parameters
+///
+/// - `attrib` - Specifies the generic vertex attribute to be modified.
+/// - `size` - Specifies the number of components per generic vertex attribute. Must be 1, 2, 3, 4.
+///   Additionally, the symbolic constant `GL_BGRA` is accepted by `vertex_attrib_pointer`. The
+///   initial value is 4.
+/// - `type` - Specifies the data type of each component in the array. The different functions take
+///   different values. The initial value is `Float`.
+/// - `normalized` - For `vertex_attrib_pointer` specifies whether fixed-point data values should
+///   be normalized (`true`) or converted directly as fixed-point values (`false`) when they are
+///   accessed.
+/// - `stride` - Specifies the byte offset between consecutive generic vertex attributes. If
+///   stride​ is 0 the generic vertex attributes are understood to be tightly packed in the array.
+///   The initial value is 0.
+/// - `offset` - Specifies the offset of the first component of the first generic vertex
+///   attribute in the array in the data store of the buffer currently bound to the `ArrayBuffer`
+///   target. The initial value is 0.
+///
+/// # Notes
+///
+/// - Each generic vertex attribute array is initially disabled and isn't accessed when
+///   `draw_arrays`, `multi_draw_arrays`, `draw_elements`, `multi_draw_elements`, or
+///   `draw_range_elements`​ is called.
+/// - `GL_UNSIGNED_INT_10F_11F_11F_REV` is accepted for `gl_type​` only if the GL version is 4.4 or
+///   higher.
+///
+/// # Errors
+///
+/// - `GL_INVALID_VALUE` is generated if index​ is greater than or equal to `GL_MAX_VERTEX_ATTRIBS`.
+/// - `GL_INVALID_VALUE` is generated if size​ is not 1, 2, 3, 4, or `GL_BGRA`.
+/// - `GL_INVALID_ENUM` is generated if type​ is not an accepted value.
+/// - `GL_INVALID_VALUE` is generated if stride​ is negative.
+/// - `GL_INVALID_OPERATION` is generated if size​ is `GL_BGRA` and type​ is not `UByte`,
+///   `GL_INT_2_10_10_10_REV`, or `GL_UNSIGNED_INT_2_10_10_10_REV`.
+/// - `GL_INVALID_OPERATION` is generated if type​ is `GL_INT_2_10_10_10_REV` or
+///   `GL_UNSIGNED_INT_2_10_10_10_REV` and size​ is not 4 or `GL_BGRA`.
+/// - `GL_INVALID_OPERATION` is generated if type​ is `GL_UNSIGNED_INT_10F_11F_11F_REV` and size​ is
+///   not 3.
+/// - `GL_INVALID_OPERATION` is generated by if size​ is `GL_BGRA` and noramlized​ is `false`.
+/// - `GL_INVALID_OPERATION` is generated if zero is bound to the `BufferTarget::Array` buffer
+///   object binding point and the offset argument is not 0.
+/// - `GL_INVALID_OPERATION` is generated if no vertex array object is bound.
+gl_proc!(glVertexAttribPointer:
+    fn vertex_attrib_pointer(
+        attrib: AttributeLocation,
+        size: i32,
+        gl_type: GlType,
+        normalized: bool,
+        stride: i32,
+        offset: usize));
+
 /*
 gen_proc_loader! {
     glGetError:
@@ -327,12 +539,6 @@ gen_proc_loader! {
         fn get_string(name: StringName) -> *const i8,
     glViewport:
         fn viewport(x: i32, y: i32, width: i32, height: i32),
-    glBindVertexArray:
-        fn bind_vertex_array(vao: VertexArrayName),
-    glBufferData:
-        fn buffer_data(target: BufferTarget, size: isize, data: *const (), usage: BufferUsage),
-    glClear:
-        fn clear(mask: ClearBufferMask),
     glCreateShader:
         fn create_shader(shader_type: ShaderType) -> ShaderObject,
     glShaderSource:
@@ -372,16 +578,6 @@ gen_proc_loader! {
         fn use_program(program: ProgramObject),
     glGetAttribLocation:
         fn get_attrib_location(program: ProgramObject, attrib_name: *const i8) -> i32,
-    glVertexAttribPointer:
-        fn vertex_attrib_pointer(
-            attrib: AttributeLocation,
-            size: i32,
-            gl_type: GLType,
-            normalized: bool,
-            stride: i32,
-            offset: usize),
-    glEnableVertexAttribArray:
-        fn enable_vertex_attrib_array(attrib: AttributeLocation),
     glGetUniformLocation:
         fn get_uniform_location(program: ProgramObject, uniform_name: *const i8) -> i32,
     glUniform1f:
@@ -396,8 +592,6 @@ gen_proc_loader! {
         fn uniform_4fv(uniform: UniformLocation, count: i32, data: *const f32),
     glDrawElements:
         fn draw_elements(mode: DrawMode, count: i32, index_type: IndexType, offset: usize),
-    glDrawArrays:
-        fn draw_arrays(mode: DrawMode, first: i32, count: i32),
     glDepthFunc:
         fn depth_func(func: Comparison),
     glBlendFunc:
