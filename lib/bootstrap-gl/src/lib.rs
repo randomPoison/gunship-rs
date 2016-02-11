@@ -33,27 +33,17 @@ pub use self::types::*;
 macro_rules! gl_proc {
     ( $proc_name:ident : fn $fn_name:ident( $( $arg:ident : $arg_ty:ty ),* ) $( -> $result:ty )* ) => {
         pub unsafe fn $fn_name( $( $arg: $arg_ty, )* ) $( -> $result )* {
-            $fn_name::$fn_name( $( $arg, )* )
-        }
+            static mut PROC_PTR: Option<extern "C" fn( $( $arg_ty, )* ) $( -> $result )*> = None;
 
-        pub mod $fn_name {
-            #[allow(unused_imports)]
-            use super::types::*;
+            if let None = PROC_PTR {
+                PROC_PTR =
+                    $crate::platform::load_proc(stringify!( $proc_name ))
+                    .map(|ptr| ::std::mem::transmute(ptr));
+            }
 
-            static mut proc_ptr: Option<extern "C" fn( $(
-                $arg_ty,
-            )* ) $( -> $result )*> = None;
-
-            pub unsafe fn $fn_name( $( $arg: $arg_ty, )* ) $( -> $result )* {
-                if let None = proc_ptr {
-                    proc_ptr = ::std::mem::transmute(
-                        $crate::platform::load_proc(stringify!( $proc_name )));
-                }
-
-                match proc_ptr {
-                    Some(gl_proc) => gl_proc( $( $arg ),* ),
-                    None => panic!("Failed to load gl proc for {}", stringify!( $proc_name )),
-                }
+            match PROC_PTR {
+                Some(gl_proc) => gl_proc( $( $arg ),* ),
+                None => panic!("Failed to load gl proc for {}", stringify!( $proc_name )),
             }
         }
     }
