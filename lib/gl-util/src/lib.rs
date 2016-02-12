@@ -8,26 +8,39 @@
 
 extern crate bootstrap_gl as gl;
 
-use gl::*;
+use gl::{BufferName, BufferTarget, BufferUsage, ClearBufferMask, DrawMode, GlType, VertexArrayName};
 use std::mem;
 
+pub use gl::{AttributeLocation};
+pub use gl::platform::swap_buffers;
+
+/// Initializes global OpenGL state and creates the OpenGL context needed to perform rendering.
 pub fn init() {
     gl::create_context();
 }
 
+/// Represents a buffer of vertex data and the layout of that data.
+///
+/// Wraps a vertex buffer object and vertex array object into one struct.
 #[derive(Debug)]
 pub struct VertexBuffer {
-    name: BufferName,
+    buffer_name: BufferName,
+    vertex_array_name: VertexArrayName,
 }
 
 impl VertexBuffer {
     /// Creates a new `VertexBuffer` object.
     pub fn new() -> VertexBuffer {
-        let mut name = BufferName::null();
-        unsafe { gl::gen_buffers(1, &mut name); }
+        let mut buffer_name = BufferName::null();
+        let mut vertex_array_name = VertexArrayName::null();
+        unsafe {
+            gl::gen_buffers(1, &mut buffer_name);
+            gl::gen_vertex_arrays(1, &mut vertex_array_name);
+        }
 
         VertexBuffer {
-            name: name,
+            buffer_name: buffer_name,
+            vertex_array_name: vertex_array_name,
         }
     }
 
@@ -37,7 +50,7 @@ impl VertexBuffer {
         let byte_count = data.len() * mem::size_of::<f32>();
 
         unsafe {
-            gl::bind_buffer(BufferTarget::Array, self.name);
+            gl::bind_buffer(BufferTarget::Array, self.buffer_name);
             gl::buffer_data(
                 BufferTarget::Array,
                 byte_count as isize,
@@ -50,6 +63,9 @@ impl VertexBuffer {
 
 impl Drop for VertexBuffer {
     fn drop(&mut self) {
-        unsafe { gl::delete_buffers(1, &mut self.name); }
+        unsafe {
+            gl::delete_buffers(1, &mut self.buffer_name);
+            gl::delete_vertex_arrays(1, &mut self.vertex_array_name);
+        }
     }
 }
