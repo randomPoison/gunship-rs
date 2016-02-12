@@ -19,6 +19,11 @@ pub fn init() {
     gl::create_context();
 }
 
+/// TODO: Take clear mask (and values) as parameters.
+pub fn clear() {
+    unsafe { gl::clear(ClearBufferMask::Color); }
+}
+
 /// Represents a buffer of vertex data and the layout of that data.
 ///
 /// Wraps a vertex buffer object and vertex array object into one struct.
@@ -56,6 +61,45 @@ impl VertexBuffer {
                 byte_count as isize,
                 data_ptr,
                 BufferUsage::StaticDraw);
+            gl::bind_buffer(BufferTarget::Array, BufferName::null());
+        }
+    }
+
+    /// Specifies how the data for a particular vertex attribute is laid out in the buffer.
+    pub fn set_attrib(
+        &mut self,
+        attrib: AttributeLocation,
+        elements: usize,
+        stride: usize,
+        offset: usize
+    ) {
+        unsafe {
+            gl::bind_buffer(BufferTarget::Array, self.buffer_name);
+            gl::bind_vertex_array(self.vertex_array_name);
+
+            gl::enable_vertex_attrib_array(AttributeLocation::from_index(0));
+            gl::vertex_attrib_pointer(
+                attrib,
+                elements as i32,
+                GlType::Float,
+                false,
+                stride as i32,
+                offset);
+
+            gl::bind_vertex_array(VertexArrayName::null());
+            gl::bind_buffer(BufferTarget::Array, BufferName::null());
+        }
+    }
+
+    /// Draws the contents of the vertex buffer to the screen.
+    pub fn draw(&self) {
+        unsafe {
+            gl::bind_buffer(BufferTarget::Array, self.buffer_name);
+            gl::bind_vertex_array(self.vertex_array_name);
+
+            gl::draw_arrays(DrawMode::Triangles, 0, 3);
+
+            gl::bind_vertex_array(VertexArrayName::null());
             gl::bind_buffer(BufferTarget::Array, BufferName::null());
         }
     }
