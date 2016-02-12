@@ -50,7 +50,7 @@ impl VertexBuffer {
     }
 
     /// Fills the buffer with the contents of the data slice.
-    pub fn set_data(&mut self, data: &[f32]) {
+    pub fn set_data_f32(&mut self, data: &[f32]) {
         let data_ptr = data.as_ptr() as *const ();
         let byte_count = data.len() * mem::size_of::<f32>();
 
@@ -66,7 +66,7 @@ impl VertexBuffer {
     }
 
     /// Specifies how the data for a particular vertex attribute is laid out in the buffer.
-    pub fn set_attrib(
+    pub fn set_attrib_f32(
         &mut self,
         attrib: AttributeLocation,
         elements: usize,
