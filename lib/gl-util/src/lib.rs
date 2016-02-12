@@ -8,10 +8,10 @@
 
 extern crate bootstrap_gl as gl;
 
-use gl::{BufferName, BufferTarget, BufferUsage, ClearBufferMask, DrawMode, GlType, VertexArrayName};
+use gl::{BufferName, BufferTarget, BufferUsage, ClearBufferMask, GlType, VertexArrayName};
 use std::mem;
 
-pub use gl::{AttributeLocation};
+pub use gl::{AttributeLocation, DrawMode};
 pub use gl::platform::swap_buffers;
 
 /// Initializes global OpenGL state and creates the OpenGL context needed to perform rendering.
@@ -92,12 +92,12 @@ impl VertexBuffer {
     }
 
     /// Draws the contents of the vertex buffer to the screen.
-    pub fn draw(&self) {
+    pub fn draw(&self, draw_mode: DrawMode, offset: usize, count: usize) {
         unsafe {
             gl::bind_buffer(BufferTarget::Array, self.buffer_name);
             gl::bind_vertex_array(self.vertex_array_name);
 
-            gl::draw_arrays(DrawMode::Triangles, 0, 3);
+            gl::draw_arrays(draw_mode, offset as i32, count as i32);
 
             gl::bind_vertex_array(VertexArrayName::null());
             gl::bind_buffer(BufferTarget::Array, BufferName::null());
