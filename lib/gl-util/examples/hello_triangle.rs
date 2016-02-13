@@ -26,7 +26,7 @@ fn main() {
             }
 
             gl::clear();
-            vertex_buffer.draw(DrawMode::Triangles, 0, 3);
+            vertex_buffer.draw(DrawMode::Triangles);
             gl::swap_buffers();
         }
     }

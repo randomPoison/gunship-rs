@@ -31,6 +31,8 @@ pub fn clear() {
 pub struct VertexBuffer {
     buffer_name: BufferName,
     vertex_array_name: VertexArrayName,
+    len: usize,
+    element_len: usize,
 }
 
 impl VertexBuffer {
@@ -46,11 +48,15 @@ impl VertexBuffer {
         VertexBuffer {
             buffer_name: buffer_name,
             vertex_array_name: vertex_array_name,
+            len: 0,
+            element_len: 0,
         }
     }
 
     /// Fills the buffer with the contents of the data slice.
     pub fn set_data_f32(&mut self, data: &[f32]) {
+        self.len = data.len();
+
         let data_ptr = data.as_ptr() as *const ();
         let byte_count = data.len() * mem::size_of::<f32>();
 
@@ -73,6 +79,13 @@ impl VertexBuffer {
         stride: usize,
         offset: usize
     ) {
+        // Calculate the number of elements based on the attribute.
+        if stride == 0 {
+            self.element_len = (self.len - offset) / elements;
+        } else {
+            unimplemented!();
+        }
+
         unsafe {
             gl::bind_buffer(BufferTarget::Array, self.buffer_name);
             gl::bind_vertex_array(self.vertex_array_name);
@@ -92,12 +105,12 @@ impl VertexBuffer {
     }
 
     /// Draws the contents of the vertex buffer to the screen.
-    pub fn draw(&self, draw_mode: DrawMode, offset: usize, count: usize) {
+    pub fn draw(&self, draw_mode: DrawMode) {
         unsafe {
             gl::bind_buffer(BufferTarget::Array, self.buffer_name);
             gl::bind_vertex_array(self.vertex_array_name);
 
-            gl::draw_arrays(draw_mode, offset as i32, count as i32);
+            gl::draw_arrays(draw_mode, 0, self.element_len as i32);
 
             gl::bind_vertex_array(VertexArrayName::null());
             gl::bind_buffer(BufferTarget::Array, BufferName::null());
