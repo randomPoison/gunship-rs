@@ -8,7 +8,7 @@
 
 extern crate bootstrap_gl as gl;
 
-use gl::{BufferName, BufferTarget, BufferUsage, ClearBufferMask, GlType, VertexArrayName};
+use gl::{BufferName, BufferTarget, BufferUsage, ClearBufferMask, GlType, IndexType, VertexArrayName};
 use std::mem;
 
 pub use gl::{AttributeLocation, DrawMode};
@@ -90,7 +90,7 @@ impl VertexBuffer {
             gl::bind_buffer(BufferTarget::Array, self.buffer_name);
             gl::bind_vertex_array(self.vertex_array_name);
 
-            gl::enable_vertex_attrib_array(AttributeLocation::from_index(0));
+            gl::enable_vertex_attrib_array(attrib);
             gl::vertex_attrib_pointer(
                 attrib,
                 elements as i32,
@@ -107,13 +107,27 @@ impl VertexBuffer {
     /// Draws the contents of the vertex buffer to the screen.
     pub fn draw(&self, draw_mode: DrawMode) {
         unsafe {
-            gl::bind_buffer(BufferTarget::Array, self.buffer_name);
             gl::bind_vertex_array(self.vertex_array_name);
+            gl::bind_buffer(BufferTarget::Array, self.buffer_name);
 
             gl::draw_arrays(draw_mode, 0, self.element_len as i32);
 
-            gl::bind_vertex_array(VertexArrayName::null());
             gl::bind_buffer(BufferTarget::Array, BufferName::null());
+            gl::bind_vertex_array(VertexArrayName::null());
+        }
+    }
+
+    pub fn draw_elements(&self, draw_mode: DrawMode, indices: &IndexBuffer) {
+        unsafe {
+            gl::bind_vertex_array(self.vertex_array_name);
+            gl::bind_buffer(BufferTarget::Array, self.buffer_name);
+            gl::bind_buffer(BufferTarget::ElementArray, indices.buffer_name);
+
+            gl::draw_elements(draw_mode, indices.len as i32, IndexType::UnsignedInt, 0);
+
+            gl::bind_buffer(BufferTarget::ElementArray, BufferName::null());
+            gl::bind_buffer(BufferTarget::Array, BufferName::null());
+            gl::bind_vertex_array(VertexArrayName::null());
         }
     }
 }
@@ -123,6 +137,52 @@ impl Drop for VertexBuffer {
         unsafe {
             gl::delete_buffers(1, &mut self.buffer_name);
             gl::delete_vertex_arrays(1, &mut self.vertex_array_name);
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct IndexBuffer {
+    buffer_name: BufferName,
+    len: usize,
+}
+
+impl IndexBuffer {
+    // Create a new index buffer.
+    pub fn new() -> IndexBuffer {
+        let mut buffer_name = BufferName::null();
+        unsafe {
+            gl::gen_buffers(1, &mut buffer_name);
+        }
+
+        IndexBuffer {
+            buffer_name: buffer_name,
+            len: 0,
+        }
+    }
+
+    pub fn set_data_u32(&mut self, data: &[u32]) {
+        self.len = data.len();
+
+        let data_ptr = data.as_ptr() as *const ();
+        let byte_count = data.len() * mem::size_of::<u32>();
+
+        unsafe {
+            gl::bind_buffer(BufferTarget::ElementArray, self.buffer_name);
+            gl::buffer_data(
+                BufferTarget::ElementArray,
+                byte_count as isize,
+                data_ptr,
+                BufferUsage::StaticDraw);
+            gl::bind_buffer(BufferTarget::ElementArray, BufferName::null());
+        }
+    }
+}
+
+impl Drop for IndexBuffer {
+    fn drop(&mut self) {
+        unsafe {
+            gl::delete_buffers(1, &mut self.buffer_name);
         }
     }
 }
