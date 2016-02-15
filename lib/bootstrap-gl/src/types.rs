@@ -143,6 +143,14 @@ pub enum GlType {
     // GL_UNSIGNED_INT_10F_11F_11F_REV
 }
 
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IndexType {
+    UnsignedByte = 0x1401,
+    UnsignedShort = 0x1403,
+    UnsignedInt = 0x1405,
+}
+
 /// TODO: Use NonZero here so that Option<VertexArrayName>::None can be used instead of 0.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -358,14 +366,6 @@ pub struct ProgramObject(u32);
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct UniformLocation(u32);
-
-#[repr(u32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum IndexType {
-    UnsignedByte  = 0x1401,
-    UnsignedShort = 0x1403,
-    UnsignedInt   = 0x1405,
-}
 
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

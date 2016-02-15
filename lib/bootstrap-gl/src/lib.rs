@@ -380,6 +380,47 @@ gl_proc!(glDrawArrays:
     ///    object.
     fn draw_arrays(mode: DrawMode, first: i32, count: i32));
 
+gl_proc!(glDrawElements:
+    /// Renders primitives from array data.
+    ///
+    /// [Wiki page](https://www.opengl.org/wiki/GLAPI/glDrawElements)
+    ///
+    /// Core since version 1.1
+    ///
+    /// Specifies multiple geometric primitives with very few subroutine calls. Instead of calling
+    /// a GL function to pass each individual vertex, normal, texture coordinate, edge flag, or
+    /// color, you can prespecify separate arrays of vertices, normals, and so on, and use them
+    /// to construct a sequence of primitives with a single call to `draw_elements`.
+    ///
+    /// When `draw_elements` is called it uses `count​` sequential elements from an enabled array,
+    /// starting at `offset` (interpreted as a byte count) to construct a sequence of geometric
+    /// primitives. `mode​` specifies what kind of primitives are constructed and how the array
+    /// elements construct these primitives. If more than one array is enabled, each is used.
+    ///
+    /// Vertex attributes that are modified by `draw_elements` have an unspecified value after
+    /// `draw_elements` returns. Attributes that aren't modified maintain their previous values.
+    ///
+    /// # Notes
+    ///
+    /// - `GL_LINE_STRIP_ADJACENCY`, `GL_LINES_ADJACENCY`, `GL_TRIANGLE_STRIP_ADJACENCY` and
+    ///   `GL_TRIANGLES_ADJACENCY` are available only if the GL version is 3.2 or greater.
+    /// - `draw_elements` is included in display lists. If `draw_elements` is entered into a
+    ///   display list the necessary array data (determined by the array pointers and enables)
+    ///   is also entered into the display list. Because the array pointers and enables are
+    ///   client-side state their values affect display lists when the lists are created, not
+    ///   when the lists are executed.
+    ///
+    /// # Errors
+    ///
+    /// - `GL_INVALID_VALUE` is generated if count​ is negative.
+    /// - `GL_INVALID_OPERATION` is generated if a geometry shader is active and mode​ is
+    ///   incompatible with the input primitive type of the geometry shader in the currently
+    ///   installed program object.
+    /// - `GL_INVALID_OPERATION` is generated if a non-zero buffer object name is bound to an
+    ///   enabled array or the element array and the buffer object's data store is currently
+    ///   mapped.
+    fn draw_elements(mode: DrawMode, count: i32, index_type: IndexType, offset: usize));
+
 gl_proc!(glEnable:
     fn enable(capability: ServerCapability));
 
@@ -592,8 +633,6 @@ gen_proc_loader! {
             values: *const f32),
     glUniform4fv:
         fn uniform_4fv(uniform: UniformLocation, count: i32, data: *const f32),
-    glDrawElements:
-        fn draw_elements(mode: DrawMode, count: i32, index_type: IndexType, offset: usize),
     glDepthFunc:
         fn depth_func(func: Comparison),
     glBlendFunc:
