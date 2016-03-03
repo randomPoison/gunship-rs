@@ -230,8 +230,8 @@ impl Engine {
                 let transform = transform_manager.get(entity).unwrap(); // TODO: Don't panic?
 
                 self.renderer.draw_mesh(
-                    &mesh.gl_mesh,
-                    &mesh.shader,
+                    mesh.gl_mesh(),
+                    mesh.shader(),
                     transform.derived_matrix(),
                     transform.derived_normal_matrix(),
                     &camera,

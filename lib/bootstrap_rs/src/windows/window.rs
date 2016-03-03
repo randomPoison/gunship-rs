@@ -1,20 +1,14 @@
-use std::mem;
-use std::ptr;
+use input::ScanCode;
+use std::{mem, ptr};
 use std::collections::VecDeque;
-use std::ops::DerefMut;
-use std::rc::Rc;
-use std::cell::RefCell;
-
+use super::input::{register_raw_input, handle_raw_input};
+use super::ToCU16Str;
+use windows::kernel32;
 use windows::winapi::*;
 use windows::user32;
-use windows::kernel32;
 use windows::winmm;
-use super::ToCU16Str;
 use window::Message;
 use window::Message::*;
-use input::ScanCode;
-
-use super::input::{register_raw_input, handle_raw_input};
 
 static CLASS_NAME: &'static str = "bootstrap";
 static WINDOW_PROP: &'static str = "window";
@@ -23,11 +17,13 @@ static WINDOW_PROP: &'static str = "window";
 pub struct Window {
     pub handle: HWND,
     pub dc: HDC,
-    pub messages: VecDeque<Message>
+    pub messages: Box<VecDeque<Message>>
 }
 
 impl Window {
-    pub fn new(name: &str, instance: HINSTANCE) -> Rc<RefCell<Window>> {
+    pub fn new(name: &str) -> Window {
+        let instance = unsafe { kernel32::GetModuleHandleW(0 as *const _) };
+
         let name_u = name.to_c_u16();
         let class_u = CLASS_NAME.to_c_u16();
 
@@ -46,11 +42,8 @@ impl Window {
             hIconSm: ptr::null_mut(),
         };
 
-        unsafe {
-            user32::RegisterClassExW(&class_info);
-        }
-
         let handle = unsafe {
+            user32::RegisterClassExW(&class_info);
             user32::CreateWindowExW(
                 0,
                 class_u.as_ptr(),
@@ -63,7 +56,7 @@ impl Window {
                 ptr::null_mut(),
                 ptr::null_mut(),
                 instance,
-                ptr::null_mut()) // TODO do we need to pass a pointer to the object here?
+                ptr::null_mut())
         };
 
         register_raw_input(handle);
@@ -74,19 +67,18 @@ impl Window {
             user32::GetDC(handle)
         };
 
+        let mut messages = Box::new(VecDeque::new());
+        let messages_ptr = &mut *messages as *mut VecDeque<Message>;
+
         // give the window a pointer to our Window object
-        let window = Rc::new(RefCell::new(Window {
+        let window = Window {
             handle: handle,
             dc: dc,
-            messages: VecDeque::new()
-        }));
-        let window_address = (window.borrow_mut().deref_mut() as *mut Window) as LPVOID;
+            messages: messages,
+        };
 
         unsafe {
-            user32::SetPropW(handle, WINDOW_PROP.to_c_u16().as_ptr(), window_address);
-        }
-
-        unsafe {
+            user32::SetPropW(handle, WINDOW_PROP.to_c_u16().as_ptr(), messages_ptr as *mut _);
             let process = kernel32::GetCurrentProcess();
             kernel32::SetPriorityClass(process, REALTIME_PRIORITY_CLASS);
         }
@@ -148,25 +140,23 @@ fn message_callback(
     wParam: WPARAM,
     lParam: LPARAM) -> LRESULT
 {
-    let window_ptr = user32::GetPropW(hwnd, WINDOW_PROP.to_c_u16().as_ptr()) as *mut Window;
-    if !window_ptr.is_null() {
-        let window = &mut *window_ptr;
+    let messages_ptr = user32::GetPropW(hwnd, WINDOW_PROP.to_c_u16().as_ptr()) as *mut VecDeque<Message>;
+    if !messages_ptr.is_null() {
+        let messages = &mut *messages_ptr;
         match uMsg {
-            WM_ACTIVATEAPP => window.messages.push_back(Activate),
-            WM_CLOSE => window.messages.push_back(Close),
-            WM_DESTROY => window.messages.push_back(Destroy),
-            //WM_PAINT => window.messages.push_back(Paint), // TODO We need a user defined window proc to allow painting outside of the main loop.
-            WM_SYSKEYDOWN | WM_KEYDOWN => window.messages.push_back(KeyDown(convert_windows_scancode(wParam, lParam))),
-            WM_SYSKEYUP | WM_KEYUP => window.messages.push_back(KeyUp(convert_windows_scancode(wParam, lParam))),
+            WM_ACTIVATEAPP => messages.push_back(Activate),
+            WM_CLOSE => messages.push_back(Close),
+            WM_DESTROY => messages.push_back(Destroy),
+            //WM_PAINT => messages.push_back(Paint), // TODO We need a user defined window proc to allow painting outside of the main loop.
+            WM_SYSKEYDOWN | WM_KEYDOWN => messages.push_back(KeyDown(convert_windows_scancode(wParam, lParam))),
+            WM_SYSKEYUP | WM_KEYUP => messages.push_back(KeyUp(convert_windows_scancode(wParam, lParam))),
             WM_MOUSEMOVE => {
                 let x_coord = ( lParam as i16 ) as i32;
                 let y_coord = ( ( lParam >> 16 ) as i16 ) as i32;
-                window.messages.push_back(MousePos(x_coord, y_coord));
+                messages.push_back(MousePos(x_coord, y_coord));
             },
-            WM_INPUT => {
-                handle_raw_input(window, lParam);
-            },
-            _ => ()
+            WM_INPUT => handle_raw_input(messages, lParam),
+            _ => (),
         }
     }
 

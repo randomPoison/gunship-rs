@@ -1,3 +1,6 @@
+//! TODO: Don't expose `polygon::light::Light` directly since it contains irrelevant data (e.g. the
+//! light's position which is controlled by the transform for gunship).
+
 use ecs::*;
 use scene::Scene;
 use component::{DefaultManager, TransformManager};

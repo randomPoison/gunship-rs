@@ -313,6 +313,18 @@ impl Vector2 {
                 vectors.len() * 2)
         }
     }
+
+    pub fn slice_from_f32_slice(data: &[f32]) -> &[Vector2] {
+        use std::slice;
+
+        assert!(data.len() % 2 == 0, "Slice must have an even number of elements to be converted to a slice of Vector2");
+        unsafe {
+            slice::from_raw_parts(
+                data.as_ptr() as *const Vector2,
+                data.len() / 2,
+            )
+        }
+    }
 }
 
 impl Lerp for Vector2 {

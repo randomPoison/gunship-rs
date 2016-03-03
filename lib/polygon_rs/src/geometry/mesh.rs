@@ -74,16 +74,18 @@ pub enum BuildMeshError {
 
     /// Indicates that one or more attributes had a count that did not match the total number of
     /// vertices.
-    IncorrectAttributeCount,
+    IncorrectAttributeCount {
+        attribute: VertexAttributeType,
+        expected: usize,
+        actual: usize,
+    },
 }
 
-#[derive(Debug, Clone)]
-pub struct MeshBuilder {
-    position_data: Vec<Point>,
-    normal_data: Vec<Vector3>,
-    texcoord_data: Vec<Vec<Vector2>>,
-
-    indices:  Vec<u32>,
+#[derive(Debug, Clone, Copy)]
+pub enum VertexAttributeType {
+    Position,
+    Normal,
+    Texcoord,
 }
 
 /// Provides a safe interface for building a mesh from raw vertex data.
@@ -98,6 +100,15 @@ pub struct MeshBuilder {
 /// - Check for different data count for different attributes (e.g. if the position attribute data
 ///   for a different number of elements than the normal attribute).
 /// - Any of the indicies would be out of bounds for the given vertex data.
+#[derive(Debug, Clone)]
+pub struct MeshBuilder {
+    position_data: Vec<Point>,
+    normal_data: Vec<Vector3>,
+    texcoord_data: Vec<Vector2>,
+
+    indices:  Vec<u32>,
+}
+
 impl MeshBuilder {
     pub fn new() -> MeshBuilder {
         MeshBuilder {
@@ -115,15 +126,11 @@ impl MeshBuilder {
             self.normal_data.push(normal);
         }
 
-        // Ensure there is a list for each texcoord.
-        while self.texcoord_data.len() < vertex.texcoord.len() {
-            self.texcoord_data.push(Vec::new());
-        }
+        assert!(vertex.texcoord.len() <= 1, "More than one texcoord per vertex is currently not supported");
 
         // Add each texcoord to its corresponding list.
-        let iter = vertex.texcoord.iter().zip(self.texcoord_data.iter_mut());
-        for (texcoord, texcoord_data) in iter {
-            texcoord_data.push(*texcoord);
+        if vertex.texcoord.len() > 0 {
+            self.texcoord_data.push(vertex.texcoord[0])
         }
     }
 
@@ -144,16 +151,9 @@ impl MeshBuilder {
         self
     }
 
-    pub fn set_texcoord_data(mut self, texcoord_data: &[&[Vector2]]) -> MeshBuilder {
-        if texcoord_data.len() == 0 {
-            return self;
-        }
-
-        for (src, dest) in texcoord_data.iter().zip(self.texcoord_data.iter_mut()) {
-            dest.clear();
-            dest.extend(*src);
-        }
-
+    pub fn set_texcoord_data(mut self, texcoord_data: &[Vector2]) -> MeshBuilder {
+        self.texcoord_data.clear();
+        self.texcoord_data.extend(texcoord_data);
         self
     }
 
@@ -170,13 +170,19 @@ impl MeshBuilder {
 
         // Check that there is enough attribute data for each one.
         if self.normal_data.len() != 0 && self.normal_data.len() != vertex_count {
-            return Err(BuildMeshError::IncorrectAttributeCount);
+            return Err(BuildMeshError::IncorrectAttributeCount {
+                attribute: VertexAttributeType::Normal,
+                expected: vertex_count,
+                actual: self.normal_data.len(),
+            });
         }
 
-        for texcoord_set in &self.texcoord_data {
-            if texcoord_set.len() != vertex_count {
-                return Err(BuildMeshError::IncorrectAttributeCount);
-            }
+        if self.texcoord_data.len() != 0 && self.texcoord_data.len() != vertex_count {
+            return Err(BuildMeshError::IncorrectAttributeCount {
+                attribute: VertexAttributeType::Texcoord,
+                expected: vertex_count,
+                actual: self.texcoord_data.len(),
+            });
         }
 
         // Make sure all indices at least point to a valid vertex.
@@ -191,16 +197,10 @@ impl MeshBuilder {
 
         // TODO: Check for degenerate triangles? Actually, should that be a failure or a warning?
 
-        let float_count = {
-            let mut float_count =
-                self.position_data.len() * 4
-              + self.normal_data.len() * 3;
-            for texcoord_set in &self.texcoord_data {
-                float_count += texcoord_set.len() * 2;
-            }
-
-            float_count
-        };
+        let float_count =
+            self.position_data.len() * 4
+          + self.normal_data.len() * 3
+          + self.texcoord_data.len() * 2;
 
         // Create the mesh.
         let mut vertex_data = Vec::<f32>::with_capacity(float_count);
@@ -227,12 +227,12 @@ impl MeshBuilder {
 
         // Setup texcoord data.
         let mut texcoord_attribs = Vec::new();
-        for texcoord_set in &self.texcoord_data {
+        {
             texcoord_attribs.push(VertexAttribute {
                 offset: vertex_data.len(),
                 stride: 2,
             });
-            vertex_data.extend(Vector2::as_ref(&*texcoord_set));
+            vertex_data.extend(Vector2::as_ref(&*self.texcoord_data));
         }
 
         // By our powers combined! We are! A mesh.

@@ -4,14 +4,8 @@ name = "polygon"
 version = "0.0.2"
 authors = ["David LeGare <excaliburhissheath@gmail.com>"]
 
-[dependencies.bootstrap-gl]
-version = "*"
-path = "../bootstrap-gl"
-
-[dependencies.polygon_math]
-version = "*"
-path = "../polygon_math"
-
-[dependencies.bootstrap_rs]
-version = "*"
-path = "../bootstrap_rs"
+[dependencies]
+parse-bmp    = { version = "0.1", path = "../parse-bmp" }
+bootstrap-gl = { version = "*",   path = "../bootstrap-gl" }
+polygon_math = { version = "*",   path = "../polygon_math" }
+bootstrap_rs = { version = "*",   path = "../bootstrap_rs" }
