@@ -32,13 +32,13 @@ impl Window {
 
         window.cascadeTopLeftFromPoint_(NSPoint::new(20.0, 20.0));
         window.center();
-        let title = NSString::alloc(nil).init_str("Poop");
+        let title = NSString::alloc(nil).init_str(name);
         window.setTitle_(title);
         window.setAcceptsMouseMovedEvents_(YES);
 
         let frame = window.contentRectForFrameRect_(frame);
         //let content = NSView::alloc(nil);
-        let content = NSView::initWithFrame_ (nil, frame);
+        let content = NSView::initWithFrame_(nil, frame);
         //content = NSView::initWithFrame_(content, frame);
         window.setContentView_(content);
 
