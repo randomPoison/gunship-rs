@@ -1,3 +1,4 @@
+use std::path::Path;
 use std::str::FromStr;
 
 // TODO: Add a specialized implementation for `Debug` that does a better job pretty printing.
@@ -8,6 +9,18 @@ pub struct Obj {
 }
 
 impl Obj {
+    pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Obj, Error> {
+        use std::fs::File;
+        use std::io::prelude::*;
+
+        let mut file = try!(File::open(path));
+        let mut text = String::new();
+
+        try!(file.read_to_string(&mut text));
+
+        Obj::from_str(&text)
+    }
+
     pub fn from_str(file_text: &str) -> Result<Obj, Error> {
         fn pull_f32(token: &mut Iterator<Item=&str>) -> Result<f32, Error> {
             let text = try!(token.next().ok_or(Error::MissingElement));
@@ -77,13 +90,14 @@ impl Obj {
 }
 
 // TODO: Include line number and column in errors.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum Error {
     UnrecognizedDirective(String),
     MissingDirectiveData,
     MissingElement,
     ParseFloatError(::std::num::ParseFloatError),
     ParseIntError(::std::num::ParseIntError),
+    IoError(::std::io::Error),
 }
 
 impl From<::std::num::ParseFloatError> for Error {
@@ -95,5 +109,11 @@ impl From<::std::num::ParseFloatError> for Error {
 impl From<::std::num::ParseIntError> for Error {
     fn from(error: ::std::num::ParseIntError) -> Error {
         Error::ParseIntError(error)
+    }
+}
+
+impl From<::std::io::Error> for Error {
+    fn from(error: ::std::io::Error) -> Error {
+        Error::IoError(error)
     }
 }
