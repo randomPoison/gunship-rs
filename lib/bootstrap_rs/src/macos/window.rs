@@ -20,13 +20,15 @@ impl Window {
         let frame = NSRect { origin: point, size: size };
 
         let window = NSWindow::alloc(nil);
-        window.initWithContentRect_styleMask_backing_defer_(frame,
-                                                            NSWindowMask::NSTitledWindowMask as NSUInteger|
-                                                            NSWindowMask::NSClosableWindowMask as NSUInteger|
-                                                            NSWindowMask::NSMiniaturizableWindowMask as NSUInteger|
-                                                            NSWindowMask::NSResizableWindowMask as NSUInteger,
-                                                            NSBackingStoreType::NSBackingStoreBuffered,
-                                                            NO).autorelease();
+        window.initWithContentRect_styleMask_backing_defer_(
+            frame.clone(),
+            NSWindowMask::NSTitledWindowMask as NSUInteger|
+            NSWindowMask::NSClosableWindowMask as NSUInteger|
+            NSWindowMask::NSMiniaturizableWindowMask as NSUInteger|
+            NSWindowMask::NSResizableWindowMask as NSUInteger,
+            NSBackingStoreType::NSBackingStoreBuffered,
+            NO)
+        .autorelease();
 
         window.cascadeTopLeftFromPoint_(NSPoint::new(20.0, 20.0));
         window.center();
@@ -50,5 +52,9 @@ impl Window {
 
     pub fn next_message(&mut self) -> Option<Message> {
         None
+    }
+
+    pub fn get_rect(&self) -> (i32, i32, i32, i32) {
+        (0, 0, 1, 1)
     }
 }

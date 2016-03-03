@@ -12,7 +12,8 @@ winmm-sys = "*"
 # xinput-sys = "*"
 
 # Begin macos dependencies.
-# TODO: Somehow make these dependencies only when compiling for macos.
+# TODO: Somehow make these dependencies only when compiling for macos. This
+# requires RFC 1361 to be implemented: https://github.com/rust-lang/rfcs/pull/1361
 objc = "*"
 cocoa = "*"
 core-graphics = "*"

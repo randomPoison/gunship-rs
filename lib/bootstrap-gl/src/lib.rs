@@ -2,12 +2,16 @@
 
 extern crate bootstrap_rs as bootstrap;
 
-#[cfg(target_os="windows")]
-#[path="windows\\mod.rs"]
+#[cfg(windows)]
+#[path="windows.rs"]
 pub mod platform;
 
-#[cfg(target_os = "linux")]
-#[path="linux/mod.rs"]
+#[cfg(target_os="linux")]
+#[path="linux.rs"]
+pub mod platform;
+
+#[cfg(target_os="macos")]
+#[path="macos.rs"]
 pub mod platform;
 
 use std::cell::Cell;

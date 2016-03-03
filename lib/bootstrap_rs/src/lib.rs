@@ -1,14 +1,14 @@
 #![feature(op_assign_traits)]
-#![cfg_attr(windows, feature(str_utf16))]
+#![cfg_attr(target_os = "windows", feature(str_utf16))]
 
 #[cfg(target_os = "macos")]
 #[macro_use]
 extern crate objc;
 
-#[cfg(windows)]
+#[cfg(target_os = "windows")]
 pub mod windows;
 
-#[cfg(windows)]
+#[cfg(target_os = "windows")]
 pub use windows::init::init;
 
 #[cfg(target_os = "linux")]
