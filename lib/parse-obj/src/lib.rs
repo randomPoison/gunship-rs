@@ -66,7 +66,9 @@ impl Obj {
                             .next()
                             .ok_or(Error::MissingDirectiveData));
                         let index = try!(usize::from_str(index_str));
-                        vertices.push(index);
+
+                        // Indices start at 1 in OBJ files so normalize them to start at 0.
+                        vertices.push(index - 1);
                     }
 
                     faces.push(vertices);
