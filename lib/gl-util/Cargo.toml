@@ -9,3 +9,4 @@ bootstrap-gl = { version = "0.0", path = "../bootstrap-gl" }
 
 [dev_dependencies]
 bootstrap_rs = { version = "0.0", path = "../bootstrap_rs" }
+parse-obj = { version = "0.1", path = "../parse-obj" }
