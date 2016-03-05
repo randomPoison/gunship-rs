@@ -108,6 +108,8 @@ impl Obj {
     }
 
     /// Gets the list of face indices.
+    ///
+    /// Each face is represented as a list of indices
     pub fn faces(&self) -> &[Vec<usize>] {
         &*self.faces
     }

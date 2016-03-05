@@ -8,7 +8,10 @@
 
 extern crate bootstrap_gl as gl;
 
-use gl::{BufferName, BufferTarget, BufferUsage, ClearBufferMask, GlType, IndexType, VertexArrayName};
+use gl::{
+    BufferName, BufferTarget, BufferUsage, ClearBufferMask, Face, GlType, IndexType, PolygonMode,
+    VertexArrayName
+};
 use std::mem;
 
 pub use gl::{AttributeLocation, DrawMode};
@@ -117,6 +120,7 @@ impl VertexBuffer {
         }
     }
 
+    /// Draws the contents of the buffer using the specified indices.
     pub fn draw_elements(&self, draw_mode: DrawMode, indices: &IndexBuffer) {
         unsafe {
             gl::bind_vertex_array(self.vertex_array_name);
@@ -125,6 +129,23 @@ impl VertexBuffer {
 
             gl::draw_elements(draw_mode, indices.len as i32, IndexType::UnsignedInt, 0);
 
+            gl::bind_buffer(BufferTarget::ElementArray, BufferName::null());
+            gl::bind_buffer(BufferTarget::Array, BufferName::null());
+            gl::bind_vertex_array(VertexArrayName::null());
+        }
+    }
+
+    /// Draws the contents of the buffer using the specified indices.
+    pub fn draw_wireframe(&self, draw_mode: DrawMode, indices: &IndexBuffer) {
+        unsafe {
+            gl::bind_vertex_array(self.vertex_array_name);
+            gl::bind_buffer(BufferTarget::Array, self.buffer_name);
+            gl::bind_buffer(BufferTarget::ElementArray, indices.buffer_name);
+            gl::polygon_mode(Face::FrontAndBack, PolygonMode::Line);
+
+            gl::draw_elements(draw_mode, indices.len as i32, IndexType::UnsignedInt, 0);
+
+            gl::polygon_mode(Face::FrontAndBack, PolygonMode::Fill);
             gl::bind_buffer(BufferTarget::ElementArray, BufferName::null());
             gl::bind_buffer(BufferTarget::Array, BufferName::null());
             gl::bind_vertex_array(VertexArrayName::null());
