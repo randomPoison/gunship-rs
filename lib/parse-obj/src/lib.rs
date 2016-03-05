@@ -87,6 +87,30 @@ impl Obj {
             faces: faces,
         })
     }
+
+    /// Gets the list of vertex position tuples.
+    pub fn positions(&self) -> &[(f32, f32, f32, f32)] {
+        &*self.positions
+    }
+
+    /// Gets the raw list of floating point values in the vertex positions list.
+    ///
+    /// Useful for sending vertex position data to the gpu.
+    pub fn raw_positions(&self) -> &[f32] {
+        use std::slice;
+
+        let len = self.positions.len() * 4;
+        let ptr = self.positions.as_ptr() as *const _;
+
+        unsafe {
+            slice::from_raw_parts(ptr, len)
+        }
+    }
+
+    /// Gets the list of face indices.
+    pub fn faces(&self) -> &[Vec<usize>] {
+        &*self.faces
+    }
 }
 
 // TODO: Include line number and column in errors.
