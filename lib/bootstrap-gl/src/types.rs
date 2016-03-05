@@ -127,6 +127,14 @@ pub enum DrawMode {
 
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Face {
+    Front = 0x0404,
+    Back = 0x0405,
+    FrontAndBack = 0x0408,
+}
+
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GlType {
     Byte = 0x1400,
     UnsignedByte = 0x1401,
@@ -149,6 +157,14 @@ pub enum IndexType {
     UnsignedByte = 0x1401,
     UnsignedShort = 0x1403,
     UnsignedInt = 0x1405,
+}
+
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PolygonMode {
+    Point = 0x1B00,
+    Line = 0x1B01,
+    Fill = 0x1B02,
 }
 
 /// TODO: Use NonZero here so that Option<VertexArrayName>::None can be used instead of 0.

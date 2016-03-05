@@ -488,6 +488,34 @@ gl_proc!(glGenVertexArrays:
     /// `GL_INVALID_VALUE` is generated if `num_arrays`​ is negative.
     fn gen_vertex_arrays(num_arrays: i32, arrays: *mut VertexArrayName));
 
+gl_proc!(glPolygonMode:
+    /// Selects the polygon rasterization mode.
+    ///
+    /// [Original Documentation](http://docs.gl/gl2/glPolygonMode)
+    ///
+    /// Core since version 1.0
+    ///
+    /// glPolygonMode controls the interpretation of polygons for rasterization. face​ describes which polygons mode​ applies to: both front and back-facing polygons (GL_FRONT_AND_BACK). The polygon mode affects only the final rasterization of polygons. In particular, a polygon's vertices are lit and the polygon is clipped and possibly culled before these modes are applied.
+    ///
+    /// Three modes are defined and can be specified in mode​:
+    ///
+    /// - `Point` - Polygon vertices that are marked as the start of a boundary edge are drawn as
+    ///   points. Point attributes such as `GL_POINT_SIZE` and `GL_POINT_SMOOTH` control the
+    ///   rasterization of the points. Polygon rasterization attributes other than
+    ///   `GL_POLYGON_MODE` have no effect.
+    /// - `Line` - Boundary edges of the polygon are drawn as line segments. Line attributes such
+    ///    as `GL_LINE_WIDTH` and `GL_LINE_SMOOTH` control the rasterization of the lines. Polygon
+    ///    rasterization attributes other than `GL_POLYGON_MODE` have no effect.
+    /// - `Fill` - The interior of the polygon is filled. Polygon attributes such as
+    ///   `GL_POLYGON_SMOOTH` control the rasterization of the polygon.
+    ///
+    /// # Notes
+    ///
+    /// Vertices are marked as boundary or nonboundary with an edge flag. Edge flags are generated
+    /// internally by the GL when it decomposes polygons; they can be set explicitly using
+    /// `edge_flag`.
+    fn polygon_mode(face: Face, mode: PolygonMode));
+
 gl_proc!(glVertexAttribPointer:
     /// Defines an array of generic vertex attribute data.
     ///
