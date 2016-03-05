@@ -9,12 +9,12 @@
 extern crate bootstrap_gl as gl;
 
 use gl::{
-    BufferName, BufferTarget, BufferUsage, ClearBufferMask, Face, GlType, IndexType, PolygonMode,
+    BufferName, BufferTarget, BufferUsage, ClearBufferMask, Face, GlType, IndexType,
     VertexArrayName
 };
 use std::mem;
 
-pub use gl::{AttributeLocation, DrawMode};
+pub use gl::{AttributeLocation, DrawMode, PolygonMode};
 pub use gl::platform::swap_buffers;
 
 /// Initializes global OpenGL state and creates the OpenGL context needed to perform rendering.
@@ -106,51 +106,6 @@ impl VertexBuffer {
             gl::bind_buffer(BufferTarget::Array, BufferName::null());
         }
     }
-
-    /// Draws the contents of the vertex buffer to the screen.
-    pub fn draw(&self, draw_mode: DrawMode) {
-        unsafe {
-            gl::bind_vertex_array(self.vertex_array_name);
-            gl::bind_buffer(BufferTarget::Array, self.buffer_name);
-
-            gl::draw_arrays(draw_mode, 0, self.element_len as i32);
-
-            gl::bind_buffer(BufferTarget::Array, BufferName::null());
-            gl::bind_vertex_array(VertexArrayName::null());
-        }
-    }
-
-    /// Draws the contents of the buffer using the specified indices.
-    pub fn draw_elements(&self, draw_mode: DrawMode, indices: &IndexBuffer) {
-        unsafe {
-            gl::bind_vertex_array(self.vertex_array_name);
-            gl::bind_buffer(BufferTarget::Array, self.buffer_name);
-            gl::bind_buffer(BufferTarget::ElementArray, indices.buffer_name);
-
-            gl::draw_elements(draw_mode, indices.len as i32, IndexType::UnsignedInt, 0);
-
-            gl::bind_buffer(BufferTarget::ElementArray, BufferName::null());
-            gl::bind_buffer(BufferTarget::Array, BufferName::null());
-            gl::bind_vertex_array(VertexArrayName::null());
-        }
-    }
-
-    /// Draws the contents of the buffer using the specified indices.
-    pub fn draw_wireframe(&self, draw_mode: DrawMode, indices: &IndexBuffer) {
-        unsafe {
-            gl::bind_vertex_array(self.vertex_array_name);
-            gl::bind_buffer(BufferTarget::Array, self.buffer_name);
-            gl::bind_buffer(BufferTarget::ElementArray, indices.buffer_name);
-            gl::polygon_mode(Face::FrontAndBack, PolygonMode::Line);
-
-            gl::draw_elements(draw_mode, indices.len as i32, IndexType::UnsignedInt, 0);
-
-            gl::polygon_mode(Face::FrontAndBack, PolygonMode::Fill);
-            gl::bind_buffer(BufferTarget::ElementArray, BufferName::null());
-            gl::bind_buffer(BufferTarget::Array, BufferName::null());
-            gl::bind_vertex_array(VertexArrayName::null());
-        }
-    }
 }
 
 impl Drop for VertexBuffer {
@@ -204,6 +159,67 @@ impl Drop for IndexBuffer {
     fn drop(&mut self) {
         unsafe {
             gl::delete_buffers(1, &mut self.buffer_name);
+        }
+    }
+}
+
+/// A configuration object for specifying all of the various configurable options for a draw call.
+pub struct DrawBuilder<'a> {
+    vertex_buffer: &'a VertexBuffer,
+    draw_mode: DrawMode,
+    index_buffer: Option<&'a IndexBuffer>,
+    polygon_mode: Option<PolygonMode>,
+}
+
+impl<'a> DrawBuilder<'a> {
+    pub fn new(vertex_buffer: &VertexBuffer, draw_mode: DrawMode) -> DrawBuilder {
+        DrawBuilder {
+            vertex_buffer: vertex_buffer,
+            draw_mode: draw_mode,
+            index_buffer: None,
+            polygon_mode: None,
+        }
+    }
+
+    pub fn index_buffer(mut self, index_buffer: &'a IndexBuffer) -> DrawBuilder<'a> {
+        self.index_buffer = Some(index_buffer);
+        self
+    }
+
+    pub fn polygon_mode(mut self, polygon_mode: PolygonMode) -> DrawBuilder<'a> {
+        self.polygon_mode = Some(polygon_mode);
+        self
+    }
+
+    pub fn draw(self) {
+        unsafe {
+            gl::bind_vertex_array(self.vertex_buffer.vertex_array_name);
+            gl::bind_buffer(BufferTarget::Array, self.vertex_buffer.buffer_name);
+
+            if let Some(polygon_mode) = self.polygon_mode {
+                gl::polygon_mode(Face::FrontAndBack, polygon_mode);
+            }
+
+            if let Some(indices) = self.index_buffer {
+                gl::bind_buffer(BufferTarget::ElementArray, indices.buffer_name);
+                gl::draw_elements(
+                    self.draw_mode,
+                    indices.len as i32,
+                    IndexType::UnsignedInt,
+                    0);
+            } else {
+                gl::draw_arrays(
+                    self.draw_mode,
+                    0,
+                    self.vertex_buffer.element_len as i32);
+            }
+
+            // Reset all values even if they weren't used so that we don't need to branch twice on
+            // each option.
+            gl::polygon_mode(Face::FrontAndBack, PolygonMode::Fill);
+            gl::bind_buffer(BufferTarget::ElementArray, BufferName::null());
+            gl::bind_buffer(BufferTarget::Array, BufferName::null());
+            gl::bind_vertex_array(VertexArrayName::null());
         }
     }
 }

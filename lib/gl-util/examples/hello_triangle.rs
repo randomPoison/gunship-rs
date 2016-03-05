@@ -24,10 +24,10 @@ fn main() {
                 Message::Close => break 'outer,
                 _ => {},
             }
-
-            gl::clear();
-            vertex_buffer.draw(DrawMode::Triangles);
-            gl::swap_buffers();
         }
+
+        gl::clear();
+        DrawBuilder::new(&vertex_buffer, DrawMode::Triangles).draw();
+        gl::swap_buffers();
     }
 }
