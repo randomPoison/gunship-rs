@@ -1,4 +1,5 @@
 extern crate bootstrap_gl as gl;
+extern crate gl_util;
 
 use bmp::Bitmap;
 use bootstrap::window::Window;
@@ -7,7 +8,12 @@ use geometry::mesh::{Mesh, VertexAttribute};
 use light::Light;
 use material::*;
 use math::*;
-use self::gl::*;
+use self::gl::{
+    BufferTarget, ClearBufferMask, Comparison, DestFactor, GlType, IndexType, IntegerName,
+    ProgramObject, ServerCapability, ShaderObject, ShaderType, SourceFactor, Texture2dTarget,
+    TextureBindTarget, TextureDataType, TextureFormat, TextureInternalFormat, TextureObject,
+    UniformLocation};
+use self::gl_util::*;
 use std::collections::HashMap;
 use std::ptr;
 use std::mem;
@@ -21,11 +27,7 @@ pub struct GLRender {
 
 impl GLRender {
     pub fn new(window: &Window) -> GLRender {
-        let gl = gl::create_context();
-
-        // TODO: Once better logging is implemented leave logging in and just disable unwanted logs.
-        // let version_str = gl::get_string(StringName::Version);
-        // println!("OpenGL Version: {:?}", version_str);
+        gl::create_context();
 
         gl::enable(ServerCapability::DebugOutput);
 
@@ -52,42 +54,23 @@ impl GLRender {
         gl::viewport(0, 0, 800, 800);
 
         GLRender {
-            gl: gl,
+            meshes: HashMap::new(),
+            mesh_id_counter: 0,
         }
     }
 
     pub fn gen_mesh(&mut self, mesh: &Mesh) -> GpuMesh {
         // Generate array buffer.
-        let vertex_array = gl::gen_vertex_array();
-        gl::bind_vertex_array(vertex_array);
+        let mut vertex_buffer = VertexBuffer::new();
+        vertex_buffer.set_data_f32(mesh.vertex_data());
 
-        // Generate vertex buffer, passing the raw data held by the mesh.
-        let vertex_buffer = gl::gen_buffer();
-        gl::bind_buffer(BufferTarget::ArrayBuffer, vertex_buffer);
-
-        gl::buffer_data(
-            BufferTarget::ArrayBuffer,
-            mesh.vertex_data(),
-            BufferUsage::StaticDraw);
-
-        let index_buffer = gl::gen_buffer();
-        gl::bind_buffer(BufferTarget::ElementArrayBuffer, index_buffer);
-
-        gl::buffer_data(
-            BufferTarget::ElementArrayBuffer,
-            mesh.indices(),
-            BufferUsage::StaticDraw);
-
-        // Unbind buffers.
-        gl::bind_vertex_array(VertexArrayName::null());
-        gl::bind_buffer(BufferTarget::ArrayBuffer, BufferName::null());
-        gl::bind_buffer(BufferTarget::ElementArrayBuffer, BufferName::null());
+        let index_buffer = IndexBuffer::new();
+        index_buffer.set_data_u32(mesh.indices());
 
         let mesh_id = GpuMesh(self.mesh_id_counter);
         self.mesh_id_counter += 1;
 
-        self.meshes.insert(MeshData {
-            vertex_array:       vertex_array,
+        self.meshes.insert(mesh_id, MeshData {
             vertex_buffer:      vertex_buffer,
             index_buffer:       index_buffer,
             position_attribute: mesh.position(),
@@ -95,11 +78,11 @@ impl GLRender {
             uv_attribute:       None,
             element_count:      mesh.indices().len(),
         });
+
+        mesh_id
     }
 
     pub fn gen_texture(&self, bitmap: &Bitmap) -> TextureObject {
-        let gl = &gl;
-
         let texture = gl::gen_texture();
         gl::bind_texture(TextureBindTarget::Texture2d, texture);
         gl::texture_image_2d(
@@ -116,14 +99,6 @@ impl GLRender {
         texture
     }
 
-    /// SUPER BAD LACK OF SAFETY, should be using RAII and some proper resource management, but
-    /// that will have to wait until we get a real rendering system.
-    pub fn delete_mesh(&self, mesh: MeshData) {
-        gl::delete_buffer(mesh.vertex_buffer);
-        gl::delete_buffer(mesh.index_buffer);
-        gl::delete_vertex_array(mesh.vertex_array);
-    }
-
     pub fn draw_mesh(
         &self,
         mesh: &MeshData,
@@ -133,7 +108,6 @@ impl GLRender {
         camera: &Camera,
         lights: &mut Iterator<Item=Light>
     ) {
-        let gl = &gl;
         let view_transform = camera.view_matrix();
         let model_view_transform = view_transform * model_transform;
         let projection_transform = camera.projection_matrix();
@@ -146,14 +120,9 @@ impl GLRender {
             inverse_model_view.transpose()
         };
 
-        // Bind the buffers for the mesh.
-        gl::bind_vertex_array(mesh.vertex_array);
-        gl::bind_buffer(BufferTarget::ArrayBuffer, mesh.vertex_buffer);
-        gl::bind_buffer(BufferTarget::ElementArrayBuffer, mesh.index_buffer);
-
         // Set the shader to use.
         let shader = material.shader();
-        shader.set_active(gl);
+        shader.set_active();
 
         // Specify the layout of the vertex data.
         let position_attrib = shader.vertex_position
@@ -161,7 +130,7 @@ impl GLRender {
         gl::vertex_attrib_pointer(
             position_attrib,
             3,
-            GLType::Float,
+            GlType::Float,
             false,
             (mesh.position_attribute.stride * mem::size_of::<f32>()) as i32,
             mesh.position_attribute.offset * mem::size_of::<f32>());
@@ -172,7 +141,7 @@ impl GLRender {
                 gl::vertex_attrib_pointer(
                     shader_normal,
                     3,
-                    GLType::Float,
+                    GlType::Float,
                     false,
                     (mesh_normal.stride * mem::size_of::<f32>()) as i32,
                     mesh_normal.offset * mem::size_of::<f32>());
@@ -283,69 +252,20 @@ impl GLRender {
                     gl::uniform_1f(light_strength_location, 1.0);
                 }
 
-                gl::draw_elements(
-                    DrawMode::Triangles,
-                    mesh.element_count as i32,
-                    IndexType::UnsignedInt,
-                    0);
+                // TODO: Set uniforms and all that jazz.
+                DrawBuilder::new(mesh.vertex_buffer, DrawMode::Triangles)
+                .index_buffer(mesh.index_buffer)
+                .draw();
             }
         } else {
             // Shader doesn't accept lights, so just draw without setting light values.
-            gl::draw_elements(
-                DrawMode::Triangles,
-                mesh.element_count as i32,
-                IndexType::UnsignedInt,
-                0);
+            // TODO: Set uniforms and all that jazz.
+            DrawBuilder::new(mesh.vertex_buffer, DrawMode::Triangles)
+            .index_buffer(mesh.index_buffer)
+            .draw();
         }
 
         gl::enable(ServerCapability::DepthTest);
-
-        // Unbind buffers.
-        gl::unbind_vertex_array();
-        gl::unbind_buffer(BufferTarget::ArrayBuffer);
-        gl::unbind_buffer(BufferTarget::ElementArrayBuffer);
-    }
-
-    pub fn draw_line(&self, camera: &Camera, shader: &ShaderProgram, start: Point, end: Point) {
-        let gl = &gl;
-        let buffer = gl::gen_buffer();
-        gl::bind_buffer(BufferTarget::ArrayBuffer, buffer);
-
-        gl::buffer_data(
-            BufferTarget::ArrayBuffer,
-            &[start.x, start.y, start.z, end.x, end.y, end.z],
-            BufferUsage::StaticDraw);
-
-        shader.set_active(gl);
-
-        let position_attrib = shader.vertex_position
-            .expect("Could not get vertexPosition attribute");
-        gl::vertex_attrib_pointer(
-            position_attrib,
-            3,
-            GLType::Float,
-            false,
-            (3 * mem::size_of::<f32>()) as i32,
-            0 * mem::size_of::<f32>());
-        gl::enable_vertex_attrib_array(position_attrib);
-
-        let view_transform = camera.view_matrix();
-        let projection_transform = camera.projection_matrix();
-        let view_projection = projection_transform * view_transform;
-        if let Some(model_view_projection_location) = shader.model_view_projection {
-            gl::uniform_matrix_4x4(
-                model_view_projection_location,
-                true,
-                view_projection.raw_data());
-        }
-
-        // if let Some(surface_color_location) = shader.surface_color {
-        //     gl::uniform_4f(surface_color_location, Color::new(1.0, 1.0, 1.0, 1.0).as_array());
-        // }
-
-        gl::draw_arrays(DrawMode::Lines, 0, 6);
-
-        gl::unbind_buffer(BufferTarget::ArrayBuffer);
     }
 
     pub fn draw_wireframe(
@@ -356,18 +276,12 @@ impl GLRender {
         model_transform: Matrix4,
         color: Color,
     ) {
-        let gl = &gl;
         let view_transform = camera.view_matrix();
         let model_view_transform = view_transform * model_transform;
         let projection_transform = camera.projection_matrix();
         let model_view_projection = projection_transform * model_view_transform;
 
-        shader.set_active(gl);
-
-        // Bind the buffers for the mesh.
-        gl::bind_vertex_array(mesh.vertex_array);
-        gl::bind_buffer(BufferTarget::ArrayBuffer, mesh.vertex_buffer);
-        gl::bind_buffer(BufferTarget::ElementArrayBuffer, mesh.index_buffer);
+        shader.set_active();
 
         // Specify the layout of the vertex data.
         let position_attrib = shader.vertex_position
@@ -375,7 +289,7 @@ impl GLRender {
         gl::vertex_attrib_pointer(
             position_attrib,
             3,
-            GLType::Float,
+            GlType::Float,
             false,
             (mesh.position_attribute.stride * mem::size_of::<f32>()) as i32,
             mesh.position_attribute.offset * mem::size_of::<f32>());
@@ -421,15 +335,9 @@ impl GLRender {
         //     gl::uniform_4f(surface_color_location, color.as_array());
         // }
 
-        gl::draw_elements(
-            DrawMode::Lines,
-            mesh.element_count as i32,
-            IndexType::UnsignedInt,
-            0);
-
-        gl::unbind_vertex_array();
-        gl::unbind_buffer(BufferTarget::ArrayBuffer);
-        gl::unbind_buffer(BufferTarget::ElementArrayBuffer);
+        DrawBuilder::new(mesh.vertex_buffer, DrawMode::Triangles)
+        .index_buffer(mesh.index_buffer)
+        .draw();
     }
 
     /// Clears the current back buffer.
@@ -447,7 +355,7 @@ impl GLRender {
         let vs = self.compile_shader(vert_shader, ShaderType::VertexShader);
         let fs = self.compile_shader(frag_shader, ShaderType::FragmentShader);
         let program = self.link_program(vs, fs);
-        ShaderProgram::new(program, &gl)
+        ShaderProgram::new(program)
     }
 
     fn compile_shader(&self, shader_source: &str, shader_type: ShaderType) -> ShaderObject {
@@ -473,9 +381,8 @@ impl GLRender {
 
 #[derive(Debug, Clone, Copy)]
 pub struct MeshData {
-    vertex_array: VertexArrayName,
-    vertex_buffer: BufferName,
-    index_buffer: BufferName,
+    vertex_buffer: VertexBuffer,
+    index_buffer: IndexBuffer,
     pub position_attribute: VertexAttribute,
     pub normal_attribute: Option<VertexAttribute>,
     pub uv_attribute: Option<VertexAttribute>,

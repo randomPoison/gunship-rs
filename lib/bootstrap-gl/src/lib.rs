@@ -23,6 +23,7 @@ pub mod platform;
 pub mod types;
 
 pub use self::types::*;
+pub use self::platform::swap_buffers;
 
 /// Macro used for generating bindings to OpenGL procs.
 ///
