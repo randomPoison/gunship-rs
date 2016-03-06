@@ -161,10 +161,29 @@ pub enum IndexType {
 
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IntegerName {
+    // Version 3.0
+    MajorVersion  = 0x821B,
+    MinorVersion  = 0x821C,
+    NumExtensions = 0x821D,
+}
+
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PolygonMode {
     Point = 0x1B00,
     Line = 0x1B01,
     Fill = 0x1B02,
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct UniformLocation(u32);
+
+impl UniformLocation {
+    pub fn from_index(index: u32) -> UniformLocation {
+        UniformLocation(index)
+    }
 }
 
 /// TODO: Use NonZero here so that Option<VertexArrayName>::None can be used instead of 0.
@@ -379,10 +398,6 @@ pub struct ShaderObject(u32);
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ProgramObject(u32);
 
-#[repr(C)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct UniformLocation(u32);
-
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ShaderParam {
@@ -456,15 +471,6 @@ pub enum StringName {
     Renderer               = 0x1F01,
     Version                = 0x1F02,
     ShadingLanguageVersion = 0x8B8C,
-}
-
-#[repr(u32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum IntegerName {
-    // Version 3.0
-    MajorVersion  = 0x821B,
-    MinorVersion  = 0x821C,
-    NumExtensions = 0x821D,
 }
 
 #[repr(u32)]
