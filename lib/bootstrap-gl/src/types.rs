@@ -178,6 +178,49 @@ pub enum PolygonMode {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ProgramObject(u32);
+
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProgramParam {
+    DeleteStatus = 0x8B80,
+    LinkStatus = 0x8B82,
+    ValidateStatus = 0x8B83,
+    InfoLogLength = 0x8B84,
+    AttachedShaders = 0x8B85,
+    ActiveUniforms = 0x8B86,
+    ActiveUniformMaxLength = 0x8B87,
+    ActiveAttributes = 0x8B89,
+    ActiveAttributeMaxLength = 0x8B8A,
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ShaderObject(u32);
+
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ShaderParam {
+    ShaderType = 0x8B4F,
+    DeleteStatus = 0x8B80,
+    CompileStatus = 0x8B81,
+    InfoLogLength = 0x8B84,
+    ShaderSourceLength = 0x8B88,
+}
+
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ShaderType {
+    ComputeShader = 0x91B9,
+    FragmentShader = 0x8B30,
+    VertexShader = 0x8B31,
+    GeometryShader = 0x8DD9,
+    TessEvaluationShader = 0x8E87,
+    TessControlShader = 0x8E88,
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct UniformLocation(u32);
 
 impl UniformLocation {
@@ -375,51 +418,6 @@ pub enum TextureFormat {
     // GL_ALPHA,
     // GL_LUMINANCE,
     // GL_LUMINANCE_ALPHA,
-}
-
-#[repr(u32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ShaderType {
-    ComputeShader        = 0x91B9,
-    FragmentShader       = 0x8B30,
-    VertexShader         = 0x8B31,
-    GeometryShader       = 0x8DD9,
-    TessEvaluationShader = 0x8E87,
-    TessControlShader    = 0x8E88,
-}
-
-/// TODO: Use NonZero here so that Option<ShaderObject>::None can be used instead of 0.
-#[repr(C)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ShaderObject(u32);
-
-/// TODO: Use NonZero here so that Option<ProgramObject>::None can be used instead of 0.
-#[repr(C)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ProgramObject(u32);
-
-#[repr(u32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ShaderParam {
-    ShaderType         = 0x8B4F,
-    DeleteStatus       = 0x8B80,
-    CompileStatus      = 0x8B81,
-    InfoLogLength      = 0x8B84,
-    ShaderSourceLength = 0x8B88,
-}
-
-#[repr(u32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ProgramParam {
-    DeleteStatus             = 0x8B80,
-    LinkStatus               = 0x8B82,
-    ValidateStatus           = 0x8B83,
-    InfoLogLength            = 0x8B84,
-    AttachedShaders          = 0x8B85,
-    ActiveUniforms           = 0x8B86,
-    ActiveUniformMaxLength   = 0x8B87,
-    ActiveAttributes         = 0x8B89,
-    ActiveAttributeMaxLength = 0x8B8A,
 }
 
 #[repr(u32)]
