@@ -181,6 +181,10 @@ pub enum PolygonMode {
 pub struct ProgramObject(u32);
 
 impl ProgramObject {
+    pub fn null() -> ProgramObject {
+        ProgramObject(0)
+    }
+
     pub fn is_null(&self) -> bool {
         *self == ProgramObject(0)
     }
@@ -205,6 +209,10 @@ pub enum ProgramParam {
 pub struct ShaderObject(u32);
 
 impl ShaderObject {
+    pub fn null() -> ShaderObject {
+        ShaderObject(0)
+    }
+
     pub fn is_null(&self) -> bool {
         *self == ShaderObject(0)
     }

@@ -1155,7 +1155,7 @@ gl_proc!(glUseProgram:
     ///
     /// Core since version 2.0
     ///
-    /// Installs the program object specified by program​ as part of current rendering state.
+    /// Installs the program object specified by `program​` as part of current rendering state.
     /// One or more executables are created in a program object by successfully attaching shader
     /// objects to it with `attach_shader`, successfully compiling the shader objects with
     /// `compile_shader`, and successfully linking the program object with `link_program`.
@@ -1179,8 +1179,9 @@ gl_proc!(glUseProgram:
     /// `use_program` removes it from use. After it is removed from use, it cannot be made part
     /// of current state until it has been successfully relinked.
     ///
-    /// If program​ is zero, then the current rendering state refers to an invalid program object
-    /// and the results of shader execution are undefined. However, this is not an error.
+    /// If `program​` is zero (the null program object), then the current rendering state refers to
+    /// an invalid program object and the results of shader execution are undefined. However, this
+    /// is not an error.
     ///
     /// If program​ does not contain shader objects of type `FragmentShader`, an executable will
     /// be installed on the vertex, and possibly geometry processors, but the results of fragment
@@ -1214,7 +1215,7 @@ gl_proc!(glVertexAttribPointer:
     /// Specifies the location and data format of the array of generic vertex attributes to use when
     /// rendering.
     ///
-    /// If normalized​ is set to `true` it indicates that values stored in an integer format are to be
+    /// If `normalize` is set to `true` it indicates that values stored in an integer format are to be
     /// mapped to the range [-1,1] (for signed values) or [0,1] (for unsigned values) when they are
     /// accessed and converted to floating point. Otherwise, values will be converted to floats
     /// directly without normalization.
@@ -1229,7 +1230,7 @@ gl_proc!(glVertexAttribPointer:
     /// (`GL_ARRAY_BUFFER_BINDING`) is saved as generic vertex attribute array state
     /// (`GL_VERTEX_ATTRIB_ARRAY_BUFFER_BINDING`) for `attrib`​.
     ///
-    /// When a generic vertex attribute array is specified `size​`, `gl_type​`, `normalized​`, `stride​`,
+    /// When a generic vertex attribute array is specified `size​`, `gl_type​`, `normalize`, `stride​`,
     /// and `offset` are saved as vertex array state, in addition to the current vertex array buffer
     /// object binding.
     ///
@@ -1244,9 +1245,9 @@ gl_proc!(glVertexAttribPointer:
     /// - `size` - Specifies the number of components per generic vertex attribute. Must be 1, 2, 3, 4.
     ///   Additionally, the symbolic constant `GL_BGRA` is accepted by `vertex_attrib_pointer`. The
     ///   initial value is 4.
-    /// - `type` - Specifies the data type of each component in the array. The different functions take
-    ///   different values. The initial value is `Float`.
-    /// - `normalized` - For `vertex_attrib_pointer` specifies whether fixed-point data values should
+    /// - `type` - Specifies the data type of each component in the array. The different functions
+    ///   take different values. The initial value is `Float`.
+    /// - `normalize` - Specifies whether fixed-point data values should
     ///   be normalized (`true`) or converted directly as fixed-point values (`false`) when they are
     ///   accessed.
     /// - `stride` - Specifies the byte offset between consecutive generic vertex attributes. If
@@ -1284,7 +1285,7 @@ gl_proc!(glVertexAttribPointer:
         attrib: AttributeLocation,
         size: i32,
         gl_type: GlType,
-        normalized: bool,
+        normalize: bool,
         stride: i32,
         offset: usize));
 

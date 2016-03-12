@@ -9,7 +9,7 @@
 extern crate bootstrap_gl as gl;
 
 use gl::{
-    BufferName, BufferTarget, BufferUsage, ClearBufferMask, Face, GlType, IndexType,
+    BufferName, BufferTarget, BufferUsage, ClearBufferMask, Face, GlType, IndexType, ProgramObject,
     VertexArrayName
 };
 use std::mem;
@@ -172,6 +172,7 @@ pub struct DrawBuilder<'a> {
     draw_mode: DrawMode,
     index_buffer: Option<&'a IndexBuffer>,
     polygon_mode: Option<PolygonMode>,
+    program: Option<&'a Program>,
 }
 
 impl<'a> DrawBuilder<'a> {
@@ -181,26 +182,37 @@ impl<'a> DrawBuilder<'a> {
             draw_mode: draw_mode,
             index_buffer: None,
             polygon_mode: None,
+            program: None,
         }
     }
 
-    pub fn index_buffer(mut self, index_buffer: &'a IndexBuffer) -> DrawBuilder<'a> {
+    pub fn index_buffer(&'a mut self, index_buffer: &'a IndexBuffer) -> &mut DrawBuilder {
         self.index_buffer = Some(index_buffer);
         self
     }
 
-    pub fn polygon_mode(mut self, polygon_mode: PolygonMode) -> DrawBuilder<'a> {
+    pub fn polygon_mode(&'a mut self, polygon_mode: PolygonMode) -> &mut DrawBuilder {
         self.polygon_mode = Some(polygon_mode);
         self
     }
 
-    pub fn draw(self) {
+    pub fn program(&'a mut self, program: &'a Program) -> &mut DrawBuilder {
+        self.program = Some(program);
+        self
+    }
+
+    pub fn draw(&mut self) {
         unsafe {
             gl::bind_vertex_array(self.vertex_buffer.vertex_array_name);
             gl::bind_buffer(BufferTarget::Array, self.vertex_buffer.buffer_name);
 
             if let Some(polygon_mode) = self.polygon_mode {
                 gl::polygon_mode(Face::FrontAndBack, polygon_mode);
+            }
+
+            if let Some(program) = self.program {
+                let Program(program_object) = *program;
+                gl::use_program(program_object);
             }
 
             if let Some(indices) = self.index_buffer {
@@ -220,9 +232,14 @@ impl<'a> DrawBuilder<'a> {
             // Reset all values even if they weren't used so that we don't need to branch twice on
             // each option.
             gl::polygon_mode(Face::FrontAndBack, PolygonMode::Fill);
+            gl::use_program(ProgramObject::null());
             gl::bind_buffer(BufferTarget::ElementArray, BufferName::null());
             gl::bind_buffer(BufferTarget::Array, BufferName::null());
             gl::bind_vertex_array(VertexArrayName::null());
         }
     }
 }
+
+/// Represents a complete shader program which can be used in rendering.
+#[derive(Debug, Clone)]
+pub struct Program(ProgramObject);

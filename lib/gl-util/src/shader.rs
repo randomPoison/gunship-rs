@@ -2,6 +2,7 @@ use gl;
 use gl::*;
 use std::ffi::CString;
 use std::mem;
+use super::Program;
 
 /// Represents a single shader which can be used to create a `Program`.
 #[derive(Debug, Clone)]
@@ -113,10 +114,6 @@ enum ShaderCompileStatus {
     Failure = 0,
     Success = 1,
 }
-
-/// Represents a complete shader program which can be used in rendering.
-#[derive(Debug, Clone)]
-pub struct Program(ProgramObject);
 
 impl Program {
     /// Creates a program with the provided shaders.
