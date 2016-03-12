@@ -1,9 +1,14 @@
 use gl;
 use gl::*;
 use std::ffi::CString;
+use std::mem;
 
+/// Represents a single shader which can be used to create a `Program`.
 #[derive(Debug, Clone)]
-pub struct Shader(ShaderObject);
+pub struct Shader {
+    shader_object: ShaderObject,
+    shader_type: ShaderType,
+}
 
 impl Shader {
     pub fn new(source: &str, shader_type: ShaderType) -> Result<Shader, ShaderError> {
@@ -24,12 +29,16 @@ impl Shader {
 
         // Handle compilation failure.
         let compile_status = compile_status(shader_object);
-        if compile_status == ShaderCompileStatus::Failure {
-            let log = read_log(shader_object);
-            return Err(ShaderError::CompileError(log));
+        match compile_status {
+            ShaderCompileStatus::Success => Ok(Shader {
+                shader_object: shader_object,
+                shader_type: shader_type,
+            }),
+            ShaderCompileStatus::Failure => {
+                let log = shader_log(shader_object);
+                Err(ShaderError::CompileError(log))
+            }
         }
-
-        Ok(Shader(shader_object))
     }
 }
 
@@ -50,20 +59,11 @@ fn compile_status(shader_object: ShaderObject) -> ShaderCompileStatus {
     let mut result = 0;
     unsafe {
         gl::get_shader_param(shader_object, ShaderParam::CompileStatus, &mut result);
-    }
-
-    if result == 1 {
-        ShaderCompileStatus::Success
-    } else if result == 0 {
-        ShaderCompileStatus::Failure
-    } else {
-        panic!(
-            "gl::get_shader_param(CompileStatus) returned a value other than 0 or 1: {}",
-            result);
+        mem::transmute(result)
     }
 }
 
-fn read_log(shader_object: ShaderObject) -> String {
+fn shader_log(shader_object: ShaderObject) -> String {
     // Get the length of the info log.
     let mut info_log_length = 0;
     unsafe {
@@ -102,7 +102,107 @@ fn read_log(shader_object: ShaderObject) -> String {
 
 #[repr(i32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
 enum ShaderCompileStatus {
-    Success = 1,
     Failure = 0,
+    Success = 1,
+}
+
+/// Represents a complete shader program which can be used in rendering.
+#[derive(Debug, Clone)]
+pub struct Program(ProgramObject);
+
+impl Program {
+    /// Creates a program with the provided shaders.
+    pub fn new(shaders: &[Shader]) -> Result<Program, ProgramError> {
+        // Create shader program.
+        let program = unsafe { gl::create_program() };
+        if program.is_null() {
+            return Err(ProgramError::CreateProgramError);
+        }
+
+        // Attach each of the shaders to the program.
+        for shader in shaders {
+            unsafe { gl::attach_shader(program, shader.shader_object); }
+        }
+
+        // Link the program and check for errors.
+        unsafe { gl::link_program(program); }
+        let link_status = link_status(program);
+        match link_status {
+            ProgramLinkStatus::Success => Ok(Program(program)),
+            ProgramLinkStatus::Failure => {
+                let log = program_log(program);
+                Err(ProgramError::LinkError(log))
+            }
+        }
+    }
+}
+
+#[repr(i32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
+enum ProgramLinkStatus {
+    Failure = 0,
+    Success = 1,
+}
+
+#[derive(Debug, Clone)]
+pub enum ProgramError {
+    /// Indicates that an error occurred while creating the program object.
+    ///
+    /// TODO: Figure out why this would happen and how to address the error.
+    CreateProgramError,
+
+    /// Indicates that an error occurred while linking the program.
+    ///
+    /// Link errors can occur for various reasons, usually relating to undeclared variables or
+    /// variables that are declared differently between different shaders in the program. The
+    /// wrapped error message will contain information about the source of the error.
+    LinkError(String),
+}
+
+fn link_status(program_object: ProgramObject) -> ProgramLinkStatus {
+    let mut result = 0;
+    unsafe {
+        gl::get_program_param(program_object, ProgramParam::LinkStatus, &mut result);
+        mem::transmute(result)
+    }
+}
+
+fn program_log(program_object: ProgramObject) -> String {
+    // Get the length of the info log.
+    let mut info_log_length = 0;
+    unsafe {
+        gl::get_program_param(
+            program_object,
+            ProgramParam::InfoLogLength,
+            &mut info_log_length);
+    }
+
+    // Create the string and read the info log.
+
+    if info_log_length > 0 {
+        let mut log = Vec::with_capacity(info_log_length as usize);
+        let mut length_out = 0;
+        unsafe {
+            log.set_len(info_log_length as usize - 1);
+            gl::get_program_info_log(
+                program_object,
+                info_log_length,
+                &mut length_out,
+                log.as_ptr() as *mut _);
+        }
+
+        assert!(
+            length_out == info_log_length - 1,
+            "Expected {} chars out, got {}",
+            info_log_length,
+            length_out);
+
+        let cstring = unsafe { CString::from_vec_unchecked(log) };
+        cstring.into_string().unwrap()
+    } else {
+        String::new()
+    }
 }
