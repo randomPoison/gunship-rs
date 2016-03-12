@@ -42,6 +42,12 @@ impl Shader {
     }
 }
 
+impl Drop for Shader {
+    fn drop(&mut self) {
+        unsafe { gl::delete_shader(self.shader_object); }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum ShaderError {
     /// Indicates that the call to `gl::create_shader()` returned 0 (the null shader object).
@@ -126,8 +132,13 @@ impl Program {
             unsafe { gl::attach_shader(program, shader.shader_object); }
         }
 
-        // Link the program and check for errors.
+        // Link the program and detach the shaders.
         unsafe { gl::link_program(program); }
+        for shader in shaders {
+            unsafe { gl::detach_shader(program, shader.shader_object); }
+        }
+
+        // Check for errors.
         let link_status = link_status(program);
         match link_status {
             ProgramLinkStatus::Success => Ok(Program(program)),
@@ -136,6 +147,13 @@ impl Program {
                 Err(ProgramError::LinkError(log))
             }
         }
+    }
+}
+
+impl Drop for Program {
+    fn drop(&mut self) {
+        let Program(program_object) = *self;
+        unsafe { gl::delete_program(program_object); }
     }
 }
 
