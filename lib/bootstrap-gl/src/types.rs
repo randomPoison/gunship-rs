@@ -180,6 +180,12 @@ pub enum PolygonMode {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ProgramObject(u32);
 
+impl ProgramObject {
+    pub fn is_null(&self) -> bool {
+        *self == ProgramObject(0)
+    }
+}
+
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProgramParam {

@@ -438,6 +438,25 @@ gl_proc!(glDeleteBuffers:
     /// `GL_INVALID_VALUE` is generated if `num_buffers` is negative.
     fn delete_buffers(num_buffers: i32, buffers: *const BufferName));
 
+gl_proc!(glDeleteShader:
+    /// Deletes a shader object.
+    ///
+    /// [Wiki page](https://www.opengl.org/wiki/GLAPI/glDeleteShader)
+    ///
+    /// Core since version 2.0
+    ///
+    /// Frees the memory and invalidates the name associated with the shader object specified by
+    /// `shader_object`. This command effectively undoes the effects of a call to `create_shader`.
+    ///
+    /// If a shader object to be deleted is attached to a program object it will be flagged for
+    /// deletion but it will not be deleted until it is no longer attached to any program object,
+    /// for any rendering context (i.e., it must be detached from wherever it was attached before
+    /// it will be deleted).
+    ///
+    /// To determine whether an object has been flagged for deletion call `get_shader_param` with
+    /// arguments `shader_object` and `DeleteStatus`.
+    fn delete_shader(shader_object: ShaderObject));
+
 gl_proc!(glDeleteVertexArrays:
     /// Deletes name vertex array objects.
     ///
@@ -455,6 +474,27 @@ gl_proc!(glDeleteVertexArrays:
     ///
     /// `GL_INVALID_VALUE` is generated if `num_arrays`​ is negative.
     fn delete_vertex_arrays(num_arrays: i32, arrays: *const VertexArrayName));
+
+gl_proc!(glDetachShader:
+    /// Detaches a shader object from a program object to which it is attached.
+    ///
+    /// [Wiki page](https://www.opengl.org/wiki/GLAPI/glDetachShader)
+    ///
+    /// Cores since version 2.0
+    ///
+    /// Detaches the shader object specified by `shader​_object` from the program object specified
+    /// by `program_object`. This command can be used to undo the effect of the command
+    /// `attach_shader`.
+    ///
+    /// If `shader_object` has already been flagged for deletion by a call to `delete_shader` and
+    /// it is not attached to any other program object it will be deleted after it has been
+    /// detached.
+    ///
+    /// # Errors
+    ///
+    /// - `GL_INVALID_OPERATION` is generated if `shader​_object` is not attached to
+    ///   `program​_object`.
+    fn detach_shader(program_object: ProgramObject, shader_object: ShaderObject));
 
 gl_proc!(glDisable:
     fn disable(capability: ServerCapability));
@@ -923,12 +963,12 @@ gl_proc!(glLinkProgram:
     ///
     /// Core since version 2.0
     ///
-    /// Links the program object specified by program​. If any shader objects of type
-    /// `VertexShader` are attached to program​, they will be used to create an executable that
+    /// Links the program object specified by `program​`. If any shader objects of type
+    /// `VertexShader` are attached to `program​`, they will be used to create an executable that
     /// will run on the programmable vertex processor. If any shader objects of type
-    /// `GeometryShader` are attached to program​, they will be used to create an executable that
+    /// `GeometryShader` are attached to `program​`, they will be used to create an executable that
     /// will run on the programmable geometry processor. If any shader objects of type
-    /// `FragmentShader` are attached to program​, they will be used to create an executable that
+    /// `FragmentShader` are attached to `program​`, they will be used to create an executable that
     /// will run on the programmable fragment processor.
     ///
     /// The status of the link operation will be stored as part of the program object's state.
@@ -972,7 +1012,7 @@ gl_proc!(glLinkProgram:
     /// - The number of active outputs in the fragment shader is greater than the value of
     ///   `GL_MAX_DRAW_BUFFERS`.
     /// - The program has an active output assigned to a location greater than or equal to the
-    ///   value of GL_MAX_DUAL_SOURCE_DRAW_BUFFERS and has an active output assigned an index
+    ///   value of `GL_MAX_DUAL_SOURCE_DRAW_BUFFERS` and has an active output assigned an index
     ///   greater than or equal to one.
     /// - More than one varying out variable is bound to the same number and index.
     /// - The explicit binding assigments do not leave enough space for the linker to
