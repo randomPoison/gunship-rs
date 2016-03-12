@@ -412,6 +412,27 @@ gl_proc!(glCreateShader:
     ///   object.
     fn create_shader(shader_type: ShaderType) -> ShaderObject);
 
+gl_proc!(glCullFace:
+    /// Specifies whether front- or back-faces should be culled.
+    ///
+    /// [Wiki page](https://www.opengl.org/wiki/GLAPI/glCullFace)
+    ///
+    /// Core since version 1.0
+    ///
+    /// Specifies whether front- or back-facing facets are culled (as specified by mode) when
+    /// facet culling is enabled. Facet culling is initially disabled. To enable and disable facet
+    /// culling, call `enable` and `disable` commands with the argument `CullFace`. Facets include
+    /// triangles, quadrilaterals, polygons, and rectangles.
+    ///
+    /// `front_face` specifies which of the clockwise and counterclockwise facets are front-facing
+    /// and back-facing.
+    ///
+    /// # Notes
+    ///
+    /// - If `mode​` is `FrontAndBack` no facets are drawn but other primitives such as points and
+    ///   lines are drawn.
+    fn cull_face(mode: Face));
+
 gl_proc!(glDebugMessageCallback:
     fn debug_message_callback(
         callback: extern "C" fn(DebugSource, DebugType, UInt, DebugSeverity, SizeI, *const u8, *mut ()),
@@ -518,6 +539,16 @@ gl_proc!(glDetachShader:
     fn detach_shader(program_object: ProgramObject, shader_object: ShaderObject));
 
 gl_proc!(glDisable:
+    /// Disables server-side GL capabilities.
+    ///
+    /// [Wiki page](https://www.opengl.org/wiki/GLAPI/glEnable)
+    ///
+    /// Core since version 1.0
+    ///
+    /// Disables various server capabilities. Use `is_enabled` or `get` to determine the current
+    /// setting of any capability. The initial value for each capability with the exception of
+    /// `Diter` and `Multisample` is `false`. The initial value for `Dither` and `Multisample` is
+    /// `true`.
     fn disable(capability: ServerCapability));
 
 gl_proc!(glDisableVertexAttribArray:
@@ -616,6 +647,16 @@ gl_proc!(glDrawElements:
     fn draw_elements(mode: DrawMode, count: i32, index_type: IndexType, offset: usize));
 
 gl_proc!(glEnable:
+    /// Enables server-side GL capabilities.
+    ///
+    /// [Wiki page](https://www.opengl.org/wiki/GLAPI/glEnable)
+    ///
+    /// Core since version 1.0
+    ///
+    /// Enables various server capabilities. Use `is_enabled` or `get` to determine the current
+    /// setting of any capability. The initial value for each capability with the exception of
+    /// `Diter` and `Multisample` is `false`. The initial value for `Dither` and `Multisample` is
+    /// `true`.
     fn enable(capability: ServerCapability));
 
 gl_proc!(glEnableVertexAttribArray:
@@ -1094,7 +1135,10 @@ gl_proc!(glPolygonMode:
     ///
     /// Core since version 1.0
     ///
-    /// glPolygonMode controls the interpretation of polygons for rasterization. face​ describes which polygons mode​ applies to: both front and back-facing polygons (GL_FRONT_AND_BACK). The polygon mode affects only the final rasterization of polygons. In particular, a polygon's vertices are lit and the polygon is clipped and possibly culled before these modes are applied.
+    /// Controls the interpretation of polygons for rasterization. `face`​ describes which polygons
+    /// mode​ applies to: The polygon mode affects only the final rasterization of polygons. In
+    /// particular, a polygon's vertices are lit and the polygon is clipped and possibly culled
+    /// before these modes are applied.
     ///
     /// Three modes are defined and can be specified in mode​:
     ///

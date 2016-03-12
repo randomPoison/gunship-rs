@@ -9,12 +9,12 @@
 extern crate bootstrap_gl as gl;
 
 use gl::{
-    BufferName, BufferTarget, BufferUsage, ClearBufferMask, Face, GlType, IndexType, ProgramObject,
-    VertexArrayName
+    BufferName, BufferTarget, BufferUsage, ClearBufferMask, GlType, IndexType, ProgramObject,
+    ServerCapability, VertexArrayName
 };
 use std::mem;
 
-pub use gl::{AttributeLocation, DrawMode, PolygonMode, ShaderType};
+pub use gl::{AttributeLocation, DrawMode, Face, PolygonMode, ShaderType};
 pub use gl::platform::swap_buffers;
 pub use self::shader::*;
 
@@ -173,6 +173,7 @@ pub struct DrawBuilder<'a> {
     index_buffer: Option<&'a IndexBuffer>,
     polygon_mode: Option<PolygonMode>,
     program: Option<&'a Program>,
+    cull: Option<Face>,
 }
 
 impl<'a> DrawBuilder<'a> {
@@ -183,6 +184,7 @@ impl<'a> DrawBuilder<'a> {
             index_buffer: None,
             polygon_mode: None,
             program: None,
+            cull: None,
         }
     }
 
@@ -201,6 +203,11 @@ impl<'a> DrawBuilder<'a> {
         self
     }
 
+    pub fn cull(&'a mut self, face: Face) -> &mut DrawBuilder {
+        self.cull = Some(face);
+        self
+    }
+
     pub fn draw(&mut self) {
         unsafe {
             gl::bind_vertex_array(self.vertex_buffer.vertex_array_name);
@@ -213,6 +220,11 @@ impl<'a> DrawBuilder<'a> {
             if let Some(program) = self.program {
                 let Program(program_object) = *program;
                 gl::use_program(program_object);
+            }
+
+            if let Some(face) = self.cull {
+                gl::enable(ServerCapability::CullFace);
+                gl::cull_face(face);
             }
 
             if let Some(indices) = self.index_buffer {
@@ -231,6 +243,7 @@ impl<'a> DrawBuilder<'a> {
 
             // Reset all values even if they weren't used so that we don't need to branch twice on
             // each option.
+            gl::disable(ServerCapability::CullFace);
             gl::polygon_mode(Face::FrontAndBack, PolygonMode::Fill);
             gl::use_program(ProgramObject::null());
             gl::bind_buffer(BufferTarget::ElementArray, BufferName::null());
