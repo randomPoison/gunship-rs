@@ -14,8 +14,11 @@ use gl::{
 };
 use std::mem;
 
-pub use gl::{AttributeLocation, DrawMode, PolygonMode};
+pub use gl::{AttributeLocation, DrawMode, PolygonMode, ShaderType};
 pub use gl::platform::swap_buffers;
+pub use self::shader::*;
+
+pub mod shader;
 
 /// Initializes global OpenGL state and creates the OpenGL context needed to perform rendering.
 pub fn init() {

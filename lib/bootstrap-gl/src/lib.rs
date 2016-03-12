@@ -813,8 +813,8 @@ gl_proc!(glGetShaderInfoLog:
     ///
     /// `get_shader_info_log` returns in `log_out` as much of the information log as it can, up
     /// to a maximum of `max_length` characters. The number of characters actually returned,
-    /// excluding the null termination character, is specified by length​. If the length of the
-    /// returned string is not required, a value of 0 can be passed in the length​ argument. The
+    /// excluding the null termination character, is specified by `length_out`​. If the length of the
+    /// returned string is not required, a value of 0 can be passed in the `length​_out` argument. The
     /// size of the buffer required to store the returned information log can be obtained by
     /// calling `get_shader` with the value `InfoLogLength`.
     ///
@@ -1065,8 +1065,8 @@ gl_proc!(glShaderSource:
     ///
     /// Sets the source code in shader​ to the source code in the array of strings specified by
     /// string​. Any source code previously stored in the shader object is completely replaced.
-    /// The number of strings in the array is specified by count​. If length​ is NULL, each string
-    /// is assumed to be null terminated. If length​ is a value other than NULL, it points to an
+    /// The number of strings in the array is specified by count​. If length​ is null, each string
+    /// is assumed to be null terminated. If length​ is a value other than 0, it points to an
     /// array containing a string length for each of the corresponding elements of string​. Each
     /// element in the length​ array may contain the length of the corresponding string (the null
     /// character is not counted as part of the string length) or a value less than 0 to indicate

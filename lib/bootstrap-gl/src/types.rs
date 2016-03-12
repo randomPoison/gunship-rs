@@ -198,6 +198,12 @@ pub enum ProgramParam {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ShaderObject(u32);
 
+impl ShaderObject {
+    pub fn is_null(&self) -> bool {
+        *self == ShaderObject(0)
+    }
+}
+
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ShaderParam {
@@ -211,12 +217,12 @@ pub enum ShaderParam {
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ShaderType {
-    ComputeShader = 0x91B9,
-    FragmentShader = 0x8B30,
-    VertexShader = 0x8B31,
-    GeometryShader = 0x8DD9,
-    TessEvaluationShader = 0x8E87,
-    TessControlShader = 0x8E88,
+    Compute = 0x91B9,
+    Fragment = 0x8B30,
+    Vertex = 0x8B31,
+    Geometry = 0x8DD9,
+    TessEvaluation = 0x8E87,
+    TessControl = 0x8E88,
 }
 
 #[repr(C)]
