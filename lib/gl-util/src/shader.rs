@@ -148,6 +148,23 @@ impl Program {
             }
         }
     }
+
+    /// Gets a vertex attribute location from the program.
+    pub fn get_attrib(&self, name: &str) -> Option<AttributeLocation> {
+        let Program(program_object) = *self;
+
+        let mut null_terminated = String::from(name);
+        null_terminated.push('\0');
+
+        let result = unsafe { gl::get_attrib_location(program_object, null_terminated.as_ptr()) };
+
+        // Check for errors
+        if result == -1 {
+            None
+        } else {
+            Some(AttributeLocation::from_index(result as u32))
+        }
+    }
 }
 
 impl Drop for Program {
