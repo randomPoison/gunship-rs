@@ -438,6 +438,27 @@ gl_proc!(glDeleteBuffers:
     /// `GL_INVALID_VALUE` is generated if `num_buffers` is negative.
     fn delete_buffers(num_buffers: i32, buffers: *const BufferName));
 
+gl_proc!(glDeleteProgram:
+    /// Deletes a program object.
+    ///
+    /// [Wiki page](https://www.opengl.org/wiki/GLAPI/glDeleteProgram)
+    ///
+    /// Core since version 2.0
+    ///
+    /// Frees the memory and invalidates the name associated with the program object specified by
+    /// `program_object`.​ This command effectively undoes the effects of a call to
+    /// `create_program`.
+    ///
+    /// If a program object is in use as part of current rendering state it will be flagged for
+    /// deletion but it will not be deleted until it is no longer part of current state for any
+    /// rendering context. If a program object to be deleted has shader objects attached to it
+    /// those shader objects will be automatically detached but not deleted unless they have
+    /// already been flagged for deletion by a previous call to `delete_shader`.
+    ///
+    /// To determine whether a program object has been flagged for deletion call
+    /// `get_program_param` with arguments `program_object` and `DeleteStatus`.
+    fn delete_program(program_object: ProgramObject));
+
 gl_proc!(glDeleteShader:
     /// Deletes a shader object.
     ///
