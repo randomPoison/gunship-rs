@@ -5,7 +5,11 @@ use std::str::FromStr;
 #[derive(Debug, Clone)]
 pub struct Obj {
     positions: Vec<(f32, f32, f32, f32)>,
-    faces: Vec<Vec<usize>>,
+    position_indices: Vec<Vec<usize>>,
+    texcoords: Vec<(f32, f32, f32)>,
+    texcoord_indices: Vec<Vec<usize>>,
+    normals: Vec<(f32, f32, f32)>,
+    normal_indices: Vec<Vec<usize>>,
 }
 
 impl Obj {
@@ -22,14 +26,46 @@ impl Obj {
     }
 
     pub fn from_str(file_text: &str) -> Result<Obj, Error> {
-        fn pull_f32(token: &mut Iterator<Item=&str>) -> Result<f32, Error> {
-            let text = try!(token.next().ok_or(Error::MissingElement));
-            let value = try!(f32::from_str(text));
+        /// Pulls the next token and parses it as an `f32`.
+        fn pull_f32(tokens: &mut Iterator<Item=&str>) -> Result<f32, Error> {
+            let token = try!(tokens.next().ok_or(Error::MissingElement));
+            let value = try!(f32::from_str(token));
             Ok(value)
         }
 
+        /// Parses the next token as `f32` or returns `None`.
+        ///
+        /// Returns `Ok(None)` if no tokens are left in `tokens`, but will treat an empty token as
+        /// an error.
+        fn pull_option_f32(tokens: &mut Iterator<Item=&str>) -> Result<Option<f32>, Error> {
+            match tokens.next() {
+                Some(token) => {
+                    let value = try!(f32::from_str(token));
+                    Ok(Some(value))
+                },
+                None => {
+                    Ok(None)
+                }
+            }
+        }
+
+        /// Parses the next token as 'usize', returning empty tokens as `None`.
+        fn pull_option_usize(tokens: &mut Iterator<Item=&str>) -> Result<Option<usize>, Error> {
+            let token = try!(tokens.next().ok_or(Error::MissingElement));
+            if token == "" {
+                Ok(None)
+            } else {
+                let value = try!(usize::from_str(token));
+                Ok(Some(value))
+            }
+        }
+
         let mut positions = Vec::new();
-        let mut faces = Vec::new();
+        let mut position_indices = Vec::new();
+        let mut texcoords = Vec::new();
+        let mut texcoord_indices = Vec::new();
+        let mut normals = Vec::new();
+        let mut normal_indices = Vec::new();
 
         for line in file_text.lines() {
             let mut tokens = line.split_whitespace();
@@ -44,39 +80,120 @@ impl Obj {
                     let x = try!(pull_f32(&mut tokens));
                     let y = try!(pull_f32(&mut tokens));
                     let z = try!(pull_f32(&mut tokens));
-                    let w = 1.0; // TOOO: Actually pull from the input.
+                    let w = try!(pull_option_f32(&mut tokens)).unwrap_or(1.0);
 
                     positions.push((x, y, z, w));
                 },
 
-                // TODO: Implement these other directives.
-                "vt" => {},
-                "vn" => {},
-                "g" => {},
-                "s" => {},
+                // Vertex texcoord data.
+                "vt" => {
+                    let u = try!(pull_f32(&mut tokens));
+                    let v = try!(pull_option_f32(&mut tokens)).unwrap_or(0.0);
+                    let w = try!(pull_option_f32(&mut tokens)).unwrap_or(0.0);
+
+                    texcoords.push((u, v, w));
+                },
+
+                // Vertex normal data.
+                "vn" => {
+                    let x = try!(pull_f32(&mut tokens));
+                    let y = try!(pull_f32(&mut tokens));
+                    let z = try!(pull_f32(&mut tokens));
+
+                    normals.push((x, y, z));
+                },
 
                 // Indices for the face.
                 "f" => {
-                    let mut vertices = Vec::new();
+                    let mut face_positions = Vec::new();
+                    let mut face_texcoords = Vec::new();
+                    let mut face_normals = Vec::new();
 
                     for vertex_str in tokens {
-                        let index_str = try!(
-                            vertex_str
-                            .split('/')
-                            .next()
-                            .ok_or(Error::MissingDirectiveData));
-                        let index = try!(usize::from_str(index_str));
+                        let mut index_tokens = vertex_str.split('/');
 
-                        // Indices start at 1 in OBJ files so normalize them to start at 0.
-                        vertices.push(index - 1);
+                        // Position index.
+                        if let Some(index) = try!(pull_option_usize(&mut index_tokens)) {
+                            face_positions.push(index - 1);
+                        }
+
+                        // Texcoord index.
+                        if let Some(index) = try!(pull_option_usize(&mut index_tokens)) {
+                            face_texcoords.push(index - 1);
+                        }
+
+                        // Normal index.
+                        if let Some(index) = try!(pull_option_usize(&mut index_tokens)) {
+                            face_normals.push(index - 1);
+                        }
                     }
 
-                    faces.push(vertices);
+                    if face_texcoords.len() != 0 {
+                        // The face has texcoord indices. There must be exactly one for each
+                        // vertex or it's an error.
+                        if face_texcoords.len() != face_positions.len() {
+                            return Err(Error::MismatchedIndexData);
+                        }
+
+                        // Add face texcoords to the texcoords list.
+                        texcoord_indices.push(face_texcoords);
+                    }
+
+                    if face_normals.len() != 0 {
+                        // The face has normal indices. There must be exactly one for each vertex
+                        // or it's an error.
+                        if face_normals.len() != face_positions.len() {
+                            return Err(Error::MismatchedIndexData);
+                        }
+
+                        // Add face normals to the normals list.
+                        normal_indices.push(face_normals);
+                    }
+
+                    // All vertices must have position data.
+                    if face_positions.len() == 0 {
+                        return Err(Error::MissingPositionIndex);
+                    }
+
+                    position_indices.push(face_positions);
                 },
 
                 // TODO: Handle the case where there is no space between the '#' and the rest of
                 // the comment (e.g. "#blah blah").
                 "#" => {},
+
+                // TODO: Implement these other directives.
+                // TODO: Warn about unimplemented directives.
+                "g" => {},
+                "s" => {},
+                "vp" => {},
+                "p" => {},
+                "l" => {},
+                "o" => {},
+                "mg" => {},
+                "cstype" => {},
+                "deg" => {},
+                "bmat" => {},
+                "step" => {},
+                "curv" => {},
+                "curv2" => {},
+                "surv" => {},
+                "parm" => {},
+                "trim" => {},
+                "hole" => {},
+                "scrv" => {},
+                "sp" => {},
+                "end" => {},
+                "con" => {},
+                "bevel" => {},
+                "c_interp" => {},
+                "d_interp" => {},
+                "lod" => {},
+                "usemtl" => {},
+                "shadow_obj" => {},
+                "trace_obj" => {},
+                "ctech" => {},
+                "stech" => {},
 
                 _ => {
                     return Err(Error::UnrecognizedDirective(line_beginning.into()));
@@ -84,9 +201,23 @@ impl Obj {
             }
         }
 
+        // Check that either all of the faces of texcoords or none do.
+        if texcoord_indices.len() != 0 && texcoord_indices.len() != position_indices.len() {
+            return Err(Error::MismatchedFaceData);
+        }
+
+        // Check that either all of the faces of normals or none do.
+        if normal_indices.len() != 0 && normal_indices.len() != position_indices.len() {
+            return Err(Error::MismatchedFaceData);
+        }
+
         Ok(Obj {
             positions: positions,
-            faces: faces,
+            position_indices: position_indices,
+            texcoords: texcoords,
+            texcoord_indices: texcoord_indices,
+            normals: normals,
+            normal_indices: normal_indices,
         })
     }
 
@@ -109,11 +240,59 @@ impl Obj {
         }
     }
 
-    /// Gets the list of face indices.
+    /// Gets the list of position indices.
     ///
     /// Each face is represented as a list of indices
-    pub fn faces(&self) -> &[Vec<usize>] {
-        &*self.faces
+    pub fn position_indices(&self) -> &[Vec<usize>] {
+        &*self.position_indices
+    }
+
+    /// Gets the list of texcoord tuples.
+    pub fn texcoords(&self) -> &[(f32, f32, f32)] {
+        &*self.texcoords
+    }
+
+    /// Gets the raw list of floating point values in the texcoords list.
+    ///
+    /// Usefule for sending texcoord data to the gpu.
+    pub fn raw_texcoords(&self) -> &[f32] {
+        use std::slice;
+
+        let len = self.texcoords.len() * 3;
+        let ptr = self.texcoords.as_ptr() as *const _;
+
+        unsafe {
+            slice::from_raw_parts(ptr, len)
+        }
+    }
+
+    /// Gets the list of texcoord indices.
+    pub fn texcoord_indices(&self) -> &[Vec<usize>] {
+        &*self.texcoord_indices
+    }
+
+    /// Gets the list of normal tuples.
+    pub fn normals(&self) -> &[(f32, f32, f32)] {
+        &*self.normals
+    }
+
+    /// Gets the raw list of floating point values in the vertex normals list.
+    ///
+    /// Useful for sending vertex normal data to the gpu.
+    pub fn raw_normals(&self) -> &[f32] {
+        use std::slice;
+
+        let len = self.normals.len() * 3;
+        let ptr = self.normals.as_ptr() as *const _;
+
+        unsafe {
+            slice::from_raw_parts(ptr, len)
+        }
+    }
+
+    /// Gets the list of normal indices.
+    pub fn normal_indices(&self) -> &[Vec<usize>] {
+        &*self.normal_indices
     }
 }
 
@@ -121,8 +300,23 @@ impl Obj {
 #[derive(Debug)]
 pub enum Error {
     UnrecognizedDirective(String),
+
+    /// Indicates that some faces have normal or texcoord data but others don't.
+    MismatchedFaceData,
+
+    /// Indicates that a face has normal or texcoord indices for some but not all of its vertices.
+    ///
+    /// According to the OBJ specification a face must have postion data for all of its vertices
+    /// and may optionally have texcoord and normal data. If any of the vertices for a face has
+    /// texcoord or normal data, though, all of the vertices must have that data. Therefore it is
+    /// an error for one or more vertices in a face to have texcoord or normal data and one or
+    /// vertices to not have that data.
+    MismatchedIndexData,
+
     MissingDirectiveData,
     MissingElement,
+    MissingPositionData,
+    MissingPositionIndex,
     ParseFloatError(::std::num::ParseFloatError),
     ParseIntError(::std::num::ParseIntError),
     IoError(::std::io::Error),
