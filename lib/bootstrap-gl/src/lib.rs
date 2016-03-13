@@ -517,6 +517,35 @@ gl_proc!(glDeleteVertexArrays:
     /// `GL_INVALID_VALUE` is generated if `num_arrays`​ is negative.
     fn delete_vertex_arrays(num_arrays: i32, arrays: *const VertexArrayName));
 
+gl_proc!(glDepthFunc:
+    /// Specifies the value used for the depth buffer comparison.
+    ///
+    /// [Wiki page](https://www.opengl.org/wiki/GLAPI/glDepthFunc)
+    ///
+    /// Core since version 1.0
+    ///
+    /// Specifies the function used to compare each incoming pixel depth value with the depth
+    /// value present in the depth buffer. The comparison is performed only if depth testing is
+    /// enabled (see `enable` and `disable` of `DepthTest`).
+    ///
+    /// `func​` specifies the conditions under which the pixel will be drawn. The comparison
+    /// functions are as follows:
+    ///
+    /// - `Never` - Never passes.
+    /// - `Less` - Passes if the incoming depth value is less than the stored depth value.
+    /// - `Equal` - Passes if the incoming depth value is equal to the stored depth value.
+    /// - `LessThanOrEqual` - Passes if the incoming depth value is less than or equal to the
+    ///   stored depth value.
+    /// - `Greater` - Passes if the incoming depth value is greater than the stored depth value.
+    /// - `NotEqual` - Passes if the incoming depth value is not equal to the stored depth value.
+    /// - `GreaterThanOrEqual` - Passes if the incoming depth value is greater than or equal to
+    ///   the stored depth value.
+    /// - `Always` - Always passes.
+    ///
+    /// The initial value of `func​` is `Less`. Initially depth testing is disabled. If depth
+    /// testing is disabled or if no depth buffer exists it is as if the depth test always passes.
+    fn depth_func(func: Comparison));
+
 gl_proc!(glDetachShader:
     /// Detaches a shader object from a program object to which it is attached.
     ///
@@ -678,6 +707,30 @@ gl_proc!(glEnableVertexAttribArray:
     ///   equal to `GL_MAX_VERTEX_ATTRIBS`.
     /// - `GL_INVALID_OPERATION` is generated if no vertex array object is bound.
     fn enable_vertex_attrib_array(attrib: AttributeLocation));
+
+gl_proc!(glFrontFace:
+    /// Defines front- and back-facing polygons.
+    ///
+    /// [Wiki page](https://www.opengl.org/wiki/GLAPI/glFrontFace)
+    ///
+    /// Core since version 1.0
+    ///
+    /// In a scene composed entirely of opaque closed surfaces, back-facing polygons are never
+    /// visible. Eliminating these invisible polygons has the obvious benefit of speeding up the
+    /// rendering of the image. To enable and disable elimination of back-facing polygons, call
+    /// `enable` and `disable` with argument `CullFace`.
+    ///
+    /// The projection of a polygon to window coordinates is said to have clockwise winding if an
+    /// imaginary object following the path from its first vertex, its second vertex, and so on,
+    /// to its last vertex, and finally back to its first vertex, moves in a clockwise direction
+    /// about the interior of the polygon. The polygon's winding is said to be counterclockwise if
+    /// the imaginary object following the same path moves in a counterclockwise direction about
+    /// the interior of the polygon. `front_face` specifies whether polygons with clockwise
+    /// winding in window coordinates, or counterclockwise winding in window coordinates, are
+    /// taken to be front-facing. Passing `CounterClockwise` to `mode​` selects counterclockwise
+    /// polygons as front-facing; `Clockwise` selects clockwise polygons as front-facing.
+    /// By default counterclockwise polygons are taken to be front-facing.
+    fn front_face(mode: WindingMode));
 
 gl_proc!(glGenBuffers:
     /// Generates buffer object names.
@@ -1358,43 +1411,39 @@ gl_proc!(glViewport:
     fn viewport(x: i32, y: i32, width: i32, height: i32));
 
 /*
-gen_proc_loader! {
-    glGetError:
-        fn get_error() -> ErrorCode,
-    glGetString:
-        fn get_string(name: StringName) -> *const i8,
-    glUniform1f:
-        fn uniform_1f(uniform: UniformLocation, value: f32),
-    glUniformMatrix4fv:
-        fn uniform_matrix_4fv(
-            uniform: UniformLocation,
-            count: i32,
-            transpose: bool,
-            values: *const f32),
-    glUniform4fv:
-        fn uniform_4fv(uniform: UniformLocation, count: i32, data: *const f32),
-    glDepthFunc:
-        fn depth_func(func: Comparison),
-    glBlendFunc:
-        fn blend_func(src_factor: SourceFactor, dest_factor: DestFactor),
-    glGenTextures:
-        fn gen_textures(count: u32, textures: *mut TextureObject),
-    glBindTexture:
-        fn bind_texture(target: TextureBindTarget, texture: TextureObject),
-    glTexImage2D:
-        fn texture_image_2d(
-            target:          Texture2dTarget,
-            level:           i32,
-            internal_format: TextureInternalFormat,
-            width:           i32,
-            height:          i32,
-            border:          i32,
-            format:          TextureFormat,
-            data_type:       TextureDataType,
-            data:            *const ()),
-    glDeleteTextures:
-        fn delete_textures(count: u32, textures: *mut TextureObject),
-}
+glGetError:
+    fn get_error() -> ErrorCode
+glGetString:
+    fn get_string(name: StringName) -> *const i8
+glUniform1f:
+    fn uniform_1f(uniform: UniformLocation, value: f32)
+glUniformMatrix4fv:
+    fn uniform_matrix_4fv(
+        uniform: UniformLocation,
+        count: i32,
+        transpose: bool,
+        values: *const f32)
+glUniform4fv:
+    fn uniform_4fv(uniform: UniformLocation, count: i32, data: *const f32)
+glBlendFunc:
+    fn blend_func(src_factor: SourceFactor, dest_factor: DestFactor)
+glGenTextures:
+    fn gen_textures(count: u32, textures: *mut TextureObject)
+glBindTexture:
+    fn bind_texture(target: TextureBindTarget, texture: TextureObject)
+glTexImage2D:
+    fn texture_image_2d(
+        target:          Texture2dTarget,
+        level:           i32,
+        internal_format: TextureInternalFormat,
+        width:           i32,
+        height:          i32,
+        border:          i32,
+        format:          TextureFormat,
+        data_type:       TextureDataType,
+        data:            *const ())
+glDeleteTextures:
+    fn delete_textures(count: u32, textures: *mut TextureObject)
 */
 
 pub extern "C" fn debug_callback(

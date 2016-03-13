@@ -112,6 +112,19 @@ impl BitOr for ClearBufferMask {
 
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Comparison {
+    Never = 0x0200,
+    Less = 0x0201,
+    Equal = 0x0202,
+    LessThanOrEqual = 0x0203,
+    Greater = 0x0204,
+    NotEqual = 0x0205,
+    GreaterThanOrEqual = 0x0206,
+    Always = 0x0207,
+}
+
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DrawMode {
     Points = 0x0000,
     Lines = 0x0001,
@@ -258,6 +271,13 @@ impl VertexArrayName {
     pub fn null() -> VertexArrayName {
         VertexArrayName(0)
     }
+}
+
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WindingMode {
+    Clockwise = 0x0900,
+    CounterClockwise = 0x0901,
 }
 
 // =============== OLD UNSORTED TYPES ========================== //
@@ -438,19 +458,6 @@ pub enum TextureFormat {
     // GL_ALPHA,
     // GL_LUMINANCE,
     // GL_LUMINANCE_ALPHA,
-}
-
-#[repr(u32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Comparison {
-    Never    = 0x0200,
-    Less     = 0x0201,
-    Equal    = 0x0202,
-    LEqual   = 0x0203,
-    Greater  = 0x0204,
-    NotEqual = 0x0205,
-    GEqual   = 0x0206,
-    Always   = 0x0207,
 }
 
 #[repr(u32)]
