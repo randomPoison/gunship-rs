@@ -14,7 +14,9 @@ use gl::{
 };
 use std::mem;
 
-pub use gl::{AttributeLocation, DrawMode, Face, PolygonMode, ShaderType};
+pub use gl::{
+    AttributeLocation, Comparison, DrawMode, Face, PolygonMode, ShaderType, WindingOrder,
+};
 pub use gl::platform::swap_buffers;
 pub use self::shader::*;
 
@@ -27,7 +29,7 @@ pub fn init() {
 
 /// TODO: Take clear mask (and values) as parameters.
 pub fn clear() {
-    unsafe { gl::clear(ClearBufferMask::Color); }
+    unsafe { gl::clear(ClearBufferMask::Color | ClearBufferMask::Depth); }
 }
 
 /// Represents a buffer of vertex data and the layout of that data.
@@ -78,6 +80,16 @@ impl VertexBuffer {
     }
 
     /// Specifies how the data for a particular vertex attribute is laid out in the buffer.
+    ///
+    /// # Parameters
+    ///
+    /// - `attrib` - The attribute being set. This can be gotten using `Program::get_attrib()`.
+    /// - `elements` - The number of `f32`s per vertex for this attribute. For example, for a
+    ///   vertex normal with x, y, and z coordinates `elements` would be 3.
+    /// - `stride` - The offset in elements between consecutive vertex attributes. If `stride` is
+    ///   attributes are understood to be tightly packed.
+    /// - `offset` - The offset in elements from the start of the buffer where the first attribute
+    ///   is located.
     pub fn set_attrib_f32(
         &mut self,
         attrib: AttributeLocation,
@@ -86,11 +98,8 @@ impl VertexBuffer {
         offset: usize
     ) {
         // Calculate the number of elements based on the attribute.
-        if stride == 0 {
-            self.element_len = (self.len - offset) / elements;
-        } else {
-            unimplemented!();
-        }
+        // TODO: Verify that each attrib has the same element length.
+        self.element_len = (self.len - offset) / elements + stride;
 
         unsafe {
             gl::bind_buffer(BufferTarget::Array, self.buffer_name);
@@ -102,8 +111,8 @@ impl VertexBuffer {
                 elements as i32,
                 GlType::Float,
                 false,
-                stride as i32,
-                offset);
+                (stride * mem::size_of::<f32>()) as i32,
+                offset * mem::size_of::<f32>());
 
             gl::bind_vertex_array(VertexArrayName::null());
             gl::bind_buffer(BufferTarget::Array, BufferName::null());
@@ -174,6 +183,8 @@ pub struct DrawBuilder<'a> {
     polygon_mode: Option<PolygonMode>,
     program: Option<&'a Program>,
     cull: Option<Face>,
+    depth_test: Option<Comparison>,
+    winding_order: Option<WindingOrder>,
 }
 
 impl<'a> DrawBuilder<'a> {
@@ -185,6 +196,8 @@ impl<'a> DrawBuilder<'a> {
             polygon_mode: None,
             program: None,
             cull: None,
+            depth_test: None,
+            winding_order: None,
         }
     }
 
@@ -208,6 +221,16 @@ impl<'a> DrawBuilder<'a> {
         self
     }
 
+    pub fn depth_test(&'a mut self, comparison: Comparison) -> &mut DrawBuilder {
+        self.depth_test = Some(comparison);
+        self
+    }
+
+    pub fn winding(&'a mut self, winding_order: WindingOrder) -> &mut DrawBuilder {
+        self.winding_order = Some(winding_order);
+        self
+    }
+
     pub fn draw(&mut self) {
         unsafe {
             gl::bind_vertex_array(self.vertex_buffer.vertex_array_name);
@@ -225,6 +248,15 @@ impl<'a> DrawBuilder<'a> {
             if let Some(face) = self.cull {
                 gl::enable(ServerCapability::CullFace);
                 gl::cull_face(face);
+
+                if let Some(winding_order) = self.winding_order {
+                    gl::front_face(winding_order);
+                }
+            }
+
+            if let Some(depth_test) = self.depth_test {
+                gl::enable(ServerCapability::DepthTest);
+                gl::depth_func(depth_test);
             }
 
             if let Some(indices) = self.index_buffer {
@@ -243,6 +275,8 @@ impl<'a> DrawBuilder<'a> {
 
             // Reset all values even if they weren't used so that we don't need to branch twice on
             // each option.
+            gl::front_face(WindingOrder::CounterClockwise);
+            gl::disable(ServerCapability::DepthTest);
             gl::disable(ServerCapability::CullFace);
             gl::polygon_mode(Face::FrontAndBack, PolygonMode::Fill);
             gl::use_program(ProgramObject::null());

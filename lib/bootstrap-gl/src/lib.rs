@@ -730,7 +730,7 @@ gl_proc!(glFrontFace:
     /// taken to be front-facing. Passing `CounterClockwise` to `mode​` selects counterclockwise
     /// polygons as front-facing; `Clockwise` selects clockwise polygons as front-facing.
     /// By default counterclockwise polygons are taken to be front-facing.
-    fn front_face(mode: WindingMode));
+    fn front_face(mode: WindingOrder));
 
 gl_proc!(glGenBuffers:
     /// Generates buffer object names.

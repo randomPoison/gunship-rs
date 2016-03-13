@@ -275,7 +275,7 @@ impl VertexArrayName {
 
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum WindingMode {
+pub enum WindingOrder {
     Clockwise = 0x0900,
     CounterClockwise = 0x0901,
 }
