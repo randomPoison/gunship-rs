@@ -70,19 +70,25 @@ fn main() {
     let frag_shader = Shader::new(FRAG_SOURCE, ShaderType::Fragment).unwrap();
     let program = Program::new(&[vert_shader, frag_shader]).unwrap();
 
-    // Get the location of the vertex attributes.
-    let position_attrib = program.get_attrib("position").unwrap();
-    let normal_attrib = program.get_attrib("normal_in").unwrap();
-
     // Create the vertex buffer and set the vertex attribs.
     let mut vertex_buffer = VertexBuffer::new();
     vertex_buffer.set_data_f32(&*vertex_data);
-    vertex_buffer.set_attrib_f32(position_attrib, 4, 7, 0);
-    vertex_buffer.set_attrib_f32(normal_attrib, 3, 7, 4);
+    vertex_buffer.set_attrib_f32("position", 4, 7, 0);
+    vertex_buffer.set_attrib_f32("normal", 3, 7, 4);
 
     // Create the index buffer.
     let mut index_buffer = IndexBuffer::new();
     index_buffer.set_data_u32(&*indices);
+
+    let mut draw_builder = DrawBuilder::new(&vertex_buffer, DrawMode::Triangles);
+    draw_builder
+        .index_buffer(&index_buffer)
+        .program(&program)
+        .map_attrib_name("position", "position")
+        .map_attrib_name("normal", "normal_in")
+        .depth_test(Comparison::Less)
+        .cull(Face::Back)
+        .winding(WindingOrder::Clockwise);
 
     'outer: loop {
         while let Some(message) = window.next_message() {
@@ -93,13 +99,7 @@ fn main() {
         }
 
         gl::clear();
-        DrawBuilder::new(&vertex_buffer, DrawMode::Triangles)
-            .index_buffer(&index_buffer)
-            .program(&program)
-            .depth_test(Comparison::Less)
-            .cull(Face::Back)
-            .winding(WindingOrder::Clockwise)
-            .draw();
+        draw_builder.draw();
         gl::swap_buffers();
     }
 }

@@ -16,7 +16,7 @@ fn main() {
     gl::init();
     let mut vertex_buffer = VertexBuffer::new();
     vertex_buffer.set_data_f32(&VERTEX_POSITIONS[..]);
-    vertex_buffer.set_attrib_f32(AttributeLocation::from_index(0), 3, 0, 0);
+    vertex_buffer.set_attrib_f32("position", 3, 0, 0);
 
     'outer: loop {
         while let Some(message) = window.next_message() {
@@ -27,7 +27,9 @@ fn main() {
         }
 
         gl::clear();
-        DrawBuilder::new(&vertex_buffer, DrawMode::Triangles).draw();
+        DrawBuilder::new(&vertex_buffer, DrawMode::Triangles)
+            .map_attrib_location("position", AttributeLocation::from_index(0))
+            .draw();
         gl::swap_buffers();
     }
 }

@@ -9,10 +9,11 @@
 extern crate bootstrap_gl as gl;
 
 use gl::{
-    BufferName, BufferTarget, BufferUsage, ClearBufferMask, GlType, IndexType, ProgramObject,
-    ServerCapability, VertexArrayName
+    BufferName, BufferTarget, BufferUsage, ClearBufferMask, debug_callback, GlType, IndexType,
+    ProgramObject, ServerCapability, VertexArrayName,
 };
-use std::mem;
+use std::{mem, ptr};
+use std::collections::HashMap;
 
 pub use gl::{
     AttributeLocation, Comparison, DrawMode, Face, PolygonMode, ShaderType, WindingOrder,
@@ -25,6 +26,7 @@ pub mod shader;
 /// Initializes global OpenGL state and creates the OpenGL context needed to perform rendering.
 pub fn init() {
     gl::create_context();
+    unsafe { gl::debug_message_callback(debug_callback, ptr::null_mut()); }
 }
 
 /// TODO: Take clear mask (and values) as parameters.
@@ -38,26 +40,24 @@ pub fn clear() {
 #[derive(Debug)]
 pub struct VertexBuffer {
     buffer_name: BufferName,
-    vertex_array_name: VertexArrayName,
     len: usize,
     element_len: usize,
+    attribs: HashMap<String, (usize, usize, usize)>,
 }
 
 impl VertexBuffer {
     /// Creates a new `VertexBuffer` object.
     pub fn new() -> VertexBuffer {
         let mut buffer_name = BufferName::null();
-        let mut vertex_array_name = VertexArrayName::null();
         unsafe {
             gl::gen_buffers(1, &mut buffer_name);
-            gl::gen_vertex_arrays(1, &mut vertex_array_name);
         }
 
         VertexBuffer {
             buffer_name: buffer_name,
-            vertex_array_name: vertex_array_name,
             len: 0,
             element_len: 0,
+            attribs: HashMap::new(),
         }
     }
 
@@ -90,9 +90,9 @@ impl VertexBuffer {
     ///   attributes are understood to be tightly packed.
     /// - `offset` - The offset in elements from the start of the buffer where the first attribute
     ///   is located.
-    pub fn set_attrib_f32(
+    pub fn set_attrib_f32<T: Into<String>>(
         &mut self,
-        attrib: AttributeLocation,
+        attrib: T,
         elements: usize,
         stride: usize,
         offset: usize
@@ -100,23 +100,7 @@ impl VertexBuffer {
         // Calculate the number of elements based on the attribute.
         // TODO: Verify that each attrib has the same element length.
         self.element_len = (self.len - offset) / elements + stride;
-
-        unsafe {
-            gl::bind_buffer(BufferTarget::Array, self.buffer_name);
-            gl::bind_vertex_array(self.vertex_array_name);
-
-            gl::enable_vertex_attrib_array(attrib);
-            gl::vertex_attrib_pointer(
-                attrib,
-                elements as i32,
-                GlType::Float,
-                false,
-                (stride * mem::size_of::<f32>()) as i32,
-                offset * mem::size_of::<f32>());
-
-            gl::bind_vertex_array(VertexArrayName::null());
-            gl::bind_buffer(BufferTarget::Array, BufferName::null());
-        }
+        self.attribs.insert(attrib.into(), (elements, stride, offset));
     }
 }
 
@@ -124,7 +108,6 @@ impl Drop for VertexBuffer {
     fn drop(&mut self) {
         unsafe {
             gl::delete_buffers(1, &mut self.buffer_name);
-            gl::delete_vertex_arrays(1, &mut self.vertex_array_name);
         }
     }
 }
@@ -177,6 +160,7 @@ impl Drop for IndexBuffer {
 
 /// A configuration object for specifying all of the various configurable options for a draw call.
 pub struct DrawBuilder<'a> {
+    vertex_array_name: VertexArrayName,
     vertex_buffer: &'a VertexBuffer,
     draw_mode: DrawMode,
     index_buffer: Option<&'a IndexBuffer>,
@@ -188,8 +172,14 @@ pub struct DrawBuilder<'a> {
 }
 
 impl<'a> DrawBuilder<'a> {
-    pub fn new(vertex_buffer: &VertexBuffer, draw_mode: DrawMode) -> DrawBuilder {
+    pub fn new(vertex_buffer: &'a VertexBuffer, draw_mode: DrawMode) -> DrawBuilder<'a> {
+        let mut vertex_array_name = VertexArrayName::null();
+        unsafe {
+            gl::gen_vertex_arrays(1, &mut vertex_array_name);
+        }
+
         DrawBuilder {
+            vertex_array_name: vertex_array_name,
             vertex_buffer: vertex_buffer,
             draw_mode: draw_mode,
             index_buffer: None,
@@ -201,39 +191,116 @@ impl<'a> DrawBuilder<'a> {
         }
     }
 
-    pub fn index_buffer(&'a mut self, index_buffer: &'a IndexBuffer) -> &mut DrawBuilder {
+    pub fn index_buffer(&mut self, index_buffer: &'a IndexBuffer) -> &mut DrawBuilder<'a> {
         self.index_buffer = Some(index_buffer);
         self
     }
 
-    pub fn polygon_mode(&'a mut self, polygon_mode: PolygonMode) -> &mut DrawBuilder {
+    pub fn polygon_mode(&mut self, polygon_mode: PolygonMode) -> &mut DrawBuilder<'a> {
         self.polygon_mode = Some(polygon_mode);
         self
     }
 
-    pub fn program(&'a mut self, program: &'a Program) -> &mut DrawBuilder {
+    pub fn program(&mut self, program: &'a Program) -> &mut DrawBuilder<'a> {
         self.program = Some(program);
         self
     }
 
-    pub fn cull(&'a mut self, face: Face) -> &mut DrawBuilder {
+    pub fn cull(&mut self, face: Face) -> &mut DrawBuilder<'a> {
         self.cull = Some(face);
         self
     }
 
-    pub fn depth_test(&'a mut self, comparison: Comparison) -> &mut DrawBuilder {
+    pub fn depth_test(&mut self, comparison: Comparison) -> &mut DrawBuilder<'a> {
         self.depth_test = Some(comparison);
         self
     }
 
-    pub fn winding(&'a mut self, winding_order: WindingOrder) -> &mut DrawBuilder {
+    pub fn winding(&mut self, winding_order: WindingOrder) -> &mut DrawBuilder<'a> {
         self.winding_order = Some(winding_order);
         self
     }
 
-    pub fn draw(&mut self) {
+    /// Maps a vertex attribute to an attribute location for the current program.
+    ///
+    /// # Panics
+    ///
+    /// - If the the vertex buffer does not have an attribute named `buffer_attrib_name`.
+    pub fn map_attrib_location(
+        &mut self,
+        buffer_attrib_name: &str,
+        attrib_location: AttributeLocation
+    ) -> &mut DrawBuilder<'a> {
+        let (elements, stride, offset) = match self.vertex_buffer.attribs.get(buffer_attrib_name) {
+            Some(&attrib_data) => attrib_data,
+            None => panic!("Vertex buffer has no attribute \"{}\"", buffer_attrib_name),
+        };
+
         unsafe {
-            gl::bind_vertex_array(self.vertex_buffer.vertex_array_name);
+            gl::bind_buffer(BufferTarget::Array, self.vertex_buffer.buffer_name);
+            gl::bind_vertex_array(self.vertex_array_name);
+
+            gl::enable_vertex_attrib_array(attrib_location);
+            gl::vertex_attrib_pointer(
+                attrib_location,
+                elements as i32,
+                GlType::Float,
+                false,
+                (stride * mem::size_of::<f32>()) as i32,
+                offset * mem::size_of::<f32>());
+
+            gl::bind_vertex_array(VertexArrayName::null());
+            gl::bind_buffer(BufferTarget::Array, BufferName::null());
+        }
+
+        self
+    }
+
+    /// Maps a vertex attribute to a variable name in the shader program.
+    ///
+    /// # Panics
+    ///
+    /// - If the program has not been set using `program()`.
+    /// - If the the vertex buffer does not have an attribute named `buffer_attrib_name`.
+    /// - If the shader program does not have a variable named `program_attrib_name`.
+    pub fn map_attrib_name(
+        &mut self,
+        buffer_attrib_name: &str,
+        program_attrib_name: &str
+    ) -> &mut DrawBuilder<'a> {
+        let program = self.program.expect("Cannot map attribs without a shader program");
+        let attrib = match program.get_attrib(program_attrib_name) {
+            Some(attrib) => attrib,
+            None => panic!("Shader program has no variable \"{}\"", program_attrib_name),
+        };
+        let (elements, stride, offset) = match self.vertex_buffer.attribs.get(buffer_attrib_name) {
+            Some(&attrib_data) => attrib_data,
+            None => panic!("Vertex buffer has no attribute \"{}\"", buffer_attrib_name),
+        };
+
+        unsafe {
+            gl::bind_buffer(BufferTarget::Array, self.vertex_buffer.buffer_name);
+            gl::bind_vertex_array(self.vertex_array_name);
+
+            gl::enable_vertex_attrib_array(attrib);
+            gl::vertex_attrib_pointer(
+                attrib,
+                elements as i32,
+                GlType::Float,
+                false,
+                (stride * mem::size_of::<f32>()) as i32,
+                offset * mem::size_of::<f32>());
+
+            gl::bind_vertex_array(VertexArrayName::null());
+            gl::bind_buffer(BufferTarget::Array, BufferName::null());
+        }
+
+        self
+    }
+
+    pub fn draw(&self) {
+        unsafe {
+            gl::bind_vertex_array(self.vertex_array_name);
             gl::bind_buffer(BufferTarget::Array, self.vertex_buffer.buffer_name);
 
             if let Some(polygon_mode) = self.polygon_mode {
@@ -283,6 +350,14 @@ impl<'a> DrawBuilder<'a> {
             gl::bind_buffer(BufferTarget::ElementArray, BufferName::null());
             gl::bind_buffer(BufferTarget::Array, BufferName::null());
             gl::bind_vertex_array(VertexArrayName::null());
+        }
+    }
+}
+
+impl<'a> Drop for DrawBuilder<'a> {
+    fn drop(&mut self) {
+        unsafe {
+            gl::delete_vertex_arrays(1, &mut self.vertex_array_name);
         }
     }
 }
