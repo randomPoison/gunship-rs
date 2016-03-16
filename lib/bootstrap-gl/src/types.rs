@@ -1,6 +1,8 @@
 use std::mem;
 use std::ops::BitOr;
 
+pub use self::Boolean::*;
+
 // ======================
 // OPENGL PRIMITIVE TYPES
 // ======================
