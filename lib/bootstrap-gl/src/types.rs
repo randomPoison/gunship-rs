@@ -8,7 +8,7 @@ pub use self::Boolean::*;
 // ======================
 
 #[repr(u32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Boolean {
     False = 0,
     True = 1,
@@ -43,7 +43,7 @@ pub type f16 = u16;
 // ============================
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct AttributeLocation(u32);
 
 impl AttributeLocation {
@@ -53,7 +53,7 @@ impl AttributeLocation {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct BufferName(u32);
 
 impl BufferName {
@@ -63,7 +63,7 @@ impl BufferName {
 }
 
 #[repr(u32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum BufferTarget {
     Array = 0x8892,
     AtomicCounter = 0x92C0,
@@ -82,7 +82,7 @@ pub enum BufferTarget {
 }
 
 #[repr(u32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum BufferUsage {
     StreamDraw = 0x88E0,
     StreamRead = 0x88E1,
@@ -97,7 +97,7 @@ pub enum BufferUsage {
 
 /// TODO: Custom derive for Debug to show which flags are set.
 #[repr(u32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ClearBufferMask {
     Depth = 0x00000100,
     Stencil = 0x00000400,
@@ -113,7 +113,7 @@ impl BitOr for ClearBufferMask {
 }
 
 #[repr(u32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Comparison {
     Never = 0x0200,
     Less = 0x0201,
@@ -126,7 +126,7 @@ pub enum Comparison {
 }
 
 #[repr(u32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum DrawMode {
     Points = 0x0000,
     Lines = 0x0001,
@@ -141,7 +141,7 @@ pub enum DrawMode {
 }
 
 #[repr(u32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Face {
     Front = 0x0404,
     Back = 0x0405,
@@ -149,7 +149,7 @@ pub enum Face {
 }
 
 #[repr(u32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum GlType {
     Byte = 0x1400,
     UnsignedByte = 0x1401,
@@ -167,7 +167,7 @@ pub enum GlType {
 }
 
 #[repr(u32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum IndexType {
     UnsignedByte = 0x1401,
     UnsignedShort = 0x1403,
@@ -175,7 +175,7 @@ pub enum IndexType {
 }
 
 #[repr(u32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum IntegerName {
     // Version 3.0
     MajorVersion  = 0x821B,
@@ -184,7 +184,7 @@ pub enum IntegerName {
 }
 
 #[repr(u32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PolygonMode {
     Point = 0x1B00,
     Line = 0x1B01,
@@ -192,7 +192,7 @@ pub enum PolygonMode {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ProgramObject(u32);
 
 impl ProgramObject {
@@ -206,7 +206,7 @@ impl ProgramObject {
 }
 
 #[repr(u32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ProgramParam {
     DeleteStatus = 0x8B80,
     LinkStatus = 0x8B82,
@@ -220,7 +220,7 @@ pub enum ProgramParam {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ShaderObject(u32);
 
 impl ShaderObject {
@@ -234,7 +234,7 @@ impl ShaderObject {
 }
 
 #[repr(u32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ShaderParam {
     ShaderType = 0x8B4F,
     DeleteStatus = 0x8B80,
@@ -244,7 +244,7 @@ pub enum ShaderParam {
 }
 
 #[repr(u32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ShaderType {
     Compute = 0x91B9,
     Fragment = 0x8B30,
@@ -255,7 +255,7 @@ pub enum ShaderType {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct UniformLocation(u32);
 
 impl UniformLocation {
@@ -266,7 +266,7 @@ impl UniformLocation {
 
 /// TODO: Use NonZero here so that Option<VertexArrayName>::None can be used instead of 0.
 #[repr(C)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct VertexArrayName(u32);
 
 impl VertexArrayName {
@@ -276,7 +276,7 @@ impl VertexArrayName {
 }
 
 #[repr(u32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum WindingOrder {
     Clockwise = 0x0900,
     CounterClockwise = 0x0901,
@@ -285,11 +285,11 @@ pub enum WindingOrder {
 // =============== OLD UNSORTED TYPES ========================== //
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct TextureObject(u32);
 
 #[repr(u32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ServerCapability {
     Fog                   = 0x0B60,
     Lighting              = 0x0B50,
@@ -322,7 +322,7 @@ pub enum ServerCapability {
 }
 
 #[repr(u32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ErrorCode {
     NoError          = 0,
     InvalidEnum      = 0x0500,
@@ -334,7 +334,7 @@ pub enum ErrorCode {
 }
 
 #[repr(u32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TextureBindTarget {
     // GL_TEXTURE_1D,
     Texture2d = 0x0DE1,
@@ -343,7 +343,7 @@ pub enum TextureBindTarget {
 }
 
 #[repr(u32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Texture2dTarget {
     Texture2d        = 0x0DE1,
     CubeMapPositiveX = 0x8515,
@@ -357,7 +357,7 @@ pub enum Texture2dTarget {
 }
 
 #[repr(u32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TextureDataType {
     Byte          = 0x1400,
     UnsignedByte  = 0x1401,
@@ -382,7 +382,7 @@ pub enum TextureDataType {
 }
 
 #[repr(u32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TextureInternalFormat {
     One = 1,
     Two = 2,
@@ -447,7 +447,7 @@ pub enum TextureInternalFormat {
 }
 
 #[repr(u32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TextureFormat {
     Rgb  = 0x1907,
     Rgba = 0x1908,
@@ -463,7 +463,7 @@ pub enum TextureFormat {
 }
 
 #[repr(u32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum DestFactor {
     Zero             = 0,
     One              = 1,
@@ -476,7 +476,7 @@ pub enum DestFactor {
 }
 
 #[repr(u32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SourceFactor {
     Zero             = 0,
     One              = 1,
@@ -492,7 +492,7 @@ pub enum SourceFactor {
 }
 
 #[repr(u32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum StringName {
     Vendor                 = 0x1F00,
     Renderer               = 0x1F01,
@@ -501,7 +501,7 @@ pub enum StringName {
 }
 
 #[repr(u32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum DebugSeverity {
     High   = 0x9146,
     Medium = 0x9147,
@@ -509,7 +509,7 @@ pub enum DebugSeverity {
 }
 
 #[repr(u32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum DebugSource {
     API            = 0x8246,
     WindowSystem   = 0x8247,
@@ -520,7 +520,7 @@ pub enum DebugSource {
 }
 
 #[repr(u32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum DebugType {
     Error              = 0x824C,
     DeprecatedBehavior = 0x824D,
