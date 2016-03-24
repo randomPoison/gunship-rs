@@ -29,11 +29,13 @@ void main() {
 static FRAG_SOURCE: &'static str = r#"
 #version 330 core
 
+uniform vec4 surface_color;
+
 in vec3 normal;
 out vec4 fragment_color;
 
 void main() {
-    fragment_color = vec4(normal, 1);
+    fragment_color = surface_color * vec4(normal, 1);
 }
 "#;
 
@@ -86,6 +88,7 @@ fn main() {
         .program(&program)
         .map_attrib_name("position", "position")
         .map_attrib_name("normal", "normal_in")
+        .uniform("surface_color", (1.0, 0.0, 0.0, 1.0))
         .depth_test(Comparison::Less)
         .cull(Face::Back)
         .winding(WindingOrder::Clockwise);

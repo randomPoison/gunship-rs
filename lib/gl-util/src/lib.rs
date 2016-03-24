@@ -9,8 +9,8 @@
 extern crate bootstrap_gl as gl;
 
 use gl::{
-    BufferName, BufferTarget, BufferUsage, ClearBufferMask, debug_callback, GlType, IndexType,
-    ProgramObject, ServerCapability, VertexArrayName,
+    BufferName, BufferTarget, BufferUsage, ClearBufferMask, debug_callback, False, GlType,
+    IndexType, ProgramObject, ServerCapability, UniformLocation, VertexArrayName,
 };
 use std::{mem, ptr};
 use std::collections::HashMap;
@@ -169,6 +169,7 @@ pub struct DrawBuilder<'a> {
     cull: Option<Face>,
     depth_test: Option<Comparison>,
     winding_order: Option<WindingOrder>,
+    uniforms: HashMap<UniformLocation, UniformValue>,
 }
 
 impl<'a> DrawBuilder<'a> {
@@ -188,6 +189,7 @@ impl<'a> DrawBuilder<'a> {
             cull: None,
             depth_test: None,
             winding_order: None,
+            uniforms: HashMap::new(),
         }
     }
 
@@ -245,7 +247,7 @@ impl<'a> DrawBuilder<'a> {
                 attrib_location,
                 elements as i32,
                 GlType::Float,
-                false,
+                False,
                 (stride * mem::size_of::<f32>()) as i32,
                 offset * mem::size_of::<f32>());
 
@@ -287,13 +289,39 @@ impl<'a> DrawBuilder<'a> {
                 attrib,
                 elements as i32,
                 GlType::Float,
-                false,
+                False,
                 (stride * mem::size_of::<f32>()) as i32,
                 offset * mem::size_of::<f32>());
 
             gl::bind_vertex_array(VertexArrayName::null());
             gl::bind_buffer(BufferTarget::Array, BufferName::null());
         }
+
+        self
+    }
+
+    /// Sets the value of a uniform variable in the shader program.
+    ///
+    /// # Panics
+    ///
+    /// - If the program has not been set using `program()`.
+    /// - If the shader program does not have a uniform name `name`.
+    pub fn uniform<T>(
+        &mut self,
+        name: &str,
+        value: T
+    ) -> &mut DrawBuilder<'a>
+        where T: Into<UniformValue>
+    {
+        let program =
+            self.program.expect("Cannot set a uniform without a shader program");
+        let uniform_location = match program.get_uniform_location(name) {
+            Some(location) => location,
+            None => panic!("Shader program has no uniform variable \"{}\"", name),
+        };
+
+        // Add uniform to the uniform map.
+        self.uniforms.insert(uniform_location, value.into());
 
         self
     }
@@ -324,6 +352,11 @@ impl<'a> DrawBuilder<'a> {
             if let Some(depth_test) = self.depth_test {
                 gl::enable(ServerCapability::DepthTest);
                 gl::depth_func(depth_test);
+            }
+
+            // Apply uniforms.
+            for (&location, uniform) in &self.uniforms {
+                uniform.apply(location);
             }
 
             if let Some(indices) = self.index_buffer {
@@ -362,6 +395,62 @@ impl<'a> Drop for DrawBuilder<'a> {
     }
 }
 
+pub enum UniformValue {
+    F32x1(f32),
+    F32x4((f32, f32, f32, f32)),
+}
+
+impl UniformValue {
+    fn apply(&self, location: UniformLocation) {
+        match *self {
+            UniformValue::F32x1(value) => unsafe {
+                gl::uniform_f32x1(location, value);
+            },
+            UniformValue::F32x4((x, y, z, w)) => unsafe {
+                gl::uniform_f32x4(location, x, y, z, w);
+            },
+        }
+    }
+}
+
+impl From<f32> for UniformValue {
+    fn from(value: f32) -> UniformValue {
+        UniformValue::F32x1(value)
+    }
+}
+
+impl From<(f32, f32, f32, f32)> for UniformValue {
+    fn from(value: (f32, f32, f32, f32)) -> UniformValue {
+        UniformValue::F32x4(value)
+    }
+}
+
+impl From<[f32; 4]> for UniformValue {
+    fn from(value: [f32; 4]) -> UniformValue {
+        UniformValue::F32x4((value[0], value[1], value[2], value[3]))
+    }
+}
+
 /// Represents a complete shader program which can be used in rendering.
 #[derive(Debug, Clone)]
 pub struct Program(ProgramObject);
+
+impl Program {
+    fn get_uniform_location(&self, name: &str) -> Option<UniformLocation> {
+        let Program(program_object) = *self;
+
+        let mut null_terminated = String::from(name);
+        null_terminated.push('\0');
+
+        let raw_location = unsafe {
+            gl::get_uniform_location(program_object, null_terminated.as_ptr())
+        };
+
+        // Check for errors.
+        if raw_location == -1 {
+            None
+        } else {
+            Some(UniformLocation::from_index(raw_location as u32))
+        }
+    }
+}

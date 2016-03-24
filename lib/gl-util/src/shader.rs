@@ -153,13 +153,13 @@ impl Program {
         let mut null_terminated = String::from(name);
         null_terminated.push('\0');
 
-        let result = unsafe { gl::get_attrib_location(program_object, null_terminated.as_ptr()) };
+        let raw_location = unsafe { gl::get_attrib_location(program_object, null_terminated.as_ptr()) };
 
-        // Check for errors
-        if result == -1 {
+        // Check for errors.
+        if raw_location == -1 {
             None
         } else {
-            Some(AttributeLocation::from_index(result as u32))
+            Some(AttributeLocation::from_index(raw_location as u32))
         }
     }
 }
