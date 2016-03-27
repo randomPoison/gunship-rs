@@ -1167,8 +1167,8 @@ gl_proc!(glUniformMatrix4fv:
     ///
     /// Modifies the value of a uniform variable. The location of the uniform variable to be
     /// modified is specified by `location​`, which should be a value returned by
-    /// `get_uniform_location`​. `uniform_f32x1` operates on the program object that was made part
-    /// of current state by calling `use_program`.
+    /// `get_uniform_location`​. `uniform_matrix_f32x4v` operates on the program object that was
+    /// made part of current state by calling `use_program`.
     ///
     /// The command `uniform_matrix_f32x4v` is used to modify a 4x4 matrix of `f32` values. If
     /// `transpose​` is `False` each matrix is assumed to be supplied in column major order. If

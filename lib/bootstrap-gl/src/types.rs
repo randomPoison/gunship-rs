@@ -14,6 +14,15 @@ pub enum Boolean {
     True = 1,
 }
 
+impl From<bool> for Boolean {
+    fn from(value: bool) -> Boolean {
+        match value {
+            true => True,
+            false => False,
+        }
+    }
+}
+
 pub type Byte = i8;
 pub type UByte = u8;
 pub type Short = i16;

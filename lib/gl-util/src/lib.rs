@@ -26,7 +26,10 @@ pub mod shader;
 /// Initializes global OpenGL state and creates the OpenGL context needed to perform rendering.
 pub fn init() {
     gl::create_context();
-    unsafe { gl::debug_message_callback(debug_callback, ptr::null_mut()); }
+    unsafe {
+        gl::enable(ServerCapability::DebugOutput);
+        gl::debug_message_callback(debug_callback, ptr::null_mut());
+    }
 }
 
 /// TODO: Take clear mask (and values) as parameters.
@@ -169,7 +172,7 @@ pub struct DrawBuilder<'a> {
     cull: Option<Face>,
     depth_test: Option<Comparison>,
     winding_order: Option<WindingOrder>,
-    uniforms: HashMap<UniformLocation, UniformValue>,
+    uniforms: HashMap<UniformLocation, UniformValue<'a>>,
 }
 
 impl<'a> DrawBuilder<'a> {
@@ -311,7 +314,7 @@ impl<'a> DrawBuilder<'a> {
         name: &str,
         value: T
     ) -> &mut DrawBuilder<'a>
-        where T: Into<UniformValue>
+        where T: Into<UniformValue<'a>>
     {
         let program =
             self.program.expect("Cannot set a uniform without a shader program");
@@ -395,12 +398,14 @@ impl<'a> Drop for DrawBuilder<'a> {
     }
 }
 
-pub enum UniformValue {
+/// Represents a value for a uniform variable in a shader program.
+pub enum UniformValue<'a> {
     F32x1(f32),
     F32x4((f32, f32, f32, f32)),
+    Matrix(GlMatrix<'a>),
 }
 
-impl UniformValue {
+impl<'a> UniformValue<'a> {
     fn apply(&self, location: UniformLocation) {
         match *self {
             UniformValue::F32x1(value) => unsafe {
@@ -409,26 +414,48 @@ impl UniformValue {
             UniformValue::F32x4((x, y, z, w)) => unsafe {
                 gl::uniform_f32x4(location, x, y, z, w);
             },
+            UniformValue::Matrix(ref matrix) => match matrix.data.len() {
+                16 => unsafe {
+                    gl::uniform_matrix_f32x4v(
+                        location,
+                        1,
+                        matrix.transpose.into(),
+                        matrix.data.as_ptr())
+                },
+                9 => unimplemented!(),
+                _ => panic!("Unsupported matrix data length: {}", matrix.data.len()),
+            },
         }
     }
 }
 
-impl From<f32> for UniformValue {
-    fn from(value: f32) -> UniformValue {
+impl<'a> From<f32> for UniformValue<'a> {
+    fn from(value: f32) -> UniformValue<'a> {
         UniformValue::F32x1(value)
     }
 }
 
-impl From<(f32, f32, f32, f32)> for UniformValue {
-    fn from(value: (f32, f32, f32, f32)) -> UniformValue {
+impl<'a> From<(f32, f32, f32, f32)> for UniformValue<'a> {
+    fn from(value: (f32, f32, f32, f32)) -> UniformValue<'a> {
         UniformValue::F32x4(value)
     }
 }
 
-impl From<[f32; 4]> for UniformValue {
-    fn from(value: [f32; 4]) -> UniformValue {
+impl<'a> From<[f32; 4]> for UniformValue<'a> {
+    fn from(value: [f32; 4]) -> UniformValue<'a> {
         UniformValue::F32x4((value[0], value[1], value[2], value[3]))
     }
+}
+
+impl<'a> From<GlMatrix<'a>> for UniformValue<'a> {
+    fn from(matrix: GlMatrix<'a>) -> UniformValue<'a> {
+        UniformValue::Matrix(matrix)
+    }
+}
+
+pub struct GlMatrix<'a> {
+    pub data: &'a [f32],
+    pub transpose: bool,
 }
 
 /// Represents a complete shader program which can be used in rendering.

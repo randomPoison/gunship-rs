@@ -9,20 +9,15 @@ use parse_obj::*;
 static VERT_SOURCE: &'static str = r#"
 #version 330 core
 
+uniform mat4 model_transform;
+
 in vec4 position;
 in vec3 normal_in;
 out vec3 normal;
 
 void main() {
-    mat4 rotation = mat4(
-        0, 0, -1, 0,
-        0, 1, 0, 0,
-        1, 0, 0, 0,
-        0, 0, 0, 1
-    );
-
     normal = normal_in;
-    gl_Position = rotation * position;
+    gl_Position = model_transform * position;
 }
 "#;
 
@@ -38,6 +33,12 @@ void main() {
     fragment_color = surface_color * vec4(normal, 1);
 }
 "#;
+
+static MODEL_TRANSFORM: [f32; 16] = [
+    0.0, 0.0, -1.0, 0.0,
+    0.0, 1.0, 0.0, 0.0,
+    1.0, 0.0, 0.0, 0.0,
+    0.0, 0.0, 0.0, 1.0];
 
 fn main() {
     // Load mesh file and normalize indices for OpenGL.
@@ -88,6 +89,10 @@ fn main() {
         .program(&program)
         .map_attrib_name("position", "position")
         .map_attrib_name("normal", "normal_in")
+        .uniform("model_transform", GlMatrix {
+            data: &MODEL_TRANSFORM,
+            transpose: false,
+        })
         .uniform("surface_color", (1.0, 0.0, 0.0, 1.0))
         .depth_test(Comparison::Less)
         .cull(Face::Back)
