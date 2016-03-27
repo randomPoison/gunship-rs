@@ -263,11 +263,14 @@ impl<'a> DrawBuilder<'a> {
 
     /// Maps a vertex attribute to a variable name in the shader program.
     ///
+    /// `map_attrib_name()` will silently ignore a program that does not have an input variable
+    /// named `program_attrib_name`, so it is always safe to speculatively map vertex attributes
+    /// even when the shader program may not use that attribute.
+    ///
     /// # Panics
     ///
     /// - If the program has not been set using `program()`.
     /// - If the the vertex buffer does not have an attribute named `buffer_attrib_name`.
-    /// - If the shader program does not have a variable named `program_attrib_name`.
     pub fn map_attrib_name(
         &mut self,
         buffer_attrib_name: &str,
@@ -276,7 +279,7 @@ impl<'a> DrawBuilder<'a> {
         let program = self.program.expect("Cannot map attribs without a shader program");
         let attrib = match program.get_attrib(program_attrib_name) {
             Some(attrib) => attrib,
-            None => panic!("Shader program has no variable \"{}\"", program_attrib_name),
+            None => return self,
         };
         let (elements, stride, offset) = match self.vertex_buffer.attribs.get(buffer_attrib_name) {
             Some(&attrib_data) => attrib_data,
@@ -305,10 +308,13 @@ impl<'a> DrawBuilder<'a> {
 
     /// Sets the value of a uniform variable in the shader program.
     ///
+    /// `uniform()` will silently ignore uniform variables that do not exist in the shader program,
+    /// so it is always safe to speculatively set uniform values even if the shader program may
+    /// not use that uniform.
+    ///
     /// # Panics
     ///
     /// - If the program has not been set using `program()`.
-    /// - If the shader program does not have a uniform name `name`.
     pub fn uniform<T>(
         &mut self,
         name: &str,
@@ -320,7 +326,7 @@ impl<'a> DrawBuilder<'a> {
             self.program.expect("Cannot set a uniform without a shader program");
         let uniform_location = match program.get_uniform_location(name) {
             Some(location) => location,
-            None => panic!("Shader program has no uniform variable \"{}\"", name),
+            None => return self,
         };
 
         // Add uniform to the uniform map.
