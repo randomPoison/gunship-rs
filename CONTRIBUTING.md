@@ -7,7 +7,7 @@ Hello fellow Rustacean and thank you for showing interest in Gunship! Before you
 
 ## Getting Started
 
-The best way to get started is with one of the [`difficulty: easy`](https://github.com/excaliburHisSheath/gunship-rs/issues?q=is%3Aissue+is%3Aopen+label%3A%22difficulty%3A+easy+%28hour%29%28mentored%29%22). All Gunship tasks are mentored but those are especially quick to get up-and-running with and require the least knowlege of Rust or the engine. Easy tasks are also (usually) well defined and require little investigation (beyond familiarizing oneself with Rust/Gunship).
+The best way to get started is with one of the [`difficulty: easy (hours)`](https://github.com/excaliburHisSheath/gunship-rs/issues?q=is%3Aissue+is%3Aopen+label%3A%22difficulty%3A+easy+%28hours%29%22). All Gunship tasks are mentored but those are especially quick to get up-and-running with and require the least knowlege of Rust or the engine. Easy tasks are also (usually) well defined and require little investigation (beyond familiarizing oneself with Rust/Gunship).
 
 ## Contributions
 
