@@ -5,7 +5,6 @@ version = "0.0.2"
 authors = ["David LeGare <excaliburhissheath@gmail.com>"]
 
 [dependencies]
-bootstrap-gl = { version = "0.1", path = "../bootstrap-gl" }
 bootstrap_rs = { version = "*", path = "../bootstrap_rs" }
 gl-util = { version = "0.1", path = "../gl-util" }
 parse-bmp = { version = "0.1", path = "../parse-bmp" }

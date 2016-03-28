@@ -19,7 +19,7 @@
 //! the color as a property. Then we can make two materials, both using the same shader but one set
 //! to show red and the other set to show blue.
 
-use gl::{GpuTexture, ShaderProgram}; // TODO: Break dependency on gl-specific detail.
+use gl::*; // TODO: Break dependency on OpenGl-specific implementation.
 use math::*;
 use std::collections::HashMap;
 use std::collections::hash_map::Iter as HashMapIter;
@@ -27,13 +27,13 @@ use std::collections::hash_map::Iter as HashMapIter;
 /// Represents combination of a shader and set values for its uniform properties.
 #[derive(Debug, Clone)]
 pub struct Material {
-    shader:     ShaderProgram,
+    shader: Program,
     properties: HashMap<String, MaterialProperty>,
-    dirty:      bool,
+    dirty: bool,
 }
 
 impl Material {
-    pub fn new(shader: ShaderProgram) -> Material {
+    pub fn new(shader: Program) -> Material {
         Material {
             shader:     shader,
             properties: HashMap::new(),
@@ -41,7 +41,7 @@ impl Material {
         }
     }
 
-    pub fn shader(&self) -> &ShaderProgram {
+    pub fn shader(&self) -> &Program {
         &self.shader
     }
 

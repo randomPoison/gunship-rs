@@ -10,7 +10,7 @@ pub mod material;
 
 pub use camera::Camera;
 pub use geometry::*;
-pub use gl::{GLRender, ShaderProgram};
+pub use gl::GlRender;
 pub use light::{Light, PointLight};
 pub use material::{Material};
 
