@@ -1,6 +1,4 @@
-use math::Point;
-use math::Matrix4;
-use math::Quaternion;
+use math::*;
 
 /// A camera in the scene.
 #[derive(Debug, Copy, Clone)]
@@ -56,5 +54,19 @@ impl Camera
         projection[2][3] = -2.0 * self.far * self.near / (self.far - self.near);
         projection[3][2] = -1.0;
         projection
+    }
+}
+
+impl Default for Camera {
+    fn default() -> Camera {
+        Camera {
+            fov: PI / 3.0,
+            aspect: 1.0,
+            near: 0.001,
+            far: 1_000.0,
+
+            position: Point::origin(),
+            rotation: Quaternion::identity(),
+        }
     }
 }

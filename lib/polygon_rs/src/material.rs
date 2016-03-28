@@ -24,6 +24,24 @@ use math::*;
 use std::collections::HashMap;
 use std::collections::hash_map::Iter as HashMapIter;
 
+static DEFAULT_VERT_SRC: &'static str = r#"
+in vec4 vertexPosition;
+
+void main() {
+    gl_Position = vertexPosition;
+}
+"#;
+
+static DEFAULT_FRAG_SRC: &'static str = r#"
+uniform vec4 globalAmbient;
+
+out vec4 colorOut;
+
+void main() {
+    colorOut = globalAmbient;
+}
+"#;
+
 /// Represents combination of a shader and set values for its uniform properties.
 #[derive(Debug, Clone)]
 pub struct Material {
@@ -73,6 +91,18 @@ impl Material {
     /// else?
     pub fn set_clean(&mut self) {
         self.dirty = false;
+    }
+}
+
+impl Default for Material {
+    fn default() -> Material {
+        use gl::gl_util::*;
+
+        let vert = Shader::new(DEFAULT_VERT_SRC, ShaderType::Vertex).unwrap();
+        let frag = Shader::new(DEFAULT_FRAG_SRC, ShaderType::Fragment).unwrap();
+        let program = Program::new(&[vert, frag]).unwrap();
+
+        Material::new(program)
     }
 }
 
