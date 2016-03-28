@@ -2,7 +2,6 @@ use std::ops::{Sub, Add, AddAssign, Neg};
 use std::cmp::{PartialOrd, Ord, Ordering};
 use std::mem;
 use std::f32;
-use std::raw::Slice;
 use std::slice;
 
 use vector::Vector3;
@@ -86,9 +85,10 @@ impl Point {
     }
 
     pub fn as_ref(points: &[Point]) -> &[f32] {
+        let ptr = points.as_ptr() as *const _;
+        let len = points.len() * 4;
         unsafe {
-            let Slice { data, len } = mem::transmute(points);
-            slice::from_raw_parts(data, len * 4)
+            slice::from_raw_parts(ptr, len)
         }
     }
 
