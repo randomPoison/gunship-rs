@@ -6,9 +6,11 @@ use geometry::mesh::{Mesh, VertexAttribute};
 use light::Light;
 use material::*;
 use math::*;
-pub use self::gl_util::*;
+use Renderer;
 use std::collections::HashMap;
 use super::GpuMesh;
+
+pub use self::gl_util::*;
 
 #[derive(Debug)]
 pub struct GlRender {
@@ -57,7 +59,7 @@ impl GlRender {
         mesh_id
     }
 
-    pub fn gen_texture(&self, bitmap: &Bitmap) -> GpuTexture {
+    pub fn gen_texture(&self, _bitmap: &Bitmap) -> GpuTexture {
         unimplemented!();
     }
 
@@ -286,6 +288,28 @@ impl GlRender {
     /// Swap the front and back buffers for the render system.
     pub fn swap_buffers(&self) {
         gl_util::swap_buffers();
+    }
+}
+
+impl Renderer for GlRender {
+    fn draw(&mut self) {
+        self.clear();
+
+        for mesh in self.meshes.keys() {
+            self.draw_mesh(
+                mesh,
+                &Material::default(),
+                Matrix4::identity(),
+                Matrix4::identity(),
+                &Camera::default(),
+                &mut None.into_iter() as &mut Iterator<Item=Light>);
+        }
+
+        self.swap_buffers();
+    }
+
+    fn register_mesh(&mut self, mesh: &Mesh) {
+        self.gen_mesh(mesh);
     }
 }
 
