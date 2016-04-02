@@ -465,7 +465,7 @@ pub struct GlMatrix<'a> {
 }
 
 /// Represents a complete shader program which can be used in rendering.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Program(ProgramObject);
 
 impl Program {

@@ -43,7 +43,7 @@ void main() {
 "#;
 
 /// Represents combination of a shader and set values for its uniform properties.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Material {
     shader: Program,
     properties: HashMap<String, MaterialProperty>,
