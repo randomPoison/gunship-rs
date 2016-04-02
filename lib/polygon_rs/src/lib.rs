@@ -10,12 +10,6 @@ pub mod geometry;
 pub mod gl;
 pub mod light;
 pub mod material;
-
-pub use camera::Camera;
-pub use geometry::*;
-pub use gl::GlRender;
-pub use light::{Light, PointLight};
-pub use material::{Material};
 pub mod shader;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
