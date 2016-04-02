@@ -5,6 +5,7 @@
 #![feature(drain)]
 #![feature(fnbox)]
 #![feature(hashmap_hasher)]
+#![feature(question_mark)]
 #![feature(raw)]
 #![feature(unboxed_closures)]
 

@@ -1,26 +1,24 @@
 use component::{MeshManager, TransformManager};
 use ecs::Entity;
 use scene::Scene;
-use self::shader::*;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::error::Error;
-use std::fs::{self, File};
-use std::io::prelude::*;
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
-use polygon::gl_render::{GLRender, GLMeshData, ShaderProgram};
+use polygon::{GlRender, GpuMesh};
 use polygon::geometry::mesh::Mesh;
+use polygon::shader::{Error as ShaderError, ShaderProgram};
 use wav::Wave;
 
 pub mod collada;
-pub mod shader;
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct ResourceManager {
-    renderer: Rc<GLRender>,
+    renderer: Rc<GlRender>,
     meshes: RefCell<HashMap<String, Mesh>>,
-    gpu_meshes: RefCell<HashMap<String, GLMeshData>>,
+    gpu_meshes: RefCell<HashMap<String, GpuMesh>>,
     mesh_nodes: RefCell<HashMap<String, MeshNode>>,
     shaders: RefCell<HashMap<String, ShaderProgram>>,
     audio_clips: RefCell<HashMap<String, Rc<Wave>>>,
@@ -29,7 +27,7 @@ pub struct ResourceManager {
 }
 
 impl ResourceManager {
-    pub fn new(renderer: Rc<GLRender>) -> ResourceManager {
+    pub fn new(renderer: Rc<GlRender>) -> ResourceManager {
         ResourceManager {
             renderer: renderer,
             meshes: RefCell::new(HashMap::new()),
@@ -76,7 +74,7 @@ impl ResourceManager {
         resource_path.push(path);
     }
 
-    pub fn get_gpu_mesh(&self, uri: &str) -> Option<GLMeshData> {
+    pub fn get_gpu_mesh(&self, uri: &str) -> Option<GpuMesh> {
         // Use cached mesh data if possible.
         self.get_cached_mesh(uri)
         .or_else(|| {
@@ -146,14 +144,16 @@ impl ResourceManager {
     pub fn get_shader<P: AsRef<Path>>(
         &self,
         shader_path: P
-    ) -> Result<ShaderProgram, ParseShaderError> {
-        {
-            let path_str = shader_path.as_ref().to_str().expect(&*format!(
+    ) -> Result<&ShaderProgram, ShaderError> {
+        let path_str = match shader_path.as_ref().to_str() {
+            Some(path) => path,
+            None => panic!(
                 "shader path {:?} contains invalid unicode characters",
-                shader_path.as_ref()));
-            if let Some(shader) = self.shaders.borrow().get(path_str) {
-                return Ok(shader.clone());
-            }
+                shader_path.as_ref()),
+        };
+
+        if let Some(shader) = self.shaders.borrow().get(path_str) {
+            return Ok(shader);
         }
 
         // This should be an else block on the above if block, but that doesn't work until MIR has
@@ -166,23 +166,8 @@ impl ResourceManager {
                     shader_path.as_ref()))
                 .into();
 
-            let mut full_path = self.resource_path.borrow().clone();
-            full_path.push(shader_path);
-            let program_src = load_file_text(full_path);
-
-            let programs = try!(ShaderParser::parse(&*program_src));
-            let vert_src = match programs.iter().find(|program| program.name == "vert") {
-                None => return Err(ParseShaderError::NoVertProgram),
-                Some(program) => program.src,
-            };
-
-            let frag_src = match programs.iter().find(|program| program.name == "frag") {
-                None => return Err(ParseShaderError::NoFragProgram),
-                Some(program) => program.src,
-            };
-
-            let shader = self.renderer.compile_shader_program(vert_src, frag_src);
-            self.shaders.borrow_mut().insert(path_string, shader.clone());
+            let shader = ShaderProgram::from_file(path_string)?;
+            self.shaders.borrow_mut().insert(path_str, shader);
 
             Ok(shader)
         }
@@ -212,14 +197,14 @@ impl ResourceManager {
         self.gpu_meshes.borrow().contains_key(uri)
     }
 
-    fn get_cached_mesh(&self, uri: &str) -> Option<GLMeshData> {
+    fn get_cached_mesh(&self, uri: &str) -> Option<GpuMesh> {
         self.gpu_meshes
         .borrow()
         .get(uri)
         .map(|mesh| *mesh)
     }
 
-    fn gen_gpu_mesh(&self, uri: &str) -> Option<GLMeshData> {
+    fn gen_gpu_mesh(&self, uri: &str) -> Option<GpuMesh> {
         // TODO: Don't do this check in release builds.
         if self.has_cached_mesh(uri) {
             println!("WARNING: Attempting to create a new mesh for {} when the uri is already in the meshes map", uri);
@@ -240,18 +225,19 @@ impl ResourceManager {
     }
 }
 
-pub fn load_file_text<P: AsRef<Path>>(file_path: P) -> String {
-    let mut file = match File::open(&file_path) {
-        // The `desc` field of `IoError` is a string that describes the error
-        Err(why) => panic!("couldn't open {}: {}", file_path.as_ref().display(), Error::description(&why)),
-        Ok(file) => file,
-    };
-    let mut contents = String::new();
-    match file.read_to_string(&mut contents) {
-        Err(why) => panic!("couldn't read {}: {}", file_path.as_ref().display(), Error::description(&why)),
-        Ok(_) => ()
+impl Clone for ResourceManager {
+    fn clone(&self) -> Self {
+        ResourceManager {
+            renderer: self.renderer.clone(),
+            meshes: self.meshes.clone(),
+            gpu_meshes: self.gpu_meshes.clone(),
+            mesh_nodes: self.mesh_nodes.clone(),
+            shaders: RefCell::new(HashMap::new()),
+            audio_clips: self.audio_clips.clone(),
+
+            resource_path: self.resource_path.clone(),
+        }
     }
-    contents
 }
 
 // TODO: Also include the node's local transform.

@@ -1,5 +1,8 @@
+#![feature(question_mark)]
+
 extern crate bootstrap_rs as bootstrap;
 extern crate parse_bmp as bmp;
+
 pub extern crate polygon_math as math;
 
 pub mod camera;
@@ -13,6 +16,7 @@ pub use geometry::*;
 pub use gl::GlRender;
 pub use light::{Light, PointLight};
 pub use material::{Material};
+pub mod shader;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct GpuMesh(usize);
