@@ -26,3 +26,17 @@ pub trait Renderer {
     /// Register mesh data with the renderer, allowing it to format and send that data to the GPU.
     fn register_mesh(&mut self, mesh: &Mesh);
 }
+
+/// A helper struct for selecting and initializing the most suitable renderer for the client's
+/// needs.
+pub struct RendererBuilder;
+
+impl RendererBuilder {
+    pub fn new() -> RendererBuilder {
+        RendererBuilder
+    }
+
+    pub fn build(&mut self) -> Box<Renderer> {
+        Box::new(gl::GlRender::new())
+    }
+}
