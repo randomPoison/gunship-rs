@@ -39,6 +39,12 @@ pub trait Renderer {
 
     /// Registers an anchor with the renderer, returning a unique id for the anchor.
     fn register_anchor(&mut self, anchor: Anchor) -> AnchorId;
+
+    /// Gets a reference to a registered anchor.
+    fn get_anchor(&self, anchor_id: AnchorId) -> Option<&Anchor>;
+
+    /// Gets a mutable reference to a registered anchor.
+    fn get_anchor_mut(&mut self, anchor_id: AnchorId) -> Option<&mut Anchor>;
 }
 
 /// A helper struct for selecting and initializing the most suitable renderer for the client's

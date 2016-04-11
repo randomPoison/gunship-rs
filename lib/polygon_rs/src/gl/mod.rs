@@ -328,6 +328,14 @@ impl Renderer for GlRender {
 
         AnchorId(anchor_id)
     }
+
+    fn get_anchor(&self, anchor_id: AnchorId) -> Option<&Anchor> {
+        self.anchors.get(&anchor_id)
+    }
+
+    fn get_anchor_mut(&mut self, anchor_id: AnchorId) -> Option<&mut Anchor> {
+        self.anchors.get_mut(&anchor_id)
+    }
 }
 
 #[derive(Debug)]
