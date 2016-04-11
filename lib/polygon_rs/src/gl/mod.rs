@@ -339,7 +339,3 @@ struct MeshData {
     pub uv_attribute: Option<VertexAttribute>,
     element_count: usize,
 }
-
-/// Represents texture data that has been sent to the GPU.
-#[derive(Debug, Clone)]
-pub struct GpuTexture;

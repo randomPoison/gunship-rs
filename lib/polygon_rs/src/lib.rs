@@ -20,7 +20,10 @@ use geometry::mesh::Mesh;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct GpuMesh(usize);
 
-use geometry::mesh::Mesh;
+/// Represents texture data that has been sent to the GPU.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct GpuTexture;
+
 /// Identifies an achor that has been registered with the renderer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct AnchorId(usize);

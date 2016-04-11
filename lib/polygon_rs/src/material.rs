@@ -19,6 +19,7 @@
 //! the color as a property. Then we can make two materials, both using the same shader but one set
 //! to show red and the other set to show blue.
 
+use {GpuTexture};
 use gl::*; // TODO: Break dependency on OpenGl-specific implementation.
 use math::*;
 use std::collections::HashMap;
