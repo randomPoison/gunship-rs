@@ -33,32 +33,15 @@ impl GlRender {
             mesh_counter: 0,
             anchor_counter: 0,
         }
-
-        let mut index_buffer = IndexBuffer::new();
-        index_buffer.set_data_u32(mesh.indices());
-
-        let mesh_id = GpuMesh(self.mesh_id_counter);
-        self.mesh_id_counter += 1;
-
-        self.meshes.insert(mesh_id, MeshData {
-            vertex_buffer:      vertex_buffer,
-            index_buffer:       index_buffer,
-            position_attribute: mesh.position(),
-            normal_attribute:   mesh.normal(),
-            uv_attribute:       None,
-            element_count:      mesh.indices().len(),
-        });
-
-        mesh_id
     }
 
-    pub fn gen_texture(&self, _bitmap: &Bitmap) -> GpuTexture {
+    fn gen_texture(&self, _bitmap: &Bitmap) -> GpuTexture {
         unimplemented!();
     }
 
-    pub fn draw_mesh(
+    fn draw_mesh(
         &self,
-        mesh: &GpuMesh,
+        mesh_data: &MeshData,
         material: &Material,
         model_transform: Matrix4,
         normal_transform: Matrix4,
@@ -77,9 +60,6 @@ impl GlRender {
             let inverse_model_view = inverse_model * inverse_view;
             inverse_model_view.transpose()
         };
-
-        // Get mesh data.
-        let mesh_data = self.meshes.get(mesh).expect("No such gpu mesh exists");
 
         // Set the shader to use.
         let mut draw_builder = DrawBuilder::new(&mesh_data.vertex_buffer, DrawMode::Triangles);
@@ -288,21 +268,56 @@ impl Renderer for GlRender {
     fn draw(&mut self) {
         self.clear();
 
-        for mesh in self.meshes.keys() {
-            self.draw_mesh(
-                mesh,
-                &Material::default(),
-                Matrix4::identity(),
-                Matrix4::identity(),
-                &Camera::default(),
-                &mut None.into_iter() as &mut Iterator<Item=Light>);
+        for anchor in self.anchors.values() {
+            for mesh_id in anchor.meshes() {
+                let mesh = self.meshes.get(mesh_id).expect("Mesh data does not exist for mesh id");
+
+                self.draw_mesh(
+                    mesh,
+                    &Material::default(),
+                    Matrix4::identity(),
+                    Matrix4::identity(),
+                    &Camera::default(),
+                    &mut None.into_iter() as &mut Iterator<Item=Light>);
+            }
+
         }
 
         self.swap_buffers();
     }
 
-    fn register_mesh(&mut self, mesh: &Mesh) {
-        self.gen_mesh(mesh);
+    fn register_mesh(&mut self, mesh: &Mesh) -> GpuMesh {
+        // Generate array buffer.
+        let mut vertex_buffer = VertexBuffer::new();
+        vertex_buffer.set_data_f32(mesh.vertex_data());
+
+        // Configure vertex attributes.
+        let position = mesh.position();
+        vertex_buffer.set_attrib_f32("position", 4, position.stride, position.offset);
+
+        if let Some(normal) = mesh.normal() {
+            vertex_buffer.set_attrib_f32("normal", 3, normal.stride, normal.offset);
+        }
+
+        let mut index_buffer = IndexBuffer::new();
+        index_buffer.set_data_u32(mesh.indices());
+
+        let mesh_id = self.mesh_counter;
+        self.mesh_counter += 1;
+
+        self.meshes.insert(
+            GpuMesh(mesh_id),
+            MeshData {
+                vertex_buffer:      vertex_buffer,
+                index_buffer:       index_buffer,
+                position_attribute: mesh.position(),
+                normal_attribute:   mesh.normal(),
+                uv_attribute:       None,
+                element_count:      mesh.indices().len(),
+            });
+
+        GpuMesh(mesh_id)
+    }
 
     fn register_anchor(&mut self, anchor: Anchor) -> AnchorId {
         let anchor_id = self.anchor_counter;

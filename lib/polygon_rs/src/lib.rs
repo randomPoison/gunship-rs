@@ -14,6 +14,9 @@ pub mod material;
 pub mod shader;
 
 use anchor::Anchor;
+use geometry::mesh::Mesh;
+
+/// Identifies mesh data that has been sent to the GPU.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct GpuMesh(usize);
 
@@ -28,8 +31,8 @@ pub trait Renderer {
     /// (usually the screen).
     fn draw(&mut self);
 
-    /// Register mesh data with the renderer, allowing it to format and send that data to the GPU.
-    fn register_mesh(&mut self, mesh: &Mesh);
+    /// Registers mesh data with the renderer, returning a unique id for the mesh.
+    fn register_mesh(&mut self, mesh: &Mesh) -> GpuMesh;
 
     /// Registers an anchor with the renderer, returning a unique id for the anchor.
     fn register_anchor(&mut self, anchor: Anchor) -> AnchorId;
