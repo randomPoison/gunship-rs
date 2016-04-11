@@ -1,5 +1,7 @@
 pub extern crate gl_util;
 
+use {AnchorId, GpuMesh, GpuTexture};
+use anchor::*;
 use bmp::Bitmap;
 use camera::Camera;
 use geometry::mesh::{Mesh, VertexAttribute};
@@ -8,14 +10,16 @@ use material::*;
 use math::*;
 use Renderer;
 use std::collections::HashMap;
-use super::GpuMesh;
 
 pub use self::gl_util::*;
 
 #[derive(Debug)]
 pub struct GlRender {
     meshes: HashMap<GpuMesh, MeshData>,
-    mesh_id_counter: usize,
+    anchors: HashMap<AnchorId, Anchor>,
+
+    mesh_counter: usize,
+    anchor_counter: usize,
 }
 
 impl GlRender {
@@ -24,21 +28,10 @@ impl GlRender {
 
         GlRender {
             meshes: HashMap::new(),
-            mesh_id_counter: 0,
-        }
-    }
+            anchors: HashMap::new(),
 
-    pub fn gen_mesh(&mut self, mesh: &Mesh) -> GpuMesh {
-        // Generate array buffer.
-        let mut vertex_buffer = VertexBuffer::new();
-        vertex_buffer.set_data_f32(mesh.vertex_data());
-
-        // Configure vertex attributes.
-        let position = mesh.position();
-        vertex_buffer.set_attrib_f32("position", 4, position.stride, position.offset);
-
-        if let Some(normal) = mesh.normal() {
-            vertex_buffer.set_attrib_f32("normal", 3, normal.stride, normal.offset);
+            mesh_counter: 0,
+            anchor_counter: 0,
         }
 
         let mut index_buffer = IndexBuffer::new();
@@ -310,6 +303,15 @@ impl Renderer for GlRender {
 
     fn register_mesh(&mut self, mesh: &Mesh) {
         self.gen_mesh(mesh);
+
+    fn register_anchor(&mut self, anchor: Anchor) -> AnchorId {
+        let anchor_id = self.anchor_counter;
+        self.anchor_counter += 1;
+
+        let old = self.anchors.insert(AnchorId(anchor_id), anchor);
+        assert!(old.is_none());
+
+        AnchorId(anchor_id)
     }
 }
 

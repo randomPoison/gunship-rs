@@ -5,6 +5,7 @@ extern crate parse_bmp as bmp;
 
 pub extern crate polygon_math as math;
 
+pub mod anchor;
 pub mod camera;
 pub mod geometry;
 pub mod gl;
@@ -12,10 +13,14 @@ pub mod light;
 pub mod material;
 pub mod shader;
 
+use anchor::Anchor;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct GpuMesh(usize);
 
 use geometry::mesh::Mesh;
+/// Identifies an achor that has been registered with the renderer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct AnchorId(usize);
 
 /// The common interface that all rendering systems must provide.
 pub trait Renderer {
@@ -25,6 +30,9 @@ pub trait Renderer {
 
     /// Register mesh data with the renderer, allowing it to format and send that data to the GPU.
     fn register_mesh(&mut self, mesh: &Mesh);
+
+    /// Registers an anchor with the renderer, returning a unique id for the anchor.
+    fn register_anchor(&mut self, anchor: Anchor) -> AnchorId;
 }
 
 /// A helper struct for selecting and initializing the most suitable renderer for the client's
