@@ -26,10 +26,12 @@ use std::collections::HashMap;
 use std::collections::hash_map::Iter as HashMapIter;
 
 static DEFAULT_VERT_SRC: &'static str = r#"
+uniform mat4 modelViewProjection;
+
 in vec4 vertexPosition;
 
 void main() {
-    gl_Position = vertexPosition;
+    gl_Position = modelViewProjection * vertexPosition;
 }
 "#;
 
