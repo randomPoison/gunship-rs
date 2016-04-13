@@ -67,4 +67,21 @@ impl Anchor {
     pub fn detach_mesh(&mut self, gpu_mesh: GpuMesh) {
         self.meshes.remove(&gpu_mesh);
     }
+
+    pub fn matrix(&self) -> Matrix4 {
+        let position = Matrix4::from_point(self.position);
+        let orientation = Matrix4::from_quaternion(self.orientation);
+        let scale = Matrix4::from_scale_vector(self.scale);
+
+        position * (orientation * scale)
+    }
+
+    pub fn normal_matrix(&self) -> Matrix4 {
+        let inv_scale = Matrix4::from_scale_vector(1.0 / self.scale);
+        let inv_rotation = self.orientation.as_matrix4().transpose();
+        let inv_translation = Matrix4::from_point(-self.position);
+
+        let inverse = inv_scale * (inv_rotation * inv_translation);
+        inverse.transpose()
+    }
 }

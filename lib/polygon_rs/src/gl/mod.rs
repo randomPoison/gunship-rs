@@ -269,18 +269,20 @@ impl Renderer for GlRender {
         self.clear();
 
         for anchor in self.anchors.values() {
+            let model_transform = anchor.matrix();
+            let normal_transform = anchor.normal_matrix();
+
             for mesh_id in anchor.meshes() {
                 let mesh = self.meshes.get(mesh_id).expect("Mesh data does not exist for mesh id");
 
                 self.draw_mesh(
                     mesh,
                     &Material::default(),
-                    Matrix4::identity(),
-                    Matrix4::identity(),
+                    model_transform,
+                    normal_transform,
                     &Camera::default(),
                     &mut None.into_iter() as &mut Iterator<Item=Light>);
             }
-
         }
 
         self.swap_buffers();
