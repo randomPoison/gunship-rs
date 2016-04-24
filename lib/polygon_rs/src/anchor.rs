@@ -68,6 +68,7 @@ impl Anchor {
         self.meshes.remove(&gpu_mesh);
     }
 
+    /// Calculates the matrix to convert from object space to world space.
     pub fn matrix(&self) -> Matrix4 {
         let position = Matrix4::from_point(self.position);
         let orientation = Matrix4::from_quaternion(self.orientation);
@@ -76,6 +77,7 @@ impl Anchor {
         position * (orientation * scale)
     }
 
+    /// Calculates the matrix used to convert normals from object space to world space.
     pub fn normal_matrix(&self) -> Matrix4 {
         let inv_scale = Matrix4::from_scale_vector(1.0 / self.scale);
         let inv_rotation = self.orientation.as_matrix4().transpose();
@@ -83,5 +85,22 @@ impl Anchor {
 
         let inverse = inv_scale * (inv_rotation * inv_translation);
         inverse.transpose()
+    }
+
+    /// Calculates the view transform for the camera.
+    ///
+    /// The view transform the matrix that converts from world coordinates to camera coordinates.
+    pub fn view_matrix(&self) -> Matrix4 {
+        let inv_orientation = self.orientation.as_matrix4().transpose();
+        let inv_translation = Matrix4::translation(
+            -self.position.x,
+            -self.position.y,
+            -self.position.z);
+        inv_orientation * inv_translation
+    }
+
+    /// Calculates the inverse view matrix.
+    pub fn inverse_view_matrix(&self) -> Matrix4 {
+        Matrix4::from_point(self.position) * self.orientation.as_matrix4()
     }
 }

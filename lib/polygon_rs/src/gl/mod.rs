@@ -1,11 +1,9 @@
 pub extern crate gl_util;
 
-use {AnchorId, GpuMesh, GpuTexture};
+use {AnchorId, CameraId, GpuMesh};
 use anchor::*;
-use bmp::Bitmap;
 use camera::Camera;
 use geometry::mesh::{Mesh, VertexAttribute};
-use light::Light;
 use material::*;
 use math::*;
 use Renderer;
@@ -17,9 +15,11 @@ pub use self::gl_util::*;
 pub struct GlRender {
     meshes: HashMap<GpuMesh, MeshData>,
     anchors: HashMap<AnchorId, Anchor>,
+    cameras: HashMap<CameraId, Camera>,
 
-    mesh_counter: usize,
-    anchor_counter: usize,
+    mesh_counter: GpuMesh,
+    anchor_counter: AnchorId,
+    camera_counter: CameraId,
 }
 
 impl GlRender {
@@ -29,14 +29,12 @@ impl GlRender {
         GlRender {
             meshes: HashMap::new(),
             anchors: HashMap::new(),
+            cameras: HashMap::new(),
 
-            mesh_counter: 0,
-            anchor_counter: 0,
+            mesh_counter: GpuMesh(0),
+            anchor_counter: AnchorId(0),
+            camera_counter: CameraId(0),
         }
-    }
-
-    fn gen_texture(&self, _bitmap: &Bitmap) -> GpuTexture {
-        unimplemented!();
     }
 
     fn draw_mesh(
@@ -46,17 +44,17 @@ impl GlRender {
         model_transform: Matrix4,
         normal_transform: Matrix4,
         camera: &Camera,
-        lights: &mut Iterator<Item=Light>
+        camera_anchor: &Anchor,
     ) {
-        // Calculate the various transforms neede for rendering.
-        let view_transform = camera.view_matrix();
+        // Calculate the various transforms needed for rendering.
+        let view_transform = camera_anchor.view_matrix();
         let model_view_transform = view_transform * model_transform;
         let projection_transform = camera.projection_matrix();
         let model_view_projection = projection_transform * model_view_transform;
 
         let view_normal_transform = {
             let inverse_model = normal_transform.transpose();
-            let inverse_view = camera.inverse_view_matrix();
+            let inverse_view = camera_anchor.inverse_view_matrix();
             let inverse_model_view = inverse_model * inverse_view;
             inverse_model_view.transpose()
         };
@@ -113,7 +111,7 @@ impl GlRender {
         .uniform("globalAmbient", *Color::new(0.25, 0.25, 0.25, 1.0).as_array())
 
         // Other uniforms.
-        .uniform("cameraPosition", *camera.position.as_array());
+        .uniform("cameraPosition", *camera_anchor.position().as_array());
 
         // // Apply material attributes.
         // for (name, property) in material.properties() {
@@ -178,11 +176,11 @@ impl GlRender {
 
     pub fn draw_wireframe(
         &self,
-        camera: &Camera,
-        material: &Material,
+        _camera: &Camera,
+        _material: &Material,
         mesh: &GpuMesh,
-        model_transform: Matrix4,
-        color: Color,
+        _model_transform: Matrix4,
+        _color: Color,
     ) {
         /*
         let view_transform = camera.view_matrix();
@@ -268,6 +266,20 @@ impl Renderer for GlRender {
     fn draw(&mut self) {
         self.clear();
 
+        let (camera, camera_anchor) = if let Some(camera) = self.cameras.values().next() {
+            // Use the first camera in the scene for now. Eventually we'll want to support
+            // rendering multiple cameras to multiple viewports or render targets but for now one
+            // is enough.
+            let anchor = match camera.anchor() {
+                Some(ref anchor_id) => self.anchors.get(anchor_id).expect("no such anchor exists"),
+                None => unimplemented!(),
+            };
+
+            (camera, anchor)
+        } else {
+            panic!("There must be a camera registered");
+        };
+
         for anchor in self.anchors.values() {
             let model_transform = anchor.matrix();
             let normal_transform = anchor.normal_matrix();
@@ -280,8 +292,8 @@ impl Renderer for GlRender {
                     &Material::default(),
                     model_transform,
                     normal_transform,
-                    &Camera::default(),
-                    &mut None.into_iter() as &mut Iterator<Item=Light>);
+                    camera,
+                    camera_anchor);
             }
         }
 
@@ -304,11 +316,10 @@ impl Renderer for GlRender {
         let mut index_buffer = IndexBuffer::new();
         index_buffer.set_data_u32(mesh.indices());
 
-        let mesh_id = self.mesh_counter;
-        self.mesh_counter += 1;
+        let mesh_id = self.mesh_counter.next();
 
         self.meshes.insert(
-            GpuMesh(mesh_id),
+            mesh_id,
             MeshData {
                 vertex_buffer:      vertex_buffer,
                 index_buffer:       index_buffer,
@@ -318,17 +329,16 @@ impl Renderer for GlRender {
                 element_count:      mesh.indices().len(),
             });
 
-        GpuMesh(mesh_id)
+        mesh_id
     }
 
     fn register_anchor(&mut self, anchor: Anchor) -> AnchorId {
-        let anchor_id = self.anchor_counter;
-        self.anchor_counter += 1;
+        let anchor_id = self.anchor_counter.next();
 
-        let old = self.anchors.insert(AnchorId(anchor_id), anchor);
+        let old = self.anchors.insert(anchor_id, anchor);
         assert!(old.is_none());
 
-        AnchorId(anchor_id)
+        anchor_id
     }
 
     fn get_anchor(&self, anchor_id: AnchorId) -> Option<&Anchor> {
@@ -337,6 +347,23 @@ impl Renderer for GlRender {
 
     fn get_anchor_mut(&mut self, anchor_id: AnchorId) -> Option<&mut Anchor> {
         self.anchors.get_mut(&anchor_id)
+    }
+
+    fn register_camera(&mut self, camera: Camera) -> CameraId {
+        let camera_id = self.camera_counter.next();
+
+        let old = self.cameras.insert(camera_id, camera);
+        assert!(old.is_none());
+
+        camera_id
+    }
+
+    fn get_camera(&self, camera_id: CameraId) -> Option<&Camera> {
+        self.cameras.get(&camera_id)
+    }
+
+    fn get_camera_mut(&mut self, camera_id: CameraId) -> Option<&mut Camera> {
+        self.cameras.get_mut(&camera_id)
     }
 }
 
