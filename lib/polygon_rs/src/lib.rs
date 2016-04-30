@@ -16,6 +16,7 @@ pub mod shader;
 use anchor::Anchor;
 use camera::Camera;
 use geometry::mesh::Mesh;
+use light::Light;
 
 /// Identifies mesh data that has been sent to the GPU.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
@@ -57,6 +58,18 @@ impl CameraId {
     }
 }
 
+/// Identifies a light that has been registered with the renderer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct LightId(usize);
+
+impl LightId {
+    fn next(&mut self) -> LightId {
+        let next = *self;
+        self.0 += 1;
+        next
+    }
+}
+
 /// The common interface that all rendering systems must provide.
 pub trait Renderer {
     /// Renders one frame based on the renderer's current state to the current render target.
@@ -82,6 +95,15 @@ pub trait Renderer {
 
     /// Gets a mutable reference to a registered camera.
     fn get_camera_mut(&mut self, camera_id: CameraId) -> Option<&mut Camera>;
+
+    /// Registers a light with the renderer, returning a unique id for the light.
+    fn register_light(&mut self, light: Light) -> LightId;
+
+    /// Gets a reference to a registered light.
+    fn get_light(&self, light_id: LightId) -> Option<&Light>;
+
+    /// Gets a mutable reference to a registered light.
+    fn get_light_mut(&mut self, light_id: LightId) -> Option<&mut Light>;
 }
 
 /// A helper struct for selecting and initializing the most suitable renderer for the client's

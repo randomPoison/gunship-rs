@@ -1,9 +1,10 @@
 pub extern crate gl_util;
 
-use {AnchorId, CameraId, GpuMesh};
+use {AnchorId, CameraId, LightId, GpuMesh};
 use anchor::*;
 use camera::Camera;
 use geometry::mesh::{Mesh, VertexAttribute};
+use light::*;
 use material::*;
 use math::*;
 use Renderer;
@@ -16,10 +17,12 @@ pub struct GlRender {
     meshes: HashMap<GpuMesh, MeshData>,
     anchors: HashMap<AnchorId, Anchor>,
     cameras: HashMap<CameraId, Camera>,
+    lights: HashMap<LightId, Light>,
 
     mesh_counter: GpuMesh,
     anchor_counter: AnchorId,
     camera_counter: CameraId,
+    light_counter: LightId,
 }
 
 impl GlRender {
@@ -30,10 +33,12 @@ impl GlRender {
             meshes: HashMap::new(),
             anchors: HashMap::new(),
             cameras: HashMap::new(),
+            lights: HashMap::new(),
 
             mesh_counter: GpuMesh(0),
             anchor_counter: AnchorId(0),
             camera_counter: CameraId(0),
+            light_counter: LightId(0),
         }
     }
 
@@ -364,6 +369,23 @@ impl Renderer for GlRender {
 
     fn get_camera_mut(&mut self, camera_id: CameraId) -> Option<&mut Camera> {
         self.cameras.get_mut(&camera_id)
+    }
+
+    fn register_light(&mut self, light: Light) -> LightId {
+        let light_id = self.light_counter.next();
+
+        let old = self.lights.insert(light_id, light);
+        assert!(old.is_none());
+
+        light_id
+    }
+
+    fn get_light(&self, light_id: LightId) -> Option<&Light> {
+        self.lights.get(&light_id)
+    }
+
+    fn get_light_mut(&mut self, light_id: LightId) -> Option<&mut Light> {
+        self.lights.get_mut(&light_id)
     }
 }
 
