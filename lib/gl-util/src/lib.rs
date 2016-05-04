@@ -16,7 +16,8 @@ use std::{mem, ptr};
 use std::collections::HashMap;
 
 pub use gl::{
-    AttributeLocation, Comparison, DrawMode, Face, PolygonMode, ShaderType, WindingOrder,
+    AttributeLocation, Comparison, DestFactor, DrawMode, Face, PolygonMode, ShaderType,
+    SourceFactor, WindingOrder,
 };
 pub use gl::platform::swap_buffers;
 pub use self::shader::*;
@@ -172,6 +173,7 @@ pub struct DrawBuilder<'a> {
     cull: Option<Face>,
     depth_test: Option<Comparison>,
     winding_order: Option<WindingOrder>,
+    blend: Option<(SourceFactor, DestFactor)>,
     uniforms: HashMap<UniformLocation, UniformValue<'a>>,
 }
 
@@ -192,6 +194,7 @@ impl<'a> DrawBuilder<'a> {
             cull: None,
             depth_test: None,
             winding_order: None,
+            blend: None,
             uniforms: HashMap::new(),
         }
     }
@@ -223,6 +226,19 @@ impl<'a> DrawBuilder<'a> {
 
     pub fn winding(&mut self, winding_order: WindingOrder) -> &mut DrawBuilder<'a> {
         self.winding_order = Some(winding_order);
+        self
+    }
+
+    pub fn blend(
+        &mut self,
+        source_factor: SourceFactor,
+        dest_factor: DestFactor
+    ) -> &mut DrawBuilder<'a> {
+        if source_factor == SourceFactor::One && dest_factor == DestFactor::Zero {
+            self.blend = None;
+        } else {
+            self.blend = Some((source_factor, dest_factor));
+        }
         self
     }
 
@@ -363,6 +379,11 @@ impl<'a> DrawBuilder<'a> {
                 gl::depth_func(depth_test);
             }
 
+            if let Some((source_factor, dest_factor)) = self.blend {
+                gl::enable(ServerCapability::Blend);
+                gl::blend_func(source_factor, dest_factor);
+            }
+
             // Apply uniforms.
             for (&location, uniform) in &self.uniforms {
                 uniform.apply(location);
@@ -385,6 +406,7 @@ impl<'a> DrawBuilder<'a> {
             // Reset all values even if they weren't used so that we don't need to branch twice on
             // each option.
             gl::front_face(WindingOrder::CounterClockwise);
+            gl::disable(ServerCapability::Blend);
             gl::disable(ServerCapability::DepthTest);
             gl::disable(ServerCapability::CullFace);
             gl::polygon_mode(Face::FrontAndBack, PolygonMode::Fill);
