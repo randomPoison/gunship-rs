@@ -130,130 +130,41 @@ impl GlRender {
         //     }
         // }
 
-        // Shader doesn't accept lights, so just draw without setting light values.
-        draw_builder.draw();
+        // Render first light without blending so it overrides any objects behind it.
+        // We also render it with light strength 0 so it only renders ambient color.
+        draw_builder
+            .uniform("lightPosition", *Point::origin().as_array())
+            .uniform("lightStrength", 0.0)
+            .draw();
 
-        // if let Some(light_position_location) = shader.light_position {
-        //     // Render first light without blending so it overrides any objects behind it.
-        //     // We also render it with light strength 0 so it only renders ambient color.
-        //     {
-        //         gl::uniform_4f(light_position_location, Point::origin().as_array());
-        //         if let Some(light_strength_location) = shader.light_strength {
-        //             gl::uniform_1f(light_strength_location, 0.0);
-        //         }
-        //         gl::disable(ServerCapability::Blend);
-        //         gl::draw_elements(
-        //             DrawMode::Triangles,
-        //             mesh.element_count as i32,
-        //             IndexType::UnsignedInt,
-        //             0);
-        //     }
-        //
-        //     // Render the rest of the lights with blending on the the depth check set to LEQUAL.
-        //     gl::depth_func(Comparison::LEqual);
-        //     gl::enable(ServerCapability::Blend);
-        //     gl::blend_func(SourceFactor::One, DestFactor::One);
-        //
-        //     let ambient_color = Color::new(0.0, 0.0, 0.0, 1.0);
-        //     if let Some(ambient_location) = shader.global_ambient {
-        //         gl::uniform_4f(ambient_location, ambient_color.as_array());
-        //     }
-        //
-        //     for light in lights {
-        //         let light_position = match light {
-        //             Light::Point(ref point_light) => point_light.position
-        //         };
-        //         let light_position_view = light_position * view_transform;
-        //
-        //         gl::uniform_4f(light_position_location, light_position_view.as_array());
-        //         if let Some(light_strength_location) = shader.light_strength {
-        //             // TODO: Use the light's actual strength value.
-        //             gl::uniform_1f(light_strength_location, 1.0);
-        //         }
-        //
-        //         // TODO: Set uniforms and all that jazz.
-        //         DrawBuilder::new(mesh.vertex_buffer, DrawMode::Triangles)
-        //         .index_buffer(mesh.index_buffer)
-        //         .draw();
-        //     }
-        // }
-    }
+        // Render the rest of the lights with blending on the the depth check set to
+        // less than or equal.
+        let ambient_color = Color::new(0.0, 0.0, 0.0, 1.0);
+        draw_builder
+            .depth_test(Comparison::LessThanOrEqual)
+            .blend(SourceFactor::One, DestFactor::One)
+            .uniform("ambientLocation", *ambient_color.as_array());
 
-    pub fn draw_wireframe(
-        &self,
-        _camera: &Camera,
-        _material: &Material,
-        mesh: &GpuMesh,
-        _model_transform: Matrix4,
-        _color: Color,
-    ) {
-        /*
-        let view_transform = camera.view_matrix();
-        let model_view_transform = view_transform * model_transform;
-        let projection_transform = camera.projection_matrix();
-        let model_view_projection = projection_transform * model_view_transform;
+        for light in self.lights.values() {
+            // Send the light's position in view space.
+            let light_anchor = match light.anchor() {
+                Some(anchor_id) => self.anchors.get(&anchor_id).expect("No such anchor exists"),
+                None => panic!("Cannot render light if it's not attached to an anchor"),
+            };
+            let light_position_view = light_anchor.position() * view_transform;
+            draw_builder.uniform("lightPosition", *light_position_view.as_array());
 
-        shader.set_active();
+            // Send data specific to the current type of light.
+            match light.data {
+                LightData::Point(PointLight { radius, strength }) => {
+                    draw_builder.uniform("lightRadius", radius);
+                    draw_builder.uniform("lightStrength", strength);
+                },
+            }
 
-        // Specify the layout of the vertex data.
-        let position_attrib = shader.vertex_position
-            .expect("Could not get vertexPosition attribute");
-        gl::vertex_attrib_pointer(
-            position_attrib,
-            3,
-            GlType::Float,
-            false,
-            (mesh.position_attribute.stride * mem::size_of::<f32>()) as i32,
-            mesh.position_attribute.offset * mem::size_of::<f32>());
-        gl::enable_vertex_attrib_array(position_attrib);
-
-        // Set uniform transforms.
-        if let Some(model_transform_location) = shader.model_transform {
-            gl::uniform_matrix_4x4(
-                model_transform_location,
-                true,
-                model_transform.raw_data());
+            // Draw the current light.
+            draw_builder.draw();
         }
-
-        if let Some(view_transform_location) = shader.view_transform {
-            gl::uniform_matrix_4x4(
-                view_transform_location,
-                true,
-                view_transform.raw_data());
-        }
-
-        if let Some(model_view_transform_location) = shader.model_view_transform {
-            gl::uniform_matrix_4x4(
-                model_view_transform_location,
-                true,
-                model_view_transform.raw_data());
-        }
-
-        if let Some(projection_transform_location) = shader.projection_transform {
-            gl::uniform_matrix_4x4(
-                projection_transform_location,
-                true,
-                projection_transform.raw_data());
-        }
-
-        if let Some(model_view_projection_location) = shader.model_view_projection {
-            gl::uniform_matrix_4x4(
-                model_view_projection_location,
-                true,
-                model_view_projection.raw_data());
-        }
-        */
-
-        // if let Some(surface_color_location) = shader.surface_color {
-        //     gl::uniform_4f(surface_color_location, color.as_array());
-        // }
-
-        // Get mesh data.
-        let mesh_data = self.meshes.get(mesh).expect("No such gpu mesh exists");
-
-        DrawBuilder::new(&mesh_data.vertex_buffer, DrawMode::Lines)
-        .index_buffer(&mesh_data.index_buffer)
-        .draw();
     }
 
     /// Clears the current back buffer.
