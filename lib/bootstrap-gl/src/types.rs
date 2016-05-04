@@ -136,6 +136,19 @@ pub enum Comparison {
 
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum DestFactor {
+    Zero = 0,
+    One = 1,
+    SourceColor = 0x0300,
+    OneMinusSourceColor = 0x0301,
+    SourceAlpha = 0x0302,
+    OneMinusSourceAlpha = 0x0303,
+    DestAlpha = 0x0304,
+    OneMinusDestAlpha = 0x0305,
+}
+
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum DrawMode {
     Points = 0x0000,
     Lines = 0x0001,
@@ -228,6 +241,39 @@ pub enum ProgramParam {
     ActiveAttributeMaxLength = 0x8B8A,
 }
 
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ServerCapability {
+    Fog = 0x0B60,
+    Lighting = 0x0B50,
+    Texture2D = 0x0DE1,
+    CullFace = 0x0B44,
+    AlphaTest = 0x0BC0,
+    Blend = 0x0BE2,
+    ColorLogicOp = 0x0BF2,
+    Dither = 0x0BD0,
+    StencilTest = 0x0B90,
+    DepthTest = 0x0B71,
+    PointSmooth = 0x0B10,
+    LineSmooth = 0x0B20,
+    ScissorTest = 0x0C11,
+    ColorMaterial = 0x0B57,
+    Normalize = 0x0BA1,
+    RescaleNormal = 0x803A,
+    PolygonOffsetFill = 0x8037,
+    VertexArray = 0x8074,
+    NormalArray = 0x8075,
+    ColorArray = 0x8076,
+    TextureCoordArray = 0x8078,
+    Multisample = 0x809D,
+    SampleAlphaToCoverage = 0x809E,
+    SampleAlphaToOne = 0x809F,
+    SampleCoverage = 0x80A0,
+
+    /// Introduced: OpenGL 4.3
+    DebugOutput = 0x92E0,
+}
+
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ShaderObject(u32);
@@ -263,6 +309,22 @@ pub enum ShaderType {
     TessControl = 0x8E88,
 }
 
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SourceFactor {
+    Zero = 0,
+    One = 1,
+    SourceColor = 0x0300,
+    OneMinusSourceColor = 0x0301,
+    SourceAlpha = 0x0302,
+    OneMinusSourceAlpha = 0x0303,
+    DestAlpha = 0x0304,
+    OneMinusDestAlpha = 0x0305,
+    DestColor = 0x0306,
+    OneMinusDestColor = 0x0307,
+    SourceAlphaSaturate = 0x0308,
+}
+
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct UniformLocation(u32);
@@ -296,39 +358,6 @@ pub enum WindingOrder {
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct TextureObject(u32);
-
-#[repr(u32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum ServerCapability {
-    Fog                   = 0x0B60,
-    Lighting              = 0x0B50,
-    Texture2D             = 0x0DE1,
-    CullFace              = 0x0B44,
-    AlphaTest             = 0x0BC0,
-    Blend                 = 0x0BE2,
-    ColorLogicOp          = 0x0BF2,
-    Dither                = 0x0BD0,
-    StencilTest           = 0x0B90,
-    DepthTest             = 0x0B71,
-    PointSmooth           = 0x0B10,
-    LineSmooth            = 0x0B20,
-    ScissorTest           = 0x0C11,
-    ColorMaterial         = 0x0B57,
-    Normalize             = 0x0BA1,
-    RescaleNormal         = 0x803A,
-    PolygonOffsetFill     = 0x8037,
-    VertexArray           = 0x8074,
-    NormalArray           = 0x8075,
-    ColorArray            = 0x8076,
-    TextureCoordArray     = 0x8078,
-    Multisample           = 0x809D,
-    SampleAlphaToCoverage = 0x809E,
-    SampleAlphaToOne      = 0x809F,
-    SampleCoverage        = 0x80A0,
-
-    /// Introduced: OpenGL 4.3
-    DebugOutput           = 0x92E0,
-}
 
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -469,35 +498,6 @@ pub enum TextureFormat {
     // GL_ALPHA,
     // GL_LUMINANCE,
     // GL_LUMINANCE_ALPHA,
-}
-
-#[repr(u32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum DestFactor {
-    Zero             = 0,
-    One              = 1,
-    SrcColor         = 0x0300,
-    OneMinusSrcColor = 0x0301,
-    SrcAlpha         = 0x0302,
-    OneMinusSrcAlpha = 0x0303,
-    DstAlpha         = 0x0304,
-    OneMinusDstAlpha = 0x0305,
-}
-
-#[repr(u32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum SourceFactor {
-    Zero             = 0,
-    One              = 1,
-    SrcColor         = 0x0300,
-    OneMinusSrcColor = 0x0301,
-    SrcAlpha         = 0x0302,
-    OneMinusSrcAlpha = 0x0303,
-    DstAlpha         = 0x0304,
-    OneMinusDstAlpha = 0x0305,
-    DstColor         = 0x0306,
-    OneMinusDstColor = 0x0307,
-    SrcAlphaSaturate = 0x0308,
 }
 
 #[repr(u32)]

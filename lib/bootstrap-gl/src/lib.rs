@@ -222,6 +222,78 @@ gl_proc!(glBindVertexArray:
     ///   object previously returned from a call to `gen_vertex_arrays`.
     fn bind_vertex_array(name: VertexArrayName));
 
+gl_proc!(glBlendFunc:
+    /// Specifies pixel arithmetic for both RGB and alpha components.
+    ///
+    /// Pixels can be drawn using a function that blends the incoming (source) RGBA values with
+    /// the RGBA values that are already in the frame buffer (the destination values). Blending is
+    /// initially disabled. Use `enable` and `disable` with argument `ServerCapability::Blend` to
+    /// enable and disable blending.
+    ///
+    /// `blend_func` is equivalent to calling `blend_func_separate` with `src_factor` for both the
+    /// `src_rbg` and `src_alpha` parameters, and `dest_factor` for both the `dest_rbg` and
+    /// `dest_alpha` parameters.
+    ///
+    /// In the table and in subsequent equations, first source, second source and destination
+    /// color components are referred to as (Rs0, Gs0, Bs0, As0), (Rs1, Gs1, Bs1, As1) and (Rd,
+    /// Gd, Bd, Ad), respectively. The color specified by glBlendColor​ is referred to as (Rc, Gc,
+    /// Bc, Ac).
+    ///
+    /// Source and destination scale factors are referred to as (sR, sG, sB, sA) and (dR, dG, dB,
+    /// dA).
+    ///
+    /// | Parameter             | RGB Factor                  | Alpha Factor |
+    /// |-----------------------|-----------------------------|--------------|
+    /// | Zero                  | (0, 0, 0)                   | 0            |
+    /// | One                   | (1, 1, 1)                   | 1            |
+    /// | SourceColor           | (Rs0, Gs0, Bs0)             | As0          |
+    /// | OneMinusSourceColor   | (1, 1, 1) - (Rs0, Gs0, Bs0) | 1 - As0      |
+    /// | DestColor             | (Rd, Gd, Bd)                | Ad           |
+    /// | OneMinusDestColor     | (1, 1, 1) - (Rd, Gd, Bd)    | 1 - Ad       |
+    /// | SourceAlpha           | (As0, As0, As0)             | As0          |
+    /// | OneMinusSourceAlpha   | (1, 1, 1) - (As0, As0, As0) | 1 - As0      |
+    /// | DestAlpha             | (Ad, Ad, Ad)                | Ad           |
+    /// | OneMinusDestAlpha     | (1, 1, 1) - (Ad, Ad, Ad)    | Ad           |
+    /// | ConstantColor         | (Rc, Gc, Bc)                | Ac           |
+    /// | OneMinusConstantColor | (1, 1, 1) - (Rc, Gc, Bc)    | 1 - Ac       |
+    /// | ConstantAlpha         | (Ac, Ac, Ac)                | Ac           |
+    /// | OneMinusConstantAlpha | (1, 1, 1) - (Ac, Ac, Ac)    | 1 - Ac       |
+    /// | SourceAlphaSaturate   | (i, i, i)                   | 1            |
+    /// | Source1Color          | (Rs1, Gs1, Bs1)             | As1          |
+    /// | OneMinusSourceColor   | (1, 1, 1) - (Rs1, Gs1, Bs1) | 1 - As1      |
+    /// | Source1Alpha          | (As1, As1, As1)             | As1          |
+    /// | OneMinusSourceAlpha   | (1, 1, 1) - (As1, As1, As1) | 1 - As1      |
+    ///
+    /// In the table,
+    ///
+    /// ```
+    /// i = min(As0, (1 - Ad))
+    /// ```
+    ///
+    /// Despite the apparent precision of the above equations, blending arithmetic is not exactly
+    /// specified, because blending operates with imprecise integer color values. However, a blend
+    /// factor that should be equal to 1 is guaranteed not to modify its multiplicand, and a blend
+    /// factor equal to 0 reduces its multiplicand to 0. For example, when `src_factor` is
+    /// `SourceAlpha`, `dest_factor` is `OneMinusSourceAlpha`, and `As0` is equal to 1, the
+    /// equations reduce to simple replacement:
+    ///
+    /// ```
+    /// Rd = Rs0
+    /// Gd = Gs0
+    /// Bd = Bs0
+    /// Ad = As0
+    /// ```
+    ///
+    /// # Notes
+    ///
+    /// - When more than one color buffer is enabled for drawing the GL performs blending
+    ///   separately for each enabled buffer, using the contents of that buffer for destination
+    ///   color (See `draw_buffer`).
+    /// - When dual source blending is enabled (i.e. one of the blend factors requiring the second
+    ///   color input is used), the maximum number of enabled draw buffers is given by
+    ///   `GL_MAX_DUAL_SOURCE_DRAW_BUFFERS`, which may be lower than `GL_MAX_DRAW_BUFFERS`.
+    fn blend_func(src_factor: SourceFactor, dest_factor: DestFactor));
+
 gl_proc!(glBufferData:
     /// Creates and initializes a buffer object's data store.
     ///
@@ -1602,8 +1674,6 @@ glGetError:
     fn get_error() -> ErrorCode
 glGetString:
     fn get_string(name: StringName) -> *const i8
-glBlendFunc:
-    fn blend_func(src_factor: SourceFactor, dest_factor: DestFactor)
 glGenTextures:
     fn gen_textures(count: u32, textures: *mut TextureObject)
 glBindTexture:
