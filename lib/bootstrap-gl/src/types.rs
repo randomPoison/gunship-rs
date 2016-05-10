@@ -270,7 +270,10 @@ pub enum ServerCapability {
     SampleAlphaToOne = 0x809F,
     SampleCoverage = 0x80A0,
 
-    /// Introduced: OpenGL 4.3
+    // Introduced: OpenGL 3.0
+    FramebufferSrgb = 0x8DB9,
+
+    // Introduced: OpenGL 4.3
     DebugOutput = 0x92E0,
 }
 
