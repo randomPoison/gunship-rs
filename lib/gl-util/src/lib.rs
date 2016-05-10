@@ -280,13 +280,13 @@ impl<'a> DrawBuilder<'a> {
     /// Maps a vertex attribute to a variable name in the shader program.
     ///
     /// `map_attrib_name()` will silently ignore a program that does not have an input variable
-    /// named `program_attrib_name`, so it is always safe to speculatively map vertex attributes
+    /// named `program_attrib_name` or a vertex buffer that does not have an attribute named
+    /// `buffer_attrib_name`, so it is always safe to speculatively map vertex attributes
     /// even when the shader program may not use that attribute.
     ///
     /// # Panics
     ///
     /// - If the program has not been set using `program()`.
-    /// - If the the vertex buffer does not have an attribute named `buffer_attrib_name`.
     pub fn map_attrib_name(
         &mut self,
         buffer_attrib_name: &str,
@@ -299,7 +299,7 @@ impl<'a> DrawBuilder<'a> {
         };
         let (elements, stride, offset) = match self.vertex_buffer.attribs.get(buffer_attrib_name) {
             Some(&attrib_data) => attrib_data,
-            None => panic!("Vertex buffer has no attribute \"{}\"", buffer_attrib_name),
+            None => return self,
         };
 
         unsafe {
