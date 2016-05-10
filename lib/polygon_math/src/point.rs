@@ -8,10 +8,8 @@ use vector::Vector3;
 
 /// A point in 3D space.
 ///
-/// Points are represented as cartesian coordinates
-/// with an `x`, `y`, and `z` position, as well as
-/// a `w` homogeneous coordinate for the purposes
-/// of linear algebra calculations.
+/// Points are represented as cartesian coordinates with an `x`, `y`, and `z` position, as well as
+/// a `w` homogeneous coordinate for the purposes of linear algebra calculations.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Point {
@@ -22,6 +20,7 @@ pub struct Point {
 }
 
 impl Point {
+    /// Creates a new point with the given coordinates.
     pub fn new(x: f32, y: f32, z: f32) -> Point {
         Point {
             x: x,
@@ -31,6 +30,7 @@ impl Point {
         }
     }
 
+    /// Creates a new point at the origin `(0.0, 0.0, 0.0, 1.0)`.
     pub fn origin() -> Point {
         Point {
             x: 0.0,
@@ -40,14 +40,27 @@ impl Point {
         }
     }
 
+    /// Creates a new point at the minimum representable coordinate.
+    ///
+    /// The minimum point is the one which has `f32::MIN` for its x, y, and z coordinates, and 1.0
+    /// for its w coordinate.
     pub fn min() -> Point {
         Point::new(f32::MIN, f32::MIN, f32::MIN)
     }
 
+    /// Creates a new point at the maximum representable coordinate.
+    ///
+    /// The maximum point is the one which has `f32::MAX` for its x, y, and z coordinates, and 1.0
+    /// for its w coordinate.
     pub fn max() -> Point {
         Point::new(f32::MAX, f32::MAX, f32::MAX)
     }
 
+    /// Calculates the distance in (in abstract units) between two points.
+    ///
+    /// This method uses `sqrt()` to calculate the distance between the points. If the exact
+    /// distance isn't necessary (e.g. when comparing two or more distances to each other) use
+    /// `distance_sqr()` as it is cheaper to calculate.
     pub fn distance(&self, other: &Point) -> f32 {
         self.distance_sqr(other).sqrt()
     }
