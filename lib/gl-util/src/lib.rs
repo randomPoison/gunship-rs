@@ -353,6 +353,8 @@ impl<'a> DrawBuilder<'a> {
 
     pub fn draw(&self) {
         unsafe {
+            gl::enable(ServerCapability::FramebufferSrgb);
+
             gl::bind_vertex_array(self.vertex_array_name);
             gl::bind_buffer(BufferTarget::Array, self.vertex_buffer.buffer_name);
 
