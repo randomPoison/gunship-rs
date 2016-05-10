@@ -1,18 +1,22 @@
 use AnchorId;
+use math::Color;
 
 #[derive(Clone, Debug)]
 pub struct Light {
     pub data: LightData,
+    pub color: Color,
+    pub strength: f32,
     anchor: Option<AnchorId>,
 }
 
 impl Light {
-    pub fn point() -> Light {
+    pub fn point(radius: f32, strength: f32, color: Color) -> Light {
         Light {
             data: LightData::Point(PointLight {
-                radius: 1.0,
-                strength: 1.0,
+                radius: radius,
             }),
+            color: color,
+            strength: strength,
             anchor: None,
         }
     }
@@ -34,5 +38,4 @@ pub enum LightData {
 #[derive(Clone, Copy, Debug)]
 pub struct PointLight {
     pub radius: f32,
-    pub strength: f32,
 }

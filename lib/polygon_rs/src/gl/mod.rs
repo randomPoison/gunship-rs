@@ -69,6 +69,8 @@ impl GlRender {
         draw_builder
         .index_buffer(&mesh_data.index_buffer)
         .program(material.shader())
+        .cull(Face::Back)
+        .depth_test(Comparison::Less)
 
         // Associate vertex attributes with shader program variables.
         .map_attrib_name("position", "vertexPosition")
@@ -114,6 +116,7 @@ impl GlRender {
 
         // Set uniform colors.
         .uniform("globalAmbient", *Color::new(0.25, 0.25, 0.25, 1.0).as_array())
+        .uniform("surfaceDiffuse", *Color::new(0.25, 0.25, 0.25, 1.0).as_array())
 
         // Other uniforms.
         .uniform("cameraPosition", *camera_anchor.position().as_array());
@@ -154,11 +157,14 @@ impl GlRender {
             let light_position_view = light_anchor.position() * view_transform;
             draw_builder.uniform("lightPosition", *light_position_view.as_array());
 
+            // Send common light data.
+            draw_builder.uniform("lightColor", *light.color.as_array());
+            draw_builder.uniform("lightStrength", light.strength);
+
             // Send data specific to the current type of light.
             match light.data {
-                LightData::Point(PointLight { radius, strength }) => {
+                LightData::Point(PointLight { radius }) => {
                     draw_builder.uniform("lightRadius", radius);
-                    draw_builder.uniform("lightStrength", strength);
                 },
             }
 

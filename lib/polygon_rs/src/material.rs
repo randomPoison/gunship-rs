@@ -25,7 +25,7 @@ use math::*;
 use std::collections::HashMap;
 use std::collections::hash_map::Iter as HashMapIter;
 
-static DEFAULT_VERT_SRC: &'static str = r#"
+static _DEFAULT_VERT_SRC: &'static str = r#"
 uniform mat4 modelViewProjection;
 
 in vec4 vertexPosition;
@@ -35,13 +35,85 @@ void main() {
 }
 "#;
 
-static DEFAULT_FRAG_SRC: &'static str = r#"
+static _DEFAULT_FRAG_SRC: &'static str = r#"
 uniform vec4 globalAmbient;
 
 out vec4 colorOut;
 
 void main() {
     colorOut = globalAmbient;
+}
+"#;
+
+static DEFAULT_VERT_SRC: &'static str = r#"
+#version 150
+
+uniform mat4 modelTransform;
+uniform mat4 normalTransform;
+uniform mat4 modelViewTransform;
+uniform mat4 modelViewProjection;
+
+in vec4 vertexPosition;
+in vec3 vertexNormal;
+
+out vec4 viewPosition;
+out vec3 viewNormal;
+
+void main(void) {
+    viewPosition = modelViewTransform * vertexPosition;
+    viewNormal = normalize(mat3(normalTransform) * vertexNormal);
+    gl_Position = modelViewProjection * vertexPosition;
+}
+"#;
+
+static DEFAULT_FRAG_SRC: &'static str = r#"
+#version 150
+
+uniform vec4 globalAmbient;
+
+uniform vec4 lightPosition;
+uniform float lightStrength;
+uniform float lightRadius;
+uniform vec4 lightColor;
+uniform vec4 surfaceDiffuse;
+
+in vec4 viewPosition;
+in vec3 viewNormal;
+
+out vec4 fragmentColor;
+
+void main(void) {
+    // STUFF THAT NEEDS TO BECOME UNIFORMS
+    vec4 surfaceSpecular = vec4(1.0, 1.0, 1.0, 1.0);
+    float surfaceShininess = 3.0;
+
+    // Calculate phong illumination.
+    vec4 ambient = vec4(0.0, 0.0, 0.0, 1.0);
+    vec4 diffuse = vec4(0.0, 0.0, 0.0, 1.0);
+    vec4 specular = vec4(0.0, 0.0, 0.0, 1.0);
+
+    ambient = globalAmbient * surfaceDiffuse;
+
+    vec3 lightOffset = (lightPosition - viewPosition).xyz;
+    float dist = length(lightOffset);
+
+    vec3 N = normalize(viewNormal);
+    vec3 L = normalize(lightOffset);
+    vec3 V = normalize(-viewPosition.xyz);
+
+    float LdotN = dot(L, N);
+    float attenuation = 1.0 / pow((dist / lightRadius) + 1.0, 2.0);
+
+    diffuse += surfaceDiffuse * lightColor * max(LdotN, 1.0e-6) * attenuation * lightStrength;
+
+    // Apply specular.
+    if (LdotN > 1e-6) {
+        vec3 R = normalize(reflect(-L, N));
+        float RdotV = clamp(dot(R, V), 0.0, 1.0);
+        specular = surfaceSpecular * lightColor * pow(RdotV, surfaceShininess) * attenuation * lightStrength;
+    }
+
+    fragmentColor = ambient + diffuse + specular;
 }
 "#;
 
