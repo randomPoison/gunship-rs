@@ -27,23 +27,7 @@ impl Point {
             x: x,
             y: y,
             z: z,
-            w: 1.0
-        }
-    }
-
-    /// TODO: Implement the `From` trait rather than making a standalone method.
-    pub fn from_slice(data: &[f32]) -> Point {
-        assert!(data.len() == 3 || data.len() == 4);
-
-        Point {
-            x: data[0],
-            y: data[1],
-            z: data[2],
-            w: if data.len() == 4 {
-                data[4]
-            } else {
-                1.0
-            }
+            w: 1.0,
         }
     }
 
@@ -68,6 +52,11 @@ impl Point {
         self.distance_sqr(other).sqrt()
     }
 
+    /// Calculates the squared distance between two points.
+    ///
+    /// This method is offered as an optimization over `distance()` because there are some cases
+    /// where the square distance is sufficent and calculating the squared distance avoids a
+    /// relatively costly square root calculation.
     pub fn distance_sqr(&self, other: &Point) -> f32 {
         let diff_x = self.x - other.x;
         let diff_y = self.y - other.y;
@@ -87,19 +76,16 @@ impl Point {
     pub fn as_ref(points: &[Point]) -> &[f32] {
         let ptr = points.as_ptr() as *const _;
         let len = points.len() * 4;
-        unsafe {
-            slice::from_raw_parts(ptr, len)
-        }
+        unsafe { slice::from_raw_parts(ptr, len) }
     }
 
     pub fn slice_from_f32_slice(raw: &[f32]) -> &[Point] {
-        assert!(raw.len() % 4 == 0, "To convert a slice of f32 to a slice of Point it must have a length that is a multiple of 4");
+        assert!(
+            raw.len() % 4 == 0,
+            "To convert a slice of f32 to a slice of Point it must have a length that is a \
+             multiple of 4");
 
-        unsafe {
-            slice::from_raw_parts(
-                raw.as_ptr() as *const Point,
-                raw.len() / 4)
-        }
+        unsafe { slice::from_raw_parts(raw.as_ptr() as *const Point, raw.len() / 4) }
     }
 }
 
@@ -160,12 +146,12 @@ impl Neg for Point {
 impl Eq for Point {}
 
 impl PartialOrd for Point {
-
     /// Ordering for points is defined by ordering the ordering precedence as x > y > z.
     ///
     /// TODO: Elaborate on ordering for points in vectors in the module documentation?
     fn partial_cmp(&self, other: &Point) -> Option<Ordering> {
-        debug_assert!(self.w == 1.0 && other.w == 1.0, "Points must be normalized before comparison");
+        debug_assert!(self.w == 1.0 && other.w == 1.0,
+                      "Points must be normalized before comparison");
 
         if self.x < other.x {
             Some(Ordering::Less)
@@ -197,10 +183,63 @@ impl Ord for Point {
     fn cmp(&self, other: &Point) -> Ordering {
         match PartialOrd::partial_cmp(self, other) {
             Some(ordering) => ordering,
-            None => panic!(
-                "Trying to compare points {:?} and {:?} when one as NaN coordinates",
-                self,
-                other),
+            None => {
+                panic!(
+                    "Trying to compare points {:?} and {:?} when one as NaN coordinates",
+                    self,
+                    other)
+            }
+        }
+    }
+}
+
+impl From<(f32, f32, f32)> for Point {
+    fn from(from: (f32, f32, f32)) -> Point {
+        Point {
+            x: from.0,
+            y: from.1,
+            z: from.2,
+            w: 1.0,
+        }
+    }
+}
+
+impl From<(f32, f32, f32, f32)> for Point {
+    fn from(from: (f32, f32, f32, f32)) -> Point {
+        Point {
+            x: from.0,
+            y: from.1,
+            z: from.2,
+            w: from.3,
+        }
+    }
+}
+
+impl<'a> From<&'a [f32]> for Point {
+    fn from(from: &[f32]) -> Point {
+        assert!(from.len() == 3 || from.len() == 4);
+
+        Point {
+            x: from[0],
+            y: from[1],
+            z: from[2],
+            w: if from.len() == 4 { from[3] } else { 1.0 },
+        }
+    }
+}
+
+impl From<Vector3> for Point {
+    /// Creates a new `Point` from a `Vector3`.
+    ///
+    /// This behaves as if the `Vector3` had been added to the origin, resulting in a `Point` with
+    /// the same x, y, and z coordinates as the original `Vector3` had. The conversion can be
+    /// expressed as `<x, y, z> => (x, y, z, 1.0)`.
+    fn from(from: Vector3) -> Point {
+        Point {
+            x: from.x,
+            y: from.y,
+            z: from.z,
+            w: 1.0,
         }
     }
 }

@@ -1,5 +1,5 @@
+use {IsZero, Dot, Lerp, Point};
 use std::ops::{Mul, MulAssign, Div, DivAssign, Neg, Add, AddAssign, Sub, SubAssign, Index, IndexMut};
-use super::{IsZero, Dot, Lerp};
 
 #[repr(C)] #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Vector3 {
@@ -35,17 +35,6 @@ impl Vector3 {
 
     pub fn forward() -> Vector3 {
         Vector3::new(0.0, 0.0, -1.0)
-    }
-
-    /// TODO: Implement the `From` trait rather than making a separate method.
-    pub fn from_slice(data: &[f32]) -> Vector3 {
-        assert!(data.len() == 3);
-
-        Vector3 {
-            x: data[0],
-            y: data[1],
-            z: data[2],
-        }
     }
 
     pub fn cross(first: Vector3, second: Vector3) -> Vector3 {
@@ -382,5 +371,42 @@ impl Mul<Vector2> for f32 {
 
     fn mul(self, rhs: Vector2) -> Vector2 {
         rhs * self
+    }
+}
+
+impl<'a> From<&'a [f32]> for Vector3 {
+    fn from(from: &[f32]) -> Vector3 {
+        assert!(from.len() == 3);
+
+        Vector3 {
+            x: from[0],
+            y: from[1],
+            z: from[2],
+        }
+    }
+}
+
+impl From<Point> for Vector3 {
+    /// Creates a new `Vector3` from a `Point`.
+    ///
+    /// This behaves as if the point had been subtracted from the origin, yielding a `Vector3` with
+    /// the same x, y, and z coordinates as the original point. The conversion can be expressed as
+    /// `(x, y, z, 1.0) => <x, y, z>`.
+    fn from(from: Point) -> Vector3 {
+        Vector3 {
+            x: from.x,
+            y: from.y,
+            z: from.z,
+        }
+    }
+}
+
+impl From<(f32, f32, f32)> for Vector3 {
+    fn from(from: (f32, f32, f32)) -> Vector3 {
+        Vector3 {
+            x: from.0,
+            y: from.1,
+            z: from.2,
+        }
     }
 }
