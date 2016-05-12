@@ -15,11 +15,13 @@ pub mod geometry;
 pub mod gl;
 pub mod light;
 pub mod material;
+pub mod mesh_instance;
 pub mod shader;
 
 use anchor::*;
 use camera::*;
 use geometry::mesh::Mesh;
+use mesh_instance::*;
 use light::*;
 
 /// Identifies mesh data that has been sent to the GPU.
@@ -38,6 +40,15 @@ pub trait Renderer {
 
     /// Registers mesh data with the renderer, returning a unique id for the mesh.
     fn register_mesh(&mut self, mesh: &Mesh) -> GpuMesh;
+
+    /// Registers a mesh instance with the renderer, returning a unique id for that mesh instance.
+    fn register_mesh_instance(&mut self, mesh_instance: MeshInstance) -> MeshInstanceId;
+
+    /// Gets a reference to a registered mesh instance.
+    fn get_mesh_instance(&self, id: MeshInstanceId) -> Option<&MeshInstance>;
+
+    /// Gets a mutable reference to a registered mesh instance.
+    fn get_mesh_instance_mut(&mut self, id: MeshInstanceId) -> Option<&mut MeshInstance>;
 
     /// Registers an anchor with the renderer, returning a unique id for the anchor.
     fn register_anchor(&mut self, anchor: Anchor) -> AnchorId;

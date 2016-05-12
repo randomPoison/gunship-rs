@@ -6,6 +6,7 @@ use camera::*;
 use geometry::mesh::{Mesh, VertexAttribute};
 use light::*;
 use material::*;
+use mesh_instance::*;
 use math::*;
 use std::collections::HashMap;
 
@@ -14,11 +15,13 @@ pub use self::gl_util::*;
 #[derive(Debug)]
 pub struct GlRender {
     meshes: HashMap<GpuMesh, MeshData>,
+    mesh_instances: HashMap<MeshInstanceId, MeshInstance>,
     anchors: HashMap<AnchorId, Anchor>,
     cameras: HashMap<CameraId, Camera>,
     lights: HashMap<LightId, Light>,
 
     mesh_counter: GpuMesh,
+    mesh_instance_counter: MeshInstanceId,
     anchor_counter: AnchorId,
     camera_counter: CameraId,
     light_counter: LightId,
@@ -30,14 +33,16 @@ impl GlRender {
 
         GlRender {
             meshes: HashMap::new(),
+            mesh_instances: HashMap::new(),
             anchors: HashMap::new(),
             cameras: HashMap::new(),
             lights: HashMap::new(),
 
-            mesh_counter: GpuMesh(0),
-            anchor_counter: AnchorId(0),
-            camera_counter: CameraId(0),
-            light_counter: LightId(0),
+            mesh_counter: GpuMesh::initial(),
+            mesh_instance_counter: MeshInstanceId::initial(),
+            anchor_counter: AnchorId::initial(),
+            camera_counter: CameraId::initial(),
+            light_counter: LightId::initial(),
         }
     }
 
@@ -120,17 +125,17 @@ impl GlRender {
         // Other uniforms.
         .uniform("cameraPosition", *camera_anchor.position().as_array());
 
-        // // Apply material attributes.
-        // for (name, property) in material.properties() {
-        //     match *property {
-        //         MaterialProperty::Color(color) => {
-        //
-        //         },
-        //         MaterialProperty::Texture(ref texture) => {
-        //
-        //         },
-        //     }
-        // }
+        // Apply material attributes.
+        for (name, property) in material.properties() {
+            match *property {
+                MaterialProperty::Color(ref color) => {
+                    draw_builder.uniform(name, *color.as_array());
+                },
+                MaterialProperty::Texture(ref _texture) => {
+                    unimplemented!();
+                },
+            }
+        }
 
         // Render first light without blending so it overrides any objects behind it.
         // We also render it with light strength 0 so it only renders ambient color.
@@ -201,21 +206,24 @@ impl Renderer for GlRender {
             panic!("There must be a camera registered");
         };
 
-        for anchor in self.anchors.values() {
+        for mesh_instance in self.mesh_instances.values() {
+            let anchor = match mesh_instance.anchor() {
+                Some(anchor_id) => self.anchors.get(anchor_id).expect("No such anchor exists"),
+                None => continue,
+            };
+
             let model_transform = anchor.matrix();
             let normal_transform = anchor.normal_matrix();
 
-            for mesh_id in anchor.meshes() {
-                let mesh = self.meshes.get(mesh_id).expect("Mesh data does not exist for mesh id");
+            let mesh = self.meshes.get(mesh_instance.mesh()).expect("Mesh data does not exist for mesh id");
 
-                self.draw_mesh(
-                    mesh,
-                    &Material::default(),
-                    model_transform,
-                    normal_transform,
-                    camera,
-                    camera_anchor);
-            }
+            self.draw_mesh(
+                mesh,
+                &Material::default(),
+                model_transform,
+                normal_transform,
+                camera,
+                camera_anchor);
         }
 
         self.swap_buffers();
@@ -251,6 +259,23 @@ impl Renderer for GlRender {
             });
 
         mesh_id
+    }
+
+    fn register_mesh_instance(&mut self, mesh_instance: MeshInstance) -> MeshInstanceId {
+        let mesh_instance_id = self.mesh_instance_counter.next();
+
+        let old = self.mesh_instances.insert(mesh_instance_id, mesh_instance);
+        assert!(old.is_none());
+
+        mesh_instance_id
+    }
+
+    fn get_mesh_instance(&self, id: MeshInstanceId) -> Option<&MeshInstance> {
+        self.mesh_instances.get(&id)
+    }
+
+    fn get_mesh_instance_mut(&mut self, id: MeshInstanceId) -> Option<&mut MeshInstance> {
+        self.mesh_instances.get_mut(&id)
     }
 
     fn register_anchor(&mut self, anchor: Anchor) -> AnchorId {

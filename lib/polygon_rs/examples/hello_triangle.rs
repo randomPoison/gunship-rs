@@ -6,6 +6,7 @@ use polygon::*;
 use polygon::anchor::*;
 use polygon::camera::*;
 use polygon::math::*;
+use polygon::mesh_instance::*;
 use polygon::geometry::mesh::*;
 
 static VERTEX_POSITIONS: [f32; 12] = [
@@ -31,10 +32,14 @@ fn main() {
     // Send the mesh to the GPU.
     let gpu_mesh = renderer.register_mesh(&mesh);
 
-    // Create an anchor, attach the mesh, and register it with the renderer.
+    // Create an anchor and register it with the renderer.
     let mut anchor = Anchor::new();
-    anchor.attach_mesh(gpu_mesh);
     let anchor_id = renderer.register_anchor(anchor);
+
+    // Create a mesh instance, attach it to the anchor, and register it.
+    let mut mesh_instance = MeshInstance::new(gpu_mesh);
+    mesh_instance.set_anchor(anchor_id);
+    renderer.register_mesh_instance(mesh_instance);
 
     // Create a camera and an anchor for it.
     let mut camera_anchor = Anchor::new();
