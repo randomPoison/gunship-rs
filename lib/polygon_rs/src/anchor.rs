@@ -104,3 +104,8 @@ impl Anchor {
         Matrix4::from_point(self.position) * self.orientation.as_matrix4()
     }
 }
+
+/// Identifies an achor that has been registered with the renderer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct AnchorId(usize);
+derive_Counter!(AnchorId);

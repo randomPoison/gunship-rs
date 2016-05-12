@@ -1,5 +1,5 @@
+use anchor::AnchorId;
 use math::*;
-use super::AnchorId;
 
 /// A camera in the scene.
 #[derive(Debug, Clone)]
@@ -53,6 +53,7 @@ impl Camera
 }
 
 impl Default for Camera {
+    /// Creates a new
     fn default() -> Camera {
         Camera {
             fov: PI / 3.0,
@@ -64,3 +65,8 @@ impl Default for Camera {
         }
     }
 }
+
+/// Identifies an achor that has been registered with the renderer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct CameraId(usize);
+derive_Counter!(CameraId);

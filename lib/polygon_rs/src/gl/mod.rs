@@ -1,13 +1,12 @@
 pub extern crate gl_util;
 
-use {AnchorId, CameraId, LightId, GpuMesh};
+use {Counter, GpuMesh, Renderer};
 use anchor::*;
-use camera::Camera;
+use camera::*;
 use geometry::mesh::{Mesh, VertexAttribute};
 use light::*;
 use material::*;
 use math::*;
-use Renderer;
 use std::collections::HashMap;
 
 pub use self::gl_util::*;

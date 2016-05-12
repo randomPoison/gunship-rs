@@ -1,4 +1,4 @@
-use AnchorId;
+use anchor::AnchorId;
 use math::Color;
 
 #[derive(Clone, Debug)]
@@ -39,3 +39,8 @@ pub enum LightData {
 pub struct PointLight {
     pub radius: f32,
 }
+
+/// Identifies a light that has been registered with the renderer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct LightId(usize);
+derive_Counter!(LightId);

@@ -4,6 +4,11 @@ extern crate parse_bmp as bmp;
 
 pub extern crate polygon_math as math;
 
+// NOTE: This is a "standard" workaround for Rust's nasty macro visibility rules. Once the new
+// macro system arrives this can be removed.
+#[macro_use]
+mod macros;
+
 pub mod anchor;
 pub mod camera;
 pub mod geometry;
@@ -12,62 +17,19 @@ pub mod light;
 pub mod material;
 pub mod shader;
 
-use anchor::Anchor;
-use camera::Camera;
+use anchor::*;
+use camera::*;
 use geometry::mesh::Mesh;
-use light::Light;
+use light::*;
 
 /// Identifies mesh data that has been sent to the GPU.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct GpuMesh(usize);
-
-impl GpuMesh {
-    fn next(&mut self) -> GpuMesh {
-        let next = *self;
-        self.0 += 1;
-        next
-    }
-}
+derive_Counter!(GpuMesh);
 
 /// Represents texture data that has been sent to the GPU.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct GpuTexture;
-
-/// Identifies an achor that has been registered with the renderer.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-pub struct AnchorId(usize);
-
-impl AnchorId {
-    fn next(&mut self) -> AnchorId {
-        let next = *self;
-        self.0 += 1;
-        next
-    }
-}
-
-/// Identifies an achor that has been registered with the renderer.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-pub struct CameraId(usize);
-
-impl CameraId {
-    fn next(&mut self) -> CameraId {
-        let next = *self;
-        self.0 += 1;
-        next
-    }
-}
-
-/// Identifies a light that has been registered with the renderer.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-pub struct LightId(usize);
-
-impl LightId {
-    fn next(&mut self) -> LightId {
-        let next = *self;
-        self.0 += 1;
-        next
-    }
-}
 
 /// The common interface that all rendering systems must provide.
 pub trait Renderer {
@@ -119,4 +81,22 @@ impl RendererBuilder {
     pub fn build(&mut self) -> Box<Renderer> {
         Box::new(gl::GlRender::new())
     }
+}
+
+/// Extra special secret trait for keep counter functionality local to this crate.
+///
+/// All resources managed by a renderer have an associated ID type used to reference the data
+/// owned by the renderer. The renderers internally keep a counter to generate new ID values, but
+/// the functionality for creating new ID values needs to be kept private to polygon. In order to
+/// avoid having to define all ID types at the root of the crate (which would give the renderers
+/// access to the private methods to create new ID values) we define the private `Counter` trait
+/// and implement it for all ID types using the `derive_Counter!` macro. This allows us to define
+/// various ID types in the most appropriate module while still giving all renderers the ability
+/// to create new ID values.
+trait Counter {
+    /// Creates a new counter with the initial value.
+    fn initial() -> Self;
+
+    /// Returns the next valid ID value, updating the internal counter in the process.
+    fn next(&mut self) -> Self;
 }
