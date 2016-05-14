@@ -8,9 +8,17 @@ use light::*;
 use material::*;
 use mesh_instance::*;
 use math::*;
+use self::gl_util::{
+    Comparison, DrawBuilder, DrawMode, Face, GlMatrix, IndexBuffer, SourceFactor, DestFactor,
+    Program, VertexBuffer
+};
+use shader::Shader;
 use std::collections::HashMap;
+use std::str;
 
-pub use self::gl_util::*;
+pub mod shader;
+
+static DEFAULT_SHADER_BYTES: &'static [u8] = include_bytes!("../../resources/shaders/diffuse_lit.shader");
 
 #[derive(Debug)]
 pub struct GlRender {
@@ -19,17 +27,35 @@ pub struct GlRender {
     anchors: HashMap<AnchorId, Anchor>,
     cameras: HashMap<CameraId, Camera>,
     lights: HashMap<LightId, Light>,
+    programs: HashMap<Shader, Program>,
 
     mesh_counter: GpuMesh,
     mesh_instance_counter: MeshInstanceId,
     anchor_counter: AnchorId,
     camera_counter: CameraId,
     light_counter: LightId,
+    shader_counter: Shader,
+
+    default_material: Material,
 }
 
 impl GlRender {
     pub fn new() -> GlRender {
         gl_util::init();
+
+        // Setup the default program for use in creating the default material.
+        let default_shader_source = str::from_utf8(DEFAULT_SHADER_BYTES).unwrap();
+        let default_program = shader::from_str(default_shader_source).unwrap();
+
+        let mut shader_counter = Shader::initial();
+        let default_shader = shader_counter.next();
+        let mut programs = HashMap::new();
+        programs.insert(default_shader, default_program);
+
+        let mut default_material = Material::new(default_shader);
+        default_material.set_color("surfaceDiffuse", Color::new(0.25, 0.25, 0.25, 1.0));
+        default_material.set_color("surfaceSpecular", Color::new(1.0, 1.0, 1.0, 1.0));
+        default_material.set_f32("surfaceShininess", 3.0);
 
         GlRender {
             meshes: HashMap::new(),
@@ -37,12 +63,16 @@ impl GlRender {
             anchors: HashMap::new(),
             cameras: HashMap::new(),
             lights: HashMap::new(),
+            programs: programs,
 
             mesh_counter: GpuMesh::initial(),
             mesh_instance_counter: MeshInstanceId::initial(),
             anchor_counter: AnchorId::initial(),
             camera_counter: CameraId::initial(),
             light_counter: LightId::initial(),
+            shader_counter: shader_counter,
+
+            default_material: default_material,
         }
     }
 
@@ -68,11 +98,16 @@ impl GlRender {
             inverse_model_view.transpose()
         };
 
+        let program = self
+            .programs
+            .get(material.shader())
+            .expect("Material is using a shader that does not exist");
+
         // Set the shader to use.
         let mut draw_builder = DrawBuilder::new(&mesh_data.vertex_buffer, DrawMode::Triangles);
         draw_builder
         .index_buffer(&mesh_data.index_buffer)
-        .program(material.shader())
+        .program(program)
         .cull(Face::Back)
         .depth_test(Comparison::Less)
 
@@ -119,8 +154,7 @@ impl GlRender {
             })
 
         // Set uniform colors.
-        .uniform("globalAmbient", *Color::new(0.25, 0.25, 0.25, 1.0).as_array())
-        .uniform("surfaceDiffuse", *Color::new(0.25, 0.25, 0.25, 1.0).as_array())
+        .uniform("globalAmbient", *Color::new(0.0, 0.0, 0.0, 1.0).as_array())
 
         // Other uniforms.
         .uniform("cameraPosition", *camera_anchor.position().as_array());
@@ -130,6 +164,9 @@ impl GlRender {
             match *property {
                 MaterialProperty::Color(ref color) => {
                     draw_builder.uniform(name, *color.as_array());
+                },
+                MaterialProperty::F32(value) => {
+                    draw_builder.uniform(name, value);
                 },
                 MaterialProperty::Texture(ref _texture) => {
                     unimplemented!();
@@ -146,11 +183,9 @@ impl GlRender {
 
         // Render the rest of the lights with blending on the the depth check set to
         // less than or equal.
-        let ambient_color = Color::new(0.0, 0.0, 0.0, 1.0);
         draw_builder
             .depth_test(Comparison::LessThanOrEqual)
-            .blend(SourceFactor::One, DestFactor::One)
-            .uniform("ambientLocation", *ambient_color.as_array());
+            .blend(SourceFactor::One, DestFactor::One);
 
         for light in self.lights.values() {
             // Send the light's position in view space.
@@ -219,7 +254,7 @@ impl Renderer for GlRender {
 
             self.draw_mesh(
                 mesh,
-                &Material::default(),
+                &mesh_instance.material(),
                 model_transform,
                 normal_transform,
                 camera,
@@ -227,6 +262,10 @@ impl Renderer for GlRender {
         }
 
         self.swap_buffers();
+    }
+
+    fn default_material(&self) -> Material {
+        self.default_material.clone()
     }
 
     fn register_mesh(&mut self, mesh: &Mesh) -> GpuMesh {

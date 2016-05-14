@@ -21,6 +21,7 @@ pub mod shader;
 use anchor::*;
 use camera::*;
 use geometry::mesh::Mesh;
+use material::Material;
 use mesh_instance::*;
 use light::*;
 
@@ -37,6 +38,9 @@ pub struct GpuTexture;
 pub trait Renderer {
     /// Renders one frame based on the renderer's current state to the current render target.
     fn draw(&mut self);
+
+    /// Gets a copy of the default material for the renderer.
+    fn default_material(&self) -> Material;
 
     /// Registers mesh data with the renderer, returning a unique id for the mesh.
     fn register_mesh(&mut self, mesh: &Mesh) -> GpuMesh;

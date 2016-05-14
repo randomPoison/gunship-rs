@@ -19,170 +19,86 @@
 //! the color as a property. Then we can make two materials, both using the same shader but one set
 //! to show red and the other set to show blue.
 
-use {GpuTexture};
-use gl::*; // TODO: Break dependency on OpenGl-specific implementation.
+use GpuTexture;
 use math::*;
+use shader::Shader;
 use std::collections::HashMap;
 use std::collections::hash_map::Iter as HashMapIter;
 
-static _DEFAULT_VERT_SRC: &'static str = r#"
-uniform mat4 modelViewProjection;
-
-in vec4 vertexPosition;
-
-void main() {
-    gl_Position = modelViewProjection * vertexPosition;
-}
-"#;
-
-static _DEFAULT_FRAG_SRC: &'static str = r#"
-uniform vec4 globalAmbient;
-
-out vec4 colorOut;
-
-void main() {
-    colorOut = globalAmbient;
-}
-"#;
-
-static DEFAULT_VERT_SRC: &'static str = r#"
-#version 150
-
-uniform mat4 modelTransform;
-uniform mat4 normalTransform;
-uniform mat4 modelViewTransform;
-uniform mat4 modelViewProjection;
-
-in vec4 vertexPosition;
-in vec3 vertexNormal;
-
-out vec4 viewPosition;
-out vec3 viewNormal;
-
-void main(void) {
-    viewPosition = modelViewTransform * vertexPosition;
-    viewNormal = normalize(mat3(normalTransform) * vertexNormal);
-    gl_Position = modelViewProjection * vertexPosition;
-}
-"#;
-
-static DEFAULT_FRAG_SRC: &'static str = r#"
-#version 150
-
-uniform vec4 globalAmbient;
-
-uniform vec4 lightPosition;
-uniform float lightStrength;
-uniform float lightRadius;
-uniform vec4 lightColor;
-uniform vec4 surfaceDiffuse;
-
-in vec4 viewPosition;
-in vec3 viewNormal;
-
-out vec4 fragmentColor;
-
-void main(void) {
-    // STUFF THAT NEEDS TO BECOME UNIFORMS
-    vec4 surfaceSpecular = vec4(1.0, 1.0, 1.0, 1.0);
-    float surfaceShininess = 3.0;
-
-    // Calculate phong illumination.
-    vec4 ambient = vec4(0.0, 0.0, 0.0, 1.0);
-    vec4 diffuse = vec4(0.0, 0.0, 0.0, 1.0);
-    vec4 specular = vec4(0.0, 0.0, 0.0, 1.0);
-
-    ambient = globalAmbient * surfaceDiffuse;
-
-    vec3 lightOffset = (lightPosition - viewPosition).xyz;
-    float dist = length(lightOffset);
-
-    vec3 N = normalize(viewNormal);
-    vec3 L = normalize(lightOffset);
-    vec3 V = normalize(-viewPosition.xyz);
-
-    float LdotN = dot(L, N);
-    float attenuation = 1.0 / pow((dist / lightRadius) + 1.0, 2.0);
-
-    diffuse += surfaceDiffuse * lightColor * max(LdotN, 1.0e-6) * attenuation * lightStrength;
-
-    // Apply specular.
-    if (LdotN > 1e-6) {
-        vec3 R = normalize(reflect(-L, N));
-        float RdotV = clamp(dot(R, V), 0.0, 1.0);
-        specular = surfaceSpecular * lightColor * pow(RdotV, surfaceShininess) * attenuation * lightStrength;
-    }
-
-    fragmentColor = ambient + diffuse + specular;
-}
-"#;
-
 /// Represents combination of a shader and set values for its uniform properties.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Material {
-    shader: Program,
+    shader: Shader,
     properties: HashMap<String, MaterialProperty>,
-    dirty: bool,
 }
 
 impl Material {
-    pub fn new(shader: Program) -> Material {
+    /// Creates a new material using the specified shader.
+    pub fn new(shader: Shader) -> Material {
         Material {
-            shader:     shader,
+            shader: shader,
             properties: HashMap::new(),
-            dirty:      false,
         }
     }
 
-    pub fn shader(&self) -> &Program {
+    /// Gets a reference to the shader used by the material.
+    pub fn shader(&self) -> &Shader {
         &self.shader
     }
 
+    /// Gets an iterator yielding the the current material properties.
     pub fn properties(&self) -> HashMapIter<String, MaterialProperty> {
         self.properties.iter()
     }
 
-    pub fn dirty(&self) -> bool {
-        self.dirty
+    /// Gets the value of a material property.
+    pub fn get_property(&self, name: &str) -> Option<&MaterialProperty> {
+        self.properties.get(name)
     }
 
+    /// Sets a property value to be the specified color.
     pub fn set_color<S: Into<String>>(&mut self, name: S, color: Color) {
         self.properties.insert(name.into(), MaterialProperty::Color(color));
-        self.dirty = true;
     }
 
+    /// Gets the value of a color property.
+    pub fn get_color(&self, name: &str) -> Option<&Color> {
+        match self.properties.get(name) {
+            Some(&MaterialProperty::Color(ref color)) => Some(color),
+            _ => None,
+        }
+    }
+
+    /// Sets a property value to be the specified `f32` value.
+    pub fn set_f32<S: Into<String>>(&mut self, name: S, value: f32) {
+        self.properties.insert(name.into(), MaterialProperty::F32(value));
+    }
+
+    /// Gets the value of a `f32` material property.
+    pub fn get_f32(&self, name: &str) -> Option<&f32> {
+        match self.properties.get(name) {
+            Some(&MaterialProperty::F32(ref value)) => Some(value),
+            _ => None,
+        }
+    }
+
+    /// Sets a property value to be the specified texture.
     pub fn set_texture<S: Into<String>>(&mut self, name: S, texture: GpuTexture) {
         self.properties.insert(name.into(), MaterialProperty::Texture(texture));
-        self.dirty = true;
     }
 
-    /// Marks the material as no longer being dirty.
+    /// Removes a property from the material.
     ///
-    /// This should only be called by the renderer once it has had a chance to process any change
-    /// to materials. Marking a material as clean when it has not been fully processed can result
-    /// changes not being fully applied.
-    ///
-    /// TODO: Can we make this private to polygon in a way that the renderers can see it but nobody
-    /// else?
-    pub fn set_clean(&mut self) {
-        self.dirty = false;
+    /// The existing property is returned if any.
+    pub fn clear_property(&mut self, name: &str) -> Option<MaterialProperty> {
+        self.properties.remove(name)
     }
 }
 
-impl Default for Material {
-    fn default() -> Material {
-        use gl::gl_util::*;
-
-        let vert = Shader::new(DEFAULT_VERT_SRC, ShaderType::Vertex).unwrap();
-        let frag = Shader::new(DEFAULT_FRAG_SRC, ShaderType::Fragment).unwrap();
-        let program = Program::new(&[vert, frag]).unwrap();
-
-        Material::new(program)
-    }
-}
-
+/// Represents a value that can be sent to the GPU and used in shader programs.
 #[derive(Debug, Clone)]
 pub enum MaterialProperty {
     Color(Color),
     Texture(GpuTexture),
+    F32(f32)
 }

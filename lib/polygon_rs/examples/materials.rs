@@ -31,6 +31,8 @@ fn main() {
     // Create a mesh instance, attach it to the anchor, and register it with the renderer.
     let mut mesh_instance = MeshInstance::new(gpu_mesh, renderer.default_material());
     mesh_instance.set_anchor(mesh_anchor_id);
+    mesh_instance.material_mut().set_color("surfaceSpecular", Color::new(1.0, 0.0, 0.0, 1.0));
+    mesh_instance.material_mut().set_f32("surfaceShininess", 5.0);
     renderer.register_mesh_instance(mesh_instance);
 
     // Create a camera and an anchor for it.
@@ -40,9 +42,9 @@ fn main() {
 
     // Create the light and an anchor for it.
     let light_anchor_id = renderer.register_anchor(Anchor::new());
-    let mut light = Light::point(5.0, 3.0, Color::new(1.0, 0.0, 1.0, 1.0));
+    let mut light = Light::point(5.0, 3.0, Color::new(1.0, 1.0, 1.0, 1.0));
     light.set_anchor(light_anchor_id);
-    let light_id = renderer.register_light(light);
+    renderer.register_light(light);
 
     let mut camera = Camera::default();
     camera.set_anchor(camera_anchor_id);
@@ -59,18 +61,12 @@ fn main() {
             }
         }
 
-        // Rotate the mesh slightly.
-        {
-            let anchor = renderer.get_anchor_mut(mesh_anchor_id).unwrap();
-            anchor.set_orientation(Quaternion::from_eulers(0.0, 2.0, 0.0).repeat(t / 2.0));
-        }
-
         // Orbit the light around the mesh.
         {
             let anchor = renderer.get_anchor_mut(light_anchor_id).unwrap();
             anchor.set_position(Point::new(
-                (t * 10.0).cos() * LIGHT_RADIUS,
-                (t * 10.0).sin() * LIGHT_RADIUS,
+                t.cos() * LIGHT_RADIUS,
+                t.sin() * LIGHT_RADIUS,
                 2.0,
             ));
         }

@@ -1,8 +1,7 @@
 extern crate parse_obj;
 
-use self::parse_obj::*;
 use polygon::geometry::mesh::*;
-use polygon::math::*;
+use self::parse_obj::*;
 use std::path::Path;
 
 pub fn load_mesh<P: AsRef<Path>>(path: P) -> Result<Mesh, BuildMeshError> {

@@ -33,11 +33,11 @@ fn main() {
     let gpu_mesh = renderer.register_mesh(&mesh);
 
     // Create an anchor and register it with the renderer.
-    let mut anchor = Anchor::new();
+    let anchor = Anchor::new();
     let anchor_id = renderer.register_anchor(anchor);
 
     // Create a mesh instance, attach it to the anchor, and register it.
-    let mut mesh_instance = MeshInstance::new(gpu_mesh);
+    let mut mesh_instance = MeshInstance::new(gpu_mesh, renderer.default_material());
     mesh_instance.set_anchor(anchor_id);
     renderer.register_mesh_instance(mesh_instance);
 
@@ -62,7 +62,7 @@ fn main() {
         {
             let anchor = renderer.get_anchor_mut(anchor_id).unwrap();
             let orientation = anchor.orientation();
-            anchor.set_orientation(orientation * Quaternion::from_eulers(0.0, 0.0, 0.001));
+            anchor.set_orientation(orientation * Quaternion::from_eulers(0.0, 0.0, 0.0005));
         }
 
         // Render the mesh.
