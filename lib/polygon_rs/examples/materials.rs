@@ -8,7 +8,6 @@ use polygon::camera::*;
 use polygon::light::*;
 use polygon::math::*;
 use polygon::mesh_instance::*;
-use polygon::geometry::mesh::*;
 
 mod utils;
 
@@ -31,9 +30,8 @@ fn main() {
     // Create a mesh instance, attach it to the anchor, and register it with the renderer.
     let mut mesh_instance = MeshInstance::new(gpu_mesh, renderer.default_material());
     mesh_instance.set_anchor(mesh_anchor_id);
-    mesh_instance.material_mut().set_color("surfaceSpecular", Color::new(1.0, 0.0, 0.0, 1.0));
     mesh_instance.material_mut().set_f32("surfaceShininess", 5.0);
-    renderer.register_mesh_instance(mesh_instance);
+    let instance_id = renderer.register_mesh_instance(mesh_instance);
 
     // Create a camera and an anchor for it.
     let mut camera_anchor = Anchor::new();
@@ -69,6 +67,20 @@ fn main() {
                 t.sin() * LIGHT_RADIUS,
                 2.0,
             ));
+        }
+
+        // Change the surface color.
+        {
+            let color = Color::new(
+                t.cos() * 0.5 + 0.5,
+                t.sin() * 0.5 + 0.5,
+                (t * 2.0).cos() * 0.5 + 0.5,
+                1.0);
+
+            let mesh_instance = renderer.get_mesh_instance_mut(instance_id).unwrap();
+            mesh_instance
+                .material_mut()
+                .set_color("surfaceDiffuse", color);
         }
 
         // Render the mesh.

@@ -13,7 +13,8 @@ pub fn load_mesh<P: AsRef<Path>>(path: P) -> Result<Mesh, BuildMeshError> {
     let mut normals = Vec::new();
 
     // Iterate over each of the faces in the mesh.
-    let mut face_indices = obj
+    let face_indices =
+        obj
         .position_indices()
         .iter()
         .zip(obj.normal_indices().iter());
