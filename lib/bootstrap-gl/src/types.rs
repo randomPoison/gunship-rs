@@ -328,65 +328,10 @@ pub enum SourceFactor {
     SourceAlphaSaturate = 0x0308,
 }
 
-#[repr(C)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct UniformLocation(u32);
-
-impl UniformLocation {
-    pub fn from_index(index: u32) -> UniformLocation {
-        UniformLocation(index)
-    }
-}
-
-/// TODO: Use NonZero here so that Option<VertexArrayName>::None can be used instead of 0.
-#[repr(C)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct VertexArrayName(u32);
-
-impl VertexArrayName {
-    pub fn null() -> VertexArrayName {
-        VertexArrayName(0)
-    }
-}
-
-#[repr(u32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum WindingOrder {
-    Clockwise = 0x0900,
-    CounterClockwise = 0x0901,
-}
-
-// =============== OLD UNSORTED TYPES ========================== //
-
-#[repr(C)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct TextureObject(u32);
-
-#[repr(u32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum ErrorCode {
-    NoError          = 0,
-    InvalidEnum      = 0x0500,
-    InvalidValue     = 0x0501,
-    InvalidOperation = 0x0502,
-    StackOverflow    = 0x0503,
-    StackUnderflow   = 0x0504,
-    OutOfMemory      = 0x0505,
-}
-
-#[repr(u32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum TextureBindTarget {
-    // GL_TEXTURE_1D,
-    Texture2d = 0x0DE1,
-    Texture3d = 0x806F,
-    CubeMap   = 0x8513,
-}
-
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Texture2dTarget {
-    Texture2d        = 0x0DE1,
+    Texture2d = 0x0DE1,
     CubeMapPositiveX = 0x8515,
     CubeMapNegativeX = 0x8516,
     CubeMapPositiveY = 0x8517,
@@ -399,15 +344,24 @@ pub enum Texture2dTarget {
 
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum TextureBindTarget {
+    // GL_TEXTURE_1D,
+    Texture2d = 0x0DE1,
+    Texture3d = 0x806F,
+    CubeMap = 0x8513,
+}
+
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TextureDataType {
-    Byte          = 0x1400,
-    UnsignedByte  = 0x1401,
+    Byte = 0x1400,
+    UnsignedByte = 0x1401,
     // GL_BITMAP,
-    Short         = 0x1402,
+    Short = 0x1402,
     UnsignedShort = 0x1403,
-    Int           = 0x1404,
-    UnsignedInt   = 0x1405,
-    Float         = 0x1406,
+    Int = 0x1404,
+    UnsignedInt = 0x1405,
+    Float = 0x1406,
     // GL_UNSIGNED_BYTE_3_3_2,
     // GL_UNSIGNED_BYTE_2_3_3_REV,
     // GL_UNSIGNED_SHORT_5_6_5,
@@ -420,6 +374,22 @@ pub enum TextureDataType {
     // GL_UNSIGNED_INT_8_8_8_8_REV,
     // GL_UNSIGNED_INT_10_10_10_2,
     // GL_UNSIGNED_INT_2_10_10_10_REV,
+}
+
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum TextureFormat {
+    Rgb = 0x1907,
+    Rgba = 0x1908,
+    Bgr = 0x80E0,
+    Bgra = 0x80E1,
+    // GL_COLOR_INDEX,
+    // GL_RED,
+    // GL_GREEN,
+    // GL_BLUE,
+    // GL_ALPHA,
+    // GL_LUMINANCE,
+    // GL_LUMINANCE_ALPHA,
 }
 
 #[repr(u32)]
@@ -487,20 +457,50 @@ pub enum TextureInternalFormat {
     // GL_SRGB8_ALPHA8,
 }
 
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct TextureObject(u32);
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct UniformLocation(u32);
+
+impl UniformLocation {
+    pub fn from_index(index: u32) -> UniformLocation {
+        UniformLocation(index)
+    }
+}
+
+/// TODO: Use NonZero here so that Option<VertexArrayName>::None can be used instead of 0.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct VertexArrayName(u32);
+
+impl VertexArrayName {
+    pub fn null() -> VertexArrayName {
+        VertexArrayName(0)
+    }
+}
+
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum TextureFormat {
-    Rgb  = 0x1907,
-    Rgba = 0x1908,
-    Bgr  = 0x80E0,
-    Bgra = 0x80E1,
-    // GL_COLOR_INDEX,
-    // GL_RED,
-    // GL_GREEN,
-    // GL_BLUE,
-    // GL_ALPHA,
-    // GL_LUMINANCE,
-    // GL_LUMINANCE_ALPHA,
+pub enum WindingOrder {
+    Clockwise = 0x0900,
+    CounterClockwise = 0x0901,
+}
+
+// =============== OLD UNSORTED TYPES ========================== //
+
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ErrorCode {
+    NoError          = 0,
+    InvalidEnum      = 0x0500,
+    InvalidValue     = 0x0501,
+    InvalidOperation = 0x0502,
+    StackOverflow    = 0x0503,
+    StackUnderflow   = 0x0504,
+    OutOfMemory      = 0x0505,
 }
 
 #[repr(u32)]

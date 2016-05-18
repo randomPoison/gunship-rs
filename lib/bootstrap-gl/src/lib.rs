@@ -201,6 +201,67 @@ gl_proc!(glBindBuffer:
     ///   `gen_buffers`.
     fn bind_buffer(target: BufferTarget, buffer: BufferName));
 
+gl_proc!(glBindTexture:
+    /// Binds a named texture to a texturing target.
+    ///
+    /// Lets you create or use a named texture. Calling `bind_texture` with target​ set to
+    /// `Texture1d`, `Texture2d`, `Texture3d`, `Texture1dArray`, `Texture2dArray`,
+    /// `TextureRectangle`, `TextureCubeMap`, `TextureCubeMapArray`, `TextureBuffer`,
+    /// `Texture2dMultisample` or `Texture2dMultisampleArray` and texture​ set to the name of the
+    /// new texture binds the texture name to the target. When a texture is bound to a target
+    /// the previous binding for that target is automatically broken.
+    ///
+    /// Texture names are `u32` values. The value zero is reserved to represent the default
+    /// texture for each texture target. Texture names and the corresponding texture contents are
+    /// local to the shared object space of the current GL rendering context; two rendering
+    /// contexts share texture names only if they explicitly enable sharing between contexts
+    /// through the appropriate GL windows interfaces functions.
+    ///
+    /// You must use `gen_textures` to generate a set of new texture names.
+    ///
+    /// When a texture is first bound it assumes the specified target: A texture first bound to
+    /// `Texture1d` becomes one-dimensional texture, a texture first bound to `Texture2d` becomes
+    /// two-dimensional texture, a texture first bound to `Texture3d` becomes three-dimensional
+    /// texture, a texture first bound to `Texture1dArray` becomes one-dimensional array texture,
+    /// a texture first bound to `Texture2dArray` becomes two-dimensional arary texture, a
+    /// texture first bound to `TextureRectangle` becomes rectangle texture, a texture first
+    /// bound to `TextureCubeMap` becomes a cube-mapped texture, a texture first bound to
+    /// `TextureCubeMapArray` becomes a cube-mapped array texture, a texture first bound to
+    /// `TextureBuffer` becomes a buffer texture, a texture first bound to `Texture2dMultisample`
+    /// becomes a two-dimensional multisampled texture, and a texture first bound to
+    /// `Texture2dMultisampleArray` becomes a two-dimensional multisampled array texture. The
+    /// state of a one-dimensional texture immediately after it is first bound is equivalent to
+    /// the state of the default `Texture1d` at GL initialization, and similarly for the other
+    /// texture types.
+    ///
+    /// While a texture is bound, GL operations on the target to which it is bound affect the
+    /// bound texture, and queries of the target to which it is bound return state from the bound
+    /// texture. In effect, the texture targets become aliases for the textures currently bound
+    /// to them, and the texture name zero refers to the default textures that were bound to them
+    /// at initialization.
+    ///
+    /// A texture binding created with `bind_texture` remains active until a different texture
+    /// is bound to the same target, or until the bound texture is deleted with
+    /// `delete_textures`.
+    ///
+    /// Once created, a named texture may be re-bound to its same original target as often as
+    /// needed. It is usually much faster to use `bind_texture` to bind an existing named
+    /// texture to one of the texture targets than it is to reload the texture image using
+    /// `tex_image_1d`, `tex_image_2d`, `tex_image_3d` or another similar function.
+    ///
+    /// # Notes
+    ///
+    /// * The `Texture2dMultisample` and `Texture2dMultisampleArray` targets are available only
+    ///   if the GL version is 3.2 or higher.
+    ///
+    /// # Errors
+    ///
+    /// * `GL_INVALID_VALUE` is generated if target​ is not a name returned from a previous call
+    ///   to `gen_textures`.
+    /// * `GL_INVALID_OPERATION` is generated if texture​ was previously created with a target
+    ///   that doesn't match that of target​.
+    fn bind_texture(target: TextureBindTarget, texture: TextureObject));
+
 gl_proc!(glBindVertexArray:
     /// Binds a named vertex array object.
     ///
@@ -571,6 +632,18 @@ gl_proc!(glDeleteShader:
     /// arguments `shader_object` and `DeleteStatus`.
     fn delete_shader(shader_object: ShaderObject));
 
+gl_proc!(glDeleteTextures:
+    /// Deletes named textures.
+    ///
+    /// Deletes `count` textures named by the elements of the array `textures​`. After a texture
+    /// is deleted it has no contents or dimensionality and its name is free for reuse (for
+    /// example by `gen_textures`). If a texture that is currently bound is deleted the binding
+    /// reverts to 0 (the default texture).
+    ///
+    /// `delete_textures` silently ignores 0's and names that do not correspond to existing
+    /// textures.
+    fn delete_textures(count: u32, textures: *mut TextureObject));
+
 gl_proc!(glDeleteVertexArrays:
     /// Deletes name vertex array objects.
     ///
@@ -825,6 +898,20 @@ gl_proc!(glGenBuffers:
     ///
     /// `GL_INVALID_VALUE` is generated if `num_buffers`​ is negative.
     fn gen_buffers(num_buffers: i32, buffers: *mut BufferName));
+
+gl_proc!(glGenTextures:
+    /// Generates texture names.
+    ///
+    /// Returns `count`​ texture names in `textures​`. There is no guarantee that the names form a
+    /// contiguous set of integers; however, it is guaranteed that none of the returned names
+    /// was in use immediately before the call to `gen_textures`.
+    ///
+    /// The generated textures have no dimensionality; they assume the dimensionality of the
+    /// texture target to which they are first bound (see `bind_texture`).
+    ///
+    /// Texture names returned by a call to `gen_textures` are not returned by subsequent calls,
+    /// unless they are first deleted with `delete_textures`.
+    fn gen_textures(count: u32, textures: *mut TextureObject));
 
 gl_proc!(glGenVertexArrays:
     /// Generates vertex array object names.
@@ -1478,8 +1565,8 @@ gl_proc!(glShaderSource:
     ///
     /// Core since version 2.0
     ///
-    /// Sets the source code in shader​ to the source code in the array of strings specified by
-    /// string​. Any source code previously stored in the shader object is completely replaced.
+    /// Sets the source code in `shader​` to the source code in the array of strings specified by
+    /// `string​s`. Any source code previously stored in the shader object is completely replaced.
     /// The number of strings in the array is specified by count​. If length​ is null, each string
     /// is assumed to be null terminated. If length​ is a value other than 0, it points to an
     /// array containing a string length for each of the corresponding elements of string​. Each
@@ -1503,6 +1590,118 @@ gl_proc!(glShaderSource:
         count: i32,
         strings: *const *const u8,
         length: *const i32));
+
+gl_proc!(glTexImage2D:
+    /// Specifies a two-dimensional texture image.
+    ///
+    /// Texturing allows elements of an image array to be read by shaders.
+    ///
+    /// To define texture images, call `tex_image_2d`. The arguments describe the parameters of
+    /// the texture image, such as height, width, width of the border, level-of-detail number
+    /// (see `tex_parameter`), and number of color components provided. The last three arguments
+    /// describe how the image is represented in memory.
+    ///
+    /// If target​ is `ProxyTexture2d`, `ProxyTexture1dArray`, `ProxyTextureCubeMap`, or
+    /// `ProxyTextureRectangle`, no data is read from data​, but all of the texture image state
+    /// is recalculated, checked for consistency, and checked against the implementation's
+    /// capabilities. If the implementation cannot handle a texture of the requested texture
+    /// size, it sets all of the image state to 0, but does not generate an error (see
+    /// `get_error`). To query for an entire mipmap array, use an image array level greater than
+    /// or equal to 1.
+    ///
+    /// If target​ is `Texture2d`, `TextureRectangle` or one of the `TextureCubeMap` targets, data
+    /// is read from data​ as a sequence of signed or unsigned bytes, shorts, or longs, or
+    /// single-precision floating-point values, depending on type​. These values are grouped into
+    /// sets of one, two, three, or four values, depending on format​, to form elements. Each data
+    /// byte is treated as eight 1-bit elements, with bit ordering determined by `UnpackLsbFirst`
+    /// (see `pixel_store`).
+    ///
+    /// If target​ is `Texture1dArray`, data is interpreted as an array of one-dimensional images.
+    ///
+    /// If a non-zero named buffer object is bound to the `PixelUnpackBuffer` target (see
+    /// `bind_buffer`) while a texture image is specified, data​ is treated as a byte offset into
+    /// the buffer object's data store.
+    ///
+    /// The first element corresponds to the lower left corner of the texture image. Subsequent
+    /// elements progress left-to-right through the remaining texels in the lowest row of the
+    /// texture image, and then in successively higher rows of the texture image. The final
+    /// element corresponds to the upper right corner of the texture image.
+    ///
+    /// format​ determines the composition of each element in data​. It can assume one of these
+    /// symbolic values:
+    ///
+    /// - `Red` - Each element is a single red component. The GL converts it to floating point
+    ///   and assembles it into an RGBA element by attaching 0 for green and blue, and 1 for
+    ///   alpha. Each component is clamped to the range [0,1].
+    /// - `Rg` - Each element is a red/green double. The GL converts it to floating point and
+    ///   assembles it into an RGBA element by attaching 0 for blue, and 1 for alpha. Each
+    ///   component is clamped to the range [0,1].
+    /// - `Rgb`, `Bgr` - Each element is an RGB (or BGR) triple. The GL converts it to floating point and
+    ///   assembles it into an RGBA element by attaching 1 for alpha. Each component is clamped
+    ///   to the range [0,1].
+    /// - `Rgba`, `Bgra` - Each element contains all four components. Each component is clamped
+    ///   to the range [0,1].
+    /// - `DepthComponent` - Each element is a single depth value. The GL converts it to floating
+    ///   point and clamps to the range [0,1].
+    /// - `DepthStencil` - Each element is a pair of depth and stencil values. The depth
+    ///   component of the pair is interpreted as in `DepthComponent`. The stencil component is
+    ///   interpreted based on specified the depth + stencil internal format.
+    ///
+    /// If an application wants to store the texture at a certain resolution or in a certain
+    /// format, it can request the resolution and format with internalFormat​. The GL will choose
+    /// an internal representation that closely approximates that requested by internalFormat​,
+    /// but it may not match exactly. (The representations specified by `Red`, `Rg`, `Rgb`, and
+    /// `Rgba` must match exactly.)
+    ///
+    /// `internal_format` may be one of the formats from the tables below:
+    ///
+    /// > TODO: Add tables. Blech that's a lot of info to copy in.
+    ///
+    /// # Parameters
+    ///
+    /// * `target` - Specifies the target texture.
+    /// * `level` - Specifies the level-of-detail number. Level 0 is the base image level. Level
+    ///   n is the nth mipmap reduction image. If target​ is `TextureRectangle` or
+    ///   `ProxyTextureRectangle`, `level​` must be 0.
+    /// * `internal_format` - Specifies the number of color components in the texture. Must be
+    ///   one of base internal formats given in Table 1, one of the sized internal formats given
+    ///   in Table 2, or one of the compressed internal formats given in Table 3, below.
+    /// * `width` - Specifies the width of the texture image. All implementations support texture
+    ///   images that are at least 1024 texels wide.
+    /// * `height` - Specifies the height of the texture image, or the number of layers in a
+    ///   texture array, in the case of the `Texture1dArray` and `ProxyTexture1dArray` targets.
+    ///   All implementations support 2D texture images that are at least 1024 texels high, and
+    ///   texture arrays that are at least 256 layers deep.
+    /// * `border` - This value must be 0.
+    /// * `format` - Specifies the format of the pixel data. For transfers of depth, stencil, or
+    ///   depth/stencil data, you must use `DepthComponent`, `StencilIndex`, or `DepthStencil`,
+    ///   where appropriate. For transfers of normalized integer or floating-point color image
+    ///   data, you must use one of the following: `Red`, `Green`, `Blue`, `Rg`, `Rgb`, `Bgr`,
+    ///   `Rgba`, and `Bgra`. For transfers of non-normalized integer data, you must use one of
+    ///   the following: `RedInteger`, `GreenInteger`, `BlueInteger`, `RgInteger`, `RgbInteger`,
+    ///   `BgrInteger`, `RgbaInteger`, and `BgraInteger`.
+    /// * `type` - Specifies the data type of the pixel data. The following symbolic values are
+    ///   accepted: `UnsignedByte`, `Byte`, `UnsignedShort`, `Short`, `UnsignedInt`, `Int`,
+    ///   `Float`, `GL_UNSIGNED_BYTE_3_3_2`, `GL_UNSIGNED_BYTE_2_3_3_REV`,
+    ///   `GL_UNSIGNED_SHORT_5_6_5`, `GL_UNSIGNED_SHORT_5_6_5_REV`, `GL_UNSIGNED_SHORT_4_4_4_4`,
+    ///   `GL_UNSIGNED_SHORT_4_4_4_4_REV`, `GL_UNSIGNED_SHORT_5_5_5_1`,
+    ///   `GL_UNSIGNED_SHORT_1_5_5_5_REV`, `GL_UNSIGNED_INT_8_8_8_8`,
+    ///   `GL_UNSIGNED_INT_8_8_8_8_REV`, `GL_UNSIGNED_INT_10_10_10_2`, and
+    ///   `GL_UNSIGNED_INT_2_10_10_10_REV`.
+    /// * `data` - Specifies a pointer to the image data in memory, or if a buffer is bound to
+    ///   `PixelUnpackBuffer`, this provides an integer offset into the bound buffer object. If
+    ///   a buffer is not bound to `PixelUnpackBuffer`, and this parameter is NULL, no
+    ///   Pixel Transfer will be performed.
+    fn texture_image_2d(
+        target:          Texture2dTarget,
+        level:           i32,
+        internal_format: TextureInternalFormat,
+        width:           i32,
+        height:          i32,
+        border:          i32,
+        format:          TextureFormat,
+        data_type:       TextureDataType,
+        data:            *const ()));
 
 gl_proc!(glUseProgram:
     /// Installs a program as part of the current rendering state.
@@ -1674,23 +1873,6 @@ glGetError:
     fn get_error() -> ErrorCode
 glGetString:
     fn get_string(name: StringName) -> *const i8
-glGenTextures:
-    fn gen_textures(count: u32, textures: *mut TextureObject)
-glBindTexture:
-    fn bind_texture(target: TextureBindTarget, texture: TextureObject)
-glTexImage2D:
-    fn texture_image_2d(
-        target:          Texture2dTarget,
-        level:           i32,
-        internal_format: TextureInternalFormat,
-        width:           i32,
-        height:          i32,
-        border:          i32,
-        format:          TextureFormat,
-        data_type:       TextureDataType,
-        data:            *const ())
-glDeleteTextures:
-    fn delete_textures(count: u32, textures: *mut TextureObject)
 */
 
 pub extern "C" fn debug_callback(
