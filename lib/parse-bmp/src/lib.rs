@@ -15,7 +15,7 @@ pub struct Bitmap {
 }
 
 impl Bitmap {
-    pub fn load<P: AsRef<Path>>(path: P) -> Result<Bitmap, ()> {
+    pub fn load<P: AsRef<Path>>(path: P) -> Result<Bitmap, Error> {
         // Open file and read all bytes.
         let bytes = {
             let mut file = File::open(path).unwrap();
@@ -83,6 +83,9 @@ impl Bitmap {
         &*self.data
     }
 }
+
+#[derive(Debug)]
+pub struct Error;
 
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
