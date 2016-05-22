@@ -53,7 +53,7 @@ pub type f16 = u16;
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct AttributeLocation(u32);
+pub struct AttributeLocation(pub u32);
 
 impl AttributeLocation {
     pub fn from_index(index: u32) -> AttributeLocation {
@@ -63,7 +63,7 @@ impl AttributeLocation {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct BufferName(u32);
+pub struct BufferName(pub u32);
 
 impl BufferName {
     pub const fn null() -> BufferName {
@@ -104,7 +104,7 @@ pub enum BufferUsage {
     DynamicCopy = 0x88EA,
 }
 
-/// TODO: Custom derive for Debug to show which flags are set.
+/// TODO: Make this into a proper bitmask rather than an enum.
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ClearBufferMask {
@@ -215,7 +215,7 @@ pub enum PolygonMode {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct ProgramObject(u32);
+pub struct ProgramObject(pub u32);
 
 impl ProgramObject {
     pub const fn null() -> ProgramObject {
@@ -279,7 +279,7 @@ pub enum ServerCapability {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct ShaderObject(u32);
+pub struct ShaderObject(pub u32);
 
 impl ShaderObject {
     pub const fn null() -> ShaderObject {
@@ -361,7 +361,7 @@ pub enum TextureDataType {
     UnsignedShort = 0x1403,
     Int = 0x1404,
     UnsignedInt = 0x1405,
-    Float = 0x1406,
+    F32 = 0x1406,
     // GL_UNSIGNED_BYTE_3_3_2,
     // GL_UNSIGNED_BYTE_2_3_3_REV,
     // GL_UNSIGNED_SHORT_5_6_5,
@@ -459,11 +459,21 @@ pub enum TextureInternalFormat {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct TextureObject(u32);
+pub struct TextureObject(pub u32);
+
+impl TextureObject {
+    pub const fn null() -> TextureObject {
+        TextureObject(0)
+    }
+
+    pub fn is_null(&self) -> bool {
+        self == &TextureObject(0)
+    }
+}
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct UniformLocation(u32);
+pub struct UniformLocation(pub u32);
 
 impl UniformLocation {
     pub fn from_index(index: u32) -> UniformLocation {
@@ -474,7 +484,7 @@ impl UniformLocation {
 /// TODO: Use NonZero here so that Option<VertexArrayName>::None can be used instead of 0.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct VertexArrayName(u32);
+pub struct VertexArrayName(pub u32);
 
 impl VertexArrayName {
     pub const fn null() -> VertexArrayName {
