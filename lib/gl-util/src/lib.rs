@@ -46,7 +46,7 @@ pub struct VertexBuffer {
     buffer_name: BufferName,
     len: usize,
     element_len: usize,
-    attribs: HashMap<String, (usize, usize, usize)>,
+    attribs: HashMap<String, AttribLayout>,
 }
 
 impl VertexBuffer {
@@ -97,14 +97,12 @@ impl VertexBuffer {
     pub fn set_attrib_f32<T: Into<String>>(
         &mut self,
         attrib: T,
-        elements: usize,
-        stride: usize,
-        offset: usize
+        layout: AttribLayout,
     ) {
         // Calculate the number of elements based on the attribute.
         // TODO: Verify that each attrib has the same element length.
-        self.element_len = (self.len - offset) / elements + stride;
-        self.attribs.insert(attrib.into(), (elements, stride, offset));
+        self.element_len = (self.len - layout.offset) / layout.elements + layout.stride;
+        self.attribs.insert(attrib.into(), layout);
     }
 }
 
@@ -114,6 +112,13 @@ impl Drop for VertexBuffer {
             gl::delete_buffers(1, &mut self.buffer_name);
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct AttribLayout {
+    pub elements: usize,
+    pub stride: usize,
+    pub offset: usize,
 }
 
 #[derive(Debug)]
@@ -252,7 +257,7 @@ impl<'a> DrawBuilder<'a> {
         buffer_attrib_name: &str,
         attrib_location: AttributeLocation
     ) -> &mut DrawBuilder<'a> {
-        let (elements, stride, offset) = match self.vertex_buffer.attribs.get(buffer_attrib_name) {
+        let layout = match self.vertex_buffer.attribs.get(buffer_attrib_name) {
             Some(&attrib_data) => attrib_data,
             None => panic!("Vertex buffer has no attribute \"{}\"", buffer_attrib_name),
         };
@@ -264,11 +269,11 @@ impl<'a> DrawBuilder<'a> {
             gl::enable_vertex_attrib_array(attrib_location);
             gl::vertex_attrib_pointer(
                 attrib_location,
-                elements as i32,
+                layout.elements as i32,
                 GlType::Float,
                 False,
-                (stride * mem::size_of::<f32>()) as i32,
-                offset * mem::size_of::<f32>());
+                (layout.stride * mem::size_of::<f32>()) as i32,
+                layout.offset * mem::size_of::<f32>());
 
             gl::bind_vertex_array(VertexArrayName::null());
             gl::bind_buffer(BufferTarget::Array, BufferName::null());
@@ -297,7 +302,7 @@ impl<'a> DrawBuilder<'a> {
             Some(attrib) => attrib,
             None => return self,
         };
-        let (elements, stride, offset) = match self.vertex_buffer.attribs.get(buffer_attrib_name) {
+        let layout = match self.vertex_buffer.attribs.get(buffer_attrib_name) {
             Some(&attrib_data) => attrib_data,
             None => return self,
         };
@@ -309,11 +314,11 @@ impl<'a> DrawBuilder<'a> {
             gl::enable_vertex_attrib_array(attrib);
             gl::vertex_attrib_pointer(
                 attrib,
-                elements as i32,
+                layout.elements as i32,
                 GlType::Float,
                 False,
-                (stride * mem::size_of::<f32>()) as i32,
-                offset * mem::size_of::<f32>());
+                (layout.stride * mem::size_of::<f32>()) as i32,
+                layout.offset * mem::size_of::<f32>());
 
             gl::bind_vertex_array(VertexArrayName::null());
             gl::bind_buffer(BufferTarget::Array, BufferName::null());

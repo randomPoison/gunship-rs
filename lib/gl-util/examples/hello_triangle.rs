@@ -16,7 +16,13 @@ fn main() {
     gl::init();
     let mut vertex_buffer = VertexBuffer::new();
     vertex_buffer.set_data_f32(&VERTEX_POSITIONS[..]);
-    vertex_buffer.set_attrib_f32("position", 3, 0, 0);
+    vertex_buffer.set_attrib_f32(
+        "position",
+        AttribLayout {
+            elements: 3,
+            offset: 0,
+            stride: 0,
+        });
 
     'outer: loop {
         while let Some(message) = window.next_message() {

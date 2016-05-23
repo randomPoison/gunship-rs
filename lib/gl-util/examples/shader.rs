@@ -76,8 +76,20 @@ fn main() {
     // Create the vertex buffer and set the vertex attribs.
     let mut vertex_buffer = VertexBuffer::new();
     vertex_buffer.set_data_f32(&*vertex_data);
-    vertex_buffer.set_attrib_f32("position", 4, 7, 0);
-    vertex_buffer.set_attrib_f32("normal", 3, 7, 4);
+    vertex_buffer.set_attrib_f32(
+        "position",
+        AttribLayout {
+            elements: 4,
+            stride: 7,
+            offset: 0,
+        });
+    vertex_buffer.set_attrib_f32(
+        "normal",
+        AttribLayout {
+            elements: 3,
+            stride: 7,
+            offset: 4,
+        });
 
     // Create the index buffer.
     let mut index_buffer = IndexBuffer::new();
