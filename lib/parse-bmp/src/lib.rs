@@ -18,30 +18,27 @@ impl Bitmap {
     pub fn load<P: AsRef<Path>>(path: P) -> Result<Bitmap, Error> {
         // Open file and read all bytes.
         let bytes = {
-            let mut file = File::open(path).unwrap();
+            let mut file = File::open(path).unwrap(); // TODO: Actually handle errors.
             let mut bytes = Vec::new();
             file.read_to_end(&mut bytes).unwrap();
             bytes
         };
 
-        println!("bytes read: {}", bytes.len());
+        Bitmap::from_bytes(&*bytes)
+    }
 
+    pub fn from_bytes(bytes: &[u8]) -> Result<Bitmap, Error> {
         // Extract the headers to get information about the bitmap.
         let file_header = {
             let ptr = bytes.as_ptr() as *const FileHeader;
             unsafe { &*ptr }
         };
 
-        println!("{:#?}", file_header);
-
         let info_header = {
             let offset = mem::size_of::<FileHeader>() as isize;
             let ptr = unsafe { bytes.as_ptr().offset(offset) } as *const InfoHeader;
-            unsafe { &* ptr }
+            unsafe { &*ptr }
         };
-
-        println!("{:#?}", info_header);
-        assert!(info_header.compression == Compression::Bitfields, "Only bitfield compression is supported currently");
 
         // Extract the color masks.
         let color_masks = {
@@ -49,8 +46,6 @@ impl Bitmap {
             let ptr = unsafe { bytes.as_ptr().offset(offset) };
             unsafe { slice::from_raw_parts(ptr as *const RgbQuad, 5) }
         };
-
-        println!("{:#?}", color_masks);
 
         // Extract color data.
         let image_data = {
@@ -108,7 +103,6 @@ pub struct RgbQuad {
 }
 
 // TODO: Don't use #[repr(packed)] to load from the buffer, read members in a portable way.
-
 #[repr(C, packed)]
 #[derive(Debug)]
 struct FileHeader {
