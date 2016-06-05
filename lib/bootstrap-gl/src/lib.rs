@@ -13,6 +13,7 @@
 //! function.
 
 #![feature(const_fn)]
+#![allow(bad_style)]
 
 #[cfg(target_os="windows")]
 #[path="windows\\mod.rs"]

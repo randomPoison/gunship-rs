@@ -354,14 +354,14 @@ pub enum TextureBindTarget {
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TextureDataType {
-    Byte = 0x1400,
-    UnsignedByte = 0x1401,
+    i8 = 0x1400,
+    u8 = 0x1401,
+    i16 = 0x1402,
+    u16 = 0x1403,
+    i32 = 0x1404,
+    u32 = 0x1405,
+    f32 = 0x1406,
     // GL_BITMAP,
-    Short = 0x1402,
-    UnsignedShort = 0x1403,
-    Int = 0x1404,
-    UnsignedInt = 0x1405,
-    F32 = 0x1406,
     // GL_UNSIGNED_BYTE_3_3_2,
     // GL_UNSIGNED_BYTE_2_3_3_REV,
     // GL_UNSIGNED_SHORT_5_6_5,
