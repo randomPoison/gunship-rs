@@ -111,3 +111,12 @@ impl Drop for Texture2d {
 pub enum Error {
     FailedToGenerateTexture,
 }
+
+pub unsafe fn set_active_texture(index: u32) {
+    const TEXTURE_ID_BASE: u32 = 0x84C0;
+
+    // TODO: Check that texture index is supported.
+
+    let texture_id = TEXTURE_ID_BASE + index;
+    gl::active_texture(texture_id);
+}

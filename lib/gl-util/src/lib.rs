@@ -10,7 +10,7 @@ extern crate bootstrap_gl as gl;
 
 use gl::{
     BufferName, BufferTarget, BufferUsage, ClearBufferMask, debug_callback, False, GlType,
-    IndexType, ProgramObject, ServerCapability, TextureBindTarget, UniformLocation,
+    IndexType, ProgramObject, ServerCapability, TextureBindTarget, TextureObject, UniformLocation,
     VertexArrayName,
 };
 use std::{mem, ptr};
@@ -406,7 +406,6 @@ impl<'a> DrawBuilder<'a> {
             for (&location, uniform) in &self.uniforms {
                 self.apply(uniform, location);
             }
-            self.active_texture.set(0);
 
             if let Some(indices) = self.index_buffer {
                 gl::bind_buffer(BufferTarget::ElementArray, indices.buffer_name);
@@ -425,7 +424,12 @@ impl<'a> DrawBuilder<'a> {
             // Reset all values even if they weren't used so that we don't need to branch twice on
             // each option.
 
-            // TODO: Reset active texture and unbind all textures.
+            // Reset all used textures.
+            for texture in 0..self.active_texture.get() {
+                texture::set_active_texture(texture as u32);
+                gl::bind_texture(TextureBindTarget::Texture2d, TextureObject::null());
+            }
+            self.active_texture.set(0);
 
             gl::front_face(WindingOrder::CounterClockwise);
             gl::disable(ServerCapability::Blend);
@@ -459,13 +463,10 @@ impl<'a> DrawBuilder<'a> {
                 _ => panic!("Unsupported matrix data length: {}", matrix.data.len()),
             },
             UniformValue::Texture(texture) => {
-                const TEXTURE_ID_BASE: i32 = 0x84C0;
-
                 let active_texture = self.active_texture.get();
-                let texture_id = TEXTURE_ID_BASE + active_texture;
 
                 unsafe {
-                    gl::active_texture(texture_id as u32);
+                    texture::set_active_texture(active_texture as u32);
                     gl::bind_texture(TextureBindTarget::Texture2d, texture.raw_value());
                     gl::uniform_i32x1(location, active_texture);
                 }
