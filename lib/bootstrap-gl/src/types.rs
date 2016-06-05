@@ -376,6 +376,23 @@ pub enum TextureDataType {
     // GL_UNSIGNED_INT_2_10_10_10_REV,
 }
 
+#[repr(i32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum TextureFilterFunction {
+    Nearest = 0x2600,
+    Linear = 0x2601,
+    NearestMipmapNearest = 0x2700,
+    LinearMipmapNearest = 0x2701,
+    NearestMipmapLinear = 0x2702,
+    LinearMipmapLinear = 0x2703,
+}
+
+impl Into<i32> for TextureFilterFunction {
+    fn into(self) -> i32 {
+        unsafe { ::std::mem::transmute(self) }
+    }
+}
+
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TextureFormat {
@@ -469,6 +486,41 @@ impl TextureObject {
     pub fn is_null(&self) -> bool {
         self == &TextureObject(0)
     }
+}
+
+#[repr(i32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum TextureParameterName {
+    MagFilter = 0x2800,
+    MinFilter = 0x2801,
+    // GL_DEPTH_STENCIL_TEXTURE_MODE
+    // GL_TEXTURE_BASE_LEVEL,
+    // GL_TEXTURE_COMPARE_FUNC,
+    // GL_TEXTURE_COMPARE_MODE,
+    // GL_TEXTURE_LOD_BIAS,
+    // GL_TEXTURE_MAG_FILTER,
+    // GL_TEXTURE_MIN_LOD,
+    // GL_TEXTURE_MAX_LOD,
+    // GL_TEXTURE_MAX_LEVEL,
+    // GL_TEXTURE_SWIZZLE_R,
+    // GL_TEXTURE_SWIZZLE_G,
+    // GL_TEXTURE_SWIZZLE_B,
+    // GL_TEXTURE_SWIZZLE_A,
+    // GL_TEXTURE_WRAP_S,
+    // GL_TEXTURE_WRAP_T,
+    // GL_TEXTURE_WRAP_R,
+}
+
+#[repr(i32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum TextureParameterTarget {
+    Texture2d = 0x0DE1,
+    // GL_TEXTURE_1D,
+    // GL_TEXTURE_3D,
+    // GL_TEXTURE_1D_ARRAY,
+    // GL_TEXTURE_2D_ARRAY,
+    // GL_TEXTURE_RECTANGLE,
+    // GL_TEXTURE_CUBE_MAP,
 }
 
 #[repr(C)]

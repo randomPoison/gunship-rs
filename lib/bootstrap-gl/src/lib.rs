@@ -66,6 +66,18 @@ pub fn destroy_context(context: platform::Context) {
     platform::destroy_context(context);
 }
 
+gl_proc!(glActiveTexture:
+    /// Selects active texture unit.
+    ///
+    /// [Wiki page](https://www.opengl.org/wiki/GLAPI/glActiveTexture)
+    ///
+    /// Core since version 1.3
+    ///
+    /// Selects which texture unit subsequent texture state calls will affect. The number of
+    /// texture units an implementation supports is implementation dependent, but must be at least
+    /// 96 (80 in GL 4.2, 48 in GL 3.3).
+    fn active_texture(texture: u32));
+
 gl_proc!(glAttachShader:
     /// Attaches a shader object to a program object.
     ///
@@ -1791,6 +1803,17 @@ gl_proc!(glTexImage2D:
         format: TextureFormat,
         data_type: TextureDataType,
         data: *const ()));
+
+gl_proc!(glTexParameteri:
+    /// Sets texture parameters.
+    ///
+    /// [Wiki page](https://www.opengl.org/wiki/GLAPI/glTexParameter)
+    ///
+    /// Core since version 1.0
+    fn texture_parameter_i32(
+        target: TextureParameterTarget,
+        name: TextureParameterName,
+        param: i32));
 
 gl_proc!(glUseProgram:
     /// Installs a program as part of the current rendering state.
