@@ -10,10 +10,13 @@ extern crate bootstrap_gl as gl;
 
 use gl::{
     BufferName, BufferTarget, BufferUsage, ClearBufferMask, debug_callback, False, GlType,
-    IndexType, ProgramObject, ServerCapability, UniformLocation, VertexArrayName,
+    IndexType, ProgramObject, ServerCapability, TextureBindTarget, UniformLocation,
+    VertexArrayName,
 };
 use std::{mem, ptr};
+use std::cell::Cell;
 use std::collections::HashMap;
+use texture::Texture2d;
 
 pub use gl::{
     AttributeLocation, Comparison, DestFactor, DrawMode, Face, PolygonMode, ShaderType,
@@ -23,6 +26,7 @@ pub use gl::platform::swap_buffers;
 pub use self::shader::*;
 
 pub mod shader;
+pub mod texture;
 
 /// Initializes global OpenGL state and creates the OpenGL context needed to perform rendering.
 pub fn init() {
@@ -180,6 +184,8 @@ pub struct DrawBuilder<'a> {
     winding_order: Option<WindingOrder>,
     blend: Option<(SourceFactor, DestFactor)>,
     uniforms: HashMap<UniformLocation, UniformValue<'a>>,
+
+    active_texture: Cell<i32>,
 }
 
 impl<'a> DrawBuilder<'a> {
@@ -201,6 +207,8 @@ impl<'a> DrawBuilder<'a> {
             winding_order: None,
             blend: None,
             uniforms: HashMap::new(),
+
+            active_texture: Cell::new(0),
         }
     }
 
@@ -347,7 +355,10 @@ impl<'a> DrawBuilder<'a> {
             self.program.expect("Cannot set a uniform without a shader program");
         let uniform_location = match program.get_uniform_location(name) {
             Some(location) => location,
-            None => return self,
+            None => {
+                println!("no uniform named {:?}", name);
+                return self;
+            },
         };
 
         // Add uniform to the uniform map.
@@ -393,8 +404,9 @@ impl<'a> DrawBuilder<'a> {
 
             // Apply uniforms.
             for (&location, uniform) in &self.uniforms {
-                uniform.apply(location);
+                self.apply(uniform, location);
             }
+            self.active_texture.set(0);
 
             if let Some(indices) = self.index_buffer {
                 gl::bind_buffer(BufferTarget::ElementArray, indices.buffer_name);
@@ -412,6 +424,9 @@ impl<'a> DrawBuilder<'a> {
 
             // Reset all values even if they weren't used so that we don't need to branch twice on
             // each option.
+
+            // TODO: Reset active texture and unbind all textures.
+
             gl::front_face(WindingOrder::CounterClockwise);
             gl::disable(ServerCapability::Blend);
             gl::disable(ServerCapability::DepthTest);
@@ -423,26 +438,9 @@ impl<'a> DrawBuilder<'a> {
             gl::bind_vertex_array(VertexArrayName::null());
         }
     }
-}
 
-impl<'a> Drop for DrawBuilder<'a> {
-    fn drop(&mut self) {
-        unsafe {
-            gl::delete_vertex_arrays(1, &mut self.vertex_array_name);
-        }
-    }
-}
-
-/// Represents a value for a uniform variable in a shader program.
-pub enum UniformValue<'a> {
-    F32x1(f32),
-    F32x4((f32, f32, f32, f32)),
-    Matrix(GlMatrix<'a>),
-}
-
-impl<'a> UniformValue<'a> {
-    fn apply(&self, location: UniformLocation) {
-        match *self {
+    fn apply(&self, uniform: &UniformValue, location: UniformLocation) {
+        match *uniform {
             UniformValue::F32x1(value) => unsafe {
                 gl::uniform_f32x1(location, value);
             },
@@ -460,8 +458,38 @@ impl<'a> UniformValue<'a> {
                 9 => unimplemented!(),
                 _ => panic!("Unsupported matrix data length: {}", matrix.data.len()),
             },
+            UniformValue::Texture(texture) => {
+                const TEXTURE_ID_BASE: i32 = 0x84C0;
+
+                let active_texture = self.active_texture.get();
+                let texture_id = TEXTURE_ID_BASE + active_texture;
+
+                unsafe {
+                    gl::active_texture(texture_id as u32);
+                    gl::bind_texture(TextureBindTarget::Texture2d, texture.raw_value());
+                    gl::uniform_i32x1(location, active_texture);
+                }
+
+                self.active_texture.set(active_texture + 1);
+            }
         }
     }
+}
+
+impl<'a> Drop for DrawBuilder<'a> {
+    fn drop(&mut self) {
+        unsafe {
+            gl::delete_vertex_arrays(1, &mut self.vertex_array_name);
+        }
+    }
+}
+
+/// Represents a value for a uniform variable in a shader program.
+pub enum UniformValue<'a> {
+    F32x1(f32),
+    F32x4((f32, f32, f32, f32)),
+    Matrix(GlMatrix<'a>),
+    Texture(&'a Texture2d),
 }
 
 impl<'a> From<f32> for UniformValue<'a> {
@@ -485,6 +513,12 @@ impl<'a> From<[f32; 4]> for UniformValue<'a> {
 impl<'a> From<GlMatrix<'a>> for UniformValue<'a> {
     fn from(matrix: GlMatrix<'a>) -> UniformValue<'a> {
         UniformValue::Matrix(matrix)
+    }
+}
+
+impl<'a> From<&'a Texture2d> for UniformValue<'a> {
+    fn from(from: &'a Texture2d) -> UniformValue<'a> {
+        UniformValue::Texture(from)
     }
 }
 
