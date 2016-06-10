@@ -39,6 +39,10 @@ macro_rules! gl_proc {
         $( #[$attr:meta] )* fn $fn_name:ident( $( $arg:ident : $arg_ty:ty ),* ) $( -> $result:ty )* ) => {
         $( #[$attr] )*
         pub unsafe fn $fn_name( $( $arg: $arg_ty, )* ) $( -> $result )* {
+            #[cfg(target_os="windows")]
+            static mut PROC_PTR: Option<extern "stdcall" fn( $( $arg_ty, )* ) $( -> $result )*> = None;
+
+            #[cfg(not(target_os="windows"))]
             static mut PROC_PTR: Option<extern "C" fn( $( $arg_ty, )* ) $( -> $result )*> = None;
 
             if let None = PROC_PTR {
