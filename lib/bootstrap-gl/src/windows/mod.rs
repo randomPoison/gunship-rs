@@ -3,15 +3,15 @@ extern crate opengl32;
 extern crate gdi32;
 extern crate user32;
 
-use std::mem;
+use std::{mem, ptr};
 use std::ffi::CString;
 
 use self::winapi::*;
 
 pub type Context = HGLRC;
 
-pub fn init() {
-    let device_context = unsafe {
+pub unsafe fn init() {
+    let device_context = {
         let hwnd = user32::GetActiveWindow();
         user32::GetDC(hwnd)
     };
@@ -45,22 +45,23 @@ pub fn init() {
         dwDamageMask: 0
     };
 
-    unsafe {
-        let pixelformat = gdi32::ChoosePixelFormat(device_context, &pfd);
-        gdi32::SetPixelFormat(device_context, pixelformat, &pfd);
-        let render_context = opengl32::wglCreateContext(device_context);
-        opengl32::wglDeleteContext(render_context);
-    };
+    let pixelformat = gdi32::ChoosePixelFormat(device_context, &pfd);
+
+    gdi32::SetPixelFormat(device_context, pixelformat, &pfd);
+
+    // Create and destroy temporary OpenGL context. This is necessary because of a quirk in the
+    // way OpenGL works on windows.
+    destroy_context(create_context());
 }
 
-pub fn create_context() -> Context {
-    let device_context = unsafe {
+pub unsafe fn create_context() -> Context {
+    let device_context = {
         let hwnd = user32::GetActiveWindow();
         user32::GetDC(hwnd)
     };
 
     // create context and make it current
-    let context = unsafe {
+    let context = {
         let render_context = opengl32::wglCreateContext(device_context);
         opengl32::wglMakeCurrent(device_context, render_context);
         render_context
@@ -69,21 +70,24 @@ pub fn create_context() -> Context {
     context
 }
 
-pub fn destroy_context(context: Context) {
-    unsafe {
-        opengl32::wglDeleteContext(context);
-    }
+pub unsafe fn destroy_context(context: Context) {
+    let device_context = {
+        let hwnd = user32::GetActiveWindow();
+        user32::GetDC(hwnd)
+    };
+    let render_context = opengl32::wglCreateContext(device_context);
+
+    opengl32::wglMakeCurrent(ptr::null_mut(), render_context);
+    opengl32::wglDeleteContext(context);
 }
 
-pub fn load_proc(proc_name: &str) -> Option<extern "C" fn()> {
+pub unsafe fn load_proc(proc_name: &str) -> Option<extern "C" fn()> {
     let string = CString::new(proc_name);
-    Some(unsafe {
-        mem::transmute(opengl32::wglGetProcAddress(string.unwrap().as_ptr()))
-    })
+    let cstr = string.unwrap().as_ptr();
+    let ptr = opengl32::wglGetProcAddress(cstr);
+    Some(mem::transmute(ptr))
 }
 
-pub fn swap_buffers() {
-    unsafe {
-        gdi32::SwapBuffers(opengl32::wglGetCurrentDC()); // TODO maybe pass in the DC?
-    }
+pub unsafe fn swap_buffers() {
+    gdi32::SwapBuffers(opengl32::wglGetCurrentDC()); // TODO maybe pass in the DC?
 }

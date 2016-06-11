@@ -60,13 +60,13 @@ macro_rules! gl_proc {
 }
 
 /// Initializes OpenGl and create the context.
-pub fn create_context() -> platform::Context {
+pub unsafe fn create_context() -> platform::Context {
     platform::init();
     platform::create_context()
 }
 
 /// Destroys and existing OpenGL context.
-pub fn destroy_context(context: platform::Context) {
+pub unsafe fn destroy_context(context: platform::Context) {
     platform::destroy_context(context);
 }
 
