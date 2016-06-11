@@ -409,6 +409,17 @@ pub enum TextureFormat {
     // GL_LUMINANCE_ALPHA,
 }
 
+impl TextureFormat {
+    pub fn elements(&self) -> usize {
+        match *self {
+            TextureFormat::Rgb => 3,
+            TextureFormat::Rgba => 4,
+            TextureFormat::Bgr => 3,
+            TextureFormat::Bgra => 4,
+        }
+    }
+}
+
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TextureInternalFormat {
