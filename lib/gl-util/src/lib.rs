@@ -2,9 +2,9 @@
 //!
 //! This crate aspires to provide an abstraction over OpenGL's raw API in order to simplify the
 //! task of writing higher-level rendering code for OpenGL. `gl-util` is much in the vein of
-//! [glutin](https://github.com/tomaka/glium) and [gfx-rs](https://github.com/gfx-rs/gfx) before
-//! it, the main difference being that it is much more poorly constructed and is being developed by
-//! someone much less experienced with OpenGL.
+//! [glutin](https://github.com/tomaka/glium) and [gfx-rs](https://github.com/gfx-rs/gfx),
+//! the main difference being that it is much more poorly constructed and is being developed by
+//! someone much less OpenGL experience.
 
 #![feature(associated_consts)]
 
@@ -31,8 +31,8 @@ pub mod texture;
 
 /// Initializes global OpenGL state and creates the OpenGL context needed to perform rendering.
 pub fn init() {
-        gl::create_context();
     unsafe {
+        gl::create_context();
         gl::enable(ServerCapability::DebugOutput);
         gl::debug_message_callback(debug_callback, ptr::null_mut());
     }
@@ -94,15 +94,11 @@ impl VertexBuffer {
 
     /// Specifies how the data for a particular vertex attribute is laid out in the buffer.
     ///
-    /// # Parameters
+    /// `layout` specifies the layout of the vertex attributes. `AttribLayout` includes the three
+    /// values that are needed to fully describe the attribute: The offset, the number of elements
+    /// in the attrib, and the stride between elements.
     ///
-    /// - `attrib` - The attribute being set. This can be gotten using `Program::get_attrib()`.
-    /// - `elements` - The number of `f32`s per vertex for this attribute. For example, for a
-    ///   vertex normal with x, y, and z coordinates `elements` would be 3.
-    /// - `stride` - The offset in elements between consecutive vertex attributes. If `stride` is
-    ///   attributes are understood to be tightly packed.
-    /// - `offset` - The offset in elements from the start of the buffer where the first attribute
-    ///   is located.
+    /// TODO: Include more details about how to describe the layout of attrib data.
     pub fn set_attrib_f32<T: Into<String>>(
         &mut self,
         attrib: T,
@@ -123,6 +119,9 @@ impl Drop for VertexBuffer {
     }
 }
 
+/// Describes the layout of vertex data in a `VertexBuffer`.
+///
+/// See [`VertexBuffer::set_attrib_f32()`](TODO) for more information.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct AttribLayout {
     pub elements: usize,
@@ -130,6 +129,7 @@ pub struct AttribLayout {
     pub offset: usize,
 }
 
+/// Represents a buffer of index data used to index into a `VertexBuffer` when drawing.
 #[derive(Debug)]
 pub struct IndexBuffer {
     buffer_name: BufferName,
@@ -137,7 +137,7 @@ pub struct IndexBuffer {
 }
 
 impl IndexBuffer {
-    // Create a new index buffer.
+    /// Creates a new index buffer.
     pub fn new() -> IndexBuffer {
         let mut buffer_name = BufferName::null();
         unsafe {
@@ -150,6 +150,7 @@ impl IndexBuffer {
         }
     }
 
+    /// Fills the index buffer with the provided data.
     pub fn set_data_u32(&mut self, data: &[u32]) {
         self.len = data.len();
 
