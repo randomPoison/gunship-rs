@@ -78,7 +78,8 @@ fn main() {
 
     // Parse the bitmap and setup the texture.
     let bitmap = Bitmap::from_bytes(TEXTURE_DATA).unwrap();
-    let texture = Texture2d::from_u8(
+
+    let texture = Texture2d::new(
         TextureFormat::Bgr,
         TextureInternalFormat::Rgb,
         bitmap.width(),

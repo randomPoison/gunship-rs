@@ -6,6 +6,8 @@
 //! it, the main difference being that it is much more poorly constructed and is being developed by
 //! someone much less experienced with OpenGL.
 
+#![feature(associated_consts)]
+
 extern crate bootstrap_gl as gl;
 
 use gl::{
@@ -22,7 +24,6 @@ pub use gl::{
     AttributeLocation, Comparison, DestFactor, DrawMode, Face, PolygonMode, ShaderType,
     SourceFactor, WindingOrder,
 };
-pub use gl::platform::swap_buffers;
 pub use self::shader::*;
 
 pub mod shader;
@@ -30,7 +31,7 @@ pub mod texture;
 
 /// Initializes global OpenGL state and creates the OpenGL context needed to perform rendering.
 pub fn init() {
-    gl::create_context();
+        gl::create_context();
     unsafe {
         gl::enable(ServerCapability::DebugOutput);
         gl::debug_message_callback(debug_callback, ptr::null_mut());
@@ -40,6 +41,10 @@ pub fn init() {
 /// TODO: Take clear mask (and values) as parameters.
 pub fn clear() {
     unsafe { gl::clear(ClearBufferMask::Color | ClearBufferMask::Depth); }
+}
+
+pub fn swap_buffers() {
+    unsafe { gl::platform::swap_buffers(); }
 }
 
 /// Represents a buffer of vertex data and the layout of that data.

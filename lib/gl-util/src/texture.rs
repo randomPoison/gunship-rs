@@ -8,57 +8,19 @@ pub use gl::{
 pub struct Texture2d(TextureObject);
 
 impl Texture2d {
-    pub fn from_f32(
-        format: TextureFormat,
+    /// Constructs a new `Texture2d` from the specified data.
+    ///
+    /// # Panics
+    ///
+    /// - If `width * height != data.len()`.
+    pub fn new<T: TextureData>(
+        data_format: TextureFormat,
         internal_format: TextureInternalFormat,
         width: usize,
         height: usize,
-        data: &[f32],
+        data: &[T],
     ) -> Result<Texture2d, Error> {
-        let mut texture_object = TextureObject::null();
-        unsafe { gl::gen_textures(1, &mut texture_object); }
-
-        // Check if the texture object was successfully created.
-        if texture_object.is_null() {
-            return Err(Error::FailedToGenerateTexture);
-        }
-
-        unsafe {
-            gl::bind_texture(TextureBindTarget::Texture2d, texture_object);
-            gl::texture_image_2d(
-                Texture2dTarget::Texture2d,
-                0,
-                internal_format,
-                width as i32,
-                height as i32,
-                0,
-                format,
-                TextureDataType::f32,
-                data.as_ptr() as *const ());
-            // gl::bind_texture(TextureBindTarget::Texture2d, TextureObject::null());
-
-            gl::texture_parameter_i32(
-                TextureParameterTarget::Texture2d,
-                TextureParameterName::MinFilter,
-                TextureFilterFunction::Nearest.into());
-            gl::texture_parameter_i32(
-                TextureParameterTarget::Texture2d,
-                TextureParameterName::MagFilter,
-                TextureFilterFunction::Nearest.into());
-        }
-
-        Ok(Texture2d(texture_object))
-    }
-
-    pub fn from_u8(
-        format: TextureFormat,
-        internal_format: TextureInternalFormat,
-        width: usize,
-        height: usize,
-        data: &[u8],
-    ) -> Result<Texture2d, Error> {
-        // TODO: Assert that there are the correct number of elements in `data` based on the
-        // texture's width, height, and format.
+        assert_eq!(width * height * data_format.elements(), data.len());
 
         let mut texture_object = TextureObject::null();
         unsafe { gl::gen_textures(1, &mut texture_object); }
@@ -77,8 +39,8 @@ impl Texture2d {
                 width as i32,
                 height as i32,
                 0,
-                format,
-                TextureDataType::u8,
+                data_format,
+                T::DATA_TYPE,
                 data.as_ptr() as *const ());
 
             gl::texture_parameter_i32(
@@ -105,6 +67,18 @@ impl Drop for Texture2d {
     fn drop(&mut self) {
         unsafe { gl::delete_textures(1, &mut self.0); }
     }
+}
+
+pub trait TextureData {
+    const DATA_TYPE: TextureDataType;
+}
+
+impl TextureData for f32 {
+    const DATA_TYPE: TextureDataType = TextureDataType::f32;
+}
+
+impl TextureData for u8 {
+    const DATA_TYPE: TextureDataType = TextureDataType::u8;
 }
 
 #[derive(Debug)]
