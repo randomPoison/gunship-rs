@@ -1,6 +1,7 @@
 use std::{mem, slice};
 use std::convert::AsRef;
 use std::fs::File;
+use std::io;
 use std::io::prelude::*;
 use std::path::Path;
 
@@ -15,12 +16,13 @@ pub struct Bitmap {
 }
 
 impl Bitmap {
+    /// Loads and parses a bitmap file from disk.
     pub fn load<P: AsRef<Path>>(path: P) -> Result<Bitmap, Error> {
         // Open file and read all bytes.
         let bytes = {
-            let mut file = File::open(path).unwrap(); // TODO: Actually handle errors.
+            let mut file = File::open(path)?;
             let mut bytes = Vec::new();
-            file.read_to_end(&mut bytes).unwrap();
+            file.read_to_end(&mut bytes)?;
             bytes
         };
 
@@ -80,7 +82,15 @@ impl Bitmap {
 }
 
 #[derive(Debug)]
-pub struct Error;
+pub enum Error {
+    IoError(io::Error),
+}
+
+impl From<io::Error> for Error {
+    fn from(from: io::Error) -> Error {
+        Error::IoError(from)
+    }
+}
 
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
