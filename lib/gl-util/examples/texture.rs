@@ -5,7 +5,10 @@ extern crate parse_bmp;
 use bootstrap::window::*;
 use gl::*;
 use gl::texture::*;
-use parse_bmp::Bitmap;
+use parse_bmp::{
+    Bitmap,
+    BitmapData,
+};
 
 static VERT_SOURCE: &'static str = r#"
 #version 330 core
@@ -78,13 +81,17 @@ fn main() {
 
     // Parse the bitmap and setup the texture.
     let bitmap = Bitmap::from_bytes(TEXTURE_DATA).unwrap();
+    let data = match bitmap.data() {
+        &BitmapData::Bgr(ref data) => &**data,
+        _ => unimplemented!(),
+    };
 
     let texture = Texture2d::new(
         TextureFormat::Bgr,
         TextureInternalFormat::Rgb,
         bitmap.width(),
         bitmap.height(),
-        bitmap.data())
+        data)
         .unwrap();
 
     let mut draw_builder = DrawBuilder::new(&vertex_buffer, DrawMode::Triangles);
