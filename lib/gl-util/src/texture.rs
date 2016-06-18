@@ -20,7 +20,14 @@ impl Texture2d {
         height: usize,
         data: &[T],
     ) -> Result<Texture2d, Error> {
-        assert_eq!(width * height * data_format.elements(), data.len());
+        let expected_pixels = width * height * data_format.elements() / T::ELEMENTS;
+        assert!(
+            expected_pixels == data.len(),
+            "Wrong number of pixels in texture, width: {}, height: {}, expected pixels: {}, actual pixels: {}",
+            width,
+            height,
+            expected_pixels,
+            data.len());
 
         let mut texture_object = TextureObject::null();
         unsafe { gl::gen_textures(1, &mut texture_object); }
@@ -71,14 +78,22 @@ impl Drop for Texture2d {
 
 pub trait TextureData {
     const DATA_TYPE: TextureDataType;
+    const ELEMENTS: usize;
 }
 
 impl TextureData for f32 {
     const DATA_TYPE: TextureDataType = TextureDataType::f32;
+    const ELEMENTS: usize = 1;
 }
 
 impl TextureData for u8 {
     const DATA_TYPE: TextureDataType = TextureDataType::u8;
+    const ELEMENTS: usize = 1;
+}
+
+impl TextureData for (u8, u8, u8) {
+    const DATA_TYPE: TextureDataType = TextureDataType::u8;
+    const ELEMENTS: usize = 3;
 }
 
 #[derive(Debug)]
