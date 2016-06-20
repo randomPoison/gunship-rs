@@ -1,14 +1,20 @@
 use std::path::Path;
+use std::slice;
 use std::str::FromStr;
 
-// TODO: Add a specialized implementation for `Debug` that does a better job pretty printing.
+pub type Point = (f32, f32, f32, f32);
+pub type Vector3 = (f32, f32, f32);
+
+/// A parsed OBJ file.
+///
+/// TODO: Add a specialized implementation for `Debug` that does a better job pretty printing.
 #[derive(Debug, Clone)]
 pub struct Obj {
-    positions: Vec<(f32, f32, f32, f32)>,
+    positions: Vec<Point>,
     position_indices: Vec<Vec<usize>>,
-    texcoords: Vec<(f32, f32, f32)>,
+    texcoords: Vec<Vector3>,
     texcoord_indices: Vec<Vec<usize>>,
-    normals: Vec<(f32, f32, f32)>,
+    normals: Vec<Vector3>,
     normal_indices: Vec<Vec<usize>>,
 }
 
@@ -222,7 +228,7 @@ impl Obj {
     }
 
     /// Gets the list of vertex position tuples.
-    pub fn positions(&self) -> &[(f32, f32, f32, f32)] {
+    pub fn positions(&self) -> &[Point] {
         &*self.positions
     }
 
@@ -248,7 +254,7 @@ impl Obj {
     }
 
     /// Gets the list of texcoord tuples.
-    pub fn texcoords(&self) -> &[(f32, f32, f32)] {
+    pub fn texcoords(&self) -> &[Vector3] {
         &*self.texcoords
     }
 
@@ -272,7 +278,7 @@ impl Obj {
     }
 
     /// Gets the list of normal tuples.
-    pub fn normals(&self) -> &[(f32, f32, f32)] {
+    pub fn normals(&self) -> &[Vector3] {
         &*self.normals
     }
 
@@ -293,6 +299,16 @@ impl Obj {
     /// Gets the list of normal indices.
     pub fn normal_indices(&self) -> &[Vec<usize>] {
         &*self.normal_indices
+    }
+
+    pub fn faces(&self) -> FaceIter {
+        FaceIter {
+            obj: self,
+
+            position_faces: self.position_indices.iter(),
+            texcoord_faces: self.texcoord_indices.iter(),
+            normal_faces: self.normal_indices.iter(),
+        }
     }
 }
 
@@ -337,5 +353,72 @@ impl From<::std::num::ParseIntError> for Error {
 impl From<::std::io::Error> for Error {
     fn from(error: ::std::io::Error) -> Error {
         Error::IoError(error)
+    }
+}
+
+/// An iterator over the vertices in a
+pub struct Face<'a> {
+    obj: &'a Obj,
+
+    position_indices: slice::Iter<'a, usize>,
+    texcoord_indices: Option<slice::Iter<'a, usize>>,
+    normal_indices: Option<slice::Iter<'a, usize>>,
+}
+
+impl<'a> Iterator for Face<'a> {
+    type Item = (Point, Option<Vector3>, Option<Vector3>);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self
+            .position_indices
+            .next()
+            .map(|pos_index| {
+                let pos = self.obj.positions[*pos_index];
+
+                let tex =
+                    self
+                    .texcoord_indices
+                    .as_mut()
+                    .and_then(|mut texcoord_indices| texcoord_indices.next())
+                    .map(|&index| self.obj.texcoords[index]);
+                let norm =
+                    self
+                    .normal_indices
+                    .as_mut()
+                    .and_then(|mut normal_indices| normal_indices.next())
+                    .map(|&index| self.obj.normals[index]);
+                (pos, tex, norm)
+            })
+    }
+}
+
+/// An iterator over the faces in an OBJ file.
+pub struct FaceIter<'a> {
+    obj: &'a Obj,
+
+    position_faces: slice::Iter<'a, Vec<usize>>,
+    texcoord_faces: slice::Iter<'a, Vec<usize>>,
+    normal_faces: slice::Iter<'a, Vec<usize>>,
+}
+
+impl<'a> Iterator for FaceIter<'a> {
+    type Item = Face<'a>;
+
+    fn next(&mut self) -> Option<Face<'a>> {
+        self
+            .position_faces
+            .next()
+            .map(|pos_face| {
+                let tex_face = self.texcoord_faces.next().map(|indices| indices.iter());
+                let norm_face = self.normal_faces.next().map(|indices| indices.iter());
+
+                Face {
+                    obj: self.obj,
+
+                    position_indices: pos_face.iter(),
+                    texcoord_indices: tex_face,
+                    normal_indices: norm_face,
+                }
+            })
     }
 }
