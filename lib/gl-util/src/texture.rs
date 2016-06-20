@@ -96,6 +96,11 @@ impl TextureData for (u8, u8, u8) {
     const ELEMENTS: usize = 3;
 }
 
+impl TextureData for (u8, u8, u8, u8) {
+    const DATA_TYPE: TextureDataType = TextureDataType::u8;
+    const ELEMENTS: usize = 4;
+}
+
 #[derive(Debug)]
 pub enum Error {
     FailedToGenerateTexture,

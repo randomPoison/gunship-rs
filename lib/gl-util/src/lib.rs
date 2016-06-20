@@ -11,8 +11,19 @@
 extern crate bootstrap_gl as gl;
 
 use gl::{
-    BufferName, BufferTarget, BufferUsage, ClearBufferMask, debug_callback, False, GlType,
-    IndexType, ProgramObject, ServerCapability, TextureBindTarget, TextureObject, UniformLocation,
+    BufferName,
+    BufferTarget,
+    BufferUsage,
+    ClearBufferMask,
+    debug_callback,
+    False,
+    GlType,
+    IndexType,
+    ProgramObject,
+    ServerCapability,
+    TextureBindTarget,
+    TextureObject,
+    UniformLocation,
     VertexArrayName,
 };
 use std::{mem, ptr};
@@ -21,8 +32,15 @@ use std::collections::HashMap;
 use texture::Texture2d;
 
 pub use gl::{
-    AttributeLocation, Comparison, DestFactor, DrawMode, Face, PolygonMode, ShaderType,
-    SourceFactor, WindingOrder,
+    AttributeLocation,
+    Comparison,
+    DestFactor,
+    DrawMode,
+    Face,
+    PolygonMode,
+    ShaderType,
+    SourceFactor,
+    WindingOrder,
 };
 pub use self::shader::*;
 
@@ -361,10 +379,7 @@ impl<'a> DrawBuilder<'a> {
             self.program.expect("Cannot set a uniform without a shader program");
         let uniform_location = match program.get_uniform_location(name) {
             Some(location) => location,
-            None => {
-                println!("no uniform named {:?}", name);
-                return self;
-            },
+            None => return self,
         };
 
         // Add uniform to the uniform map.
