@@ -301,6 +301,7 @@ impl Obj {
         &*self.normal_indices
     }
 
+    /// Returns an iterator over the faces in mesh.
     pub fn faces(&self) -> FaceIter {
         FaceIter {
             obj: self,
