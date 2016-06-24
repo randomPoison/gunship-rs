@@ -1,6 +1,10 @@
+extern crate parse_bmp;
 extern crate parse_obj;
 
 use polygon::geometry::mesh::*;
+use polygon::math::Vector2;
+use polygon::texture::Texture2d;
+use self::parse_bmp::Bitmap;
 use self::parse_obj::*;
 use std::path::Path;
 
@@ -11,23 +15,24 @@ pub fn load_mesh<P: AsRef<Path>>(path: P) -> Result<Mesh, BuildMeshError> {
     // Gather vertex data so that OpenGL can use them.
     let mut positions = Vec::new();
     let mut normals = Vec::new();
+    let mut texcoords = Vec::new();
 
     // Iterate over each of the faces in the mesh.
-    let face_indices =
-        obj
-        .position_indices()
-        .iter()
-        .zip(obj.normal_indices().iter());
-    for (face_position_indices, face_normal_indices) in face_indices {
+    for face in obj.faces() {
         // Iterate over each of the vertices in the face to combine the position and normal into
         // a single vertex.
-        for (position_index, normal_index) in
-            face_position_indices.iter().zip(face_normal_indices.iter()) {
-            let position = obj.positions()[*position_index];
+        for (position, maybe_tex, maybe_normal) in face {
             positions.push(position.into());
 
-            let normal = obj.normals()[*normal_index];
-            normals.push(normal.into());
+            // NOTE: The w texcoord is provided according to the bitmap spec but we don't need to
+            // use it here, so we simply ignore it.
+            if let Some((u, v, _w)) = maybe_tex {
+                texcoords.push(Vector2::new(u, v));
+            }
+
+            if let Some(normal) = maybe_normal {
+                normals.push(normal.into());
+            }
         }
     }
 
@@ -38,6 +43,12 @@ pub fn load_mesh<P: AsRef<Path>>(path: P) -> Result<Mesh, BuildMeshError> {
     MeshBuilder::new()
         .set_position_data(&*positions)
         .set_normal_data(&*normals)
+        .set_texcoord_data(&*texcoords)
         .set_indices(&*indices)
         .build()
+}
+
+pub fn load_texture<P: AsRef<Path>>(path: P) -> Texture2d {
+    let bitmap = Bitmap::load(path).unwrap();
+    Texture2d::from_bitmap(bitmap)
 }

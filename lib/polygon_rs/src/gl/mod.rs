@@ -33,7 +33,7 @@ use texture::*;
 
 pub mod shader;
 
-static DEFAULT_SHADER_BYTES: &'static [u8] = include_bytes!("../../resources/shaders/diffuse_lit.shader");
+static DEFAULT_SHADER_BYTES: &'static [u8] = include_bytes!("../../resources/shaders/texture_diffuse_lit.shader");
 
 #[derive(Debug)]
 pub struct GlRender {
