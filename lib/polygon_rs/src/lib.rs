@@ -1,6 +1,6 @@
 #![feature(question_mark)]
 
-extern crate parse_bmp as bmp;
+extern crate parse_bmp;
 
 pub extern crate polygon_math as math;
 
@@ -17,6 +17,7 @@ pub mod light;
 pub mod material;
 pub mod mesh_instance;
 pub mod shader;
+pub mod texture;
 
 use anchor::*;
 use camera::*;
@@ -24,15 +25,12 @@ use geometry::mesh::Mesh;
 use material::Material;
 use mesh_instance::*;
 use light::*;
+use texture::*;
 
 /// Identifies mesh data that has been sent to the GPU.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct GpuMesh(usize);
 derive_Counter!(GpuMesh);
-
-/// Represents texture data that has been sent to the GPU.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-pub struct GpuTexture;
 
 /// The common interface that all rendering systems must provide.
 pub trait Renderer {
@@ -44,6 +42,9 @@ pub trait Renderer {
 
     /// Registers mesh data with the renderer, returning a unique id for the mesh.
     fn register_mesh(&mut self, mesh: &Mesh) -> GpuMesh;
+
+    /// Registers texture data with the renderer, returning a unique id for the texture.
+    fn register_texture(&mut self, texture: &Texture2d) -> GpuTexture;
 
     /// Registers a mesh instance with the renderer, returning a unique id for that mesh instance.
     fn register_mesh_instance(&mut self, mesh_instance: MeshInstance) -> MeshInstanceId;

@@ -9,8 +9,22 @@ use material::*;
 use mesh_instance::*;
 use math::*;
 use self::gl_util::{
-    Comparison, DrawBuilder, DrawMode, Face, GlMatrix, IndexBuffer, SourceFactor, DestFactor,
-    Program, VertexBuffer
+    AttribLayout,
+    Comparison,
+    DestFactor,
+    DrawBuilder,
+    DrawMode,
+    Face,
+    GlMatrix,
+    IndexBuffer,
+    Program,
+    SourceFactor,
+    VertexBuffer,
+};
+use self::gl_util::texture::{
+    Texture2d as GlTexture2d,
+    TextureFormat,
+    TextureInternalFormat,
 };
 use shader::Shader;
 use std::collections::HashMap;
@@ -23,6 +37,7 @@ static DEFAULT_SHADER_BYTES: &'static [u8] = include_bytes!("../../resources/sha
 #[derive(Debug)]
 pub struct GlRender {
     meshes: HashMap<GpuMesh, MeshData>,
+    textures: HashMap<GpuTexture, GlTexture2d>,
     mesh_instances: HashMap<MeshInstanceId, MeshInstance>,
     anchors: HashMap<AnchorId, Anchor>,
     cameras: HashMap<CameraId, Camera>,
@@ -30,6 +45,7 @@ pub struct GlRender {
     programs: HashMap<Shader, Program>,
 
     mesh_counter: GpuMesh,
+    texture_counter: GpuTexture,
     mesh_instance_counter: MeshInstanceId,
     anchor_counter: AnchorId,
     camera_counter: CameraId,
@@ -59,6 +75,7 @@ impl GlRender {
 
         GlRender {
             meshes: HashMap::new(),
+            textures: HashMap::new(),
             mesh_instances: HashMap::new(),
             anchors: HashMap::new(),
             cameras: HashMap::new(),
@@ -66,6 +83,7 @@ impl GlRender {
             programs: programs,
 
             mesh_counter: GpuMesh::initial(),
+            texture_counter: GpuTexture::initial(),
             mesh_instance_counter: MeshInstanceId::initial(),
             anchor_counter: AnchorId::initial(),
             camera_counter: CameraId::initial(),
@@ -163,13 +181,14 @@ impl GlRender {
         for (name, property) in material.properties() {
             match *property {
                 MaterialProperty::Color(ref color) => {
-                    draw_builder.uniform(name, *color.as_array());
+                    draw_builder.uniform::<[f32; 4]>(name, color.into());
                 },
                 MaterialProperty::F32(value) => {
                     draw_builder.uniform(name, value);
                 },
-                MaterialProperty::Texture(ref _texture) => {
-                    unimplemented!();
+                MaterialProperty::Texture(ref texture) => {
+                    let gl_texture = self.textures.get(texture).expect("No such texture exists");
+                    draw_builder.uniform(name, gl_texture);
                 },
             }
         }
@@ -275,10 +294,33 @@ impl Renderer for GlRender {
 
         // Configure vertex attributes.
         let position = mesh.position();
-        vertex_buffer.set_attrib_f32("position", 4, position.stride, position.offset);
+        vertex_buffer.set_attrib_f32(
+            "position",
+            AttribLayout {
+                elements: position.elements,
+                stride: position.stride,
+                offset: position.offset,
+            });
 
         if let Some(normal) = mesh.normal() {
-            vertex_buffer.set_attrib_f32("normal", 3, normal.stride, normal.offset);
+            vertex_buffer.set_attrib_f32(
+                "normal",
+                AttribLayout {
+                    elements: normal.elements,
+                    stride: normal.stride,
+                    offset: normal.offset
+                });
+        }
+
+        // TODO: Support multiple texcoords.
+        if let Some(texcoord) = mesh.texcoord().first() {
+            vertex_buffer.set_attrib_f32(
+                "texcoord",
+                AttribLayout {
+                    elements: texcoord.elements,
+                    stride: texcoord.stride,
+                    offset: texcoord.offset,
+                });
         }
 
         let mut index_buffer = IndexBuffer::new();
@@ -298,6 +340,60 @@ impl Renderer for GlRender {
             });
 
         mesh_id
+    }
+
+    fn register_texture(&mut self, texture: &Texture2d) -> GpuTexture {
+        let (format, internal_format) = match texture.format() {
+            DataFormat::Rgb => (TextureFormat::Rgb, TextureInternalFormat::Rgb),
+            DataFormat::Rgba => (TextureFormat::Rgba, TextureInternalFormat::Rgba),
+            DataFormat::Bgr => (TextureFormat::Bgr, TextureInternalFormat::Rgb),
+            DataFormat::Bgra => (TextureFormat::Bgra, TextureInternalFormat::Rgba),
+        };
+
+        // Create the Texture2d from the texture data.
+        let texture_result = match texture.data() {
+            &TextureData::f32(ref data) => {
+                GlTexture2d::new(
+                    format,
+                    internal_format,
+                    texture.width(),
+                    texture.height(),
+                    &*data)
+            },
+            &TextureData::u8(ref data) => {
+                GlTexture2d::new(
+                    format,
+                    internal_format,
+                    texture.width(),
+                    texture.height(),
+                    &*data)
+            },
+            &TextureData::u8x3(ref data) => {
+                GlTexture2d::new(
+                    format,
+                    internal_format,
+                    texture.width(),
+                    texture.height(),
+                    &*data)
+            },
+            &TextureData::u8x4(ref data) => {
+                GlTexture2d::new(
+                    format,
+                    internal_format,
+                    texture.width(),
+                    texture.height(),
+                    &*data)
+            },
+        };
+        let gl_texture = texture_result.expect("Unable to send texture to GPU");
+
+        // Register the mesh internally.
+        let texture_id = self.texture_counter.next();
+
+        let old = self.textures.insert(texture_id, gl_texture);
+        assert!(old.is_none());
+
+        texture_id
     }
 
     fn register_mesh_instance(&mut self, mesh_instance: MeshInstance) -> MeshInstanceId {

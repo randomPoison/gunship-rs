@@ -19,11 +19,11 @@
 //! the color as a property. Then we can make two materials, both using the same shader but one set
 //! to show red and the other set to show blue.
 
-use GpuTexture;
 use math::*;
 use shader::Shader;
 use std::collections::HashMap;
 use std::collections::hash_map::Iter as HashMapIter;
+use texture::GpuTexture;
 
 /// Represents combination of a shader and set values for its uniform properties.
 #[derive(Debug, Clone)]
