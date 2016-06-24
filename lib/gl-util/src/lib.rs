@@ -15,7 +15,9 @@ use gl::{
     BufferTarget,
     BufferUsage,
     ClearBufferMask,
-    debug_callback,
+    DebugSeverity,
+    DebugSource,
+    DebugType,
     False,
     GlType,
     IndexType,
@@ -49,6 +51,31 @@ pub mod texture;
 
 /// Initializes global OpenGL state and creates the OpenGL context needed to perform rendering.
 pub fn init() {
+    pub extern "C" fn debug_callback(
+        source: DebugSource,
+        message_type: DebugType,
+        _id: u32,
+        severity: DebugSeverity,
+        _length: i32,
+        message: *const u8,
+        _user_param: *mut ()
+    ) {
+        use std::ffi::CStr;
+
+        let message = unsafe { CStr::from_ptr(message as *const _) }.to_string_lossy();
+
+        println!(
+            r#"Recieved some kind of debug message.
+            source: {:?},
+            type: {:?},
+            severity: {:?},
+            message: {}"#,
+            source,
+            message_type,
+            severity,
+            message);
+    }
+
     unsafe {
         gl::create_context();
         gl::enable(ServerCapability::DebugOutput);

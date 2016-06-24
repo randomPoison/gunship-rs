@@ -1990,22 +1990,3 @@ glGetError:
 glGetString:
     fn get_string(name: StringName) -> *const i8
 */
-
-pub extern "C" fn debug_callback(
-    source: DebugSource,
-    message_type: DebugType,
-    _id: UInt,
-    severity: DebugSeverity,
-    _length: SizeI,
-    message: *const u8,
-    _user_param: *mut ()
-) {
-    use std::ffi::CStr;
-
-    println!(
-        "Recieved some kind of debug message. source: {:?}, type: {:?}, severity: {:?}, message: {:?}",
-        source,
-        message_type,
-        severity,
-        unsafe { CStr::from_ptr(message as *const _) })
-}
