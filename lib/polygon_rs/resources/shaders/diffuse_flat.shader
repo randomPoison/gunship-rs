@@ -1,19 +1,19 @@
 program vert {
-    uniform mat4 modelViewProjection;
+    uniform mat4 model_view_projection;
 
-    in vec4 vertexPosition;
+    in vec4 vertex_position;
 
     void main() {
-        gl_Position = modelViewProjection * vertexPosition;
+        gl_Position = model_view_projection * vertex_position;
     }
 }
 
 program frag {
-    uniform vec4 surfaceDiffuse;
+    uniform vec4 surface_color;
 
     out vec4 colorOut;
 
     void main() {
-        colorOut = surfaceDiffuse;
+        colorOut = surface_color;
     }
 }

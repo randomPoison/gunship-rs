@@ -17,7 +17,7 @@ fn main() {
     let mut renderer = RendererBuilder::new().build();
 
     // Build a triangle mesh.
-    let mesh = utils::load_mesh("examples/epps_head.obj").unwrap();
+    let mesh = utils::load_mesh("resources/meshes/epps_head.obj").unwrap();
 
     // Send the mesh to the GPU.
     let gpu_mesh = renderer.register_mesh(&mesh);
@@ -30,7 +30,7 @@ fn main() {
     // Create a mesh instance, attach it to the anchor, and register it with the renderer.
     let mut mesh_instance = MeshInstance::new(gpu_mesh, renderer.default_material());
     mesh_instance.set_anchor(mesh_anchor_id);
-    mesh_instance.material_mut().set_f32("surfaceShininess", 5.0);
+    mesh_instance.material_mut().set_f32("surface_shininess", 5.0);
     let instance_id = renderer.register_mesh_instance(mesh_instance);
 
     // Create a camera and an anchor for it.
@@ -80,7 +80,7 @@ fn main() {
             let mesh_instance = renderer.get_mesh_instance_mut(instance_id).unwrap();
             mesh_instance
                 .material_mut()
-                .set_color("surfaceDiffuse", color);
+                .set_color("surface_color", color);
         }
 
         // Render the mesh.

@@ -59,9 +59,16 @@ impl Vertex {
     }
 }
 
+/// A struct describing the single attribute within a mesh's vertex buffer.
 #[derive(Debug, Clone, Copy)]
 pub struct VertexAttribute {
+    /// The number of elements in the attribute.
+    pub elements: usize,
+
+    /// The offset in elements from the start of the buffer.
     pub offset: usize,
+
+    /// The stride in elements between consecutive vertices.
     pub stride: usize,
 }
 
@@ -207,16 +214,18 @@ impl MeshBuilder {
 
         // Setup position data.
         let position_attrib = VertexAttribute {
+            elements: 4,
             offset: 0,
-            stride: 4,
+            stride: 0,
         };
         vertex_data.extend(Point::as_ref(&*self.position_data));
 
         // Setup normal data.
         let normal_attrib = if self.normal_data.len() > 0 {
             let attrib = VertexAttribute {
+                elements: 3,
                 offset: vertex_data.len(),
-                stride: 3,
+                stride: 0,
             };
             vertex_data.extend(Vector3::as_ref(&*self.normal_data));
 
@@ -227,10 +236,11 @@ impl MeshBuilder {
 
         // Setup texcoord data.
         let mut texcoord_attribs = Vec::new();
-        {
+        if self.texcoord_data.len() > 0 {
             texcoord_attribs.push(VertexAttribute {
+                elements: 2,
                 offset: vertex_data.len(),
-                stride: 2,
+                stride: 0,
             });
             vertex_data.extend(Vector2::as_ref(&*self.texcoord_data));
         }

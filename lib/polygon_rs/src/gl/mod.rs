@@ -29,6 +29,7 @@ use self::gl_util::texture::{
 use shader::Shader;
 use std::collections::HashMap;
 use std::str;
+use texture::*;
 
 pub mod shader;
 
@@ -69,9 +70,9 @@ impl GlRender {
         programs.insert(default_shader, default_program);
 
         let mut default_material = Material::new(default_shader);
-        default_material.set_color("surfaceDiffuse", Color::new(0.25, 0.25, 0.25, 1.0));
-        default_material.set_color("surfaceSpecular", Color::new(1.0, 1.0, 1.0, 1.0));
-        default_material.set_f32("surfaceShininess", 3.0);
+        default_material.set_color("surface_color", Color::new(0.25, 0.25, 0.25, 1.0));
+        default_material.set_color("surface_specular", Color::new(1.0, 1.0, 1.0, 1.0));
+        default_material.set_f32("surface_shininess", 3.0);
 
         GlRender {
             meshes: HashMap::new(),
@@ -130,18 +131,19 @@ impl GlRender {
         .depth_test(Comparison::Less)
 
         // Associate vertex attributes with shader program variables.
-        .map_attrib_name("position", "vertexPosition")
-        .map_attrib_name("normal", "vertexNormal")
+        .map_attrib_name("position", "vertex_position")
+        .map_attrib_name("normal", "vertex_normal")
+        .map_attrib_name("texcoord", "vertex_uv0")
 
         // Set uniform transforms.
         .uniform(
-            "modelTransform",
+            "model_transform",
             GlMatrix {
                 data: model_transform.raw_data(),
                 transpose: true,
             })
         .uniform(
-            "normalTransform",
+            "normal_transform",
             GlMatrix {
                 data: view_normal_transform.raw_data(),
                 transpose: true,
@@ -153,7 +155,7 @@ impl GlRender {
                 transpose: true,
             })
         .uniform(
-            "modelViewTransform",
+            "model_view_transform",
             GlMatrix {
                 data: model_view_transform.raw_data(),
                 transpose: true,
@@ -165,14 +167,14 @@ impl GlRender {
                 transpose: true,
             })
         .uniform(
-            "modelViewProjection",
+            "model_view_projection",
             GlMatrix {
                 data: model_view_projection.raw_data(),
                 transpose: true,
             })
 
         // Set uniform colors.
-        .uniform("globalAmbient", *Color::new(0.0, 0.0, 0.0, 1.0).as_array())
+        .uniform("global_ambient", [0.1, 0.1, 0.1, 1.0])
 
         // Other uniforms.
         .uniform("cameraPosition", *camera_anchor.position().as_array());
@@ -196,8 +198,8 @@ impl GlRender {
         // Render first light without blending so it overrides any objects behind it.
         // We also render it with light strength 0 so it only renders ambient color.
         draw_builder
-            .uniform("lightPosition", *Point::origin().as_array())
-            .uniform("lightStrength", 0.0)
+            .uniform("light_position", *Point::origin().as_array())
+            .uniform("light_strength", 0.0)
             .draw();
 
         // Render the rest of the lights with blending on the the depth check set to
@@ -213,16 +215,16 @@ impl GlRender {
                 None => panic!("Cannot render light if it's not attached to an anchor"),
             };
             let light_position_view = light_anchor.position() * view_transform;
-            draw_builder.uniform("lightPosition", *light_position_view.as_array());
+            draw_builder.uniform("light_position", *light_position_view.as_array());
 
             // Send common light data.
-            draw_builder.uniform("lightColor", *light.color.as_array());
-            draw_builder.uniform("lightStrength", light.strength);
+            draw_builder.uniform::<[f32; 4]>("light_color", light.color.into());
+            draw_builder.uniform("light_strength", light.strength);
 
             // Send data specific to the current type of light.
             match light.data {
                 LightData::Point(PointLight { radius }) => {
-                    draw_builder.uniform("lightRadius", radius);
+                    draw_builder.uniform("light_radius", radius);
                 },
             }
 

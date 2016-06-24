@@ -8,9 +8,8 @@ use polygon::camera::*;
 use polygon::light::*;
 use polygon::math::*;
 use polygon::mesh_instance::*;
-use polygon::geometry::mesh::*;
 
-mod utils;
+pub mod utils;
 
 fn main() {
     // Open a window and create the renderer instance.
@@ -18,7 +17,7 @@ fn main() {
     let mut renderer = RendererBuilder::new().build();
 
     // Build a triangle mesh.
-    let mesh = utils::load_mesh("examples/epps_head.obj").unwrap();
+    let mesh = utils::load_mesh("resources/meshes/epps_head.obj").unwrap();
 
     // Send the mesh to the GPU.
     let gpu_mesh = renderer.register_mesh(&mesh);
@@ -42,7 +41,7 @@ fn main() {
     let light_anchor_id = renderer.register_anchor(Anchor::new());
     let mut light = Light::point(5.0, 3.0, Color::new(1.0, 0.0, 1.0, 1.0));
     light.set_anchor(light_anchor_id);
-    let light_id = renderer.register_light(light);
+    renderer.register_light(light);
 
     let mut camera = Camera::default();
     camera.set_anchor(camera_anchor_id);
