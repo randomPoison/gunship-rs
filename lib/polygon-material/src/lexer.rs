@@ -6,6 +6,7 @@ use super::token::*;
 pub struct Lexer<'a> {
     source: &'a str,
     chars: Peekable<CharIndices<'a>>,
+    is_done: bool,
 }
 
 pub type Result<T> = ::std::result::Result<T, Error>;
@@ -15,6 +16,7 @@ impl<'a> Lexer<'a> {
         Lexer {
             source: source,
             chars: source.char_indices().peekable(),
+            is_done: false,
         }
     }
 
@@ -34,6 +36,8 @@ impl<'a> Lexer<'a> {
             match start {
                 Some(index_char) => index_char,
                 None => {
+                    self.is_done = true;
+
                     // Never found a non-whitespace character, so we're at the end of the file.
                     let span = Span::new(self.source.len(), self.source.len());
                     return Ok((Token::EndOfFile, span))
@@ -67,13 +71,24 @@ impl<'a> Lexer<'a> {
             '=' => Token::Eq,
             ':' => Token::Colon,
 
-            _ => return Err(Error {
-                span: Span::new(start_index, start_index + 1),
-                data: ErrorData::IllegalSymbol(character),
-            }),
+            _ => {
+                self.is_done = true;
+
+                return Err(Error {
+                    span: Span::new(start_index, start_index + 1),
+                    data: ErrorData::IllegalSymbol(character),
+                });
+            },
         };
 
         Ok((token, Span::new(start_index, start_index + 1)))
+    }
+
+    /// Checks if the lexer is done.
+    ///
+    /// Returns `true` if the lexer reached the end of the file or found a token error.
+    pub fn is_done(&self) -> bool {
+        self.is_done
     }
 
     fn parse_ident(&mut self, start_index: usize) -> Result<(Token, Span)> {
@@ -118,6 +133,7 @@ impl<'a> Lexer<'a> {
         }
 
         // Uh-oh, we got to the end and never closed the braces.
+        self.is_done = true;
         Err(Error {
             span: Span::new(start_index, self.source.len()),
             data: ErrorData::UnclosedProgramLiteral,
@@ -126,13 +142,13 @@ impl<'a> Lexer<'a> {
 }
 
 /// Represents a lex error.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Error {
-    span: Span,
-    data: ErrorData,
+    pub span: Span,
+    pub data: ErrorData,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ErrorData {
     IllegalSymbol(char),
     UnclosedProgramLiteral,
