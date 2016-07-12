@@ -98,8 +98,8 @@ impl<'a> Lexer<'a> {
                 let span = Span::new(start_index, end_index);
 
                 let token = match word {
-                    "property" => Token::Keyword(Keyword::Property),
-                    "program" => Token::Keyword(Keyword::Program),
+                    "property" => Token::Property,
+                    "program" => Token::Program,
                     _ => Token::Identifier,
                 };
 
@@ -125,7 +125,7 @@ impl<'a> Lexer<'a> {
                     depth -= 1;
                     if depth == 0 {
                         // We're at the end.
-                        return Ok((Token::Program, Span::new(start_index + 1, end_index)));
+                        return Ok((Token::ProgramLiteral, Span::new(start_index + 1, end_index)));
                     }
                 },
                 _ => {}
@@ -142,13 +142,13 @@ impl<'a> Lexer<'a> {
 }
 
 /// Represents a lex error.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Error {
     pub span: Span,
     pub data: ErrorData,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ErrorData {
     IllegalSymbol(char),
     UnclosedProgramLiteral,

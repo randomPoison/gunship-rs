@@ -1,14 +1,11 @@
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Keyword {
-    Property,
-    Program,
-}
+use std::ops::Index;
 
 /// Represents a token in a material source file.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Token {
     /* Keywords */
-    Keyword(Keyword),
+    Program,
+    Property,
 
     /* Operator symbols */
     Eq,
@@ -20,7 +17,7 @@ pub enum Token {
     CloseCurly,
 
     /* Literal */
-    Program,
+    ProgramLiteral,
 
     /* Name components */
     Identifier,
@@ -45,5 +42,13 @@ impl Span {
             begin: begin,
             end: end,
         }
+    }
+}
+
+impl Index<Span> for str {
+    type Output = str;
+
+    fn index(&self, index: Span) -> &str {
+        &self[index.begin..index.end]
     }
 }
