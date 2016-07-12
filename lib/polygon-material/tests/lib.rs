@@ -3,7 +3,7 @@
 extern crate polygon_material as material;
 
 use material::lexer::{Error as TokenError, ErrorData, Lexer};
-use material::material_source::{PropertySource, ProgramSource, MaterialSource, Error as MaterialSourceError};
+use material::material_source::{PropertySource, PropertyType, ProgramSource, MaterialSource, Error as MaterialSourceError};
 use material::parser::Error as ParseError;
 use material::token::*;
 
@@ -61,16 +61,25 @@ fn lex_properties() {
         Ok((Token::EndOfFile, "")),
     ];
 
-    let EXPECTED_MATERIAL = Ok(MaterialSource {
+    let expected_material = Ok(MaterialSource {
         properties: vec![
-            PropertySource::Color,
-            PropertySource::f32,
-            PropertySource::Vector3,
+            PropertySource {
+                name: "surface_color".to_string(),
+                property_type: PropertyType::Color,
+            },
+            PropertySource {
+                name: "another_thing".to_string(),
+                property_type: PropertyType::f32,
+            },
+            PropertySource {
+                name: "some_vec".to_string(),
+                property_type: PropertyType::Vector3,
+            }
         ],
         programs: vec![],
     });
 
-    verify_lexer(SOURCE, EXPECTED_TOKENS, EXPECTED_MATERIAL);
+    verify_lexer(SOURCE, EXPECTED_TOKENS, expected_material);
 }
 
 #[test]
@@ -86,12 +95,12 @@ fn lex_sybmol_error() {
         Err((ErrorData::IllegalSymbol('&'), "&")),
     ];
 
-    let EXPECTED_MATERIAL = Err(MaterialSourceError::ParseError(ParseError::TokenError(TokenError {
-        span: Span::new(0, 0),
+    let expected_material = Err(MaterialSourceError::ParseError(ParseError::TokenError(TokenError {
+        span: Span::new(24, 25),
         data: ErrorData::IllegalSymbol('&'),
     })));
 
-    verify_lexer(SOURCE, EXPECTED_TOKENS, EXPECTED_MATERIAL);
+    verify_lexer(SOURCE, EXPECTED_TOKENS, expected_material);
 }
 
 #[test]
@@ -118,7 +127,7 @@ fn lex_program() {
         Ok((Token::EndOfFile, "")),
     ];
 
-    let EXPECTED_MATERIAL = Ok(MaterialSource {
+    let expected_material = Ok(MaterialSource {
         properties: vec![],
         programs: vec![
             ProgramSource::Vertex(" foo.bar(); ".to_string()),
@@ -126,7 +135,7 @@ fn lex_program() {
         ],
     });
 
-    verify_lexer(SOURCE, EXPECTED_TOKENS, EXPECTED_MATERIAL);
+    verify_lexer(SOURCE, EXPECTED_TOKENS, expected_material);
 }
 
 #[test]
@@ -151,10 +160,10 @@ fn lex_program_error() {
         Err((ErrorData::UnclosedProgramLiteral, "{\n            fn program keyworkds do_stuff() {\n                bar.foo();\n            }\n    ")),
     ];
 
-    let EXPECTED_MATERIAL = Err(MaterialSourceError::ParseError(ParseError::TokenError(TokenError {
-        span: Span::new(0, 0),
+    let expected_material = Err(MaterialSourceError::ParseError(ParseError::TokenError(TokenError {
+        span: Span::new(59, 152),
         data: ErrorData::UnclosedProgramLiteral,
     })));
 
-    verify_lexer(SOURCE, EXPECTED_TOKENS, EXPECTED_MATERIAL);
+    verify_lexer(SOURCE, EXPECTED_TOKENS, expected_material);
 }
