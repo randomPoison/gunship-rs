@@ -51,10 +51,10 @@ pub mod texture;
 
 /// Initializes global OpenGL state and creates the OpenGL context needed to perform rendering.
 pub fn init() {
-    pub extern "C" fn debug_callback(
+    pub extern "system" fn debug_callback(
         source: DebugSource,
         message_type: DebugType,
-        _id: u32,
+        object_id: u32,
         severity: DebugSeverity,
         _length: i32,
         message: *const u8,
@@ -64,14 +64,16 @@ pub fn init() {
 
         let message = unsafe { CStr::from_ptr(message as *const _) }.to_string_lossy();
 
-        println!(
+        panic!(
             r#"Recieved some kind of debug message.
             source: {:?},
             type: {:?},
+            object_id: 0x{:x},
             severity: {:?},
             message: {}"#,
             source,
             message_type,
+            object_id,
             severity,
             message);
     }
@@ -236,6 +238,7 @@ pub struct DrawBuilder<'a> {
     blend: Option<(SourceFactor, DestFactor)>,
     uniforms: HashMap<UniformLocation, UniformValue<'a>>,
 
+    // TODO: This is dumb and isn't necessary, get rid of it.
     active_texture: Cell<i32>,
 }
 
@@ -331,8 +334,8 @@ impl<'a> DrawBuilder<'a> {
                 layout.elements as i32,
                 GlType::Float,
                 False,
-                (layout.stride * mem::size_of::<f32>()) as i32,
-                layout.offset * mem::size_of::<f32>());
+                (layout.stride * mem::size_of::<f32>()) as i32, // TODO: Correctly handle non-f32
+                layout.offset * mem::size_of::<f32>());         // attrib data types.
 
             gl::bind_vertex_array(VertexArrayName::null());
             gl::bind_buffer(BufferTarget::Array, BufferName::null());
@@ -402,6 +405,8 @@ impl<'a> DrawBuilder<'a> {
     ) -> &mut DrawBuilder<'a>
         where T: Into<UniformValue<'a>>
     {
+        let value = value.into();
+
         let program =
             self.program.expect("Cannot set a uniform without a shader program");
         let uniform_location = match program.get_uniform_location(name) {
@@ -410,7 +415,7 @@ impl<'a> DrawBuilder<'a> {
         };
 
         // Add uniform to the uniform map.
-        self.uniforms.insert(uniform_location, value.into());
+        self.uniforms.insert(uniform_location, value);
 
         self
     }
@@ -493,10 +498,16 @@ impl<'a> DrawBuilder<'a> {
 
     fn apply(&self, uniform: &UniformValue, location: UniformLocation) {
         match *uniform {
-            UniformValue::F32x1(value) => unsafe {
+            UniformValue::f32(value) => unsafe {
                 gl::uniform_f32x1(location, value);
             },
-            UniformValue::F32x4((x, y, z, w)) => unsafe {
+            UniformValue::f32x2((x, y)) => unsafe {
+                gl::uniform_f32x2(location, x, y);
+            },
+            UniformValue::f32x3((x, y, z)) => unsafe {
+                gl::uniform_f32x3(location, x, y, z);
+            },
+            UniformValue::f32x4((x, y, z, w)) => unsafe {
                 gl::uniform_f32x4(location, x, y, z, w);
             },
             UniformValue::Matrix(ref matrix) => match matrix.data.len() {
@@ -507,7 +518,13 @@ impl<'a> DrawBuilder<'a> {
                         matrix.transpose.into(),
                         matrix.data.as_ptr())
                 },
-                9 => unimplemented!(),
+                9 => unsafe {
+                    gl::uniform_matrix_f32x3v(
+                        location,
+                        1,
+                        matrix.transpose.into(),
+                        matrix.data.as_ptr())
+                },
                 _ => panic!("Unsupported matrix data length: {}", matrix.data.len()),
             },
             UniformValue::Texture(texture) => {
@@ -534,28 +551,62 @@ impl<'a> Drop for DrawBuilder<'a> {
 }
 
 /// Represents a value for a uniform variable in a shader program.
+#[derive(Debug)]
+#[allow(bad_style)]
 pub enum UniformValue<'a> {
-    F32x1(f32),
-    F32x4((f32, f32, f32, f32)),
+    f32(f32),
+    f32x2((f32, f32)),
+    f32x3((f32, f32, f32)),
+    f32x4((f32, f32, f32, f32)),
     Matrix(GlMatrix<'a>),
     Texture(&'a Texture2d),
 }
 
 impl<'a> From<f32> for UniformValue<'a> {
     fn from(value: f32) -> UniformValue<'a> {
-        UniformValue::F32x1(value)
+        UniformValue::f32(value)
+    }
+}
+
+impl<'a> From<(f32, f32)> for UniformValue<'a> {
+    fn from(value: (f32, f32)) -> UniformValue<'a> {
+        UniformValue::f32x2(value)
+    }
+}
+
+impl<'a> From<(f32, f32, f32)> for UniformValue<'a> {
+    fn from(value: (f32, f32, f32)) -> UniformValue<'a> {
+        UniformValue::f32x3(value)
     }
 }
 
 impl<'a> From<(f32, f32, f32, f32)> for UniformValue<'a> {
     fn from(value: (f32, f32, f32, f32)) -> UniformValue<'a> {
-        UniformValue::F32x4(value)
+        UniformValue::f32x4(value)
+    }
+}
+
+impl<'a> From<[f32; 1]> for UniformValue<'a> {
+    fn from(value: [f32; 1]) -> UniformValue<'a> {
+        UniformValue::f32(value[0])
+    }
+}
+
+impl<'a> From<[f32; 2]> for UniformValue<'a> {
+    fn from(value: [f32; 2]) -> UniformValue<'a> {
+        UniformValue::f32x2((value[0], value[1]))
+    }
+}
+
+impl<'a> From<[f32; 3]> for UniformValue<'a> {
+    fn from(value: [f32; 3]) -> UniformValue<'a> {
+        UniformValue::f32x3((value[0], value[1], value[2]))
     }
 }
 
 impl<'a> From<[f32; 4]> for UniformValue<'a> {
     fn from(value: [f32; 4]) -> UniformValue<'a> {
-        UniformValue::F32x4((value[0], value[1], value[2], value[3]))
+        UniformValue::f32x4((value[0], value[1], value[2], value[3]))
     }
 }
 
@@ -571,6 +622,7 @@ impl<'a> From<&'a Texture2d> for UniformValue<'a> {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct GlMatrix<'a> {
     pub data: &'a [f32],
     pub transpose: bool,

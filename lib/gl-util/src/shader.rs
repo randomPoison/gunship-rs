@@ -12,13 +12,14 @@ pub struct Shader {
 }
 
 impl Shader {
-    pub fn new(source: &str, shader_type: ShaderType) -> Result<Shader, ShaderError> {
+    pub fn new<T: AsRef<str>>(source: T, shader_type: ShaderType) -> Result<Shader, ShaderError> {
         // Create the shader object.
         let shader_object = unsafe { gl::create_shader(shader_type) };
         if shader_object.is_null() {
             return Err(ShaderError::CreateShaderError);
         }
 
+        let source = source.as_ref();
         let source_ptr = source.as_ptr();
         let len = source.len() as i32;
 
