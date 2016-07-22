@@ -136,6 +136,56 @@ pub enum Comparison {
 
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum DebugMessageId {
+    GL_BUFFER = 0x82E0,
+    GL_SHADER = 0x82E1,
+    GL_PROGRAM = 0x82E2,
+    GL_VERTEX_ARRAY = 0x8074,
+    GL_QUERY = 0x82E3,
+    GL_PROGRAM_PIPELINE = 0x82E4,
+    GL_TRANSFORM_FEEDBACK = 0x8E22,
+    GL_SAMPLER = 0x82E6,
+    GL_TEXTURE = 0x1702,
+    GL_RENDERBUFFER = 0x8D41,
+    GL_FRAMEBUFFER = 0x8D40,
+}
+
+
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum DebugSeverity {
+    High = 0x9146,
+    Medium = 0x9147,
+    Low = 0x9148,
+}
+
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum DebugSource {
+    API = 0x8246,
+    WindowSystem = 0x8247,
+    ShaderCompiler = 0x8248,
+    ThirdParty = 0x8249,
+    Application = 0x824A,
+    Other = 0x824B,
+}
+
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum DebugType {
+    Error = 0x824C,
+    DeprecatedBehavior = 0x824D,
+    UndefinedBehavior = 0x824E,
+    Portability = 0x824F,
+    Performance = 0x8250,
+    Other = 0x8251,
+    Marker = 0x8268,
+    PushGroup = 0x8269,
+    PopGroup = 0x826A,
+}
+
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum DestFactor {
     Zero = 0,
     One = 1,
@@ -160,6 +210,18 @@ pub enum DrawMode {
     Quads = 0x0007,
     // GL_QUAD_STRIP
     // GL_POLYGON
+}
+
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ErrorCode {
+    NoError = 0,
+    InvalidEnum = 0x0500,
+    InvalidValue = 0x0501,
+    InvalidOperation = 0x0502,
+    StackOverflow = 0x0503,
+    StackUnderflow = 0x0504,
+    OutOfMemory = 0x0505,
 }
 
 #[repr(u32)]
@@ -326,6 +388,15 @@ pub enum SourceFactor {
     DestColor = 0x0306,
     OneMinusDestColor = 0x0307,
     SourceAlphaSaturate = 0x0308,
+}
+
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum StringName {
+    Vendor = 0x1F00,
+    Renderer = 0x1F01,
+    Version = 0x1F02,
+    ShadingLanguageVersion = 0x8B8C,
 }
 
 #[repr(u32)]
@@ -560,60 +631,4 @@ impl VertexArrayName {
 pub enum WindingOrder {
     Clockwise = 0x0900,
     CounterClockwise = 0x0901,
-}
-
-// =============== OLD UNSORTED TYPES ========================== //
-
-#[repr(u32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum ErrorCode {
-    NoError          = 0,
-    InvalidEnum      = 0x0500,
-    InvalidValue     = 0x0501,
-    InvalidOperation = 0x0502,
-    StackOverflow    = 0x0503,
-    StackUnderflow   = 0x0504,
-    OutOfMemory      = 0x0505,
-}
-
-#[repr(u32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum StringName {
-    Vendor                 = 0x1F00,
-    Renderer               = 0x1F01,
-    Version                = 0x1F02,
-    ShadingLanguageVersion = 0x8B8C,
-}
-
-#[repr(u32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum DebugSeverity {
-    High   = 0x9146,
-    Medium = 0x9147,
-    Low    = 0x9148,
-}
-
-#[repr(u32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum DebugSource {
-    API            = 0x8246,
-    WindowSystem   = 0x8247,
-    ShaderCompiler = 0x8248,
-    ThirdParty     = 0x8249,
-    Application    = 0x824A,
-    Other          = 0x824B,
-}
-
-#[repr(u32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum DebugType {
-    Error              = 0x824C,
-    DeprecatedBehavior = 0x824D,
-    UndefinedBehavior  = 0x824E,
-    Portability        = 0x824F,
-    Performance        = 0x8250,
-    Other              = 0x8251,
-    Marker             = 0x8268,
-    PushGroup          = 0x8269,
-    PopGroup           = 0x826A,
 }

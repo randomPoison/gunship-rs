@@ -34,6 +34,9 @@ pub use self::platform::swap_buffers;
 /// the various functions that are part of the OpenGL API we must load pointers to those functions.
 /// This macro generates the necessary boilerplate for loading and stashing those pointers, as well
 /// as handling failure when those pointers fail to load (i.e. panicking).
+///
+/// TODO: Add a variant where the same gl proc can be mapped to multiple rust functions to improve
+/// type safety specification.
 macro_rules! gl_proc {
     ( $proc_name:ident:
         $( #[$attr:meta] )* fn $fn_name:ident( $( $arg:ident : $arg_ty:ty ),* ) $( -> $result:ty )* ) => {
@@ -585,9 +588,11 @@ gl_proc!(glCullFace:
     ///   lines are drawn.
     fn cull_face(mode: Face));
 
+pub type DebugMessageCallback = extern "system" fn(DebugSource, DebugType, UInt, DebugSeverity, SizeI, *const u8, *mut ());
+
 gl_proc!(glDebugMessageCallback:
     fn debug_message_callback(
-        callback: extern "C" fn(DebugSource, DebugType, UInt, DebugSeverity, SizeI, *const u8, *mut ()),
+        callback: DebugMessageCallback,
         user_param: *mut ()
     ));
 
@@ -1248,6 +1253,129 @@ gl_proc!(glUniform1f:
     ///   variable will not be changed.
     fn uniform_f32x1(location: UniformLocation, value: f32));
 
+gl_proc!(glUniform2f:
+    /// Specify the value of a uniform variable for the current program object.
+    ///
+    /// [Wiki page](https://www.opengl.org/wiki/GLAPI/glUniform)
+    ///
+    /// Core since version 2.0
+    ///
+    /// Modifies the value of a uniform variable. The location of the uniform variable to be
+    /// modified is specified by `location​`, which should be a value returned by
+    /// `get_uniform_location`​. `uniform_f32x2` operates on the program object that was made part
+    /// of current state by calling `use_program`.
+    ///
+    /// The command `uniform_f32x2` is used to change the value of the uniform variable specified by
+    /// `location​` using the value passed as arguments. The number specified in the command should
+    /// match the number of components in the data type of the specified uniform variable (i.e.
+    /// `uniform_f32x2` should be used to set a `vec2` variable).
+    ///
+    /// All active uniform variables defined in a program object are initialized to 0 when the
+    /// program object is linked successfully. They retain the values assigned to them by a call
+    /// to `uniform_*` until the next successful link operation occurs on the program object,
+    /// when they are once again initialized to 0.
+    ///
+    /// # Notes
+    ///
+    /// - `uniform_i32x1` and `uniform_i32v` are the only two functions that may be used to load
+    ///   uniform variables defined as opaque types. Loading opaque types with any other function
+    ///   will result in a `GL_INVALID_OPERATION` error.
+    /// - If count​ is greater than 1 and the indicated uniform variable is not an array, a
+    ///   `GL_INVALID_OPERATION` error is generated and the specified uniform variable will remain
+    ///   unchanged.
+    /// - Other than the preceding exceptions, if the type and size of the uniform variable as
+    ///   defined in the shader do not match the type and size specified in the name of the
+    ///   command used to load its value, a `GL_INVALID_OPERATION` error will be generated and
+    ///   the specified uniform variable will remain unchanged.
+    /// - If `location​` is a value other than -1 and it does not represent a valid uniform variable
+    ///   location in the current program object, an error will be generated, and no changes will
+    ///   be made to the uniform variable storage of the current program object. If location​ is
+    ///   equal to -1, the data passed in will be silently ignored and the specified uniform
+    ///   variable will not be changed.
+    fn uniform_f32x2(location: UniformLocation, x: f32, y: f32));
+
+gl_proc!(glUniform3f:
+    /// Specify the value of a uniform variable for the current program object.
+    ///
+    /// [Wiki page](https://www.opengl.org/wiki/GLAPI/glUniform)
+    ///
+    /// Core since version 2.0
+    ///
+    /// Modifies the value of a uniform variable. The location of the uniform variable to be
+    /// modified is specified by `location​`, which should be a value returned by
+    /// `get_uniform_location`​. `uniform_f32x3` operates on the program object that was made part
+    /// of current state by calling `use_program`.
+    ///
+    /// The command `uniform_f32x4` is used to change the value of the uniform variable specified by
+    /// `location​` using the value passed as arguments. The number specified in the command should
+    /// match the number of components in the data type of the specified uniform variable (i.e.
+    /// `uniform_f32x3` should be used to set a `vec3` variable).
+    ///
+    /// All active uniform variables defined in a program object are initialized to 0 when the
+    /// program object is linked successfully. They retain the values assigned to them by a call
+    /// to `uniform_*` until the next successful link operation occurs on the program object,
+    /// when they are once again initialized to 0.
+    ///
+    /// # Notes
+    ///
+    /// - `uniform_i32x1` and `uniform_i32v` are the only two functions that may be used to load
+    ///   uniform variables defined as opaque types. Loading opaque types with any other function
+    ///   will result in a `GL_INVALID_OPERATION` error.
+    /// - If count​ is greater than 1 and the indicated uniform variable is not an array, a
+    ///   `GL_INVALID_OPERATION` error is generated and the specified uniform variable will remain
+    ///   unchanged.
+    /// - Other than the preceding exceptions, if the type and size of the uniform variable as
+    ///   defined in the shader do not match the type and size specified in the name of the
+    ///   command used to load its value, a `GL_INVALID_OPERATION` error will be generated and
+    ///   the specified uniform variable will remain unchanged.
+    /// - If `location​` is a value other than -1 and it does not represent a valid uniform variable
+    ///   location in the current program object, an error will be generated, and no changes will
+    ///   be made to the uniform variable storage of the current program object. If location​ is
+    ///   equal to -1, the data passed in will be silently ignored and the specified uniform
+    ///   variable will not be changed.
+    fn uniform_f32x3(location: UniformLocation, x: f32, y: f32, z: f32));
+
+gl_proc!(glUniform4f:
+    /// Specify the value of a uniform variable for the current program object.
+    ///
+    /// [Wiki page](https://www.opengl.org/wiki/GLAPI/glUniform)
+    ///
+    /// Core since version 2.0
+    ///
+    /// Modifies the value of a uniform variable. The location of the uniform variable to be
+    /// modified is specified by `location​`, which should be a value returned by
+    /// `get_uniform_location`​. `uniform_f32x4` operates on the program object that was made part
+    /// of current state by calling `use_program`.
+    ///
+    /// The command `uniform_f32x4` is used to change the value of the uniform variable specified by
+    /// `location​` using the value passed as arguments. The number specified in the command should
+    /// match the number of components in the data type of the specified uniform variable (i.e.
+    /// `uniform_f32x4` should be used to set a `vec4` variable).
+    ///
+    /// All active uniform variables defined in a program object are initialized to 0 when the
+    /// program object is linked successfully. They retain the values assigned to them by a call
+    /// to `uniform_*` until the next successful link operation occurs on the program object,
+    /// when they are once again initialized to 0.
+    ///
+    /// # Notes
+    ///
+    /// - `uniform_i32x1` and `uniform_i32v` are the only two functions that may be used to load
+    ///   uniform variables defined as opaque types. Loading opaque types with any other function
+    ///   will result in a `GL_INVALID_OPERATION` error.
+    /// - If count​ is greater than 1 and the indicated uniform variable is not an array, a
+    ///   `GL_INVALID_OPERATION` error is generated and the specified uniform variable will remain
+    ///   unchanged.
+    /// - Other than the preceding exceptions, if the type and size of the uniform variable as
+    ///   defined in the shader do not match the type and size specified in the name of the
+    ///   command used to load its value, a `GL_INVALID_OPERATION` error will be generated and
+    ///   the specified uniform variable will remain unchanged.
+    /// - If `location​` is a value other than -1 and it does not represent a valid uniform variable
+    ///   location in the current program object, an error will be generated, and no changes will
+    ///   be made to the uniform variable storage of the current program object. If location​ is
+    ///   equal to -1, the data passed in will be silently ignored and the specified uniform
+    ///   variable will not be changed.
+    fn uniform_f32x4(location: UniformLocation, x: f32, y: f32, z: f32, w: f32));
+
 gl_proc!(glUniform1i:
     /// Specify the value of a uniform variable for the current program object.
     ///
@@ -1333,47 +1461,6 @@ gl_proc!(glUniform1iv:
     ///   equal to -1, the data passed in will be silently ignored and the specified uniform
     ///   variable will not be changed.
     fn uniform_i32x1v(location: UniformLocation, count: i32, data: *const i32));
-
-gl_proc!(glUniform4f:
-    /// Specify the value of a uniform variable for the current program object.
-    ///
-    /// [Wiki page](https://www.opengl.org/wiki/GLAPI/glUniform)
-    ///
-    /// Core since version 2.0
-    ///
-    /// Modifies the value of a uniform variable. The location of the uniform variable to be
-    /// modified is specified by `location​`, which should be a value returned by
-    /// `get_uniform_location`​. `uniform_f32x4` operates on the program object that was made part
-    /// of current state by calling `use_program`.
-    ///
-    /// The command `uniform_f32x4` is used to change the value of the uniform variable specified by
-    /// `location​` using the value passed as arguments. The number specified in the command should
-    /// match the number of components in the data type of the specified uniform variable (i.e.
-    /// `uniform_f32x4` should be used to set a `vec4` variable).
-    ///
-    /// All active uniform variables defined in a program object are initialized to 0 when the
-    /// program object is linked successfully. They retain the values assigned to them by a call
-    /// to `uniform_*` until the next successful link operation occurs on the program object,
-    /// when they are once again initialized to 0.
-    ///
-    /// # Notes
-    ///
-    /// - `uniform_i32x1` and `uniform_i32v` are the only two functions that may be used to load
-    ///   uniform variables defined as opaque types. Loading opaque types with any other function
-    ///   will result in a `GL_INVALID_OPERATION` error.
-    /// - If count​ is greater than 1 and the indicated uniform variable is not an array, a
-    ///   `GL_INVALID_OPERATION` error is generated and the specified uniform variable will remain
-    ///   unchanged.
-    /// - Other than the preceding exceptions, if the type and size of the uniform variable as
-    ///   defined in the shader do not match the type and size specified in the name of the
-    ///   command used to load its value, a `GL_INVALID_OPERATION` error will be generated and
-    ///   the specified uniform variable will remain unchanged.
-    /// - If `location​` is a value other than -1 and it does not represent a valid uniform variable
-    ///   location in the current program object, an error will be generated, and no changes will
-    ///   be made to the uniform variable storage of the current program object. If location​ is
-    ///   equal to -1, the data passed in will be silently ignored and the specified uniform
-    ///   variable will not be changed.
-    fn uniform_f32x4(location: UniformLocation, x: f32, y: f32, z: f32, w: f32));
 
 gl_proc!(glUniform4fv:
     /// Specify the value of a uniform variable for the current program object.
@@ -1475,6 +1562,64 @@ gl_proc!(glUniformMatrix4fv:
     ///   equal to -1, the data passed in will be silently ignored and the specified uniform
     ///   variable will not be changed.
     fn uniform_matrix_f32x4v(
+        uniform: UniformLocation,
+        count: i32,
+        transpose: Boolean,
+        values: *const f32));
+
+gl_proc!(glUniformMatrix3fv:
+    /// Specify the value of a uniform variable for the current program object.
+    ///
+    /// [Wiki page](https://www.opengl.org/wiki/GLAPI/glUniform)
+    ///
+    /// Core since version 2.0
+    ///
+    /// Modifies the value of a uniform variable. The location of the uniform variable to be
+    /// modified is specified by `location​`, which should be a value returned by
+    /// `get_uniform_location`​. `uniform_matrix_f32x3v` operates on the program object that was
+    /// made part of current state by calling `use_program`.
+    ///
+    /// The command `uniform_matrix_f32x3v` is used to modify a 3x3 matrix of `f32` values. If
+    /// `transpose​` is `False` each matrix is assumed to be supplied in column major order. If
+    /// transpose​ is `True` each matrix is assumed to be supplied in row major order. The `count​`
+    /// argument indicates the number of matrices to be passed. A count of 1 should be used if
+    /// modifying the value of a single matrix, and a count greater than 1 can be used to modify
+    /// an array of matrices.
+    ///
+    /// All active uniform variables defined in a program object are initialized to 0 when the
+    /// program object is linked successfully. They retain the values assigned to them by a call
+    /// to `uniform_*` until the next successful link operation occurs on the program object,
+    /// when they are once again initialized to 0.
+    ///
+    /// # Params
+    ///
+    /// - `location` - Specifies the location of the uniform value to be modified.
+    /// - `count` - Specifies the number of matrices that are to be modified. This should be 1 if
+    ///   the targeted uniform variable is not an array of matrices, and 1 or more if it is an
+    ///   array of matrices.
+    /// - `transpose` - Specifies whether to transpose the matrix as the values are loaded into
+    ///   the uniform variable.
+    /// - `values` - Specifies a pointer to an array of `count​` * 16 `f32` values that will be
+    ///   used to update the specified uniform variable.
+    ///
+    /// # Notes
+    ///
+    /// - `uniform_i32x1` and `uniform_i32v` are the only two functions that may be used to load
+    ///   uniform variables defined as opaque types. Loading opaque types with any other function
+    ///   will result in a `GL_INVALID_OPERATION` error.
+    /// - If count​ is greater than 1 and the indicated uniform variable is not an array, a
+    ///   `GL_INVALID_OPERATION` error is generated and the specified uniform variable will remain
+    ///   unchanged.
+    /// - Other than the preceding exceptions, if the type and size of the uniform variable as
+    ///   defined in the shader do not match the type and size specified in the name of the
+    ///   command used to load its value, a `GL_INVALID_OPERATION` error will be generated and
+    ///   the specified uniform variable will remain unchanged.
+    /// - If `location​` is a value other than -1 and it does not represent a valid uniform variable
+    ///   location in the current program object, an error will be generated, and no changes will
+    ///   be made to the uniform variable storage of the current program object. If location​ is
+    ///   equal to -1, the data passed in will be silently ignored and the specified uniform
+    ///   variable will not be changed.
+    fn uniform_matrix_f32x3v(
         uniform: UniformLocation,
         count: i32,
         transpose: Boolean,
@@ -1632,10 +1777,25 @@ gl_proc!(glLinkProgram:
     ///   and transform feedback mode is active.
     fn link_program(program: ProgramObject));
 
+gl_proc!(glObjectLabel:
+    /// Labels a named object for use in debug messages.
+    ///
+    /// [Wiki page](https://www.opengl.org/wiki/GLAPI/glObjectLabel)
+    ///
+    /// Core since version 4.3
+    ///
+    /// Labels the object identified by `name​` within the namespace given by `identifier​`.
+    ///
+    /// `label​` points to a string that will be used to label the object. `length​` contains the
+    /// number of characters in `label​`. If `length​` is negative, it is implied that label​
+    /// contains a null-terminated string. If label​ is `NULL`, any debug label is effectively
+    /// removed from the object.
+    fn set_object_label(identifier: DebugMessageId, name: u32, length: i32, label: u8));
+
 gl_proc!(glPolygonMode:
     /// Selects the polygon rasterization mode.
     ///
-    /// [Original Documentation](http://docs.gl/gl2/glPolygonMode)
+    /// [Wiki page](http://docs.gl/gl2/glPolygonMode)
     ///
     /// Core since version 1.0
     ///
@@ -1699,6 +1859,10 @@ gl_proc!(glShaderSource:
 gl_proc!(glTexImage2D:
     /// Specifies a two-dimensional texture image.
     ///
+    /// [Wiki page](https://www.opengl.org/wiki/GLAPI/glTexImage2D)
+    ///
+    /// Core since version 1.0
+    ///
     /// Texturing allows elements of an image array to be read by shaders.
     ///
     /// To define texture images, call `tex_image_2d`. The arguments describe the parameters of
@@ -1715,10 +1879,10 @@ gl_proc!(glTexImage2D:
     /// or equal to 1.
     ///
     /// If target​ is `Texture2d`, `TextureRectangle` or one of the `TextureCubeMap` targets, data
-    /// is read from data​ as a sequence of signed or unsigned bytes, shorts, or longs, or
+    /// is read from `data​` as a sequence of signed or unsigned bytes, shorts, or longs, or
     /// single-precision floating-point values, depending on type​. These values are grouped into
-    /// sets of one, two, three, or four values, depending on format​, to form elements. Each data
-    /// byte is treated as eight 1-bit elements, with bit ordering determined by `UnpackLsbFirst`
+    /// sets of one, two, three, or four values, depending on format​, to form elements. Each
+    /// byte in `data` is treated as eight 1-bit elements, with bit ordering determined by `UnpackLsbFirst`
     /// (see `pixel_store`).
     ///
     /// If target​ is `Texture1dArray`, data is interpreted as an array of one-dimensional images.
@@ -1785,14 +1949,7 @@ gl_proc!(glTexImage2D:
     ///   `Rgba`, and `Bgra`. For transfers of non-normalized integer data, you must use one of
     ///   the following: `RedInteger`, `GreenInteger`, `BlueInteger`, `RgInteger`, `RgbInteger`,
     ///   `BgrInteger`, `RgbaInteger`, and `BgraInteger`.
-    /// * `type` - Specifies the data type of the pixel data. The following symbolic values are
-    ///   accepted: `UnsignedByte`, `Byte`, `UnsignedShort`, `Short`, `UnsignedInt`, `Int`,
-    ///   `Float`, `GL_UNSIGNED_BYTE_3_3_2`, `GL_UNSIGNED_BYTE_2_3_3_REV`,
-    ///   `GL_UNSIGNED_SHORT_5_6_5`, `GL_UNSIGNED_SHORT_5_6_5_REV`, `GL_UNSIGNED_SHORT_4_4_4_4`,
-    ///   `GL_UNSIGNED_SHORT_4_4_4_4_REV`, `GL_UNSIGNED_SHORT_5_5_5_1`,
-    ///   `GL_UNSIGNED_SHORT_1_5_5_5_REV`, `GL_UNSIGNED_INT_8_8_8_8`,
-    ///   `GL_UNSIGNED_INT_8_8_8_8_REV`, `GL_UNSIGNED_INT_10_10_10_2`, and
-    ///   `GL_UNSIGNED_INT_2_10_10_10_REV`.
+    /// * `type` - Specifies the data type of the pixel data.
     /// * `data` - Specifies a pointer to the image data in memory, or if a buffer is bound to
     ///   `PixelUnpackBuffer`, this provides an integer offset into the bound buffer object. If
     ///   a buffer is not bound to `PixelUnpackBuffer`, and this parameter is NULL, no
@@ -1814,6 +1971,8 @@ gl_proc!(glTexParameteri:
     /// [Wiki page](https://www.opengl.org/wiki/GLAPI/glTexParameter)
     ///
     /// Core since version 1.0
+    ///
+    /// TODO: Ugh the docs for this one are annoying.
     fn texture_parameter_i32(
         target: TextureParameterTarget,
         name: TextureParameterName,
