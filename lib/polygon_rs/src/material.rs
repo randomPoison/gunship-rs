@@ -25,6 +25,12 @@ use std::collections::HashMap;
 use std::collections::hash_map::Iter as HashMapIter;
 use texture::GpuTexture;
 
+pub use polygon_material::material_source::MaterialSource;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct MaterialId(usize);
+derive_Counter!(MaterialId);
+
 /// Represents combination of a shader and set values for its uniform properties.
 #[derive(Debug, Clone)]
 pub struct Material {
@@ -71,13 +77,26 @@ impl Material {
 
     /// Sets a property value to be the specified `f32` value.
     pub fn set_f32<S: Into<String>>(&mut self, name: S, value: f32) {
-        self.properties.insert(name.into(), MaterialProperty::F32(value));
+        self.properties.insert(name.into(), MaterialProperty::f32(value));
     }
 
     /// Gets the value of a `f32` material property.
     pub fn get_f32(&self, name: &str) -> Option<&f32> {
         match self.properties.get(name) {
-            Some(&MaterialProperty::F32(ref value)) => Some(value),
+            Some(&MaterialProperty::f32(ref value)) => Some(value),
+            _ => None,
+        }
+    }
+
+    /// Sets a property value to be the specified `Vector3` value.
+    pub fn set_vector3<S: Into<String>>(&mut self, name: S, value: Vector3) {
+        self.properties.insert(name.into(), MaterialProperty::Vector3(value));
+    }
+
+    /// Gets the value of a `Vector3` material property.
+    pub fn get_vector3(&self, name: &str) -> Option<&Vector3> {
+        match self.properties.get(name) {
+            Some(&MaterialProperty::Vector3(ref value)) => Some(value),
             _ => None,
         }
     }
@@ -97,8 +116,10 @@ impl Material {
 
 /// Represents a value that can be sent to the GPU and used in shader programs.
 #[derive(Debug, Clone)]
+#[allow(bad_style)]
 pub enum MaterialProperty {
     Color(Color),
     Texture(GpuTexture),
-    F32(f32)
+    f32(f32),
+    Vector3(Vector3),
 }

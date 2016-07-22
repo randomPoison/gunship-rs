@@ -27,10 +27,38 @@ impl MaterialSource {
     }
 }
 
+/// Represents a program item parsed from a material file.
+///
+/// TODO: Document the different variants.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ProgramSource {
     Vertex(String),
     Fragment(String),
+}
+
+impl ProgramSource {
+    /// Checks if the program source is a vertex shader.
+    pub fn is_vertex(&self) -> bool {
+        match *self {
+            ProgramSource::Vertex(_) => true,
+            _ => false,
+        }
+    }
+
+    /// Checks if the programs source is fragment shader.
+    pub fn is_fragment(&self) -> bool {
+        match *self {
+            ProgramSource::Fragment(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn source(&self) -> &str {
+        match *self {
+            ProgramSource::Vertex(ref source) => &*source,
+            ProgramSource::Fragment(ref source) => &*source,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

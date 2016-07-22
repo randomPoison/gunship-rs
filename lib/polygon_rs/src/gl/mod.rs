@@ -18,6 +18,8 @@ use self::gl_util::{
     GlMatrix,
     IndexBuffer,
     Program,
+    Shader as GlShader,
+    ShaderType,
     SourceFactor,
     VertexBuffer,
 };
@@ -31,12 +33,11 @@ use std::collections::HashMap;
 use std::str;
 use texture::*;
 
-pub mod shader;
-
-static DEFAULT_SHADER_BYTES: &'static [u8] = include_bytes!("../../resources/shaders/texture_diffuse_lit.shader");
+static DEFAULT_SHADER_BYTES: &'static [u8] = include_bytes!("../../resources/shaders/diffuse_flat.shader");
 
 #[derive(Debug)]
 pub struct GlRender {
+    materials: HashMap<MaterialId, Material>,
     meshes: HashMap<GpuMesh, MeshData>,
     textures: HashMap<GpuTexture, GlTexture2d>,
     mesh_instances: HashMap<MeshInstanceId, MeshInstance>,
@@ -45,6 +46,7 @@ pub struct GlRender {
     lights: HashMap<LightId, Light>,
     programs: HashMap<Shader, Program>,
 
+    material_counter: MaterialId,
     mesh_counter: GpuMesh,
     texture_counter: GpuTexture,
     mesh_instance_counter: MeshInstanceId,
@@ -60,39 +62,42 @@ impl GlRender {
     pub fn new() -> GlRender {
         gl_util::init();
 
-        // Setup the default program for use in creating the default material.
-        let default_shader_source = str::from_utf8(DEFAULT_SHADER_BYTES).unwrap();
-        let default_program = shader::from_str(default_shader_source).unwrap();
-
-        let mut shader_counter = Shader::initial();
-        let default_shader = shader_counter.next();
-        let mut programs = HashMap::new();
-        programs.insert(default_shader, default_program);
-
-        let mut default_material = Material::new(default_shader);
-        default_material.set_color("surface_color", Color::new(0.25, 0.25, 0.25, 1.0));
-        default_material.set_color("surface_specular", Color::new(1.0, 1.0, 1.0, 1.0));
-        default_material.set_f32("surface_shininess", 3.0);
-
-        GlRender {
+        let mut renderer = GlRender {
+            materials: HashMap::new(),
             meshes: HashMap::new(),
             textures: HashMap::new(),
             mesh_instances: HashMap::new(),
             anchors: HashMap::new(),
             cameras: HashMap::new(),
             lights: HashMap::new(),
-            programs: programs,
+            programs: HashMap::new(),
 
+            material_counter: MaterialId::initial(),
             mesh_counter: GpuMesh::initial(),
             texture_counter: GpuTexture::initial(),
             mesh_instance_counter: MeshInstanceId::initial(),
             anchor_counter: AnchorId::initial(),
             camera_counter: CameraId::initial(),
             light_counter: LightId::initial(),
-            shader_counter: shader_counter,
+            shader_counter: Shader::initial(),
 
-            default_material: default_material,
-        }
+            // Use temporary value and replace it later.
+            default_material: Material::new(Shader::initial()),
+        };
+
+        // Load source code for the default material.
+        let default_material_source = str::from_utf8(DEFAULT_SHADER_BYTES).unwrap();
+        let material_source = MaterialSource::from_str(default_material_source).unwrap();
+
+        // default_material.set_color("surface_color", Color::new(0.25, 0.25, 0.25, 1.0));
+        // default_material.set_color("surface_specular", Color::new(1.0, 1.0, 1.0, 1.0));
+        // default_material.set_f32("surface_shininess", 3.0);
+
+        // Create the default material and drop add it to the renderer.
+        let default_material = renderer.build_material(material_source).unwrap();
+        renderer.default_material = default_material;
+
+        renderer
     }
 
     fn draw_mesh(
@@ -100,7 +105,7 @@ impl GlRender {
         mesh_data: &MeshData,
         material: &Material,
         model_transform: Matrix4,
-        normal_transform: Matrix4,
+        normal_transform: Matrix3,
         camera: &Camera,
         camera_anchor: &Anchor,
     ) {
@@ -112,7 +117,7 @@ impl GlRender {
 
         let view_normal_transform = {
             let inverse_model = normal_transform.transpose();
-            let inverse_view = camera_anchor.inverse_view_matrix();
+            let inverse_view = camera_anchor.inverse_view_matrix().into();
             let inverse_model_view = inverse_model * inverse_view;
             inverse_model_view.transpose()
         };
@@ -149,7 +154,7 @@ impl GlRender {
                 transpose: true,
             })
         .uniform(
-            "viewTransform",
+            "view_transform",
             GlMatrix {
                 data: view_transform.raw_data(),
                 transpose: true,
@@ -161,7 +166,7 @@ impl GlRender {
                 transpose: true,
             })
         .uniform(
-            "projectionTransform",
+            "projection_transform",
             GlMatrix {
                 data: projection_transform.raw_data(),
                 transpose: true,
@@ -177,7 +182,7 @@ impl GlRender {
         .uniform("global_ambient", [0.1, 0.1, 0.1, 1.0])
 
         // Other uniforms.
-        .uniform("cameraPosition", *camera_anchor.position().as_array());
+        .uniform("camera_position", *camera_anchor.position().as_array());
 
         // Apply material attributes.
         for (name, property) in material.properties() {
@@ -185,8 +190,11 @@ impl GlRender {
                 MaterialProperty::Color(ref color) => {
                     draw_builder.uniform::<[f32; 4]>(name, color.into());
                 },
-                MaterialProperty::F32(value) => {
+                MaterialProperty::f32(value) => {
                     draw_builder.uniform(name, value);
+                },
+                MaterialProperty::Vector3(value) => {
+                    draw_builder.uniform::<[f32; 3]>(name, value.into());
                 },
                 MaterialProperty::Texture(ref texture) => {
                     let gl_texture = self.textures.get(texture).expect("No such texture exists");
@@ -287,6 +295,183 @@ impl Renderer for GlRender {
 
     fn default_material(&self) -> Material {
         self.default_material.clone()
+    }
+
+    fn build_material(&mut self, source: MaterialSource) -> Result<Material, ()> {
+        use polygon_material::material_source::PropertyType;
+
+        // COMPILE SHADER SOURCE
+        // =====================
+
+        // Generate uniform declarations for the material's properties. This string will be
+        // injected into the shader templates.
+        let uniform_declarations = {
+            let mut uniform_declarations = String::new();
+            for property in &source.properties {
+                uniform_declarations.push_str("uniform ");
+
+                let type_str = match property.property_type {
+                    PropertyType::Color => "vec4",
+                    PropertyType::Texture2d => "sampler2D",
+                    PropertyType::f32 => "float",
+                    PropertyType::Vector3 => "vec3",
+                };
+
+                uniform_declarations.push_str(type_str);
+                uniform_declarations.push(' ');
+                uniform_declarations.push_str(&*property.name);
+                uniform_declarations.push_str(";\n");
+            }
+
+            uniform_declarations
+        };
+
+        // Generate the GLSL source for the vertex shader.
+        let vert_shader = {
+            // Retrieve source string for the vertex shader.
+            let raw_source =
+                source
+                .programs
+                .iter()
+                .find(|program_source| program_source.is_vertex())
+                .map(|program_source| program_source.source())
+                .ok_or(())?;
+
+            // Perform text replacements for the various keywords.
+            let replaced_source = raw_source
+                .replace("@position", "gl_Position")
+                .replace("@vertex.view_position", "vertex__view_position")
+                .replace("@vertex.view_normal", "vertex__view_normal")
+                .replace("@vertex.uv0", "vertex__uv0");
+            let replaced_source = format!(r#"
+                    #version 150
+
+                    uniform mat4 model_transform;
+                    uniform mat3 normal_transform;
+                    uniform mat4 view_transform;
+                    uniform mat4 model_view_transform;
+                    uniform mat4 projection_transform;
+                    uniform mat4 model_view_projection;
+
+                    uniform vec4 global_ambient;
+                    uniform vec4 camera_position;
+                    uniform vec4 light_position;
+                    uniform float light_strength;
+                    uniform float light_radius;
+                    uniform vec4 light_color;
+
+                    {}
+
+                    in vec4 vertex_position;
+                    in vec3 vertex_normal;
+                    in vec2 vertex_uv0;
+
+                    out vec4 vertex__view_position;
+                    out vec3 vertex__view_normal;
+                    out vec2 vertex__uv0;
+
+                    void main(void) {{
+                        vertex__view_position = model_view_transform * vertex_position;
+                        vertex__view_normal = normalize(mat3(normal_transform) * vertex_normal);
+                        vertex__uv0 = vertex_uv0;
+
+                        {}
+                    }}
+                "#,
+                uniform_declarations,
+                replaced_source);
+
+            println!("vert source:\n{}", replaced_source);
+            GlShader::new(replaced_source, ShaderType::Vertex).map_err(|err| ())?
+        };
+
+        // Generate the GLSL source for the fragment shader.
+        let frag_shader = {
+            // Retrieve source string for the fragment shader.
+            let raw_source =
+                source
+                .programs
+                .iter()
+                .find(|program_source| program_source.is_fragment())
+                .map(|program_source| program_source.source())
+                .ok_or(())?;
+
+            // Perform text replacements for the various keywords.
+            let replaced_source = raw_source
+                .replace("@color", "__fragment_color")
+                .replace("@vertex.color", "vertex__color")
+                .replace("@vertex.view_position", "vertex__view_position")
+                .replace("@vertex.view_normal", "vertex__view_normal")
+                .replace("@vertex.uv0", "vertex__uv0");
+            let replaced_source = format!(r#"
+                    #version 150
+
+                    uniform mat4 model_transform;
+                    uniform mat3 normal_transform;
+                    uniform mat4 view_transform;
+                    uniform mat4 model_view_transform;
+                    uniform mat4 projection_transform;
+
+                    uniform vec4 global_ambient;
+                    uniform vec4 camera_position;
+                    uniform vec4 light_position;
+                    uniform float light_strength;
+                    uniform float light_radius;
+                    uniform vec4 light_color;
+
+                    {}
+
+                    in vec4 vertex__view_position;
+                    in vec3 vertex__view_normal;
+                    in vec2 vertex__uv0;
+
+                    out vec4 __fragment_color;
+
+                    void main(void) {{
+                        {}
+                    }}
+                "#,
+                uniform_declarations,
+                replaced_source);
+
+            println!("frag source:\n{}", replaced_source);
+            GlShader::new(replaced_source, ShaderType::Fragment).map_err(|err| ())?
+        };
+
+        let program = Program::new(&[vert_shader, frag_shader]).map_err(|err| ())?;
+
+        let program_id = self.shader_counter.next();
+        self.programs.insert(program_id, program);
+
+        // BUILD MATERIAL OBJECT
+        // =====================
+
+        let mut material = Material::new(program_id);
+
+        // Add the properties from the material declaration.
+        for property in source.properties {
+            let type_str = match property.property_type {
+                PropertyType::Color => material.set_color(property.name, Color::default()),
+                PropertyType::Texture2d => material.set_texture(property.name, GpuTexture::default()),
+                PropertyType::f32 => material.set_f32(property.name, f32::default()),
+                PropertyType::Vector3 => material.set_vector3(property.name, Vector3::default()),
+            };
+        }
+
+        Ok(material)
+    }
+
+    fn register_material(&mut self, material: Material) -> MaterialId {
+        let material_id = self.material_counter.next();
+
+        let old = self.materials.insert(material_id, material);
+        assert!(old.is_none());
+
+        material_id
+    }
+
+    fn get_material(&self, material_id: MaterialId) -> Option<&Material> {
+        self.materials.get(&material_id)
     }
 
     fn register_mesh(&mut self, mesh: &Mesh) -> GpuMesh {

@@ -1,6 +1,7 @@
 #![feature(question_mark)]
 
 extern crate parse_bmp;
+extern crate polygon_material;
 
 pub extern crate polygon_math as math;
 
@@ -22,9 +23,9 @@ pub mod texture;
 use anchor::*;
 use camera::*;
 use geometry::mesh::Mesh;
-use material::Material;
-use mesh_instance::*;
 use light::*;
+use material::*;
+use mesh_instance::*;
 use texture::*;
 
 /// Identifies mesh data that has been sent to the GPU.
@@ -39,6 +40,15 @@ pub trait Renderer {
 
     /// Gets a copy of the default material for the renderer.
     fn default_material(&self) -> Material;
+
+    /// Parses a material source file and generates a material from it.
+    fn build_material(&mut self, source: MaterialSource) -> Result<Material, ()>;
+
+    /// Registers a material to be used as a shared material.
+    fn register_material(&mut self, material: Material) -> MaterialId;
+
+    /// Gets a registered material.
+    fn get_material(&self, material_id: MaterialId) -> Option<&Material>;
 
     /// Registers mesh data with the renderer, returning a unique id for the mesh.
     fn register_mesh(&mut self, mesh: &Mesh) -> GpuMesh;

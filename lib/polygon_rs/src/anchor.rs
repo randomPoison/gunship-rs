@@ -57,12 +57,13 @@ impl Anchor {
     }
 
     /// Calculates the matrix used to convert normals from object space to world space.
-    pub fn normal_matrix(&self) -> Matrix4 {
-        let inv_scale = Matrix4::from_scale_vector(1.0 / self.scale);
-        let inv_rotation = self.orientation.as_matrix4().transpose();
-        let inv_translation = Matrix4::from_point(-self.position);
+    pub fn normal_matrix(&self) -> Matrix3 {
+        let inv_scale = Matrix3::from_scale_vector(1.0 / self.scale);
+        let orientation: Matrix3 = self.orientation.into();
+        let inv_rotation = orientation.transpose();
+        // let inv_translation = Matrix3::from_point(-self.position);
 
-        let inverse = inv_scale * (inv_rotation * inv_translation);
+        let inverse = inv_scale * (inv_rotation);// * inv_translation);
         inverse.transpose()
     }
 
