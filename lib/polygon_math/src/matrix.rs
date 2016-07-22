@@ -10,7 +10,8 @@ use super::{IsZero, Dot};
 /// A 4x4 matrix that can be used to represent a combination of translation, rotation, and scale.
 ///
 /// Matrices are row-major.
-#[repr(C)] #[derive(Clone, Copy)]
+#[derive(Clone, Copy)]
+#[repr(C)]
 pub struct Matrix4 {
     data: [[f32; 4]; 4]
 }
@@ -86,14 +87,7 @@ impl Matrix4 {
 
     /// Creates a new rotation matrix from a quaternion.
     pub fn from_quaternion(q: Quaternion) -> Matrix4 {
-        Matrix4 {
-            data: [
-                [(q.w*q.w + q.x*q.x - q.y*q.y - q.z*q.z), (2.0*q.x*q.y - 2.0*q.w*q.z),             (2.0*q.x*q.z + 2.0*q.w*q.y),             0.0],
-                [(2.0*q.x*q.y + 2.0*q.w*q.z),             (q.w*q.w - q.x*q.x + q.y*q.y - q.z*q.z), (2.0*q.y*q.z - 2.0*q.w*q.x),             0.0],
-                [(2.0*q.x*q.z - 2.0*q.w*q.y),             (2.0*q.y*q.z + 2.0*q.w*q.x),             (q.w*q.w - q.x*q.x - q.y*q.y + q.z*q.z), 0.0],
-                [0.0,                                     0.0,                                     0.0,                                     1.0],
-            ]
-        }
+        q.into()
     }
 
     pub fn from_matrix3(other: Matrix3) -> Matrix4 {
@@ -270,8 +264,35 @@ impl Debug for Matrix4 {
     }
 }
 
+impl From<Matrix3> for Matrix4 {
+    fn from(from: Matrix3) -> Matrix4 {
+        Matrix4 {
+            data: [
+                [from[0][0], from[0][1], from[0][2], 0.0],
+                [from[1][0], from[1][1], from[1][2], 0.0],
+                [from[2][0], from[2][1], from[2][2], 0.0],
+                [0.0, 0.0, 0.0, 1.0],
+            ]
+        }
+    }
+}
+
+impl From<Quaternion> for Matrix4 {
+    fn from(q: Quaternion) -> Matrix4 {
+        Matrix4 {
+            data: [
+            [(q.w*q.w + q.x*q.x - q.y*q.y - q.z*q.z), (2.0*q.x*q.y - 2.0*q.w*q.z),             (2.0*q.x*q.z + 2.0*q.w*q.y),             0.0],
+            [(2.0*q.x*q.y + 2.0*q.w*q.z),             (q.w*q.w - q.x*q.x + q.y*q.y - q.z*q.z), (2.0*q.y*q.z - 2.0*q.w*q.x),             0.0],
+            [(2.0*q.x*q.z - 2.0*q.w*q.y),             (2.0*q.y*q.z + 2.0*q.w*q.x),             (q.w*q.w - q.x*q.x - q.y*q.y + q.z*q.z), 0.0],
+            [0.0,                                     0.0,                                     0.0,                                     1.0],
+            ]
+        }
+    }
+}
+
 /// A 3x3 matrix that can be used to represent a combination of rotation and scale.
-#[repr(C)] #[derive(Clone, Copy)]
+#[derive(Clone, Copy)]
+#[repr(C)]
 pub struct Matrix3([[f32; 3]; 3]);
 
 impl Matrix3 {
@@ -292,10 +313,14 @@ impl Matrix3 {
     }
 
     pub fn from_quaternion(q: Quaternion) -> Matrix3 {
+        q.into()
+    }
+
+    pub fn from_scale_vector(scale: Vector3) -> Matrix3 {
         Matrix3([
-            [(q.w*q.w + q.x*q.x - q.y*q.y - q.z*q.z), (2.0*q.x*q.y - 2.0*q.w*q.z),             (2.0*q.x*q.z + 2.0*q.w*q.y),           ],
-            [(2.0*q.x*q.y + 2.0*q.w*q.z),             (q.w*q.w - q.x*q.x + q.y*q.y - q.z*q.z), (2.0*q.y*q.z - 2.0*q.w*q.x),           ],
-            [(2.0*q.x*q.z - 2.0*q.w*q.y),             (2.0*q.y*q.z + 2.0*q.w*q.x),             (q.w*q.w - q.x*q.x - q.y*q.y + q.z*q.z)],
+            [scale.x, 0.0,     0.0,   ],
+            [0.0,     scale.y, 0.0,   ],
+            [0.0,     0.0,     scale.z],
         ])
     }
 
@@ -355,6 +380,13 @@ impl Matrix3 {
 
     pub fn z_part(&self) -> Vector3 {
         Vector3::new(self[0][2], self[1][2], self[2][2])
+    }
+
+    /// Get the matrix data as a raw array.
+    pub fn raw_data(&self) -> &[f32; 9] {
+        // It's safe to transmute a pointer to data to a &[f32; 9]
+        // because the layout in memory is exactly the same.
+        unsafe { ::std::mem::transmute(&self) }
     }
 }
 
@@ -429,5 +461,25 @@ impl Debug for Matrix3 {
         }
 
         Ok(())
+    }
+}
+
+impl From<Matrix4> for Matrix3 {
+    fn from(from: Matrix4) -> Matrix3 {
+        Matrix3([
+            [from[0][0], from[0][1], from[0][2]],
+            [from[1][0], from[1][1], from[1][2]],
+            [from[2][0], from[2][1], from[2][2]],
+        ])
+    }
+}
+
+impl From<Quaternion> for Matrix3 {
+    fn from(q: Quaternion) -> Matrix3 {
+        Matrix3([
+            [(q.w*q.w + q.x*q.x - q.y*q.y - q.z*q.z), (2.0*q.x*q.y - 2.0*q.w*q.z),             (2.0*q.x*q.z + 2.0*q.w*q.y),           ],
+            [(2.0*q.x*q.y + 2.0*q.w*q.z),             (q.w*q.w - q.x*q.x + q.y*q.y - q.z*q.z), (2.0*q.y*q.z - 2.0*q.w*q.x),           ],
+            [(2.0*q.x*q.z - 2.0*q.w*q.y),             (2.0*q.y*q.z + 2.0*q.w*q.x),             (q.w*q.w - q.x*q.x - q.y*q.y + q.z*q.z)],
+        ])
     }
 }

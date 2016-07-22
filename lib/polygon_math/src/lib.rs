@@ -1,3 +1,4 @@
+#![feature(const_fn)]
 #![feature(slice_patterns)]
 #![cfg_attr(test, feature(test))]
 

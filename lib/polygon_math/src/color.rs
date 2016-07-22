@@ -48,6 +48,17 @@ impl Color {
     }
 }
 
+impl Default for Color {
+    fn default() -> Color {
+        Color {
+            r: 0.0,
+            g: 0.0,
+            b: 0.0,
+            a: 1.0,
+        }
+    }
+}
+
 impl From<[f32; 3]> for Color {
     fn from(from: [f32; 3]) -> Color {
         let [r, g, b] = from;
