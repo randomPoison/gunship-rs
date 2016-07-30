@@ -4,7 +4,7 @@ extern crate parse_obj;
 
 use bootstrap::window::*;
 use gl::*;
-use parse_obj::*;
+use parse_obj::Obj;
 
 fn main() {
     // Load mesh file and normalize indices for OpenGL.
@@ -21,7 +21,7 @@ fn main() {
 
     let mut vertex_buffer = VertexBuffer::new();
     vertex_buffer.set_data_f32(obj.raw_positions());
-    vertex_buffer.set_attrib_f32("position", 4, 0, 0);
+    vertex_buffer.set_attrib_f32("position", AttribLayout { elements: 4, offset: 0, stride: 0 });
 
     let mut index_buffer = IndexBuffer::new();
     index_buffer.set_data_u32(&*raw_indices);

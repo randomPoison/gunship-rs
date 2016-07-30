@@ -4,7 +4,7 @@ extern crate parse_obj;
 
 use bootstrap::window::*;
 use gl::*;
-use parse_obj::*;
+use parse_obj::Obj;
 
 static VERT_SOURCE: &'static str = r#"
 #version 330 core
