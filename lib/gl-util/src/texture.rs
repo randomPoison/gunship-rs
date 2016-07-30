@@ -76,6 +76,12 @@ impl Drop for Texture2d {
     }
 }
 
+impl Default for Texture2d {
+    fn default() -> Texture2d {
+        Texture2d(TextureObject::null())
+    }
+}
+
 pub trait TextureData {
     const DATA_TYPE: TextureDataType;
     const ELEMENTS: usize;
