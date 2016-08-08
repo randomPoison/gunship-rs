@@ -397,6 +397,7 @@ pub enum StringName {
     Renderer = 0x1F01,
     Version = 0x1F02,
     ShadingLanguageVersion = 0x8B8C,
+    Extensions = 0x1F03,
 }
 
 #[repr(u32)]

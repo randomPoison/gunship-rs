@@ -5,7 +5,8 @@ version = "0.1.0"
 authors = ["David LeGare <excaliburhissheath@gmail.com>"]
 
 [dependencies]
+kernel32-sys = "0.2"
 gdi32-sys = "0.2"
-user32-sys = "0.1"
 opengl32-sys = "0.1"
+user32-sys = "0.1"
 winapi = "0.2"
