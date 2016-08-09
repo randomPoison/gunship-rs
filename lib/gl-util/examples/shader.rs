@@ -4,6 +4,7 @@ extern crate parse_obj;
 
 use bootstrap::window::*;
 use gl::*;
+use gl::context::Context;
 use parse_obj::Obj;
 
 static VERT_SOURCE: &'static str = r#"
@@ -66,7 +67,8 @@ fn main() {
 
     // Create window and initialize OpenGL.
     let mut window = Window::new("gl-util - wireframe example");
-    gl::init();
+
+    let context = Context::new().unwrap();
 
     // Compile and link shaders into a shader program.
     let vert_shader = Shader::new(VERT_SOURCE, ShaderType::Vertex).unwrap();
@@ -118,8 +120,8 @@ fn main() {
             }
         }
 
-        gl::clear();
+        context.clear();
         draw_builder.draw();
-        gl::swap_buffers();
+        context.swap_buffers();
     }
 }

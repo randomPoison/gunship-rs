@@ -4,6 +4,7 @@ extern crate parse_obj;
 
 use bootstrap::window::*;
 use gl::*;
+use gl::context::Context;
 use parse_obj::Obj;
 
 fn main() {
@@ -17,7 +18,7 @@ fn main() {
     }
 
     let mut window = Window::new("gl-util - wireframe example");
-    gl::init();
+    let context = Context::new().unwrap();
 
     let mut vertex_buffer = VertexBuffer::new();
     vertex_buffer.set_data_f32(obj.raw_positions());
@@ -34,12 +35,12 @@ fn main() {
             }
         }
 
-        gl::clear();
+        context.clear();
         DrawBuilder::new(&vertex_buffer, DrawMode::Triangles)
             .index_buffer(&index_buffer)
             .map_attrib_location("position", AttributeLocation::from_index(0))
             .polygon_mode(PolygonMode::Line)
             .draw();
-        gl::swap_buffers();
+        context.swap_buffers();
     }
 }
