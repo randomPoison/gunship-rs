@@ -122,6 +122,7 @@ impl Program {
         // Create shader program.
         let program = unsafe { gl::create_program() };
         if program.is_null() {
+            unsafe { gl::delete_program(program); }
             return Err(ProgramError::CreateProgramError);
         }
 
@@ -132,6 +133,8 @@ impl Program {
 
         // Link the program and detach the shaders.
         unsafe { gl::link_program(program); }
+
+        // Detach the shaders.
         for shader in shaders {
             unsafe { gl::detach_shader(program, shader.shader_object); }
         }
@@ -141,6 +144,8 @@ impl Program {
         match link_status {
             ProgramLinkStatus::Success => Ok(Program(program)),
             ProgramLinkStatus::Failure => {
+                unsafe { gl::delete_program(program); }
+
                 let log = program_log(program);
                 Err(ProgramError::LinkError(log))
             }

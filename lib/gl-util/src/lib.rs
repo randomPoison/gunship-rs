@@ -7,6 +7,7 @@
 //! someone much less OpenGL experience.
 
 #![feature(associated_consts)]
+#![feature(question_mark)]
 
 extern crate bootstrap_gl as gl;
 
@@ -14,10 +15,6 @@ use gl::{
     BufferName,
     BufferTarget,
     BufferUsage,
-    ClearBufferMask,
-    DebugSeverity,
-    DebugSource,
-    DebugType,
     False,
     GlType,
     IndexType,
@@ -28,7 +25,7 @@ use gl::{
     UniformLocation,
     VertexArrayName,
 };
-use std::{mem, ptr};
+use std::mem;
 use std::cell::Cell;
 use std::collections::HashMap;
 use texture::Texture2d;
@@ -46,53 +43,13 @@ pub use gl::{
 };
 pub use self::shader::*;
 
+pub mod context;
 pub mod shader;
 pub mod texture;
 
-/// Initializes global OpenGL state and creates the OpenGL context needed to perform rendering.
-pub fn init() {
-    pub extern "system" fn debug_callback(
-        source: DebugSource,
-        message_type: DebugType,
-        object_id: u32,
-        severity: DebugSeverity,
-        _length: i32,
-        message: *const u8,
-        _user_param: *mut ()
-    ) {
-        use std::ffi::CStr;
-
-        let message = unsafe { CStr::from_ptr(message as *const _) }.to_string_lossy();
-
-        panic!(
-            r#"Recieved some kind of debug message.
-            source: {:?},
-            type: {:?},
-            object_id: 0x{:x},
-            severity: {:?},
-            message: {}"#,
-            source,
-            message_type,
-            object_id,
-            severity,
-            message);
-    }
-
-    unsafe {
-        gl::create_context();
-        gl::enable(ServerCapability::DebugOutput);
-        gl::debug_message_callback(debug_callback, ptr::null_mut());
-    }
-}
-
-/// TODO: Take clear mask (and values) as parameters.
-pub fn clear() {
-    unsafe { gl::clear(ClearBufferMask::Color | ClearBufferMask::Depth); }
-}
-
-pub fn swap_buffers() {
-    unsafe { gl::platform::swap_buffers(); }
-}
+#[cfg(target_os="windows")]
+#[path="windows\\mod.rs"]
+pub mod platform;
 
 /// Represents a buffer of vertex data and the layout of that data.
 ///
