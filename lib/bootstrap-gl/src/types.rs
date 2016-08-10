@@ -134,6 +134,8 @@ pub enum Comparison {
     Always = 0x0207,
 }
 
+pub type DebugMessageCallback = extern "system" fn(DebugSource, DebugType, UInt, DebugSeverity, SizeI, *const u8, *mut ());
+
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum DebugMessageId {

@@ -42,17 +42,30 @@ macro_rules! gl_proc {
         $( #[$attr:meta] )* fn $fn_name:ident( $( $arg:ident : $arg_ty:ty ),* ) $( -> $result:ty )* ) => {
         $( #[$attr] )*
         pub unsafe fn $fn_name( $( $arg: $arg_ty, )* ) $( -> $result )* {
-            static mut PROC_PTR: Option<extern "system" fn( $( $arg_ty, )* ) $( -> $result )*> = None;
+            $fn_name::load();
 
-            if let None = PROC_PTR {
-                PROC_PTR =
-                    $crate::platform::load_proc(stringify!( $proc_name ))
-                    .map(|ptr| ::std::mem::transmute(ptr));
-            }
-
-            match PROC_PTR {
+            match $fn_name::load() {
                 Some(gl_proc) => gl_proc( $( $arg ),* ),
                 None => panic!("Failed to load gl proc for {}", stringify!( $proc_name )),
+            }
+        }
+
+        pub mod $fn_name {
+            #[allow(unused_imports)]
+            use types::*;
+
+            static mut PROC_PTR: Option<ProcType> = None;
+
+            pub type ProcType = extern "system" fn( $( $arg_ty, )* ) $( -> $result )*;
+
+            pub unsafe fn load() -> Option<ProcType> {
+                if let None = PROC_PTR {
+                    PROC_PTR =
+                        $crate::platform::load_proc(stringify!( $proc_name ))
+                        .map(|ptr| ::std::mem::transmute(ptr));
+                }
+
+                PROC_PTR
             }
         }
     }
@@ -572,8 +585,6 @@ gl_proc!(glCullFace:
     /// - If `mode​` is `FrontAndBack` no facets are drawn but other primitives such as points and
     ///   lines are drawn.
     fn cull_face(mode: Face));
-
-pub type DebugMessageCallback = extern "system" fn(DebugSource, DebugType, UInt, DebugSeverity, SizeI, *const u8, *mut ());
 
 gl_proc!(glDebugMessageCallback:
     fn debug_message_callback(
