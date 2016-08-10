@@ -79,6 +79,10 @@ impl Context {
             println!("\tversion: {}", version);
             println!("\tglsl version: {}", glsl_version);
 
+            // Load a bunch of proc pointers for funsies.
+            gl::get_attrib_location::load();
+            gl::gen_vertex_arrays::load();
+
             Ok(Context {
                 device_context: device_context,
                 render_context: context,
