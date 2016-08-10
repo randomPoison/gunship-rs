@@ -23,6 +23,7 @@ use self::gl_util::{
     SourceFactor,
     VertexBuffer,
 };
+use self::gl_util::context::{Context, Error as ContextError};
 use self::gl_util::texture::{
     Texture2d as GlTexture2d,
     TextureFormat,
@@ -33,10 +34,12 @@ use std::collections::HashMap;
 use std::str;
 use texture::*;
 
-static DEFAULT_SHADER_BYTES: &'static [u8] = include_bytes!("../../resources/shaders/diffuse_flat.shader");
+static DEFAULT_SHADER_BYTES: &'static [u8] = include_bytes!("../../resources/shaders/texture_diffuse_lit.shader");
 
 #[derive(Debug)]
 pub struct GlRender {
+    context: Context,
+
     materials: HashMap<MaterialId, Material>,
     meshes: HashMap<GpuMesh, MeshData>,
     textures: HashMap<GpuTexture, GlTexture2d>,
@@ -59,10 +62,12 @@ pub struct GlRender {
 }
 
 impl GlRender {
-    pub fn new() -> GlRender {
-        gl_util::init();
+    pub fn new() -> Result<GlRender, Error> {
+        let context = Context::new()?;
 
         let mut renderer = GlRender {
+            context: context,
+
             materials: HashMap::new(),
             meshes: HashMap::new(),
             textures: HashMap::new(),
@@ -97,7 +102,7 @@ impl GlRender {
         let default_material = renderer.build_material(material_source).unwrap();
         renderer.default_material = default_material;
 
-        renderer
+        Ok(renderer)
     }
 
     fn draw_mesh(
@@ -109,6 +114,8 @@ impl GlRender {
         camera: &Camera,
         camera_anchor: &Anchor,
     ) {
+        let default_texture = GlTexture2d::default();
+
         // Calculate the various transforms needed for rendering.
         let view_transform = camera_anchor.view_matrix();
         let model_view_transform = view_transform * model_transform;
@@ -197,7 +204,10 @@ impl GlRender {
                     draw_builder.uniform::<[f32; 3]>(name, value.into());
                 },
                 MaterialProperty::Texture(ref texture) => {
-                    let gl_texture = self.textures.get(texture).expect("No such texture exists");
+                    let gl_texture =
+                        self.textures
+                        .get(texture)
+                        .unwrap_or(&default_texture);
                     draw_builder.uniform(name, gl_texture);
                 },
             }
@@ -243,12 +253,27 @@ impl GlRender {
 
     /// Clears the current back buffer.
     pub fn clear(&self) {
-        gl_util::clear();
+        self.context.clear();
     }
 
     /// Swap the front and back buffers for the render system.
     pub fn swap_buffers(&self) {
-        gl_util::swap_buffers();
+        self.context.swap_buffers();
+    }
+}
+
+impl Drop for GlRender {
+    fn drop(&mut self) {
+        // Empty all containers to force cleanup of OpenGL primitives before we tear down the
+        // GL subsystem.
+        self.materials.clear();
+        self.meshes.clear();
+        self.textures.clear();
+        self.mesh_instances.clear();
+        self.anchors.clear();
+        self.cameras.clear();
+        self.lights.clear();
+        self.programs.clear();
     }
 }
 
@@ -328,6 +353,13 @@ impl Renderer for GlRender {
 
         // Generate the GLSL source for the vertex shader.
         let vert_shader = {
+            static DEFAULT_VERT_MAIN: &'static str = r#"
+                gl_Position = model_view_projection * vertex_position;
+                _vertex_view_position_ = model_view_transform * vertex_position;
+                _vertex_view_normal_ = normalize(mat3(normal_transform) * vertex_normal);
+                _vertex_uv0_ = vertex_uv0;
+            "#;
+
             // Retrieve source string for the vertex shader.
             let raw_source =
                 source
@@ -335,14 +367,14 @@ impl Renderer for GlRender {
                 .iter()
                 .find(|program_source| program_source.is_vertex())
                 .map(|program_source| program_source.source())
-                .ok_or(())?;
+                .unwrap_or(DEFAULT_VERT_MAIN);
 
             // Perform text replacements for the various keywords.
             let replaced_source = raw_source
                 .replace("@position", "gl_Position")
-                .replace("@vertex.view_position", "vertex__view_position")
-                .replace("@vertex.view_normal", "vertex__view_normal")
-                .replace("@vertex.uv0", "vertex__uv0");
+                .replace("@vertex.view_position", "_vertex_view_position_")
+                .replace("@vertex.view_normal", "_vertex_view_normal_")
+                .replace("@vertex.uv0", "_vertex_uv0_");
             let replaced_source = format!(r#"
                     #version 150
 
@@ -366,22 +398,17 @@ impl Renderer for GlRender {
                     in vec3 vertex_normal;
                     in vec2 vertex_uv0;
 
-                    out vec4 vertex__view_position;
-                    out vec3 vertex__view_normal;
-                    out vec2 vertex__uv0;
+                    out vec4 _vertex_view_position_;
+                    out vec3 _vertex_view_normal_;
+                    out vec2 _vertex_uv0_;
 
                     void main(void) {{
-                        vertex__view_position = model_view_transform * vertex_position;
-                        vertex__view_normal = normalize(mat3(normal_transform) * vertex_normal);
-                        vertex__uv0 = vertex_uv0;
-
                         {}
                     }}
                 "#,
                 uniform_declarations,
                 replaced_source);
 
-            println!("vert source:\n{}", replaced_source);
             GlShader::new(replaced_source, ShaderType::Vertex).map_err(|err| ())?
         };
 
@@ -398,11 +425,11 @@ impl Renderer for GlRender {
 
             // Perform text replacements for the various keywords.
             let replaced_source = raw_source
-                .replace("@color", "__fragment_color")
+                .replace("@color", "_fragment_color_")
                 .replace("@vertex.color", "vertex__color")
-                .replace("@vertex.view_position", "vertex__view_position")
-                .replace("@vertex.view_normal", "vertex__view_normal")
-                .replace("@vertex.uv0", "vertex__uv0");
+                .replace("@vertex.view_position", "_vertex_view_position_")
+                .replace("@vertex.view_normal", "_vertex_view_normal_")
+                .replace("@vertex.uv0", "_vertex_uv0_");
             let replaced_source = format!(r#"
                     #version 150
 
@@ -421,11 +448,11 @@ impl Renderer for GlRender {
 
                     {}
 
-                    in vec4 vertex__view_position;
-                    in vec3 vertex__view_normal;
-                    in vec2 vertex__uv0;
+                    in vec4 _vertex_view_position_;
+                    in vec3 _vertex_view_normal_;
+                    in vec2 _vertex_uv0_;
 
-                    out vec4 __fragment_color;
+                    out vec4 _fragment_color_;
 
                     void main(void) {{
                         {}
@@ -434,7 +461,6 @@ impl Renderer for GlRender {
                 uniform_declarations,
                 replaced_source);
 
-            println!("frag source:\n{}", replaced_source);
             GlShader::new(replaced_source, ShaderType::Fragment).map_err(|err| ())?
         };
 
@@ -450,7 +476,7 @@ impl Renderer for GlRender {
 
         // Add the properties from the material declaration.
         for property in source.properties {
-            let type_str = match property.property_type {
+            match property.property_type {
                 PropertyType::Color => material.set_color(property.name, Color::default()),
                 PropertyType::Texture2d => material.set_texture(property.name, GpuTexture::default()),
                 PropertyType::f32 => material.set_f32(property.name, f32::default()),
@@ -649,6 +675,17 @@ impl Renderer for GlRender {
 
     fn get_light_mut(&mut self, light_id: LightId) -> Option<&mut Light> {
         self.lights.get_mut(&light_id)
+    }
+}
+
+#[derive(Debug)]
+pub enum Error {
+    ContextError(ContextError),
+}
+
+impl From<ContextError> for Error {
+    fn from(from: ContextError) -> Error {
+        Error::ContextError(from)
     }
 }
 

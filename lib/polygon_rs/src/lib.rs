@@ -105,7 +105,8 @@ impl RendererBuilder {
 
     /// Constructs a new renderer using the options set in the builder.
     pub fn build(&mut self) -> Box<Renderer> {
-        Box::new(gl::GlRender::new())
+        let renderer = gl::GlRender::new().unwrap();
+        Box::new(renderer) as Box<Renderer>
     }
 }
 
