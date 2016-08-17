@@ -34,7 +34,7 @@ use std::collections::HashMap;
 use std::str;
 use texture::*;
 
-static DEFAULT_SHADER_BYTES: &'static [u8] = include_bytes!("../../resources/shaders/texture_diffuse_lit.shader");
+static DEFAULT_SHADER_BYTES: &'static [u8] = include_bytes!("../../resources/shaders/texture_diffuse_lit.material");
 
 #[derive(Debug)]
 pub struct GlRender {
@@ -157,6 +157,12 @@ impl GlRender {
         .uniform(
             "normal_transform",
             GlMatrix {
+                data: normal_transform.raw_data(),
+                transpose: true,
+            })
+        .uniform(
+            "view_normal_transform",
+            GlMatrix {
                 data: view_normal_transform.raw_data(),
                 transpose: true,
             })
@@ -186,7 +192,7 @@ impl GlRender {
             })
 
         // Set uniform colors.
-        .uniform("global_ambient", [0.1, 0.1, 0.1, 1.0])
+        .uniform("global_ambient", [0.01, 0.01, 0.01, 1.0])
 
         // Other uniforms.
         .uniform("camera_position", *camera_anchor.position().as_array());
@@ -232,8 +238,10 @@ impl GlRender {
                 Some(anchor_id) => self.anchors.get(&anchor_id).expect("No such anchor exists"),
                 None => panic!("Cannot render light if it's not attached to an anchor"),
             };
+            draw_builder.uniform("light_position", *light_anchor.position().as_array());
+
             let light_position_view = light_anchor.position() * view_transform;
-            draw_builder.uniform("light_position", *light_position_view.as_array());
+            draw_builder.uniform("light_position_view", *light_position_view.as_array());
 
             // Send common light data.
             draw_builder.uniform::<[f32; 4]>("light_color", light.color.into());
@@ -351,13 +359,39 @@ impl Renderer for GlRender {
             uniform_declarations
         };
 
+        static BUILT_IN_UNIFORMS: &'static str = r#"
+            uniform mat4 model_transform;
+            uniform mat3 normal_transform;
+            uniform mat3 view_normal_transform;
+            uniform mat4 view_transform;
+            uniform mat4 model_view_transform;
+            uniform mat4 projection_transform;
+            uniform mat4 model_view_projection;
+
+            uniform vec4 global_ambient;
+            uniform vec4 camera_position;
+            uniform vec4 camera_position_view;
+            uniform vec4 light_position;
+            uniform vec4 light_position_view;
+            uniform float light_strength;
+            uniform float light_radius;
+            uniform vec4 light_color;
+        "#;
+
         // Generate the GLSL source for the vertex shader.
         let vert_shader = {
             static DEFAULT_VERT_MAIN: &'static str = r#"
-                gl_Position = model_view_projection * vertex_position;
-                _vertex_view_position_ = model_view_transform * vertex_position;
-                _vertex_view_normal_ = normalize(mat3(normal_transform) * vertex_normal);
-                _vertex_uv0_ = vertex_uv0;
+                @position = model_view_projection * vertex_position;
+
+                @vertex.position = vertex_position;
+                @vertex.normal = vertex_normal;
+                @vertex.uv0 = vertex_uv0;
+
+                @vertex.world_position = model_transform * vertex_position;
+                @vertex.world_normal = normalize(normal_transform * vertex_normal);
+
+                @vertex.view_position = model_view_transform * vertex_position;
+                @vertex.view_normal = normalize(view_normal_transform * vertex_normal);
             "#;
 
             // Retrieve source string for the vertex shader.
@@ -372,25 +406,17 @@ impl Renderer for GlRender {
             // Perform text replacements for the various keywords.
             let replaced_source = raw_source
                 .replace("@position", "gl_Position")
+                .replace("@vertex.position", "_vertex_position_")
+                .replace("@vertex.normal", "_vertex_normal_")
+                .replace("@vertex.uv0", "_vertex_uv0_")
+                .replace("@vertex.world_position", "_vertex_world_position_")
+                .replace("@vertex.world_normal", "_vertex_world_normal_")
                 .replace("@vertex.view_position", "_vertex_view_position_")
-                .replace("@vertex.view_normal", "_vertex_view_normal_")
-                .replace("@vertex.uv0", "_vertex_uv0_");
+                .replace("@vertex.view_normal", "_vertex_view_normal_");
             let replaced_source = format!(r#"
                     #version 150
 
-                    uniform mat4 model_transform;
-                    uniform mat3 normal_transform;
-                    uniform mat4 view_transform;
-                    uniform mat4 model_view_transform;
-                    uniform mat4 projection_transform;
-                    uniform mat4 model_view_projection;
-
-                    uniform vec4 global_ambient;
-                    uniform vec4 camera_position;
-                    uniform vec4 light_position;
-                    uniform float light_strength;
-                    uniform float light_radius;
-                    uniform vec4 light_color;
+                    {}
 
                     {}
 
@@ -398,14 +424,19 @@ impl Renderer for GlRender {
                     in vec3 vertex_normal;
                     in vec2 vertex_uv0;
 
+                    out vec4 _vertex_position_;
+                    out vec3 _vertex_normal_;
+                    out vec2 _vertex_uv0_;
+                    out vec4 _vertex_world_position_;
+                    out vec3 _vertex_world_normal_;
                     out vec4 _vertex_view_position_;
                     out vec3 _vertex_view_normal_;
-                    out vec2 _vertex_uv0_;
 
                     void main(void) {{
                         {}
                     }}
                 "#,
+                BUILT_IN_UNIFORMS,
                 uniform_declarations,
                 replaced_source);
 
@@ -426,31 +457,27 @@ impl Renderer for GlRender {
             // Perform text replacements for the various keywords.
             let replaced_source = raw_source
                 .replace("@color", "_fragment_color_")
-                .replace("@vertex.color", "vertex__color")
+                .replace("@vertex.position", "_vertex_position_")
+                .replace("@vertex.normal", "_vertex_normal_")
+                .replace("@vertex.uv0", "_vertex_uv0_")
+                .replace("@vertex.world_position", "_vertex_world_position_")
+                .replace("@vertex.world_normal", "_vertex_world_normal_")
                 .replace("@vertex.view_position", "_vertex_view_position_")
-                .replace("@vertex.view_normal", "_vertex_view_normal_")
-                .replace("@vertex.uv0", "_vertex_uv0_");
+                .replace("@vertex.view_normal", "_vertex_view_normal_");
             let replaced_source = format!(r#"
                     #version 150
 
-                    uniform mat4 model_transform;
-                    uniform mat3 normal_transform;
-                    uniform mat4 view_transform;
-                    uniform mat4 model_view_transform;
-                    uniform mat4 projection_transform;
-
-                    uniform vec4 global_ambient;
-                    uniform vec4 camera_position;
-                    uniform vec4 light_position;
-                    uniform float light_strength;
-                    uniform float light_radius;
-                    uniform vec4 light_color;
+                    {}
 
                     {}
 
+                    in vec4 _vertex_position_;
+                    in vec3 _vertex_normal_;
+                    in vec2 _vertex_uv0_;
+                    in vec4 _vertex_world_position_;
+                    in vec3 _vertex_world_normal_;
                     in vec4 _vertex_view_position_;
                     in vec3 _vertex_view_normal_;
-                    in vec2 _vertex_uv0_;
 
                     out vec4 _fragment_color_;
 
@@ -458,6 +485,7 @@ impl Renderer for GlRender {
                         {}
                     }}
                 "#,
+                BUILT_IN_UNIFORMS,
                 uniform_declarations,
                 replaced_source);
 
