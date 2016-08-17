@@ -34,8 +34,8 @@ fn main() {
     // Create a mesh instance, attach it to the anchor, and register it with the renderer.
     let mut mesh_instance = MeshInstance::new(gpu_mesh, renderer.default_material());
     mesh_instance.set_anchor(mesh_anchor_id);
-    mesh_instance.material_mut().set_color("surface_color", Color::rgb(0.0, 0.0, 0.0));
-    mesh_instance.material_mut().set_f32("surface_shininess", 5.0);
+    mesh_instance.material_mut().set_color("surface_color", Color::rgb(1.0, 1.0, 1.0));
+    mesh_instance.material_mut().set_f32("surface_shininess", 4.0);
     mesh_instance.material_mut().set_texture("surface_diffuse", gpu_texture);
     renderer.register_mesh_instance(mesh_instance);
 
@@ -46,7 +46,7 @@ fn main() {
 
     // Create the light and an anchor for it.
     let light_anchor_id = renderer.register_anchor(Anchor::new());
-    let mut light = Light::point(5.0, 3.0, Color::new(1.0, 1.0, 1.0, 1.0));
+    let mut light = Light::point(LIGHT_RADIUS, 1.0, Color::new(1.0, 1.0, 1.0, 1.0));
     light.set_anchor(light_anchor_id);
     renderer.register_light(light);
 
@@ -54,7 +54,7 @@ fn main() {
     camera.set_anchor(camera_anchor_id);
     renderer.register_camera(camera);
 
-    const LIGHT_RADIUS: f32 = 5.0;
+    const LIGHT_RADIUS: f32 = 2.0;
 
     let mut t: f32 = 0.0;
     'outer: loop {
@@ -75,9 +75,9 @@ fn main() {
         {
             let anchor = renderer.get_anchor_mut(light_anchor_id).unwrap();
             anchor.set_position(Point::new(
-                t.cos() * LIGHT_RADIUS,
-                t.sin() * LIGHT_RADIUS,
-                2.0,
+                t.cos() * LIGHT_RADIUS * 0.5,
+                t.sin() * LIGHT_RADIUS * 0.5,
+                0.75,
             ));
         }
 
