@@ -386,7 +386,9 @@ impl Matrix3 {
     pub fn raw_data(&self) -> &[f32; 9] {
         // It's safe to transmute a pointer to data to a &[f32; 9]
         // because the layout in memory is exactly the same.
-        unsafe { ::std::mem::transmute(&self) }
+        let Matrix3(ref data) = *self;
+
+        unsafe { &*(data as *const _ as *const [f32; 9]) }
     }
 }
 
