@@ -28,7 +28,7 @@ fn main() {
     anchor.set_position(Point::new(0.0, 0.0, 0.0));
     let mesh_anchor_id = renderer.register_anchor(anchor);
 
-    let material_source = MaterialSource::from_file("resources/shaders/diffuse_lit.material").unwrap();
+    let material_source = MaterialSource::from_file("resources/materials/diffuse_lit.material").unwrap();
     let material = renderer.build_material(material_source).unwrap();
 
     // Create a mesh instance, attach it to the anchor, and register it with the renderer.

@@ -34,7 +34,7 @@ use std::collections::HashMap;
 use std::str;
 use texture::*;
 
-static DEFAULT_SHADER_BYTES: &'static [u8] = include_bytes!("../../resources/shaders/texture_diffuse_lit.material");
+static DEFAULT_SHADER_BYTES: &'static [u8] = include_bytes!("../../resources/materials/texture_diffuse_lit.material");
 
 #[derive(Debug)]
 pub struct GlRender {
