@@ -43,7 +43,11 @@ impl Window {
         };
 
         let handle = unsafe {
-            user32::RegisterClassExW(&class_info);
+            let result = user32::RegisterClassExW(&class_info);
+            if result == 0 {
+                println!("ERROR: Unable to create WINAPI window class");
+            }
+
             user32::CreateWindowExW(
                 0,
                 class_u.as_ptr(),
@@ -140,12 +144,34 @@ fn message_callback(
     wParam: WPARAM,
     lParam: LPARAM) -> LRESULT
 {
+    // match uMsg {
+    //     WM_NCCREATE => println!("WM_NCCREATE"),
+    //     WM_CREATE => println!("WM_CREATE"),
+    //     WM_ACTIVATEAPP => println!("WM_ACTIVATEAPP"),
+    //     WM_CLOSE => println!("WM_CLOSE"),
+    //     WM_DESTROY => println!("WM_DESTROY"),
+    //     WM_PAINT => println!("WM_PAINT"),
+    //     WM_SYSKEYDOWN => println!("WM_SYSKEYDOWN"),
+    //     WM_KEYDOWN => println!("WM_KEYDOWN"),
+    //     WM_SYSKEYUP => println!("WM_SYSKEYUP"),
+    //     WM_KEYUP => println!("WM_KEYUP"),
+    //     WM_MOUSEMOVE => println!("WM_MOUSEMOVE"),
+    //     WM_INPUT => println!("WM_INPUT"),
+    //     _ => println!("uknown message: {:?}", uMsg),
+    // }
+
     let messages_ptr = user32::GetPropW(hwnd, WINDOW_PROP.to_c_u16().as_ptr()) as *mut VecDeque<Message>;
     if !messages_ptr.is_null() {
         let messages = &mut *messages_ptr;
         match uMsg {
-            WM_ACTIVATEAPP => messages.push_back(Activate),
-            WM_CLOSE => messages.push_back(Close),
+            WM_ACTIVATEAPP => { messages.push_back(Activate); },
+            WM_CLOSE => {
+                messages.push_back(Close);
+
+                // Skip default proc to avoid closing the window. Allow client code to perform
+                // whatever handling they want before closing the window.
+                return 0;
+            },
             WM_DESTROY => messages.push_back(Destroy),
             //WM_PAINT => messages.push_back(Paint), // TODO We need a user defined window proc to allow painting outside of the main loop.
             WM_SYSKEYDOWN | WM_KEYDOWN => messages.push_back(KeyDown(convert_windows_scancode(wParam, lParam))),
@@ -156,7 +182,7 @@ fn message_callback(
                 messages.push_back(MousePos(x_coord, y_coord));
             },
             WM_INPUT => handle_raw_input(messages, lParam),
-            _ => (),
+            _ => {},
         }
     }
 
