@@ -128,8 +128,6 @@ use scene::Scene;
 use self::bounding_volume::{BoundingVolumeManager, bvh_update};
 use self::grid_collision::GridCollisionSystem;
 use std::cell::{RefCell, Ref, RefMut};
-use std::collections::{HashSet};
-use std::collections::hash_state::HashState;
 use stopwatch::Stopwatch;
 use super::DefaultMessage;
 use super::struct_component_manager::{StructComponentManager, Iter};
@@ -677,11 +675,11 @@ impl CollisionCallbackManager {
 
     /// For a pair of colliding entities A and B, we assume that there is either an entry (A, B) or
     /// (B, A), but not both. We manually invoke the callback for both colliding entities.
-    pub fn process_collisions<H>(
+    pub fn process_collisions<'a, H>(
         &mut self,
         scene: &Scene,
-        collisions: &HashSet<(Entity, Entity), H>
-    ) where H: HashState {
+        collisions: H,
+    ) where H: IntoIterator<Item = &'a (Entity, Entity)>{
         let _stopwatch = Stopwatch::new("Process Collision Callbacks");
 
         {

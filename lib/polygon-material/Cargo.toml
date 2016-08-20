@@ -1,0 +1,8 @@
+[package]
+
+name = "polygon_material"
+version = "0.0.0"
+authors = ["David LeGare <excaliburhissheath@gmail.com>"]
+
+[dependencies]
+polygon_math = { version = "0.0", path = "../polygon_math" }

@@ -1,11 +1,17 @@
 use collections::EntitySet;
-use engine::EngineBuilder;
+use engine::{Engine, EngineBuilder};
 use scene::Scene;
 use std::collections::VecDeque;
 use std::intrinsics;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct Entity(u32);
+
+impl Entity {
+    pub fn new() -> Entity {
+        Engine::scene().create_entity()
+    }
+}
 
 const MIN_RECYCLED_ENTITIES: usize = 1000;
 

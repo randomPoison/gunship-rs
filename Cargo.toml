@@ -34,14 +34,14 @@ debug = true
 [profile.bench]
 lto = true
 
-[[example]]
-name = "create_destroy"
-path = "examples/benchmarks/create_destroy.rs"
-
-[[example]]
-name = "circle_movement"
-path = "examples/benchmarks/circle_movement.rs"
-
-[[example]]
-name = "circle_collision"
-path = "examples/benchmarks/circle_collision.rs"
+# [[example]]
+# name = "create_destroy"
+# path = "examples/benchmarks/create_destroy.rs"
+#
+# [[example]]
+# name = "circle_movement"
+# path = "examples/benchmarks/circle_movement.rs"
+#
+# [[example]]
+# name = "circle_collision"
+# path = "examples/benchmarks/circle_collision.rs"

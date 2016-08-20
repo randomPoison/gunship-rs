@@ -30,8 +30,6 @@ impl CallbackId {
     }
 }
 
-
-
 /// Utility manager for handling callbacks in a hotloading-compatible way.
 pub struct CallbackManager<T: 'static + ?Sized> {
     callbacks: HashMap<CallbackId, Box<T>, FnvHashState>,

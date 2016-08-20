@@ -1,14 +1,12 @@
 [package]
 
 name = "bootstrap-gl"
-version = "0.0.0"
+version = "0.1.0"
 authors = ["David LeGare <excaliburhissheath@gmail.com>"]
 
 [dependencies]
-winapi = "*"
-opengl32-sys = "*"
-gdi32-sys = "*"
-
-[dependencies.bootstrap_rs]
-version="*"
-path="../bootstrap_rs"
+kernel32-sys = "0.2"
+gdi32-sys = "0.2"
+opengl32-sys = "0.1"
+user32-sys = "0.1"
+winapi = "0.2"

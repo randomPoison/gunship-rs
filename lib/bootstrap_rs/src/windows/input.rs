@@ -1,11 +1,10 @@
+use std::collections::VecDeque;
 use std::mem::{self, size_of};
 use std::ptr;
-
+use window::Message::*;
+use window::*;
 use windows::winapi::*;
 use windows::user32;
-
-use window::Message::*;
-use window::Window;
 
 // use windows::winapi::winuser::RAWINPUTDEVICE;
 // use windows::xinput::*;
@@ -73,7 +72,7 @@ pub fn register_raw_input(hwnd: HWND) {
     }
 }
 
-pub fn handle_raw_input(window: &mut Window, lParam: LPARAM) {
+pub fn handle_raw_input(messages: &mut VecDeque<Message>, lParam: LPARAM) {
     // Call GetRawInputData once to get the size of the data.
     let mut size: UINT = 0;
     unsafe {
@@ -103,43 +102,43 @@ pub fn handle_raw_input(window: &mut Window, lParam: LPARAM) {
     assert!(raw.header.dwType == RIM_TYPEMOUSE);
     assert!(raw_mouse.usFlags == MOUSE_MOVE_RELATIVE);
 
-    window.messages.push_back(MouseMove(raw_mouse.lLastX, raw_mouse.lLastY));
+    messages.push_back(MouseMove(raw_mouse.lLastX, raw_mouse.lLastY));
 
 
     if raw_mouse.usButtonFlags != 0 {
         let button_flags = raw_mouse.usButtonFlags;
         if button_flags & RI_MOUSE_LEFT_BUTTON_DOWN != 0 {
-            window.messages.push_back(MouseButtonPressed(0));
+            messages.push_back(MouseButtonPressed(0));
         }
         if button_flags & RI_MOUSE_LEFT_BUTTON_UP != 0 {
-            window.messages.push_back(MouseButtonReleased(0));
+            messages.push_back(MouseButtonReleased(0));
         }
         if button_flags & RI_MOUSE_RIGHT_BUTTON_DOWN != 0 {
-            window.messages.push_back(MouseButtonPressed(1));
+            messages.push_back(MouseButtonPressed(1));
         }
         if button_flags & RI_MOUSE_RIGHT_BUTTON_UP != 0 {
-            window.messages.push_back(MouseButtonReleased(1));
+            messages.push_back(MouseButtonReleased(1));
         }
         if button_flags & RI_MOUSE_MIDDLE_BUTTON_DOWN != 0 {
-            window.messages.push_back(MouseButtonPressed(2));
+            messages.push_back(MouseButtonPressed(2));
         }
         if button_flags & RI_MOUSE_MIDDLE_BUTTON_UP != 0 {
-            window.messages.push_back(MouseButtonReleased(2));
+            messages.push_back(MouseButtonReleased(2));
         }
         if button_flags & RI_MOUSE_BUTTON_4_DOWN != 0 {
-            window.messages.push_back(MouseButtonPressed(3));
+            messages.push_back(MouseButtonPressed(3));
         }
         if button_flags & RI_MOUSE_BUTTON_4_UP != 0 {
-            window.messages.push_back(MouseButtonReleased(3));
+            messages.push_back(MouseButtonReleased(3));
         }
         if button_flags & RI_MOUSE_BUTTON_5_DOWN != 0 {
-            window.messages.push_back(MouseButtonPressed(4));
+            messages.push_back(MouseButtonPressed(4));
         }
         if button_flags & RI_MOUSE_BUTTON_5_UP != 0 {
-            window.messages.push_back(MouseButtonReleased(4));
+            messages.push_back(MouseButtonReleased(4));
         }
         if button_flags & RI_MOUSE_WHEEL != 0 {
-            window.messages.push_back(MouseWheel(raw_mouse.usButtonData as i32))
+            messages.push_back(MouseWheel(raw_mouse.usButtonData as i32))
         }
     }
 }

@@ -2,7 +2,7 @@ use collections::{Array, EntityMap, EntitySet};
 use ecs::*;
 use scene::Scene;
 use std::cell::RefCell;
-use std::fmt::{Debug, Error, Formatter, Write};
+use std::fmt::{Debug, Error, Formatter};
 use std::intrinsics::type_name;
 use std::ops::*;
 

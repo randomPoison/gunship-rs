@@ -1,7 +1,9 @@
+/// Implements the logic behind converting COLLADA documents to polygon-rs meshes.
+
 extern crate parse_collada as collada;
 
 use math::*;
-use polygon::geometry::*;
+use polygon::geometry::mesh::*;
 pub use self::collada::{
     AnyUri,
     ArrayElement,
@@ -162,10 +164,10 @@ fn collada_mesh_to_mesh(mesh: &collada::Mesh) -> Result<Mesh> {
         _ => return Err(Error::UnsupportedPrimitiveType),
     };
 
-    let primitive_indices = try!(
+    let primitive_indices =
         triangles.p
         .as_ref()
-        .ok_or(Error::MissingPrimitiveIndices));
+        .ok_or(Error::MissingPrimitiveIndices)?;
 
     // Iterate over the indices, rearranging the normal data to match the position data.
     let stride = triangles.input.len(); // TODO: Do we have a better way of calculating stride? What if one of the sources isn't used? OR USED TWICE!?

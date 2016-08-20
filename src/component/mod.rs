@@ -19,7 +19,7 @@ pub use self::singleton_component_manager::SingletonComponentManager;
 pub use self::transform::{Transform, TransformManager};
 pub use self::camera::{Camera, CameraManager};
 pub use self::mesh::{Mesh, MeshManager};
-pub use self::light::{Light, LightManager, LightUpdateSystem};
+pub use self::light::{Light, LightManager};
 pub use self::audio::{AudioSource, AudioSourceManager, AudioSystem};
 pub use self::alarm::{AlarmId, AlarmManager, alarm_update};
 pub use self::collider::{Collider, ColliderManager, CollisionSystem, bounding_volume, grid_collision};

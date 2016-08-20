@@ -10,11 +10,11 @@ use window::Window;
 
 pub type Context = glx::GLXContext;
 
-pub fn init(_window: &Window) {
+pub unsafe fn init(_window: &Window) {
     println!("gl::init() is not implemented on linux");
 }
 
-pub fn create_context(_window: &Window) -> GLContext {
+pub unsafe fn create_context(_window: &Window) -> GLContext {
     set_proc_loader();
     //
     // context
@@ -22,16 +22,14 @@ pub fn create_context(_window: &Window) -> GLContext {
     ptr::null_mut()
 }
 
-pub fn set_proc_loader() {
+pub unsafe fn set_proc_loader() {
     // provide method for loading functions
     gl::load_with(|s| {
         let string = CString::new(s);
-        unsafe {
-            mem::transmute(glx::glXGetProcAddress(mem::transmute(string.unwrap().as_ptr())))
-        }
+        mem::transmute(glx::glXGetProcAddress(mem::transmute(string.unwrap().as_ptr())))
     });
 }
 
-pub fn swap_buffers(window: &Window) {
-    unsafe { glx::glXSwapBuffers(window.display, window.window); }
+pub unsafe fn swap_buffers(window: &Window) {
+    glx::glXSwapBuffers(window.display, window.window);
 }

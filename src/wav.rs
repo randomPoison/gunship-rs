@@ -1,16 +1,16 @@
-use std::io::prelude::*;
-use std::fs::File;
-use std::path::Path;
-use std::error::Error;
-use std::mem;
 use std::char;
+use std::error::Error;
 use std::fmt::{Debug, Formatter};
+use std::fs::File;
+use std::io::prelude::*;
+use std::mem;
+use std::path::Path;
+use std::slice;
 
 const RIFF: [u8; 4] = ['R' as u8, 'I' as u8, 'F' as u8, 'F' as u8];
 const WAVE: [u8; 4] = ['W' as u8, 'A' as u8, 'V' as u8, 'E' as u8];
 const FMT:  [u8; 4] = ['f' as u8, 'm' as u8, 't' as u8, ' ' as u8];
 const DATA: [u8; 4] = ['d' as u8, 'a' as u8, 't' as u8, 'a' as u8];
-const INPUT_BUFFER_SIZE: usize = 2048;
 
 #[repr(C)]
 pub struct ChunkHeader {
@@ -101,25 +101,28 @@ impl DataChunk {
     }
 
     pub fn from_stream(file: &mut File, header: ChunkHeader) -> Result<DataChunk, ::std::io::Error> {
+        const INPUT_BUFFER_SIZE_SAMPLES: usize = 2048;
+        const INPUT_BUFFER_SIZE_BYTES: usize = INPUT_BUFFER_SIZE_SAMPLES * 2;
+
+        // TODO: The header specifies how many bytes are in the data chunk, so we should
+        // pre-allocate a buffer large enough and read the entire data chunk at once.
         let mut samples: Vec<u16> = Vec::new();
-        let buffer: [u16; INPUT_BUFFER_SIZE] = [0; INPUT_BUFFER_SIZE];
+        let mut byte_buffer: [u8; INPUT_BUFFER_SIZE_BYTES] = [0; INPUT_BUFFER_SIZE_BYTES];
         loop {
-            let bytes_read = unsafe {
-                try!(file.read(mem::transmute(::std::raw::Slice {
-                    data: &buffer,
-                    len: INPUT_BUFFER_SIZE * 2,
-                })))
-            };
+            let bytes_read = file.read(&mut byte_buffer)?;
+
+            // Convert the data read from the file from bytes to samples.
             let samples_read = bytes_read / 2;
+            let sample_buffer = unsafe {
+                slice::from_raw_parts(byte_buffer.as_ptr() as *const u16, INPUT_BUFFER_SIZE_SAMPLES)
+            };
+
+            // Copy data from the buffer to `samples`.
+            samples.extend(&sample_buffer[0..samples_read]);
 
             // If there are no more bytes to read then we're done.
-            // TODO: Only read as many bytes as the header specifies.
-            if bytes_read == 0 {
+            if bytes_read < INPUT_BUFFER_SIZE_BYTES {
                 break;
-            }
-
-            for sample in buffer.iter().take(samples_read) {
-                samples.push(*sample);
             }
         }
 

@@ -1,20 +1,16 @@
-use std::rc::Rc;
-use std::cell::RefCell;
 use std::thread;
-use std::ops::Deref;
 use std::collections::HashMap;
 use std::intrinsics::type_name;
 use std::mem;
 use std::ptr;
 use std::time::Duration;
 
-use bootstrap;
 use bootstrap::input::ScanCode;
 use bootstrap::window::Window;
 use bootstrap::window::Message::*;
 use bootstrap::time::Timer;
 use bs_audio;
-use polygon::gl_render::GLRender;
+use polygon::{Renderer, RendererBuilder};
 use singleton::Singleton;
 use stopwatch::{Collector, Stopwatch};
 
@@ -27,18 +23,17 @@ use debug_draw::DebugDraw;
 pub const TARGET_FRAME_TIME_SECONDS: f32 = 1.0 / 60.0;
 pub const TARGET_FRAME_TIME_MS: f32 = TARGET_FRAME_TIME_SECONDS * 1000.0;
 
-static mut INSTANCE: *mut Engine = 0 as *mut _;
+static mut INSTANCE: *mut Engine = ptr::null_mut();
 
 pub struct Engine {
-    window: Rc<RefCell<Window>>, // TODO: This doesn't need to be an Rc<RefCell<>> when we're not doing hotloading.
-    renderer: Rc<GLRender>,
+    renderer: Box<Renderer>,
+    window: Window,
     resource_manager: Box<ResourceManager>,
 
     systems: HashMap<SystemId, Box<System>>,
     debug_systems: HashMap<SystemId, Box<System>>,
 
     // TODO: Replace explicit update ordering with something more automatic (e.g. dependency hierarchy).
-    light_update: Box<System>,
     audio_update: Box<System>,
     alarm_update: Box<System>,
     collision_update: Box<System>,
@@ -91,11 +86,13 @@ impl Engine {
         &*instance.resource_manager
     }
 
-    pub fn window() -> Rc<RefCell<Window>> {
-        Engine::instance().window.clone()
+    pub fn window() -> &'static Window {
+        &Engine::instance().window
     }
 
     fn main_loop(&mut self) {
+        println!("starting main loop");
+
         let timer = Timer::new();
         let mut collector = Collector::new().unwrap();
 
@@ -108,12 +105,15 @@ impl Engine {
             self.draw();
 
             if self.close {
+                println!("shutting down engine");
                 break;
             }
 
-            if !cfg!(feature="timing")
-            && timer.elapsed_ms(start_time) > TARGET_FRAME_TIME_MS {
-                println!("WARNING: Missed frame time. Frame time: {}ms, target frame time: {}ms", timer.elapsed_ms(start_time), TARGET_FRAME_TIME_MS);
+            if !cfg!(feature="timing") && timer.elapsed_ms(start_time) > TARGET_FRAME_TIME_MS {
+                println!(
+                    "WARNING: Missed frame time. Frame time: {}ms, target frame time: {}ms",
+                    timer.elapsed_ms(start_time),
+                    TARGET_FRAME_TIME_MS);
             }
 
             // Wait for target frame time.
@@ -131,6 +131,8 @@ impl Engine {
         };
 
         collector.flush_to_file("stopwatch.csv");
+
+        println!("exiting main loop");
     }
 
     fn update(&mut self) {
@@ -139,9 +141,8 @@ impl Engine {
         let scene = &mut self.scene;
 
         scene.input.clear();
-        let mut window = self.window.borrow_mut();
         loop {
-            let message = window.next_message(); // TODO: Make this an iterator to simplify this loop.
+            let message = self.window.next_message(); // TODO: Make this an iterator to simplify this loop.
             match message {
                 Some(message) => {
                     match message {
@@ -189,7 +190,6 @@ impl Engine {
 
         if !self.debug_pause || scene.input.key_pressed(ScanCode::F11) {
             self.collision_update.update(scene, TARGET_FRAME_TIME_SECONDS);
-            self.light_update.update(scene, TARGET_FRAME_TIME_SECONDS);
             self.audio_update.update(scene, TARGET_FRAME_TIME_SECONDS);
         }
 
@@ -206,85 +206,23 @@ impl Engine {
     fn draw(&mut self) {
         let _stopwatch = Stopwatch::new("draw");
 
-        self.renderer.clear();
-
-        let scene = &mut self.scene;
-        let camera_manager = scene.get_manager::<CameraManager>();
-        let transform_manager = scene.get_manager::<TransformManager>();
-        let mesh_manager = scene.get_manager::<MeshManager>();
-        let light_manager = scene.get_manager::<LightManager>();
-
-        // Handle rendering for each camera.
-        for (camera, entity) in camera_manager.iter() {
-            // TODO: Update the camera's bounds in a separate system.
-            let camera = {
-                let transform = transform_manager.get(entity).unwrap(); // TODO: Don't panic?
-
-                camera.to_polygon_camera(
-                    transform.position_derived(),
-                    transform.rotation_derived())
-            };
-
-            // Draw all of the meshes.
-            for (mesh, entity) in mesh_manager.iter() {
-                let transform = transform_manager.get(entity).unwrap(); // TODO: Don't panic?
-
-                self.renderer.draw_mesh(
-                    &mesh.gl_mesh,
-                    &mesh.shader,
-                    transform.derived_matrix(),
-                    transform.derived_normal_matrix(),
-                    &camera,
-                    &mut light_manager.iter().map(|(light_ref, _)| *light_ref));
-            }
-
-            self.debug_draw.flush_commands(&camera);
-        }
-
-        self.renderer.swap_buffers(self.window.borrow().deref());
+        self.renderer.draw();
     }
 
     #[cfg(feature="no-draw")]
     fn draw(&mut self) {}
 }
 
-impl Clone for Engine {
-    fn clone(&self) -> Engine {
-        let resource_manager = self.resource_manager.clone();
-
-        let engine = Engine {
-            window: self.window.clone(),
-            renderer: self.renderer.clone(),
-            resource_manager: resource_manager.clone(),
-
-            systems: HashMap::new(),
-            debug_systems: HashMap::new(),
-
-            light_update: Box::new(LightUpdateSystem),
-            audio_update: Box::new(AudioSystem),
-            alarm_update: Box::new(alarm_update),
-            collision_update: Box::new(CollisionSystem::new()),
-
-            scene: self.scene.clone(),
-
-            debug_draw: DebugDraw::new(self.renderer.clone(), &*resource_manager),
-
-            close: false,
-            debug_pause: false,
-        };
-
-        engine
-    }
-}
-
 unsafe impl Singleton for Engine {
     /// Creates the instance of the singleton.
     fn set_instance(engine: Engine) {
+        println!("setting instance");
         assert!(unsafe { INSTANCE.is_null() }, "Cannot create more than one Engine instance");
         let boxed_engine = Box::new(engine);
         unsafe {
             INSTANCE = Box::into_raw(boxed_engine);
         }
+        println!("done setting instance");
     }
 
     /// Retrieves an immutable reference to the singleton instance.
@@ -340,12 +278,13 @@ impl EngineBuilder {
     ///
     /// No `Engine` object is returned because this method instantiates the engine singleton.
     pub fn build(self) {
+
         let engine = {
-            let instance = bootstrap::init();
-            let window = Window::new("Rust Window", instance);
-            let renderer = Rc::new(GLRender::new(window.borrow().deref()));
-            let resource_manager = Box::new(ResourceManager::new(renderer.clone()));
-            let debug_draw = DebugDraw::new(renderer.clone(), &*resource_manager);
+            let window = Window::new("gunship game");
+            let mut renderer = RendererBuilder::new().build();
+            let debug_draw = DebugDraw::new(&mut *renderer);
+
+            let resource_manager = Box::new(ResourceManager::new());
 
             let audio_source = match bs_audio::init() {
                 Ok(audio_source) => audio_source,
@@ -356,14 +295,13 @@ impl EngineBuilder {
             };
 
             Engine {
-                window: window.clone(),
-                renderer: renderer.clone(),
+                window: window,
+                renderer: renderer,
                 resource_manager: resource_manager,
 
                 systems: self.systems,
                 debug_systems: self.debug_systems,
 
-                light_update: Box::new(LightUpdateSystem),
                 audio_update: Box::new(AudioSystem),
                 alarm_update: Box::new(alarm_update),
                 collision_update: Box::new(CollisionSystem::new()),
@@ -376,6 +314,9 @@ impl EngineBuilder {
                 debug_pause: false,
             }
         };
+
+        println!("made the engine, woo");
+
         Engine::set_instance(engine);
     }
 
@@ -425,82 +366,3 @@ impl EngineBuilder {
         self.debug_systems.insert(system_id, Box::new(system));
     }
 }
-
-// ==========================
-// HOTLOADING MAGIC FUNCTIONS
-// ==========================
-
-
-/*
-// FIXME: Hotloading is completely broken for the time being, it's going to need some heavy
-// refactoring before it's going to work again.
-
-#[no_mangle]
-pub fn engine_init(window: Rc<RefCell<Window>>) -> Box<Engine> {
-    let renderer = Rc::new(GLRender::new(window.borrow().deref()));
-    let resource_manager = Box::new(ResourceManager::new(renderer.clone()));
-    let debug_draw = DebugDraw::new(renderer.clone(), &*resource_manager);
-
-    let audio_source = match bs_audio::init() {
-        Ok(audio_source) => {
-            println!("Audio subsystem successfully initialized");
-            audio_source
-        },
-        Err(error) => {
-            panic!("Error while initialzing audio subsystem: {}", error)
-        },
-    };
-
-    Box::new(Engine {
-        window: window,
-        renderer: renderer.clone(),
-        resource_manager: resource_manager,
-
-        systems: HashMap::new(),
-        debug_systems: HashMap::new(),
-
-        transform_update: Box::new(transform_update),
-        light_update: Box::new(LightUpdateSystem),
-        audio_update: Box::new(AudioSystem),
-        alarm_update: Box::new(alarm_update),
-        collision_update: Box::new(CollisionSystem::new()),
-
-        scene: Scene::new(audio_source),
-
-        debug_draw: debug_draw,
-
-        close: false,
-        debug_pause: false,
-    })
-}
-
-#[no_mangle]
-pub fn engine_reload(engine: &Engine) -> Box<Engine> {
-    let new_engine = engine.clone();
-    Box::new(new_engine)
-}
-
-#[no_mangle]
-pub fn engine_update_and_render(engine: &mut Engine) {
-    engine.update();
-    engine.draw();
-}
-
-#[no_mangle]
-pub fn engine_close(engine: &Engine) -> bool {
-    engine.close()
-}
-
-#[no_mangle]
-pub fn engine_drop(engine: Box<Engine>) {
-    drop(engine);
-}
-
-// #[cfg(test)] // TODO: Only include this for benchmarks. Double TODO: better support headless benches.
-pub fn do_collision_update(engine: &mut Engine) {
-    let scene = &mut engine.scene;
-    engine.transform_update.update(scene, TARGET_FRAME_TIME_SECONDS);
-    engine.collision_update.update(scene, TARGET_FRAME_TIME_SECONDS);
-}
-
-*/
