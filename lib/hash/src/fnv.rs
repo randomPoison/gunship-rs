@@ -4,7 +4,7 @@ use std::hash::{BuildHasher, Hasher};
 ///! clonable, and this was faster than actually cloning the repo and making PR. At some point I
 ///! should probably request the change be added to the main repo.
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct FnvHashState;
 
 impl BuildHasher for FnvHashState {

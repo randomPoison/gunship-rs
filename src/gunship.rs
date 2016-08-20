@@ -1,10 +1,8 @@
 #![feature(associated_type_defaults)]
-#![feature(augmented_assignments)]
-#![feature(core)]
+#![feature(const_fn)]
 #![feature(core_intrinsics)]
-#![feature(drain)]
+#![feature(fn_traits)]
 #![feature(fnbox)]
-#![feature(hashmap_hasher)]
 #![feature(question_mark)]
 #![feature(raw)]
 #![feature(unboxed_closures)]
@@ -56,7 +54,7 @@ pub use self::component::audio::{AudioSourceManager, AudioSource};
 pub use self::component::alarm::{AlarmId, AlarmManager};
 pub use self::component::collider::{ColliderManager, Collider};
 pub use self::component::singleton_component_manager::{SingletonComponentManager, SingletonComponentUpdateManager};
-pub use self::polygon::geometry::MeshBuilder;
+pub use self::polygon::geometry::mesh::MeshBuilder;
 pub use self::singleton::Singleton;
 
 // // TODO: These are only needed for hotloading support.

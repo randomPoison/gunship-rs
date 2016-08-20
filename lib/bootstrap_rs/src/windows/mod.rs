@@ -5,7 +5,6 @@ extern crate user32;
 extern crate kernel32;
 extern crate winmm;
 
-pub mod init;
 pub mod window;
 pub mod input;
 pub mod time;

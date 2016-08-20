@@ -3,37 +3,35 @@ use ecs::Entity;
 use scene::Scene;
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::error::Error;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
-use polygon::{GlRender, GpuMesh};
+use polygon::{GpuMesh};
 use polygon::geometry::mesh::Mesh;
-use polygon::shader::{Error as ShaderError, ShaderProgram};
+use polygon::material::*;
 use wav::Wave;
 
 pub mod collada;
 
-#[derive(Debug)]
 pub struct ResourceManager {
-    renderer: Rc<GlRender>,
+    // renderer: Rc<Box<Renderer>>,
     meshes: RefCell<HashMap<String, Mesh>>,
     gpu_meshes: RefCell<HashMap<String, GpuMesh>>,
     mesh_nodes: RefCell<HashMap<String, MeshNode>>,
-    shaders: RefCell<HashMap<String, ShaderProgram>>,
+    _materials: RefCell<HashMap<String, Material>>,
     audio_clips: RefCell<HashMap<String, Rc<Wave>>>,
 
     resource_path: RefCell<PathBuf>,
 }
 
 impl ResourceManager {
-    pub fn new(renderer: Rc<GlRender>) -> ResourceManager {
+    pub fn new() -> ResourceManager {
         ResourceManager {
-            renderer: renderer,
+            // renderer: renderer,
             meshes: RefCell::new(HashMap::new()),
             gpu_meshes: RefCell::new(HashMap::new()),
             mesh_nodes: RefCell::new(HashMap::new()),
-            shaders: RefCell::new(HashMap::new()),
+            _materials: RefCell::new(HashMap::new()),
             audio_clips: RefCell::new(HashMap::new()),
 
             resource_path: RefCell::new(PathBuf::new()),
@@ -67,7 +65,7 @@ impl ResourceManager {
     /// # Details
     ///
     /// The resource manager is configured to look in the specified directory when loading
-    /// resources such as meshes and shaders.
+    /// resources such as meshes and materials.
     pub fn set_resource_path<P: AsRef<Path>>(&self, path: P) {
         let mut resource_path = self.resource_path.borrow_mut();
         *resource_path = PathBuf::new();
@@ -141,36 +139,11 @@ impl ResourceManager {
         Ok(entity)
     }
 
-    pub fn get_shader<P: AsRef<Path>>(
+    pub fn get_material<P: AsRef<Path>>(
         &self,
-        shader_path: P
-    ) -> Result<&ShaderProgram, ShaderError> {
-        let path_str = match shader_path.as_ref().to_str() {
-            Some(path) => path,
-            None => panic!(
-                "shader path {:?} contains invalid unicode characters",
-                shader_path.as_ref()),
-        };
-
-        if let Some(shader) = self.shaders.borrow().get(path_str) {
-            return Ok(shader);
-        }
-
-        // This should be an else block on the above if block, but that doesn't work until MIR has
-        // dropped, so for now we have to settle for manual case analysis.
-        {
-            let path_string: String = shader_path.as_ref()
-                .to_str()
-                .expect(&*format!(
-                    "shader path {:?} contains invalid unicode characters",
-                    shader_path.as_ref()))
-                .into();
-
-            let shader = ShaderProgram::from_file(path_string)?;
-            self.shaders.borrow_mut().insert(path_str, shader);
-
-            Ok(shader)
-        }
+        _path: P
+    ) -> Result<&Material, MaterialError> {
+        unimplemented!();
     }
 
     pub fn add_mesh<U: Into<String> + AsRef<str>>(&self, uri: U, mesh: Mesh) {
@@ -210,33 +183,20 @@ impl ResourceManager {
             println!("WARNING: Attempting to create a new mesh for {} when the uri is already in the meshes map", uri);
         }
 
-        let meshes = self.meshes.borrow();
-        let mesh = match meshes.get(uri) {
-            Some(mesh) => mesh,
-            None => return None,
-        };
+        // let meshes = self.meshes.borrow();
+        // let mesh = match meshes.get(uri) {
+        //     Some(mesh) => mesh,
+        //     None => return None,
+        // };
+        //
+        // let gpu_mesh = self.renderer.register_mesh(&mesh);
+        // self.gpu_meshes
+        //     .borrow_mut()
+        //     .insert(uri.into(), gpu_mesh);
+        //
+        // Some(gpu_mesh)
 
-        let mesh_data = self.renderer.gen_mesh(mesh);
-        self.gpu_meshes
-        .borrow_mut()
-        .insert(uri.into(), mesh_data);
-
-        Some(mesh_data)
-    }
-}
-
-impl Clone for ResourceManager {
-    fn clone(&self) -> Self {
-        ResourceManager {
-            renderer: self.renderer.clone(),
-            meshes: self.meshes.clone(),
-            gpu_meshes: self.gpu_meshes.clone(),
-            mesh_nodes: self.mesh_nodes.clone(),
-            shaders: RefCell::new(HashMap::new()),
-            audio_clips: self.audio_clips.clone(),
-
-            resource_path: self.resource_path.clone(),
-        }
+        unimplemented!();
     }
 }
 
@@ -255,3 +215,6 @@ impl MeshNode {
         }
     }
 }
+
+#[derive(Debug)]
+pub struct MaterialError;

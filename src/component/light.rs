@@ -1,32 +1,10 @@
-//! TODO: Don't expose `polygon::light::Light` directly since it contains irrelevant data (e.g. the
-//! light's position which is controlled by the transform for gunship).
+use component::DefaultManager;
 
-use ecs::*;
-use scene::Scene;
-use component::{DefaultManager, TransformManager};
-
+// TODO: Don't expose `polygon::light::Light` directly since it contains irrelevant data (e.g. the
+// anchor, which is polygon-specific and controlled by the transform in Gunship).
 pub use polygon::light::Light;
 pub use polygon::light::PointLight;
 
 derive_Component!(Light);
 
 pub type LightManager = DefaultManager<Light>;
-
-#[derive(Debug, Clone, Copy)]
-pub struct LightUpdateSystem;
-
-impl System for LightUpdateSystem {
-    fn update(&mut self, scene: &Scene, _delta: f32) {
-        let mut light_manager = unsafe { scene.get_manager_mut::<LightManager>() }; // FIXME: Is bad, use new system.
-        let transform_manager = scene.get_manager::<TransformManager>();
-
-        for (mut light, entity) in light_manager.iter_mut() {
-            let light_transform = transform_manager.get(entity).unwrap(); // TODO: Don't panic.
-            match &mut *light {
-                &mut Light::Point(ref mut point_light) => {
-                    point_light.position = light_transform.position();
-                }
-            }
-        }
-    }
-}

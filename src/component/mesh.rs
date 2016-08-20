@@ -1,34 +1,33 @@
 use ecs::*;
 use engine::*;
-use polygon::gl_render::{GLMeshData, ShaderProgram};
+use polygon::GpuMesh;
+use polygon::material::Material;
 use super::struct_component_manager::*;
-
 
 #[derive(Debug, Clone)]
 pub struct Mesh {
-    entity:  Entity,
-    gl_mesh: GLMeshData,
-    shader:  ShaderProgram,
+    entity: Entity,
+    gl_mesh: GpuMesh,
 }
 
 impl Mesh {
-    pub fn gl_mesh(&self) -> &GLMeshData {
+    pub fn gl_mesh(&self) -> &GpuMesh {
         &self.gl_mesh
     }
 
-    pub fn set_shader(&self, uri: &'static str) {
-        let shader =
+    pub fn set_material(&self, uri: &'static str) {
+        let material =
             Engine::resource_manager()
-            .get_shader(uri)
+            .get_material(uri)
             .unwrap(); // TODO: Provide better panic message (or maybe DON'T PANIC!?).
 
         Engine::scene()
         .manager_for::<Mesh>()
-        .send_message(self.entity, MeshMessage::SetShader(shader));
+        .send_message(self.entity, MeshMessage::SetMaterial(material.clone())); // TODO: Don't clone material?
     }
 
-    pub fn shader(&self) -> &ShaderProgram {
-        &self.shader
+    pub fn material(&self) -> &Material {
+        unimplemented!()
     }
 }
 
@@ -50,15 +49,10 @@ impl MeshManager {
         self.give_mesh(entity, mesh)
     }
 
-    pub fn give_mesh(&self, entity: Entity, mesh: GLMeshData) -> &Mesh {
-        let shader =
-            Engine::resource_manager()
-            .get_shader("shaders/forward_phong.glsl")
-            .unwrap(); // TODO: Provide better panic message (or maybe DON'T PANIC!?).
+    pub fn give_mesh(&self, entity: Entity, mesh: GpuMesh) -> &Mesh {
         self.0.assign(entity, Mesh {
             entity:  entity,
             gl_mesh: mesh,
-            shader:  shader,
         })
     }
 
@@ -99,16 +93,17 @@ derive_Singleton!(MeshManager);
 
 #[derive(Debug, Clone)]
 pub enum MeshMessage {
-    SetShader(ShaderProgram),
+    SetMaterial(Material),
 }
 
 impl Message for MeshMessage {
     type Target = Mesh;
 
-    fn apply(self, target: &mut Mesh) {
+    fn apply(self, _target: &mut Mesh) {
         match self {
-            MeshMessage::SetShader(shader) => {
-                target.shader = shader;
+            MeshMessage::SetMaterial(_) => {
+                // target.material = RefCell::new(material);
+                unimplemented!();
             },
         }
     }

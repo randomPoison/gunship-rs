@@ -168,7 +168,7 @@ impl TransformManager {
 
         // Give the transform a pointer to its data.
         let data = unsafe { row.get_unchecked(index) };
-        transform.data = data as *const _ as *mut _; // `UnsafeCell` level dark magic.
+        transform.data = data as *const _ as *mut _; // TODO: Use `UnsafeCell` to avoid Rust doing illegal optimizations.
 
         // Add to the transform map.
         self.transforms.insert(entity, transform);

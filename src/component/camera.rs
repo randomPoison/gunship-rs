@@ -1,9 +1,9 @@
 use component::DefaultManager;
 use math::*;
-use std::f32::consts::PI;
 
 pub type CameraManager = DefaultManager<Camera>;
 
+derive_Component!(Camera);
 #[derive(Debug, Clone)]
 pub struct Camera
 {
@@ -12,22 +12,6 @@ pub struct Camera
     pub near: f32,
     pub far: f32,
 }
-
-impl Camera {
-    pub fn to_polygon_camera(&self, position: Point, orientation: Quaternion) -> ::polygon::camera::Camera {
-        ::polygon::camera::Camera {
-            fov: self.fov,
-            aspect: self.aspect,
-            near: self.near,
-            far: self.far,
-
-            position: position,
-            rotation: orientation,
-        }
-    }
-}
-
-derive_Component!(Camera);
 
 impl Default for Camera {
     fn default() -> Camera {

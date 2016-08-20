@@ -124,7 +124,7 @@ macro_rules! collada_element {
     };
 
     ($tag_name:expr, $struct_name:ident => {
-        contents: String
+        contents: String,
     }) => {
         #[derive(Debug, Clone)]
         pub struct $struct_name(String);
@@ -172,7 +172,7 @@ macro_rules! collada_element {
     };
 
     ($tag_name:expr, $struct_name:ident => {
-        contents: $contents_type:ty
+        contents: $contents_type:ty,
     }) => {
         #[derive(Debug, Clone)]
         pub struct $struct_name($contents_type);
@@ -661,19 +661,19 @@ collada_element!("asset", Asset => {
 });
 
 collada_element!("author", Author => {
-    contents: String
+    contents: String,
 });
 
 collada_element!("author_email", AuthorEmail => {
-    contents: String
+    contents: String,
 });
 
 collada_element!("author_website", AuthorWebsite => {
-    contents: String
+    contents: String,
 });
 
 collada_element!("authoring_tool", AuthoringTool => {
-    contents: String
+    contents: String,
 });
 
 collada_element!("bind", Bind => {});
@@ -702,7 +702,7 @@ collada_element!("color", Color => {
 });
 
 collada_element!("comments", Comments => {
-    contents: String
+    contents: String,
 });
 
 collada_element!("contributor", Contributor => {
@@ -719,7 +719,7 @@ collada_element!("constant", ConstantFx => {});
 collada_element!("convex_mesh", ConvexMesh => {});
 
 collada_element!("copyright", Copyright => {
-    contents: String
+    contents: String,
 });
 
 collada_element!("coverage", Coverage => {
@@ -727,7 +727,7 @@ collada_element!("coverage", Coverage => {
 });
 
 collada_element!("created", Created => {
-    contents: String
+    contents: String,
 });
 
 collada_element!("diffuse", Diffuse => {

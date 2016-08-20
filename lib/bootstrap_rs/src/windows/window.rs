@@ -13,7 +13,7 @@ use window::Message::*;
 static CLASS_NAME: &'static str = "bootstrap";
 static WINDOW_PROP: &'static str = "window";
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Window {
     pub handle: HWND,
     pub dc: HDC,
@@ -129,6 +129,8 @@ impl Window {
 
 impl Drop for Window {
     fn drop(&mut self) {
+        println!("closing window");
+
         unsafe {
             winmm::timeEndPeriod(1);
             user32::DestroyWindow(self.handle);
