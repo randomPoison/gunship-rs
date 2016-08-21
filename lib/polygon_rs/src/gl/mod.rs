@@ -258,16 +258,6 @@ impl GlRender {
             draw_builder.draw();
         }
     }
-
-    /// Clears the current back buffer.
-    pub fn clear(&self) {
-        self.context.clear();
-    }
-
-    /// Swap the front and back buffers for the render system.
-    pub fn swap_buffers(&self) {
-        self.context.swap_buffers();
-    }
 }
 
 impl Drop for GlRender {
@@ -287,43 +277,38 @@ impl Drop for GlRender {
 
 impl Renderer for GlRender {
     fn draw(&mut self) {
-        self.clear();
+        self.context.clear();
 
-        let (camera, camera_anchor) = if let Some(camera) = self.cameras.values().next() {
-            // Use the first camera in the scene for now. Eventually we'll want to support
-            // rendering multiple cameras to multiple viewports or render targets but for now one
-            // is enough.
-            let anchor = match camera.anchor() {
+        // TODO: Support rendering multiple cameras.
+        // TODO: Should we warn if there are no cameras?
+        if let Some(camera) = self.cameras.values().next() {
+            let camera_anchor = match camera.anchor() {
                 Some(ref anchor_id) => self.anchors.get(anchor_id).expect("no such anchor exists"),
                 None => unimplemented!(),
             };
 
-            (camera, anchor)
-        } else {
-            panic!("There must be a camera registered");
-        };
+            for mesh_instance in self.mesh_instances.values() {
+                let anchor = match mesh_instance.anchor() {
+                    Some(anchor_id) => self.anchors.get(anchor_id).expect("No such anchor exists"),
+                    None => continue,
+                };
 
-        for mesh_instance in self.mesh_instances.values() {
-            let anchor = match mesh_instance.anchor() {
-                Some(anchor_id) => self.anchors.get(anchor_id).expect("No such anchor exists"),
-                None => continue,
-            };
+                let model_transform = anchor.matrix();
+                let normal_transform = anchor.normal_matrix();
 
-            let model_transform = anchor.matrix();
-            let normal_transform = anchor.normal_matrix();
+                let mesh = self.meshes.get(mesh_instance.mesh()).expect("Mesh data does not exist for mesh id");
 
-            let mesh = self.meshes.get(mesh_instance.mesh()).expect("Mesh data does not exist for mesh id");
-
-            self.draw_mesh(
-                mesh,
-                &mesh_instance.material(),
-                model_transform,
-                normal_transform,
-                camera,
-                camera_anchor);
+                self.draw_mesh(
+                    mesh,
+                    &mesh_instance.material(),
+                    model_transform,
+                    normal_transform,
+                    camera,
+                    camera_anchor);
+            }
         }
 
-        self.swap_buffers();
+        self.context.swap_buffers();
     }
 
     fn default_material(&self) -> Material {
