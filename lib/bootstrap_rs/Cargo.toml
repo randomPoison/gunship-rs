@@ -14,10 +14,10 @@ winmm-sys = "*"
 # Begin macos dependencies.
 # TODO: Somehow make these dependencies only when compiling for macos. This
 # requires RFC 1361 to be implemented: https://github.com/rust-lang/rfcs/pull/1361
-objc = "*"
-cocoa = "*"
-core-graphics = "*"
-core-foundation = "*"
+objc = "0.2"
+cocoa = "0.3"
+core-graphics = "0.3"
+core-foundation = "0.2"
 
 # [dependencies.x11]
 # version = "*"

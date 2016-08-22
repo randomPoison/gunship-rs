@@ -1,4 +1,4 @@
-#![feature(op_assign_traits)]
+#![feature(trace_macros)]
 #![cfg_attr(target_os = "windows", feature(str_utf16))]
 
 #[cfg(target_os = "macos")]
