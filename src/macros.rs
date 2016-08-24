@@ -60,3 +60,19 @@ macro_rules! warn_once {
         }
     }
 }
+
+#[macro_export]
+macro_rules! await {
+    ($future: expr) => {
+        unsafe {
+            // Create a place for the result of the async operation.
+            let mut result: Option<Result<_, _>> = None;
+
+            // Suspend this fiber until the future completes.
+            $crate::async::run_async($future, &mut result);
+
+            // Return the result of the future.
+            result.expect("No result returned from async operation")
+        }
+    }
+}

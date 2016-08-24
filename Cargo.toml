@@ -13,26 +13,17 @@ hotloading = []
 no-draw = []
 
 [dependencies]
-bootstrap_rs    = { path = "lib/bootstrap_rs" }
+bootstrap_rs = { path = "lib/bootstrap_rs" }
 bootstrap_audio = { path = "lib/bootstrap_audio" }
-hash            = { path = "lib/hash" }
-parse_collada   = { path = "lib/parse_collada" }
-polygon         = { path = "lib/polygon_rs" }
-polygon_math    = { path = "lib/polygon_math" }
-stopwatch       = { path = "lib/stopwatch" }
+fiber = { version = "0.1", path = "lib/fiber" }
+hash = { path = "lib/hash" }
+parse_collada = { path = "lib/parse_collada" }
+polygon = { path = "lib/polygon_rs" }
+polygon_math = { path = "lib/polygon_math" }
+stopwatch = { path = "lib/stopwatch" }
 
 [dev_dependencies]
 rand = "*"
-
-# [profile.dev]
-# opt-level = 1
-
-[profile.release]
-# lto = true
-debug = true
-
-[profile.bench]
-lto = true
 
 # [[example]]
 # name = "create_destroy"

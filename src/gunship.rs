@@ -1,4 +1,5 @@
 #![feature(associated_type_defaults)]
+#![feature(conservative_impl_trait)]
 #![feature(const_fn)]
 #![feature(core_intrinsics)]
 #![feature(fn_traits)]
@@ -9,9 +10,10 @@
 
 extern crate bootstrap_rs as bootstrap;
 extern crate bootstrap_audio as bs_audio;
+extern crate fiber;
+extern crate hash;
 extern crate polygon;
 extern crate polygon_math as math;
-extern crate hash;
 
 pub mod stopwatch {
     extern crate stopwatch;
@@ -26,6 +28,7 @@ pub mod stopwatch {
 #[macro_use]
 pub mod macros;
 
+pub mod async;
 pub mod callback;
 pub mod collections;
 pub mod component;

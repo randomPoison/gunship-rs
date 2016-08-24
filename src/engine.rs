@@ -317,6 +317,9 @@ impl EngineBuilder {
 
         println!("made the engine, woo");
 
+        // Init aysnc subsystem.
+        ::async::init();
+
         Engine::set_instance(engine);
     }
 

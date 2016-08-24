@@ -11,6 +11,7 @@ use polygon::geometry::mesh::Mesh;
 use polygon::material::*;
 use wav::Wave;
 
+pub mod async;
 pub mod collada;
 
 pub struct ResourceManager {
