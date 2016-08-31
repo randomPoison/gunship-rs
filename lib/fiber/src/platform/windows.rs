@@ -1,7 +1,7 @@
 extern crate kernel32;
 extern crate winapi;
 
-use FiberProc;
+use std::boxed::FnBox;
 use std::ptr;
 use self::winapi::*;
 
@@ -19,13 +19,12 @@ pub fn init() -> Fiber {
     fiber
 }
 
-pub fn create_fiber<T>(stack_size: usize, fiber_proc: FiberProc<T>, data: *mut T) -> Fiber {
+pub fn create_fiber(stack_size: usize, func: Box<FnBox()>) -> Fiber {
     let fiber = unsafe {
-        let platform_proc = ::std::mem::transmute(fiber_proc);
         kernel32::CreateFiber(
             stack_size as u32,
-            Some(platform_proc),
-            data as LPVOID,
+            Some(fiber_proc),
+            Box::into_raw(Box::new(func)) as LPVOID,
         )
     };
 
@@ -42,4 +41,10 @@ pub fn create_fiber<T>(stack_size: usize, fiber_proc: FiberProc<T>, data: *mut T
 pub fn make_active(fiber: Fiber) {
     println!("making active: {:?}", fiber);
     unsafe { kernel32::SwitchToFiber(fiber); }
+}
+
+/// `data` is secretly a pointer to a `Box<Box<FnBox()>>`.
+unsafe extern "system" fn fiber_proc(data: LPVOID) {
+    let func = Box::from_raw(data as *mut Box<FnBox()>);
+    func();
 }
