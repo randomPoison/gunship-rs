@@ -64,15 +64,49 @@ macro_rules! warn_once {
 #[macro_export]
 macro_rules! await {
     ($future: expr) => {
-        unsafe {
+        {
             // Create a place for the result of the async operation.
-            let mut result: Option<Result<_, _>> = None;
+            let mut result = None;
 
             // Suspend this fiber until the future completes.
-            $crate::async::run_async($future, &mut result);
+            $crate::async::await($future, &mut result);
 
             // Return the result of the future.
             result.expect("No result returned from async operation")
         }
     }
+}
+
+#[macro_export]
+macro_rules! await_all {
+    ($future_0: expr, $future_1: expr, $future_2: expr) => { unsafe {
+        let mut result_0 = None;
+        let mut result_1 = None;
+        let mut result_2 = None;
+
+        let fiber_0 = $crate::async::start($future_0, &mut result_0);
+        let fiber_1 = $crate::async::start($future_1, &mut result_1);
+        let fiber_2 = $crate::async::start($future_2, &mut result_2);
+
+        $crate::async::await_all([fiber_0, fiber_1, fiber_2].iter().cloned());
+        (result_0.unwrap(), result_1.unwrap(), result_2.unwrap())
+    } };
+
+    ($future_0: expr, $future_1: expr) => { unsafe {
+        let mut result_0 = None;
+        let mut result_1 = None;
+
+        let fiber_0 = $crate::async::start($future_0, &mut result_0);
+        let fiber_1 = $crate::async::start($future_1, &mut result_1);
+
+        $crate::async::await_all([fiber_0, fiber_1].iter().cloned());
+        (result_0.unwrap(), result_1.unwrap())
+    } };
+
+    ($future_0: expr) => { unsafe {
+        let mut result_0 = None;
+        let fiber_0 = $crate::async::start($future_0, &mut result_0);
+        $crate::async::await_all([fiber_0].iter().cloned());
+        result_0.unwrap()
+    } };
 }

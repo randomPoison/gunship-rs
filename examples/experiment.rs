@@ -15,10 +15,9 @@ fn main() {
 /// 3. Create entity in scene and assign it a mesh and material.
 /// 4. Create entity in scene and assign it the camera.
 fn setup_scene() {
-    // Load mesh resource.
     let mesh_future = resource::async::load_mesh("examples/meshes/cube.dae");
-    println!("awaiting mesh resource");
-    let mesh_result = await!(mesh_future);
-    println!("mesh resource returned: {:?}", mesh_result);
-    // let _mesh = mesh_result.unwrap();
+    let material_future = resource::async::load_material("lib/polygon_rs/resources/materials/diffuse_flat.material");
+
+    let result = await_all!(mesh_future, material_future);
+    println!("{:?}", result);
 }

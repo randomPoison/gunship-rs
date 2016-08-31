@@ -7,6 +7,7 @@
 #![feature(question_mark)]
 #![feature(raw)]
 #![feature(unboxed_closures)]
+#![feature(unique)]
 
 extern crate bootstrap_rs as bootstrap;
 extern crate bootstrap_audio as bs_audio;
