@@ -16,7 +16,7 @@ pub fn load_mesh<P: AsRef<Path>>(_path: P) -> impl Future<Item = Mesh, Error = L
         fn run(&mut self) -> Result<Mesh, LoadMeshError> {
             let start = Instant::now();
 
-            // Spin-lock until time is up.
+            // TODO: Use something like `WaitForSeconds`.
             while start.elapsed().as_secs() < 3 { }
 
             Ok(7)
@@ -42,7 +42,7 @@ pub fn load_material<P: AsRef<Path>>(_path: P) -> impl Future<Item = Material, E
         fn run(&mut self) -> Result<Material, LoadMaterialError> {
             let start = Instant::now();
 
-            // Spin-lock until time is up.
+            // TODO: Use something like `WaitForSeconds`.
             while start.elapsed().as_secs() < 10 { }
 
             Err(LoadMaterialError)
