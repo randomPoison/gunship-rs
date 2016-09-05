@@ -12,8 +12,6 @@ pub fn init() -> Fiber {
 
     if fiber.is_null() {
         println!("ERROR: Failed to convert main thread to a fiber");
-    } else {
-        println!("initialized main fiber: {:?}", fiber);
     }
 
     fiber
@@ -31,15 +29,12 @@ pub fn create_fiber(stack_size: usize, func: Box<FnBox()>) -> Fiber {
     // TODO: Return an error result, rather than just logging a warning.
     if fiber.is_null() {
         println!("ERROR: Failed to create fiber");
-    } else {
-        println!("created fiber: {:?}", fiber);
     }
 
     fiber
 }
 
 pub fn make_active(fiber: Fiber) {
-    println!("making active: {:?}", fiber);
     unsafe { kernel32::SwitchToFiber(fiber); }
 }
 

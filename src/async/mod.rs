@@ -3,7 +3,7 @@
 //! This module acts as a singleton. This is to allow the scheduler to globally accessible, making
 //! async operations usable from anywhere in the engine and game code.
 
-use fiber::Fiber;
+use fiber::{self, Fiber};
 use std::ptr::Unique;
 
 mod scheduler;
@@ -21,6 +21,18 @@ pub fn init() {
     // No-op invocation of `with()` to force initialization. Honestly this is kind of dumb, we
     // don't need lazy initialization if we're explicitly initializing on startup.
     scheduler::Scheduler::with(|_| {});
+}
+
+pub fn start_workers(worker_count: usize) {
+    for _ in 0..worker_count {
+        ::std::thread::spawn(|| {
+            // Initialize worker thread for fibers.
+            fiber::init();
+
+            // Wait until work is available for this thread.
+            scheduler::wait_for_work();
+        });
+    }
 }
 
 /// Schedules a fiber without suspending the current one.
@@ -52,8 +64,6 @@ pub unsafe fn start<F: 'static + Future>(
         DEFAULT_STACK_SIZE,
         fiber_proc,
     );
-
-    scheduler::start(fiber.clone());
 
     fiber
 }

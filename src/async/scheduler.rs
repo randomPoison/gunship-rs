@@ -8,8 +8,9 @@
 use fiber::{self, Fiber};
 use std::collections::{HashMap, HashSet};
 use std::iter::FromIterator;
-use std::sync::{Mutex, Once, ONCE_INIT};
+use std::sync::{Condvar, Mutex, Once, ONCE_INIT};
 
+static mut CONDVAR: *const Condvar = ::std::ptr::null();
 static mut INSTANCE: *const Mutex<Scheduler> = ::std::ptr::null();
 static INSTANCE_INIT: Once = ONCE_INIT;
 
@@ -22,13 +23,12 @@ pub fn start(fiber: Fiber) {
 
 /// Suspends the current fiber until `fiber` completes.
 pub fn wait_for(fiber: Fiber) {
-    let next = Scheduler::with(move |scheduler| {
+    Scheduler::with(move |scheduler| {
         let current = Fiber::current().expect("Unable to get current fiber");
         scheduler.wait_for(current, fiber);
-        scheduler.next()
     });
 
-    make_active_or_wait_for_work(next);
+    wait_for_work();
 }
 
 /// Suspends the current fiber until all fibers in `fibers` complete.
@@ -37,32 +37,44 @@ pub fn wait_for_all<I>(fibers: I)
     I: IntoIterator<Item = Fiber>,
     I: Clone,
 {
-    let next = Scheduler::with(move |scheduler| {
+    Scheduler::with(move |scheduler| {
         let current = Fiber::current().expect("Unable to get current fiber");
         scheduler.wait_for_all(current, fibers);
-        scheduler.next()
     });
 
-    make_active_or_wait_for_work(next);
+    wait_for_work();
 }
 
 /// Ends the current fiber and begins the next ready one.
 pub fn finish() {
-    let next = Scheduler::with(|scheduler| {
+    Scheduler::with(|scheduler| {
         let current = Fiber::current().expect("Unable to get current fiber");
         scheduler.finish(current);
-        scheduler.next()
     });
 
-    make_active_or_wait_for_work(next);
+    wait_for_work();
 }
 
-/// Makes the specified fiber active or wait until the next fiber becomes active.
-fn make_active_or_wait_for_work(maybe_fiber: Option<Fiber>) {
-    match maybe_fiber {
-        Some(fiber) => fiber.make_active(),
-        None => println!("TODO: No more work to do, I guess we're just going to hang"),
+/// Suspends the current thread until the scheduler has more work available.
+pub fn wait_for_work() {
+    let mut next;
+    unsafe {
+        let mutex = &*INSTANCE;
+        let condvar = &*CONDVAR;
+
+        let mut scheduler = mutex.lock().expect("Scheduler mutex was poisoned");
+        next = scheduler.next();
+        while next.is_none() {
+            scheduler =
+                condvar
+                .wait(scheduler)
+                .expect("Scheduler mutex was poisoned");
+            next = scheduler.next();
+        }
     }
+
+    // Once
+    next.unwrap().make_active();
 }
 
 pub struct Scheduler {
@@ -105,6 +117,9 @@ impl Scheduler {
 
             let boxed_scheduler = Box::new(Mutex::new(scheduler));
             unsafe { INSTANCE = Box::into_raw(boxed_scheduler); }
+
+            let boxed_condvar = Box::new(Condvar::new());
+            unsafe { CONDVAR = Box::into_raw(boxed_condvar); }
         });
 
         let mutex = unsafe {
@@ -118,9 +133,12 @@ impl Scheduler {
     /// Schedules `fiber` without any dependencies;
     fn schedule(&mut self, fiber: Fiber) {
         self.ready.push(fiber);
+
+        let condvar = unsafe { &*CONDVAR };
+        condvar.notify_one();
     }
 
-    /// Schedules the current fiber
+    /// Schedules `dependency` and suspends `pending` until it finishes.
     fn wait_for(&mut self, pending: Fiber, dependency: Fiber) {
         self.wait_for_all(pending, [dependency].iter().cloned());
     }
@@ -136,10 +154,12 @@ impl Scheduler {
         self.pending.insert(pending, dependencies_set);
 
         // Add `fibers` to the list of ready fibers.
-        self.ready.extend(dependencies);
+        for dependency in dependencies {
+            self.schedule(dependency);
+        }
     }
 
-    /// Removes the specified fiber from the scheduler and update dependents.
+    /// Removes the specified fiber from the scheduler and updates dependents.
     fn finish(&mut self, done: Fiber) {
         // Remove `done` as a dependency from other fibers, tracking any pending fibers that no
         // longer have any dependencies.
@@ -163,6 +183,7 @@ impl Scheduler {
 
     /// Gets the next ready fiber and makes it active on the current thread.
     fn next(&mut self) -> Option<Fiber> {
-        self.ready.pop()
+        let popped = self.ready.pop();
+        popped
     }
 }

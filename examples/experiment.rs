@@ -4,7 +4,10 @@ extern crate gunship;
 use gunship::*;
 
 fn main() {
-    EngineBuilder::new().build();
+    let mut builder = EngineBuilder::new();
+    builder.max_workers(4);
+    builder.build();
+
     setup_scene();
 }
 

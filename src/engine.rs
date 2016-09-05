@@ -216,13 +216,11 @@ impl Engine {
 unsafe impl Singleton for Engine {
     /// Creates the instance of the singleton.
     fn set_instance(engine: Engine) {
-        println!("setting instance");
         assert!(unsafe { INSTANCE.is_null() }, "Cannot create more than one Engine instance");
         let boxed_engine = Box::new(engine);
         unsafe {
             INSTANCE = Box::into_raw(boxed_engine);
         }
-        println!("done setting instance");
     }
 
     /// Retrieves an immutable reference to the singleton instance.
@@ -246,6 +244,7 @@ pub struct EngineBuilder {
     systems: HashMap<SystemId, Box<System>>,
     debug_systems: HashMap<SystemId, Box<System>>,
     managers: ManagerMap,
+    max_workers: usize,
 }
 
 /// A builder for configuring the components and systems registered with the game engine.
@@ -260,6 +259,7 @@ impl EngineBuilder {
             systems: HashMap::new(),
             debug_systems: HashMap::new(),
             managers: ManagerMap::new(),
+            max_workers: 1,
         };
 
         // Register internal component managers.
@@ -315,26 +315,32 @@ impl EngineBuilder {
             }
         };
 
-        println!("made the engine, woo");
-
         // Init aysnc subsystem.
         ::async::init();
+        ::async::start_workers(self.max_workers);
 
         Engine::set_instance(engine);
+    }
+
+    pub fn max_workers(&mut self, workers: usize) -> &mut EngineBuilder {
+        assert!(workers > 0, "There must be at least one worker for the engine to run");
+        self.max_workers = workers;
+        self
     }
 
     /// Registers the manager for the specified component type.
     ///
     /// Defers internally to `register_manager()`.
-    pub fn register_component<T: Component>(&mut self) {
+    pub fn register_component<T: Component>(&mut self) -> &mut EngineBuilder {
         T::Manager::register(self);
+        self
     }
 
     /// Registers the specified manager with the engine.
     ///
     /// Defers internally to `ComponentManager::register()`.
 
-    pub fn register_manager<T: ComponentManager>(&mut self, manager: T) {
+    pub fn register_manager<T: ComponentManager>(&mut self, manager: T) -> &mut EngineBuilder {
         let manager_id = ManagerId::of::<T>();
         assert!(
             !self.managers.contains_key(&manager_id),
@@ -345,10 +351,12 @@ impl EngineBuilder {
 
         // Add the manager to the type map and the component id to the component map.
         self.managers.insert(manager_id, boxed_manager);
+
+        self
     }
 
     /// Registers the system with the engine.
-    pub fn register_system<T: System>(&mut self, system: T) {
+    pub fn register_system<T: System>(&mut self, system: T) -> &mut EngineBuilder {
         let system_id = SystemId::of::<T>();
 
         assert!(
@@ -356,10 +364,12 @@ impl EngineBuilder {
             "System {} with ID {:?} already registered", unsafe { type_name::<T>() }, &system_id);
 
         self.systems.insert(system_id, Box::new(system));
+
+        self
     }
 
     /// Registers the debug system with the engine.
-    pub fn register_debug_system<T: System>(&mut self, system: T) {
+    pub fn register_debug_system<T: System>(&mut self, system: T) -> &mut EngineBuilder {
         let system_id = SystemId::of::<T>();
 
         assert!(
@@ -367,5 +377,7 @@ impl EngineBuilder {
             "System {} with ID {:?} already registered", unsafe { type_name::<T>() }, &system_id);
 
         self.debug_systems.insert(system_id, Box::new(system));
+
+        self
     }
 }
