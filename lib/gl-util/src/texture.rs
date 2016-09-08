@@ -1,3 +1,4 @@
+use context::Context;
 use gl;
 
 pub use gl::{
@@ -5,7 +6,11 @@ pub use gl::{
     TextureInternalFormat, TextureDataType, TextureParameterName, TextureParameterTarget};
 
 #[derive(Debug)]
-pub struct Texture2d(TextureObject);
+pub struct Texture2d {
+    texture_object: TextureObject,
+
+    context: ::gl::Context,
+}
 
 impl Texture2d {
     /// Constructs a new `Texture2d` from the specified data.
@@ -14,12 +19,16 @@ impl Texture2d {
     ///
     /// - If `width * height != data.len()`.
     pub fn new<T: TextureData>(
+        context: &Context,
         data_format: TextureFormat,
         internal_format: TextureInternalFormat,
         width: usize,
         height: usize,
         data: &[T],
     ) -> Result<Texture2d, Error> {
+        let context = context.inner();
+        let _guard = ::context::ContextGuard::new(&context);
+
         let expected_pixels = width * height * data_format.elements() / T::ELEMENTS;
         assert!(
             expected_pixels == data.len(),
@@ -61,24 +70,31 @@ impl Texture2d {
             gl::bind_texture(TextureBindTarget::Texture2d, TextureObject::null());
         }
 
-        Ok(Texture2d(texture_object))
+        Ok(Texture2d {
+            texture_object: texture_object,
+
+            context: context,
+        })
+    }
+
+    pub fn empty(context: &Context) -> Texture2d {
+        Texture2d {
+            texture_object: TextureObject::null(),
+
+            context: context.inner(),
+        }
     }
 
     /// Returns the OpenGL primitive managed by this object.
-    pub fn raw_value(&self) -> TextureObject {
-        self.0
+    pub(crate) fn inner(&self) -> TextureObject {
+        self.texture_object
     }
 }
 
 impl Drop for Texture2d {
     fn drop(&mut self) {
-        unsafe { gl::delete_textures(1, &mut self.0); }
-    }
-}
-
-impl Default for Texture2d {
-    fn default() -> Texture2d {
-        Texture2d(TextureObject::null())
+        let _guard = ::context::ContextGuard::new(&self.context);
+        unsafe { gl::delete_textures(1, &mut self.inner()); }
     }
 }
 

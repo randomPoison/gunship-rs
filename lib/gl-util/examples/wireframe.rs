@@ -20,11 +20,11 @@ fn main() {
     let mut window = Window::new("gl-util - wireframe example");
     let context = Context::new().unwrap();
 
-    let mut vertex_buffer = VertexBuffer::new();
+    let mut vertex_buffer = VertexBuffer::new(&context);
     vertex_buffer.set_data_f32(obj.raw_positions());
     vertex_buffer.set_attrib_f32("position", AttribLayout { elements: 4, offset: 0, stride: 0 });
 
-    let mut index_buffer = IndexBuffer::new();
+    let mut index_buffer = IndexBuffer::new(&context);
     index_buffer.set_data_u32(&*raw_indices);
 
     'outer: loop {
@@ -36,7 +36,7 @@ fn main() {
         }
 
         context.clear();
-        DrawBuilder::new(&vertex_buffer, DrawMode::Triangles)
+        DrawBuilder::new(&context, &vertex_buffer, DrawMode::Triangles)
             .index_buffer(&index_buffer)
             .map_attrib_location("position", AttributeLocation::from_index(0))
             .polygon_mode(PolygonMode::Line)

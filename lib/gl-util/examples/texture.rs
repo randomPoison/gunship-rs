@@ -5,6 +5,7 @@ extern crate parse_bmp;
 use bootstrap::window::*;
 use gl::*;
 use gl::context::Context;
+use gl::shader::*;
 use gl::texture::*;
 use parse_bmp::{
     Bitmap,
@@ -58,12 +59,12 @@ fn main() {
     let context = Context::new().unwrap();
 
     // Compile and link shaders into a shader program.
-    let vert_shader = Shader::new(VERT_SOURCE, ShaderType::Vertex).unwrap();
-    let frag_shader = Shader::new(FRAG_SOURCE, ShaderType::Fragment).unwrap();
-    let program = Program::new(&[vert_shader, frag_shader]).unwrap();
+    let vert_shader = Shader::new(&context, VERT_SOURCE, ShaderType::Vertex).unwrap();
+    let frag_shader = Shader::new(&context, FRAG_SOURCE, ShaderType::Fragment).unwrap();
+    let program = Program::new(&context, &[vert_shader, frag_shader]).unwrap();
 
     // Create the vertex buffer and set the vertex attribs.
-    let mut vertex_buffer = VertexBuffer::new();
+    let mut vertex_buffer = VertexBuffer::new(&context);
     vertex_buffer.set_data_f32(&VERTEX_DATA[..]);
     vertex_buffer.set_attrib_f32(
         "position",
@@ -88,6 +89,7 @@ fn main() {
     };
 
     let texture = Texture2d::new(
+        &context,
         TextureFormat::Bgr,
         TextureInternalFormat::Rgb,
         bitmap.width(),
@@ -95,7 +97,7 @@ fn main() {
         data)
         .unwrap();
 
-    let mut draw_builder = DrawBuilder::new(&vertex_buffer, DrawMode::Triangles);
+    let mut draw_builder = DrawBuilder::new(&context, &vertex_buffer, DrawMode::Triangles);
     draw_builder
         .program(&program)
         .map_attrib_name("position", "position")

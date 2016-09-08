@@ -1,3 +1,4 @@
+#![feature(item_like_imports)]
 #![feature(question_mark)]
 
 extern crate parse_bmp;
