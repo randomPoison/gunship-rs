@@ -5,6 +5,7 @@ extern crate parse_obj;
 use bootstrap::window::*;
 use gl::*;
 use gl::context::Context;
+use gl::shader::*;
 use parse_obj::Obj;
 
 static VERT_SOURCE: &'static str = r#"
@@ -71,12 +72,12 @@ fn main() {
     let context = Context::new().unwrap();
 
     // Compile and link shaders into a shader program.
-    let vert_shader = Shader::new(VERT_SOURCE, ShaderType::Vertex).unwrap();
-    let frag_shader = Shader::new(FRAG_SOURCE, ShaderType::Fragment).unwrap();
-    let program = Program::new(&[vert_shader, frag_shader]).unwrap();
+    let vert_shader = Shader::new(&context, VERT_SOURCE, ShaderType::Vertex).unwrap();
+    let frag_shader = Shader::new(&context, FRAG_SOURCE, ShaderType::Fragment).unwrap();
+    let program = Program::new(&context, &[vert_shader, frag_shader]).unwrap();
 
     // Create the vertex buffer and set the vertex attribs.
-    let mut vertex_buffer = VertexBuffer::new();
+    let mut vertex_buffer = VertexBuffer::new(&context);
     vertex_buffer.set_data_f32(&*vertex_data);
     vertex_buffer.set_attrib_f32(
         "position",
@@ -94,10 +95,10 @@ fn main() {
         });
 
     // Create the index buffer.
-    let mut index_buffer = IndexBuffer::new();
+    let mut index_buffer = IndexBuffer::new(&context);
     index_buffer.set_data_u32(&*indices);
 
-    let mut draw_builder = DrawBuilder::new(&vertex_buffer, DrawMode::Triangles);
+    let mut draw_builder = DrawBuilder::new(&context, &vertex_buffer, DrawMode::Triangles);
     draw_builder
         .index_buffer(&index_buffer)
         .program(&program)

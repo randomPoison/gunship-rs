@@ -8,22 +8,10 @@ use light::*;
 use material::*;
 use mesh_instance::*;
 use math::*;
-use self::gl_util::{
-    AttribLayout,
-    Comparison,
-    DestFactor,
-    DrawBuilder,
-    DrawMode,
-    Face,
-    GlMatrix,
-    IndexBuffer,
-    Program,
-    Shader as GlShader,
-    ShaderType,
-    SourceFactor,
-    VertexBuffer,
-};
+use self::gl_util::*;
 use self::gl_util::context::{Context, Error as ContextError};
+use self::gl_util::shader::*;
+use self::gl_util::shader::Shader as GlShader;
 use self::gl_util::texture::{
     Texture2d as GlTexture2d,
     TextureFormat,
@@ -114,7 +102,7 @@ impl GlRender {
         camera: &Camera,
         camera_anchor: &Anchor,
     ) {
-        let default_texture = GlTexture2d::default();
+        let default_texture = GlTexture2d::empty(&self.context);
 
         // Calculate the various transforms needed for rendering.
         let view_transform = camera_anchor.view_matrix();
@@ -135,7 +123,11 @@ impl GlRender {
             .expect("Material is using a shader that does not exist");
 
         // Set the shader to use.
-        let mut draw_builder = DrawBuilder::new(&mesh_data.vertex_buffer, DrawMode::Triangles);
+        let mut draw_builder = DrawBuilder::new(
+            &self.context,
+            &mesh_data.vertex_buffer,
+            DrawMode::Triangles,
+        );
         draw_builder
         .index_buffer(&mesh_data.index_buffer)
         .program(program)
@@ -425,7 +417,7 @@ impl Renderer for GlRender {
                 uniform_declarations,
                 replaced_source);
 
-            GlShader::new(replaced_source, ShaderType::Vertex).map_err(|err| ())?
+            GlShader::new(&self.context, replaced_source, ShaderType::Vertex).map_err(|err| ())?
         };
 
         // Generate the GLSL source for the fragment shader.
@@ -474,10 +466,10 @@ impl Renderer for GlRender {
                 uniform_declarations,
                 replaced_source);
 
-            GlShader::new(replaced_source, ShaderType::Fragment).map_err(|err| ())?
+            GlShader::new(&self.context, replaced_source, ShaderType::Fragment).map_err(|err| ())?
         };
 
-        let program = Program::new(&[vert_shader, frag_shader]).map_err(|err| ())?;
+        let program = Program::new(&self.context, &[vert_shader, frag_shader]).map_err(|err| ())?;
 
         let program_id = self.shader_counter.next();
         self.programs.insert(program_id, program);
@@ -515,7 +507,7 @@ impl Renderer for GlRender {
 
     fn register_mesh(&mut self, mesh: &Mesh) -> GpuMesh {
         // Generate array buffer.
-        let mut vertex_buffer = VertexBuffer::new();
+        let mut vertex_buffer = VertexBuffer::new(&self.context);
         vertex_buffer.set_data_f32(mesh.vertex_data());
 
         // Configure vertex attributes.
@@ -549,7 +541,7 @@ impl Renderer for GlRender {
                 });
         }
 
-        let mut index_buffer = IndexBuffer::new();
+        let mut index_buffer = IndexBuffer::new(&self.context);
         index_buffer.set_data_u32(mesh.indices());
 
         let mesh_id = self.mesh_counter.next();
@@ -580,6 +572,7 @@ impl Renderer for GlRender {
         let texture_result = match texture.data() {
             &TextureData::f32(ref data) => {
                 GlTexture2d::new(
+                    &self.context,
                     format,
                     internal_format,
                     texture.width(),
@@ -588,6 +581,7 @@ impl Renderer for GlRender {
             },
             &TextureData::u8(ref data) => {
                 GlTexture2d::new(
+                    &self.context,
                     format,
                     internal_format,
                     texture.width(),
@@ -596,6 +590,7 @@ impl Renderer for GlRender {
             },
             &TextureData::u8x3(ref data) => {
                 GlTexture2d::new(
+                    &self.context,
                     format,
                     internal_format,
                     texture.width(),
@@ -604,6 +599,7 @@ impl Renderer for GlRender {
             },
             &TextureData::u8x4(ref data) => {
                 GlTexture2d::new(
+                    &self.context,
                     format,
                     internal_format,
                     texture.width(),
