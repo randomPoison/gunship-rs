@@ -1,4 +1,3 @@
-use async::Future;
 use std::path::Path;
 use std::time::Instant;
 
@@ -6,24 +5,13 @@ use std::time::Instant;
 ///
 /// Loads a mesh data from the specified path and performs any necessary processing to prepare it
 /// to be used in rendering.
-pub fn load_mesh<P: AsRef<Path>>(_path: P) -> impl Future<Item = Mesh, Error = LoadMeshError> {
-    struct LoadMesh;
+pub fn load_mesh<P: AsRef<Path>>(_path: P) -> Result<Mesh, LoadMeshError> {
+    let start = Instant::now();
 
-    impl Future for LoadMesh {
-        type Item = Mesh;
-        type Error = LoadMeshError;
+    // TODO: Use something like `WaitForSeconds`.
+    while start.elapsed().as_secs() < 3 {}
 
-        fn run(&mut self) -> Result<Mesh, LoadMeshError> {
-            let start = Instant::now();
-
-            // TODO: Use something like `WaitForSeconds`.
-            while start.elapsed().as_secs() < 3 { }
-
-            Ok(7)
-        }
-    }
-
-    LoadMesh
+    Ok(7)
 }
 
 // #[derive(Debug)]
@@ -32,24 +20,13 @@ pub type Mesh = usize;
 #[derive(Debug)]
 pub struct LoadMeshError;
 
-pub fn load_material<P: AsRef<Path>>(_path: P) -> impl Future<Item = Material, Error = LoadMaterialError> {
-    struct LoadMaterial;
+pub fn load_material<P: AsRef<Path>>(_path: P) -> Result<Material, LoadMaterialError> {
+    let start = Instant::now();
 
-    impl Future for LoadMaterial {
-        type Item = Material;
-        type Error = LoadMaterialError;
+    // TODO: Use something like `WaitForSeconds`.
+    while start.elapsed().as_secs() < 10 {}
 
-        fn run(&mut self) -> Result<Material, LoadMaterialError> {
-            let start = Instant::now();
-
-            // TODO: Use something like `WaitForSeconds`.
-            while start.elapsed().as_secs() < 10 { }
-
-            Err(LoadMaterialError)
-        }
-    }
-
-    LoadMaterial
+    Err(LoadMaterialError)
 }
 
 // #[derive(Debug)]

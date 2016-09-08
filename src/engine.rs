@@ -141,27 +141,24 @@ impl Engine {
         let scene = &mut self.scene;
 
         scene.input.clear();
-        loop {
-            let message = self.window.next_message(); // TODO: Make this an iterator to simplify this loop.
-            match message {
-                Some(message) => {
-                    match message {
-                        Activate => (),
-                        Close => self.close = true,
-                        Destroy => (),
-                        Paint => (),
 
-                        // Handle inputs.
-                        KeyDown(_)
-                      | KeyUp(_)
-                      | MouseMove(_, _)
-                      | MousePos(_, _)
-                      | MouseButtonPressed(_)
-                      | MouseButtonReleased(_)
-                      | MouseWheel(_) => scene.input.push_input(message),
-                    }
-                },
-                None => break
+        // TODO: Make this an iterator to simplify this loop.
+        while let Some(message) = self.window.next_message() {
+            println!("message: {:?}", message);
+            match message {
+                Activate => (),
+                Close => self.close = true,
+                Destroy => (),
+                Paint => (),
+
+                // Handle inputs.
+                KeyDown(_)
+              | KeyUp(_)
+              | MouseMove(_, _)
+              | MousePos(_, _)
+              | MouseButtonPressed(_)
+              | MouseButtonReleased(_)
+              | MouseWheel(_) => scene.input.push_input(message),
             }
         }
 
@@ -320,6 +317,8 @@ impl EngineBuilder {
         ::async::start_workers(self.max_workers);
 
         Engine::set_instance(engine);
+
+        run!(Engine::start());
     }
 
     pub fn max_workers(&mut self, workers: usize) -> &mut EngineBuilder {
