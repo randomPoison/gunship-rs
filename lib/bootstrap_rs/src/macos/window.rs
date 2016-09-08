@@ -45,7 +45,7 @@ mod window_map {
 
 pub struct Window {
     app: *mut Object,
-    window: *mut Object,
+    _window: *mut Object,
 }
 
 impl Window {
@@ -97,7 +97,7 @@ impl Window {
 
             Window {
                 app: app,
-                window: window,
+                _window: window,
             }
         };
 
@@ -157,8 +157,6 @@ impl Window {
                     NSDefaultRunLoopMode,
                     YES,
                 );
-
-                let type_ptr: NSEventType = msg_send![event, type];
 
                 msg_send![self.app, sendEvent:event];
                 msg_send![self.app, updateWindows];
@@ -251,8 +249,7 @@ extern fn run(
     }
 }
 
-extern fn window_will_close(app: &mut Object, _sel: Sel, notification: *mut Object) {
-    println!("window will close! :D");
+extern fn window_will_close(app: &mut Object, _sel: Sel, _notification: *mut Object) {
     window_map::with(|window_map| {
         let message_queue = window_map.get_mut(&(app as *mut _)).expect("No window existed in window map");
         message_queue.messages.push_back(Message::Close);
@@ -272,6 +269,7 @@ unsafe fn get_next_message_imp() -> extern fn (*mut Object, Sel, i64, *mut Objec
 /// - The `NSApplication` must fully initialized before attempting to open a window.
 unsafe fn open_window(app: *mut Object) -> *mut Object {
     let NSWindow = Class::get("NSWindow").unwrap();
+    let NSTrackingArea = Class::get("NSTrackingArea").unwrap();
 
     let point = NSPoint { x: 0.0, y: 0.0 };
     let size = NSSize { width: 500.0, height: 500.0 };
@@ -301,12 +299,32 @@ unsafe fn open_window(app: *mut Object) -> *mut Object {
     // Configure the window delegate.
     msg_send![window, setDelegate: app];
 
-    // Show the window.
+    // Ensure the window gets mouse move events.
+    let result: BOOL = msg_send![window, makeFirstResponder: nil];
+    println!("makeFirstResponder result: {:?}", result);
+    msg_send![window, setAcceptsMouseMovedEvents: YES];
+
+    let options: NSTrackingAreaOptions =
+        NSTrackingActiveAlways |
+        NSTrackingInVisibleRect |
+        NSTrackingMouseEnteredAndExited |
+        NSTrackingMouseMoved;
+
+    let view: *mut Object = msg_send![window, contentView];
+    let bounds: NSRect = msg_send![view, bounds];
+    println!("bounds: {:?}", bounds);
+    let tracking_area: *mut Object = msg_send![NSTrackingArea, alloc];
     msg_send![
-        window,
-        makeKeyAndOrderFront:nil
+        tracking_area,
+        initWithRect: bounds
+        options: options
+        owner: app
+        userInfo: nil
     ];
-    msg_send![window, orderFrontRegardless];
+    msg_send![view, addTrackingArea: tracking_area];
+
+    // Show the window.
+    msg_send![window, makeKeyAndOrderFront: app];
 
     window
 }
