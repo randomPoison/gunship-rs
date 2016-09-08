@@ -113,47 +113,130 @@ impl Window {
         // unsafe { self.window.performClose_(nil); }
     }
 
+    // TODO: Implement non-blocking window messages.
     pub fn next_message(&mut self) -> Option<Message> {
-        unsafe {
-            // TODO: Create autorelease blocks?
-
-            let NSDate = Class::get("NSDate").unwrap();
-            let distant_future = msg_send![NSDate, distantFuture];
-
-            //let NSApplication = Class::get("NSApplication").unwrap();
-            //let event: *mut Object = msg_send![
-            //    super(self.app, NSApplication),
-            //    nextEventMatchingMask: 0xffffffff //NSAnyEventMask,
-            //    untilDate: distant_future
-            //    inMode: NSDefaultRunLoopMode
-            //    dequeue: YES
-            //];
-
-            // HACK: For some reason the above doesn't work. I don't know why, but we should fix it.
-            let imp = get_next_message_imp();
-
-            let event = imp(
-                self.app,
-                sel!(nextEventMatchingMask:untilDate:inMode:dequeue:),
-                0xffffffff, //NSAnyEventMask,
-                distant_future,
-                NSDefaultRunLoopMode,
-                YES,
-            );
-
-            let type_ptr: NSEventType = msg_send![event, type];
-            println!("event: {:?}", type_ptr);
-
-            msg_send![self.app, sendEvent:event];
-            msg_send![self.app, updateWindows];
-        }
-
         None
+    }
+
+    /// Waits for the next window message, blocking if none is pending.
+    pub fn wait_for_message(&mut self) -> Option<Message> {
+        loop {
+            // First check if there are any pending messages in the window map.
+            let pending_message = window_map::with(|window_map| {
+                let window_inner = window_map.get_mut(&self.app).expect("Unable to find window in window map");
+                window_inner.messages.pop_front()
+            });
+
+            if let Some(message) = pending_message {
+                return Some(message);
+            }
+
+            unsafe {
+                // TODO: Create autorelease blocks?
+
+                let NSDate = Class::get("NSDate").unwrap();
+                let distant_future = msg_send![NSDate, distantFuture];
+
+                //let NSApplication = Class::get("NSApplication").unwrap();
+                //let event: *mut Object = msg_send![
+                //    super(self.app, NSApplication),
+                //    nextEventMatchingMask: 0xffffffff //NSAnyEventMask,
+                //    untilDate: distant_future
+                //    inMode: NSDefaultRunLoopMode
+                //    dequeue: YES
+                //];
+
+                // HACK: For some reason the above doesn't work. I don't know why, but we should fix it.
+                let imp = get_next_message_imp();
+
+                let event = imp(
+                    self.app,
+                    sel!(nextEventMatchingMask:untilDate:inMode:dequeue:),
+                    0xffffffff, //NSAnyEventMask,
+                    distant_future,
+                    NSDefaultRunLoopMode,
+                    YES,
+                );
+
+                let type_ptr: NSEventType = msg_send![event, type];
+
+                msg_send![self.app, sendEvent:event];
+                msg_send![self.app, updateWindows];
+
+                if let Some(event) = map_event(event) {
+                    return Some(event);
+                }
+            }
+        }
     }
 
     pub fn get_rect(&self) -> (i32, i32, i32, i32) {
         (0, 0, 1, 1)
     }
+}
+
+impl<'a> IntoIterator for &'a mut Window {
+    type Item = Message;
+    type IntoIter = WindowMessages<'a>;
+
+    fn into_iter(self) -> WindowMessages<'a> {
+        WindowMessages(self)
+    }
+}
+
+pub struct WindowMessages<'a>(&'a mut Window);
+
+impl<'a> Iterator for WindowMessages<'a> {
+    type Item = Message;
+
+    fn next(&mut self) -> Option<Message> {
+        self.0.wait_for_message()
+    }
+}
+
+fn map_event(event: *mut Object) -> Option<Message> {
+    use macos::cocoa::appkit::NSEventType::*;
+    use window::Message::*;
+    use input::ScanCode;
+
+    let message = match unsafe { msg_send![event, type] } {
+        NSLeftMouseDown => Message::MouseButtonPressed(0),
+        NSLeftMouseUp => Message::MouseButtonReleased(0),
+        NSRightMouseDown => Message::MouseButtonPressed(1),
+        NSRightMouseUp => Message::MouseButtonReleased(1),
+        NSMouseMoved => MouseMove(0, 0), // TODO: Get actual movement amount.
+        NSLeftMouseDragged => MouseMove(0, 0), // TODO: Get actual movement amount.
+        NSRightMouseDragged => MouseMove(0, 0), // TODO: Get actual movement amount.
+        //NSMouseEntered => !,
+        //NSMouseExited => !,
+        NSKeyDown => KeyDown(ScanCode::Unsupported),
+        NSKeyUp => KeyUp(ScanCode::Unsupported),
+        //NSFlagsChanged => !,
+        //NSAppKitDefined => !,
+        //NSSystemDefined => !,
+        //NSApplicationDefined => !,
+        //NSPeriodic => !,
+        //NSCursorUpdate => !,
+        NSScrollWheel => MouseWheel(0),
+        //NSTabletPoint => !,
+        //NSTabletProximity => !,
+        //NSOtherMouseDown => !,
+        //NSOtherMouseUp => !,
+        //NSOtherMouseDragged => !,
+        //NSEventTypeGesture => !,
+        //NSEventTypeMagnify => !,
+        //NSEventTypeSwipe => !,
+        //NSEventTypeRotate => !,
+        //NSEventTypeBeginGesture => !,
+        //NSEventTypeEndGesture => !,
+        //NSEventTypeSmartMagnify => !,
+        //NSEventTypeQuickLook => !,
+        //NSEventTypePressure => !,
+
+        _ => return None,
+    };
+
+    Some(message)
 }
 
 extern fn run(
