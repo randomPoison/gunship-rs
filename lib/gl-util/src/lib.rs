@@ -7,24 +7,15 @@
 //! someone much less OpenGL experience.
 
 #![feature(associated_consts)]
+#![feature(item_like_imports)]
+#![feature(pub_restricted)]
 #![feature(question_mark)]
 
 extern crate bootstrap_gl as gl;
 
-use gl::{
-    BufferName,
-    BufferTarget,
-    BufferUsage,
-    False,
-    GlType,
-    IndexType,
-    ProgramObject,
-    ServerCapability,
-    TextureBindTarget,
-    TextureObject,
-    UniformLocation,
-    VertexArrayName,
-};
+use context::Context;
+use gl::*;
+use shader::Program;
 use std::mem;
 use std::cell::Cell;
 use std::collections::HashMap;
@@ -41,7 +32,6 @@ pub use gl::{
     SourceFactor,
     WindingOrder,
 };
-pub use self::shader::*;
 
 pub mod context;
 pub mod shader;
@@ -60,13 +50,18 @@ pub struct VertexBuffer {
     len: usize,
     element_len: usize,
     attribs: HashMap<String, AttribLayout>,
+
+    pub(crate) context: gl::Context,
 }
 
 impl VertexBuffer {
     /// Creates a new `VertexBuffer` object.
-    pub fn new() -> VertexBuffer {
+    pub fn new(context: &Context) -> VertexBuffer {
+        let context = context.inner();
+
         let mut buffer_name = BufferName::null();
         unsafe {
+            let _guard = ::context::ContextGuard::new(&context);
             gl::gen_buffers(1, &mut buffer_name);
         }
 
@@ -75,6 +70,8 @@ impl VertexBuffer {
             len: 0,
             element_len: 0,
             attribs: HashMap::new(),
+
+            context: context,
         }
     }
 
@@ -86,6 +83,7 @@ impl VertexBuffer {
         let byte_count = data.len() * mem::size_of::<f32>();
 
         unsafe {
+            let _guard = ::context::ContextGuard::new(&self.context);
             gl::bind_buffer(BufferTarget::Array, self.buffer_name);
             gl::buffer_data(
                 BufferTarget::Array,
@@ -118,6 +116,7 @@ impl VertexBuffer {
 impl Drop for VertexBuffer {
     fn drop(&mut self) {
         unsafe {
+            let _guard = ::context::ContextGuard::new(&self.context);
             gl::delete_buffers(1, &mut self.buffer_name);
         }
     }
@@ -125,7 +124,9 @@ impl Drop for VertexBuffer {
 
 /// Describes the layout of vertex data in a `VertexBuffer`.
 ///
-/// See [`VertexBuffer::set_attrib_f32()`](TODO) for more information.
+/// See [`VertexBuffer::set_attrib_f32()`][VertexBuffer::set_attrib_f32] for more information.
+///
+/// [VertexBuffer::set_attrib_f32]: TODO: Figure out link.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct AttribLayout {
     pub elements: usize,
@@ -138,19 +139,25 @@ pub struct AttribLayout {
 pub struct IndexBuffer {
     buffer_name: BufferName,
     len: usize,
+
+    pub(crate) context: gl::Context,
 }
 
 impl IndexBuffer {
     /// Creates a new index buffer.
-    pub fn new() -> IndexBuffer {
+    pub fn new(context: &Context) -> IndexBuffer {
+        let context = context.inner();
         let mut buffer_name = BufferName::null();
         unsafe {
+            let _guard = ::context::ContextGuard::new(&context);
             gl::gen_buffers(1, &mut buffer_name);
         }
 
         IndexBuffer {
             buffer_name: buffer_name,
             len: 0,
+
+            context: context,
         }
     }
 
@@ -162,6 +169,7 @@ impl IndexBuffer {
         let byte_count = data.len() * mem::size_of::<u32>();
 
         unsafe {
+            let _guard = ::context::ContextGuard::new(&self.context);
             gl::bind_buffer(BufferTarget::ElementArray, self.buffer_name);
             gl::buffer_data(
                 BufferTarget::ElementArray,
@@ -176,6 +184,7 @@ impl IndexBuffer {
 impl Drop for IndexBuffer {
     fn drop(&mut self) {
         unsafe {
+            let _guard = ::context::ContextGuard::new(&self.context);
             gl::delete_buffers(1, &mut self.buffer_name);
         }
     }
@@ -197,12 +206,19 @@ pub struct DrawBuilder<'a> {
 
     // TODO: This is dumb and isn't necessary, get rid of it.
     active_texture: Cell<i32>,
+
+    pub(crate) context: gl::Context,
 }
 
 impl<'a> DrawBuilder<'a> {
-    pub fn new(vertex_buffer: &'a VertexBuffer, draw_mode: DrawMode) -> DrawBuilder<'a> {
+    pub fn new(context: &Context, vertex_buffer: &'a VertexBuffer, draw_mode: DrawMode) -> DrawBuilder<'a> {
+        let context = context.inner();
+
+        assert!(context == vertex_buffer.context, "Specified vertex buffer does not match the specified context");
+
         let mut vertex_array_name = VertexArrayName::null();
         unsafe {
+            let _guard = ::context::ContextGuard::new(&context);
             gl::gen_vertex_arrays(1, &mut vertex_array_name);
         }
 
@@ -220,10 +236,15 @@ impl<'a> DrawBuilder<'a> {
             uniforms: HashMap::new(),
 
             active_texture: Cell::new(0),
+
+            context: context,
         }
     }
 
     pub fn index_buffer(&mut self, index_buffer: &'a IndexBuffer) -> &mut DrawBuilder<'a> {
+        assert!(
+            self.context == index_buffer.context,
+            "Specified index buffer's context does not match draw builder's context");
         self.index_buffer = Some(index_buffer);
         self
     }
@@ -234,6 +255,9 @@ impl<'a> DrawBuilder<'a> {
     }
 
     pub fn program(&mut self, program: &'a Program) -> &mut DrawBuilder<'a> {
+        // assert!(
+        //     self.context == program.context,
+        //     "Specified program's context does not match draw builder's context");
         self.program = Some(program);
         self
     }
@@ -282,6 +306,7 @@ impl<'a> DrawBuilder<'a> {
         };
 
         unsafe {
+            let _guard = ::context::ContextGuard::new(&self.context);
             gl::bind_buffer(BufferTarget::Array, self.vertex_buffer.buffer_name);
             gl::bind_vertex_array(self.vertex_array_name);
 
@@ -327,6 +352,7 @@ impl<'a> DrawBuilder<'a> {
         };
 
         unsafe {
+            let _guard = ::context::ContextGuard::new(&self.context);
             gl::bind_buffer(BufferTarget::Array, self.vertex_buffer.buffer_name);
             gl::bind_vertex_array(self.vertex_array_name);
 
@@ -379,6 +405,8 @@ impl<'a> DrawBuilder<'a> {
 
     pub fn draw(&self) {
         unsafe {
+            let _guard = ::context::ContextGuard::new(&self.context);
+
             gl::enable(ServerCapability::FramebufferSrgb);
 
             gl::bind_vertex_array(self.vertex_array_name);
@@ -389,8 +417,7 @@ impl<'a> DrawBuilder<'a> {
             }
 
             if let Some(program) = self.program {
-                let Program(program_object) = *program;
-                gl::use_program(program_object);
+                gl::use_program(program.inner());
             }
 
             if let Some(face) = self.cull {
@@ -454,6 +481,8 @@ impl<'a> DrawBuilder<'a> {
     }
 
     fn apply(&self, uniform: &UniformValue, location: UniformLocation) {
+        let _guard = ::context::ContextGuard::new(&self.context);
+
         match *uniform {
             UniformValue::f32(value) => unsafe {
                 gl::uniform_f32x1(location, value);
@@ -489,7 +518,7 @@ impl<'a> DrawBuilder<'a> {
 
                 unsafe {
                     texture::set_active_texture(active_texture as u32);
-                    gl::bind_texture(TextureBindTarget::Texture2d, texture.raw_value());
+                    gl::bind_texture(TextureBindTarget::Texture2d, texture.inner());
                     gl::uniform_i32x1(location, active_texture);
                 }
 
@@ -502,6 +531,7 @@ impl<'a> DrawBuilder<'a> {
 impl<'a> Drop for DrawBuilder<'a> {
     fn drop(&mut self) {
         unsafe {
+            let _guard = ::context::ContextGuard::new(&self.context);
             gl::delete_vertex_arrays(1, &mut self.vertex_array_name);
         }
     }
@@ -583,28 +613,4 @@ impl<'a> From<&'a Texture2d> for UniformValue<'a> {
 pub struct GlMatrix<'a> {
     pub data: &'a [f32],
     pub transpose: bool,
-}
-
-/// Represents a complete shader program which can be used in rendering.
-#[derive(Debug)]
-pub struct Program(ProgramObject);
-
-impl Program {
-    fn get_uniform_location(&self, name: &str) -> Option<UniformLocation> {
-        let Program(program_object) = *self;
-
-        let mut null_terminated = String::from(name);
-        null_terminated.push('\0');
-
-        let raw_location = unsafe {
-            gl::get_uniform_location(program_object, null_terminated.as_ptr())
-        };
-
-        // Check for errors.
-        if raw_location == -1 {
-            None
-        } else {
-            Some(UniformLocation::from_index(raw_location as u32))
-        }
-    }
 }

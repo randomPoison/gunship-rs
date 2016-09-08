@@ -629,6 +629,8 @@ gl_proc!(glDeleteProgram:
     /// those shader objects will be automatically detached but not deleted unless they have
     /// already been flagged for deletion by a previous call to `delete_shader`.
     ///
+    /// A value of 0 (a "null" program object) for `program_object` will be silently ignored.
+    ///
     /// To determine whether a program object has been flagged for deletion call
     /// `get_program_param` with arguments `program_object` and `DeleteStatus`.
     fn delete_program(program_object: ProgramObject));

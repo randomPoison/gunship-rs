@@ -1,18 +1,24 @@
+use context::Context;
 use gl;
 use gl::*;
 use std::ffi::CString;
 use std::mem;
-use super::Program;
 
 /// Represents a single shader which can be used to create a `Program`.
 #[derive(Debug, Clone)]
 pub struct Shader {
     shader_object: ShaderObject,
     shader_type: ShaderType,
+
+    context: ::gl::Context,
 }
 
 impl Shader {
-    pub fn new<T: AsRef<str>>(source: T, shader_type: ShaderType) -> Result<Shader, ShaderError> {
+    pub fn new<T: AsRef<str>>(context: &Context, source: T, shader_type: ShaderType) -> Result<Shader, ShaderError> {
+        let context = context.inner();
+
+        let _context = ::context::ContextGuard::new(&context);
+
         // Create the shader object.
         let shader_object = unsafe { gl::create_shader(shader_type) };
         if shader_object.is_null() {
@@ -35,6 +41,8 @@ impl Shader {
             ShaderCompileStatus::Success => Ok(Shader {
                 shader_object: shader_object,
                 shader_type: shader_type,
+
+                context: context,
             }),
             ShaderCompileStatus::Failure => {
                 let log = shader_log(shader_object);
@@ -46,6 +54,7 @@ impl Shader {
 
 impl Drop for Shader {
     fn drop(&mut self) {
+        let _context = ::context::ContextGuard::new(&self.context);
         unsafe { gl::delete_shader(self.shader_object); }
     }
 }
@@ -116,37 +125,50 @@ enum ShaderCompileStatus {
     Success = 1,
 }
 
+/// Represents a complete shader program which can be used in rendering.
+#[derive(Debug)]
+pub struct Program {
+    program_object: ProgramObject,
+
+    context: ::gl::Context,
+}
+
 impl Program {
     /// Creates a program with the provided shaders.
-    pub fn new(shaders: &[Shader]) -> Result<Program, ProgramError> {
+    pub fn new(context: &Context, shaders: &[Shader]) -> Result<Program, ProgramError> {
+        let context = context.inner();
+
+        let _guard = ::context::ContextGuard::new(&context);
+
         // Create shader program.
-        let program = unsafe { gl::create_program() };
-        if program.is_null() {
-            unsafe { gl::delete_program(program); }
+        let program = Program {
+            program_object: unsafe { gl::create_program() },
+
+            context: context,
+        };
+        if program.inner().is_null() {
             return Err(ProgramError::CreateProgramError);
         }
 
         // Attach each of the shaders to the program.
         for shader in shaders {
-            unsafe { gl::attach_shader(program, shader.shader_object); }
+            unsafe { gl::attach_shader(program.inner(), shader.shader_object); }
         }
 
         // Link the program and detach the shaders.
-        unsafe { gl::link_program(program); }
+        unsafe { gl::link_program(program.inner()); }
 
         // Detach the shaders.
         for shader in shaders {
-            unsafe { gl::detach_shader(program, shader.shader_object); }
+            unsafe { gl::detach_shader(program.inner(), shader.shader_object); }
         }
 
         // Check for errors.
-        let link_status = link_status(program);
+        let link_status = link_status(program.inner());
         match link_status {
-            ProgramLinkStatus::Success => Ok(Program(program)),
+            ProgramLinkStatus::Success => Ok(program),
             ProgramLinkStatus::Failure => {
-                unsafe { gl::delete_program(program); }
-
-                let log = program_log(program);
+                let log = program_log(program.inner());
                 Err(ProgramError::LinkError(log))
             }
         }
@@ -154,12 +176,12 @@ impl Program {
 
     /// Gets a vertex attribute location from the program.
     pub fn get_attrib(&self, name: &str) -> Option<AttributeLocation> {
-        let Program(program_object) = *self;
+        let _guard = ::context::ContextGuard::new(&self.context);
 
         let mut null_terminated = String::from(name);
         null_terminated.push('\0');
 
-        let raw_location = unsafe { gl::get_attrib_location(program_object, null_terminated.as_ptr()) };
+        let raw_location = unsafe { gl::get_attrib_location(self.inner(), null_terminated.as_ptr()) };
 
         // Check for errors.
         if raw_location == -1 {
@@ -168,12 +190,34 @@ impl Program {
             Some(AttributeLocation::from_index(raw_location as u32))
         }
     }
+
+    pub(crate) fn get_uniform_location(&self, name: &str) -> Option<UniformLocation> {
+        let _guard = ::context::ContextGuard::new(&self.context);
+
+        let mut null_terminated = String::from(name);
+        null_terminated.push('\0');
+
+        let raw_location = unsafe {
+            gl::get_uniform_location(self.inner(), null_terminated.as_ptr())
+        };
+
+        // Check for errors.
+        if raw_location == -1 {
+            None
+        } else {
+            Some(UniformLocation::from_index(raw_location as u32))
+        }
+    }
+
+    pub(crate) fn inner(&self) -> ProgramObject {
+        self.program_object
+    }
 }
 
 impl Drop for Program {
     fn drop(&mut self) {
-        let Program(program_object) = *self;
-        unsafe { gl::delete_program(program_object); }
+        let _guard = ::context::ContextGuard::new(&self.context);
+        unsafe { gl::delete_program(self.inner()); }
     }
 }
 
