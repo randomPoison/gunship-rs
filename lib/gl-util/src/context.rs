@@ -52,8 +52,6 @@ impl Context {
         }
 
         unsafe {
-            gl::init(device_context);
-
             let context =
                 gl::create_context(device_context)
                 .ok_or(Error::UnableToCreateRenderContext)?;

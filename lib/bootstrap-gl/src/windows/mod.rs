@@ -12,10 +12,6 @@ use self::winapi::*;
 pub type DeviceContext = HDC;
 pub type Context = (HDC, HGLRC);
 
-pub unsafe fn init(device_context: DeviceContext) {
-
-}
-
 pub unsafe fn create_context(device_context: DeviceContext) -> Option<Context> {
     let render_context = opengl32::wglCreateContext(device_context);
     if render_context.is_null() {
