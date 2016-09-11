@@ -19,8 +19,8 @@ static INDICES: [u32; 3] = [0, 1, 2];
 
 fn main() {
     // Open a window and create the renderer instance.
-    let mut window = Window::new("Hello, Triangle!");
-    let mut renderer = RendererBuilder::new().build();
+    let mut window = Window::new("Hello, Triangle!").unwrap();
+    let mut renderer = RendererBuilder::new(&window).build();
 
     // Build a triangle mesh.
     let mesh = MeshBuilder::new()

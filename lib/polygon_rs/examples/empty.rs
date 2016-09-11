@@ -6,8 +6,8 @@ use polygon::*;
 
 fn main() {
     // Open a window and create the renderer instance.
-    let mut window = Window::new("Hello, Triangle!");
-    let mut renderer = RendererBuilder::new().build();
+    let mut window = Window::new("Hello, Triangle!").unwrap();
+    let mut renderer = RendererBuilder::new(&window).build();
 
     'outer: loop {
         while let Some(message) = window.next_message() {

@@ -67,9 +67,9 @@ fn main() {
     let indices: Vec<u32> = (0..(obj.position_indices().len() * 3) as u32).collect();
 
     // Create window and initialize OpenGL.
-    let mut window = Window::new("gl-util - wireframe example");
+    let mut window = Window::new("gl-util - wireframe example").unwrap();
 
-    let context = Context::new().unwrap();
+    let context = Context::from_window(&window).unwrap();
 
     // Compile and link shaders into a shader program.
     let vert_shader = Shader::new(&context, VERT_SOURCE, ShaderType::Vertex).unwrap();

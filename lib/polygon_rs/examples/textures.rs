@@ -13,8 +13,8 @@ mod utils;
 
 fn main() {
     // Open a window and create the renderer instance.
-    let mut window = Window::new("Hello, Triangle!");
-    let mut renderer = RendererBuilder::new().build();
+    let mut window = Window::new("Hello, Triangle!").unwrap();
+    let mut renderer = RendererBuilder::new(&window).build();
 
     // Build a triangle mesh.
     let mesh = utils::load_mesh("resources/meshes/epps_head.obj").unwrap();

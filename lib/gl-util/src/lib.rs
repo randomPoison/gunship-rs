@@ -11,6 +11,7 @@
 #![feature(pub_restricted)]
 #![feature(question_mark)]
 
+extern crate bootstrap_rs as bootstrap;
 extern crate bootstrap_gl as gl;
 
 use context::Context;

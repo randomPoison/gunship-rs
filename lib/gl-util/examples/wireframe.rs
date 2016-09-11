@@ -17,8 +17,8 @@ fn main() {
         }
     }
 
-    let mut window = Window::new("gl-util - wireframe example");
-    let context = Context::new().unwrap();
+    let mut window = Window::new("gl-util - wireframe example").unwrap();
+    let context = Context::from_window(&window).unwrap();
 
     let mut vertex_buffer = VertexBuffer::new(&context);
     vertex_buffer.set_data_f32(obj.raw_positions());
