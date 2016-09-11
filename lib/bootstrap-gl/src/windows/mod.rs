@@ -13,49 +13,14 @@ pub type DeviceContext = HDC;
 pub type Context = (HDC, HGLRC);
 
 pub unsafe fn init(device_context: DeviceContext) {
-    let pfd = PIXELFORMATDESCRIPTOR {
-        nSize: mem::size_of::<PIXELFORMATDESCRIPTOR>() as WORD,
-        nVersion: 1,
-        dwFlags: PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER,
-        iPixelType: PFD_TYPE_RGBA,
-        cColorBits: 32,
-        cRedBits: 0,
-        cRedShift: 0,
-        cGreenBits: 0,
-        cGreenShift: 0,
-        cBlueBits: 0,
-        cBlueShift: 0,
-        cAlphaBits: 0,
-        cAlphaShift: 0,
-        cAccumBits: 0,
-        cAccumRedBits: 0,
-        cAccumGreenBits: 0,
-        cAccumBlueBits: 0,
-        cAccumAlphaBits: 0,
-        cDepthBits: 24,
-        cStencilBits: 8,
-        cAuxBuffers: 0,
-        iLayerType: PFD_MAIN_PLANE,
-        bReserved: 0,
-        dwLayerMask: 0,
-        dwVisibleMask: 0,
-        dwDamageMask: 0
-    };
 
-    let pixel_format = gdi32::ChoosePixelFormat(device_context, &pfd);
-    if pixel_format == 0 {
-        println!("WARNING: Unable to find appropriate pixel format, OpenGL rendering might not work");
-    }
-
-    let result = gdi32::SetPixelFormat(device_context, pixel_format, &pfd);
-    if result == 0 {
-        println!("WARNING: Failed to set pixel format, OpenGL rendering might not work");
-    }
 }
 
 pub unsafe fn create_context(device_context: DeviceContext) -> Option<Context> {
     let render_context = opengl32::wglCreateContext(device_context);
     if render_context.is_null() {
+        let error = kernel32::GetLastError();
+        println!("WARNING: Failed to created OpenGL context, last error: {:#x}", error);
         None
     } else {
         Some((device_context, render_context))

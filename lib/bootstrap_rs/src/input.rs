@@ -1,5 +1,4 @@
-#[cfg(windows)]
-pub use windows::input::{set_cursor_visibility, set_cursor_bounds, clear_cursor_bounds};
+pub use platform::input::{set_cursor_visibility, set_cursor_bounds, clear_cursor_bounds};
 
 #[repr(u32)]
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
