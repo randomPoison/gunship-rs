@@ -2,7 +2,8 @@ use std::thread;
 use std::collections::HashMap;
 use std::intrinsics::type_name;
 use std::mem;
-use std::ptr;
+use std::ptr::{self, Unique};
+use std::sync::{Arc, Barrier};
 use std::time::Duration;
 
 use bootstrap::input::ScanCode;
@@ -91,8 +92,6 @@ impl Engine {
     }
 
     fn main_loop(&mut self) {
-        println!("starting main loop");
-
         let timer = Timer::new();
         let mut collector = Collector::new().unwrap();
 
@@ -131,8 +130,6 @@ impl Engine {
         };
 
         collector.flush_to_file("stopwatch.csv");
-
-        println!("exiting main loop");
     }
 
     fn update(&mut self) {
@@ -144,7 +141,6 @@ impl Engine {
 
         // TODO: Make this an iterator to simplify this loop.
         while let Some(message) = self.window.next_message() {
-            println!("message: {:?}", message);
             match message {
                 Activate => (),
                 Close => self.close = true,
@@ -275,10 +271,36 @@ impl EngineBuilder {
     ///
     /// No `Engine` object is returned because this method instantiates the engine singleton.
     pub fn build(self) {
-
         let engine = {
-            let window = Window::new("gunship game");
-            let mut renderer = RendererBuilder::new().build();
+
+            let window = {
+                let mut window = unsafe { mem::uninitialized() };
+                let mut out = unsafe { Unique::new(&mut window as *mut _) };
+
+                let barrier = Arc::new(Barrier::new(2));
+                let barrier_clone = barrier.clone();
+
+                thread::spawn(move || {
+                    let mut window = Window::new("gunship game").unwrap();
+
+                    let mut message_pump = window.message_pump();
+
+                    // write data out to `window` without dropping the old (uninitialized) value.
+                    unsafe { ptr::write(out.get_mut(), window); }
+
+                    // Sync with
+                    barrier_clone.wait();
+
+                    message_pump.run();
+                });
+
+                // Wait until window thread finishe creating the window.
+                barrier.wait();
+
+                window
+            };
+
+            let mut renderer = RendererBuilder::new(&window).build();
             let debug_draw = DebugDraw::new(&mut *renderer);
 
             let resource_manager = Box::new(ResourceManager::new());
