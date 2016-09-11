@@ -13,11 +13,11 @@ static VERTEX_POSITIONS: [f32; 9] = [
 
 fn main() {
     // Open a window to be used as a target for rendering.
-    let mut window = Window::new("Hello, Triangle!");
+    let mut window = Window::new("Hello, Triangle!").unwrap();
 
     // Create the OpenGL context. `Context::new()` will attempt to find a default render target,
     // in this case it will use the window we just opened.
-    let context = Context::new().unwrap();
+    let context = Context::from_window(&window).unwrap();
 
     // Create a vertex buffer to store the vertices of the triangle. We provide it with data and
     // specify the layout of that data.

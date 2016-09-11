@@ -1,3 +1,4 @@
+use bootstrap::window::Window;
 use gl::{
     self,
     ClearBufferMask,
@@ -15,16 +16,10 @@ use std::ptr;
 pub struct Context(gl::Context);
 
 impl Context {
-    /// Creates a new rendering context.
-    ///
-    /// Attempts to find a currently active window and use that as the target for rendering. If
-    /// no window can be found then `Err` will be returned.
-    pub fn new() -> Result<Context, Error> {
-        if let Some(device_context) = ::platform::find_device_context() {
-            Context::from_device_context(device_context)
-        } else {
-            Err(Error::NoDeviceContext)
-        }
+    /// Creates a new rendering context for the specified window.
+    pub fn from_window(window: &Window) -> Result<Context, Error> {
+        let device_context = window.platform().device_context();
+        Context::from_device_context(device_context)
     }
 
     /// Initializes global OpenGL state and creates the OpenGL context needed to perform rendering.

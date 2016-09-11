@@ -1,6 +1,7 @@
 #![feature(item_like_imports)]
 #![feature(question_mark)]
 
+extern crate bootstrap_rs as bootstrap;
 extern crate parse_bmp;
 extern crate polygon_material;
 
@@ -22,6 +23,7 @@ pub mod shader;
 pub mod texture;
 
 use anchor::*;
+use bootstrap::window::Window;
 use camera::*;
 use geometry::mesh::Mesh;
 use light::*;
@@ -96,17 +98,21 @@ pub trait Renderer {
 
 /// A helper struct for selecting and initializing the most suitable renderer for the client's
 /// needs.
-pub struct RendererBuilder;
+pub struct RendererBuilder<'a> {
+    window: &'a Window,
+}
 
-impl RendererBuilder {
+impl<'a> RendererBuilder<'a> {
     /// Creates a new builder object.
-    pub fn new() -> RendererBuilder {
-        RendererBuilder
+    pub fn new(window: &Window) -> RendererBuilder {
+        RendererBuilder {
+            window: window,
+        }
     }
 
     /// Constructs a new renderer using the options set in the builder.
     pub fn build(&mut self) -> Box<Renderer> {
-        let renderer = gl::GlRender::new().unwrap();
+        let renderer = gl::GlRender::new(self.window).unwrap();
         Box::new(renderer) as Box<Renderer>
     }
 }

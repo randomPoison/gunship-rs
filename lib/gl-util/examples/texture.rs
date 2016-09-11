@@ -55,8 +55,8 @@ static TEXTURE_DATA: &'static [u8] = include_bytes!("./structured.bmp");
 
 fn main() {
     // Create window and initialize OpenGL.
-    let mut window = Window::new("gl-util - texture example");
-    let context = Context::new().unwrap();
+    let mut window = Window::new("gl-util - texture example").unwrap();
+    let context = Context::from_window(&window).unwrap();
 
     // Compile and link shaders into a shader program.
     let vert_shader = Shader::new(&context, VERT_SOURCE, ShaderType::Vertex).unwrap();

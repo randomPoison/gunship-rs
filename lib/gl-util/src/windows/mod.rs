@@ -1,4 +1,7 @@
 extern crate user32;
+extern crate winapi;
+
+use self::winapi::*;
 
 use gl;
 
@@ -9,7 +12,11 @@ pub fn find_device_context() -> Option<gl::DeviceContext> {
         return None;
     }
 
-    let device_context = unsafe { user32::GetDC(hwnd) };
+    device_context_from_window_handle(hwnd)
+}
+
+pub fn device_context_from_window_handle(window_handle: HWND) -> Option<gl::DeviceContext> {
+    let device_context = unsafe { user32::GetDC(window_handle) };
     if device_context.is_null() {
         None
     } else {

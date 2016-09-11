@@ -2,6 +2,7 @@ pub extern crate gl_util;
 
 use {Counter, GpuMesh, Renderer};
 use anchor::*;
+use bootstrap::window::Window;
 use camera::*;
 use geometry::mesh::{Mesh, VertexAttribute};
 use light::*;
@@ -50,8 +51,8 @@ pub struct GlRender {
 }
 
 impl GlRender {
-    pub fn new() -> Result<GlRender, Error> {
-        let context = Context::new()?;
+    pub fn new(window: &Window) -> Result<GlRender, Error> {
+        let context = Context::from_window(window)?;
 
         let mut renderer = GlRender {
             context: context,
