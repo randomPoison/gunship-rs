@@ -1,3 +1,5 @@
+#![feature(question_mark)]
+
 extern crate parse_xml as xml;
 
 use std::convert::From;
@@ -47,6 +49,14 @@ impl Collada {
                 parser.parse()
             }
         }
+    }
+
+    pub fn parse<T: Into<String>>(source: T) -> Result<Collada> {
+        let xml = xml::Parser::from_string(source.into());
+        let mut parser = ColladaParser {
+            events: xml.parse()
+        };
+        parser.parse()
     }
 }
 

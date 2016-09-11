@@ -45,7 +45,7 @@ pub trait Renderer {
     fn default_material(&self) -> Material;
 
     /// Parses a material source file and generates a material from it.
-    fn build_material(&mut self, source: MaterialSource) -> Result<Material, ()>;
+    fn build_material(&mut self, source: MaterialSource) -> Result<Material, BuildMaterialError>;
 
     /// Registers a material to be used as a shared material.
     fn register_material(&mut self, material: Material) -> MaterialId;
@@ -134,3 +134,6 @@ trait Counter {
     /// Returns the next valid ID value, updating the internal counter in the process.
     fn next(&mut self) -> Self;
 }
+
+#[derive(Debug)]
+pub struct BuildMaterialError;

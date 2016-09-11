@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::intrinsics::type_name;
 use std::mem;
 use std::ptr::{self, Unique};
-use std::sync::{Arc, Barrier};
+use std::sync::{Arc, Barrier, Mutex};
 use std::time::Duration;
 
 use bootstrap::input::ScanCode;
@@ -27,7 +27,7 @@ pub const TARGET_FRAME_TIME_MS: f32 = TARGET_FRAME_TIME_SECONDS * 1000.0;
 static mut INSTANCE: *mut Engine = ptr::null_mut();
 
 pub struct Engine {
-    renderer: Box<Renderer>,
+    renderer: Mutex<Box<Renderer>>,
     window: Window,
     resource_manager: Box<ResourceManager>,
 
@@ -85,6 +85,14 @@ impl Engine {
     pub fn resource_manager<'a>() -> &'a ResourceManager {
         let instance = Engine::instance();
         &*instance.resource_manager
+    }
+
+    pub fn renderer<F, T>(func: F) -> T
+        where F: FnOnce(&mut Renderer) -> T,
+    {
+        let instance = Engine::instance();
+        let mut renderer = instance.renderer.lock().expect("Could not acquire lock on renderer mutex");
+        func(&mut **renderer)
     }
 
     pub fn window() -> &'static Window {
@@ -199,7 +207,10 @@ impl Engine {
     fn draw(&mut self) {
         let _stopwatch = Stopwatch::new("draw");
 
-        self.renderer.draw();
+        self.renderer
+        .lock()
+        .expect("Unable to acquire lock on renderer mutex for drawing")
+        .draw();
     }
 
     #[cfg(feature="no-draw")]
@@ -315,7 +326,7 @@ impl EngineBuilder {
 
             Engine {
                 window: window,
-                renderer: renderer,
+                renderer: Mutex::new(renderer),
                 resource_manager: resource_manager,
 
                 systems: self.systems,

@@ -25,7 +25,7 @@ use std::collections::HashMap;
 use std::collections::hash_map::Iter as HashMapIter;
 use texture::GpuTexture;
 
-pub use polygon_material::material_source::MaterialSource;
+pub use polygon_material::material_source::{Error as MaterialSourceError, MaterialSource};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct MaterialId(usize);

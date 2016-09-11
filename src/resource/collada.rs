@@ -73,6 +73,12 @@ pub enum Error {
     UnsupportedSourceData,
 }
 
+impl From<collada::Error> for Error {
+    fn from(from: collada::Error) -> Error {
+        Error::ParseColladaError(from)
+    }
+}
+
 pub type Result<T> = ::std::result::Result<T, Error>;
 
 pub enum VertexSemantic {
@@ -82,12 +88,8 @@ pub enum VertexSemantic {
 }
 
 /// Loads all resources from a COLLADA document and adds them to the resource manager.
-pub fn load_resources<P: AsRef<Path>>(path: P, resource_manager: &ResourceManager) -> Result<()> {
-    let path = path.as_ref();
-
-    let collada_data = try!(
-        Collada::load(&path)
-        .map_err(|error| Error::ParseColladaError(error)));
+pub fn load_resources<T: Into<String>>(source: T) -> Result<Mesh> {
+    let collada_data = Collada::parse(source)?;
 
     // Load all meshes from the document and add them to the resource manager.
     if let Some(library_geometries) = collada_data.library_geometries {
@@ -96,9 +98,7 @@ pub fn load_resources<P: AsRef<Path>>(path: P, resource_manager: &ResourceManage
             // TODO: Generate an id for the geometry if it doesn't already have one.
             let id = match geometry.id {
                 None => {
-                    println!(
-                        "WARNING: COLLADA file {} contained a <geometry> element with no \"id\" attribute",
-                        path.display());
+                    println!("WARNING: COLLADA file contained a <geometry> element with no \"id\" attribute");
                     println!("WARNING: This is unsupported because there is no way to reference that geometry to instantiate it");
                     continue;
                 },
@@ -109,7 +109,10 @@ pub fn load_resources<P: AsRef<Path>>(path: P, resource_manager: &ResourceManage
                 GeometricElement::Mesh(ref mesh) => try!(collada_mesh_to_mesh(mesh)),
                 _ => return Err(Error::UnsupportedGeometricElement),
             };
-            resource_manager.add_mesh(id, mesh);
+
+            // TODO: Actually finish parsing all the other data from the file.
+            return Ok(mesh);
+            // resource_manager.add_mesh(id, mesh); // TODO: Cache resources?
         }
     }
 
@@ -121,8 +124,7 @@ pub fn load_resources<P: AsRef<Path>>(path: P, resource_manager: &ResourceManage
             let id = match visual_scene.id {
                 None => {
                     println!(
-                        "WARNING: COLLADA file {} contained a <visual_scene> with no \"id\" attribute",
-                        path.display());
+                        "WARNING: COLLADA file contained a <visual_scene> with no \"id\" attribute");
                     println!("WARNING: This is unsupported because there is no way to reference that scene to instantiate it");
                     continue;
                 },
@@ -138,13 +140,13 @@ pub fn load_resources<P: AsRef<Path>>(path: P, resource_manager: &ResourceManage
             }
 
             // Add to resource manager.
-            resource_manager.add_mesh_node(id, mesh_node);
+            // resource_manager.add_mesh_node(id, mesh_node); // TODO: Cache resources.
         }
     }
 
     // TODO: Load other resources from the document, such as animation data.
 
-    Ok(())
+    unimplemented!();
 }
 
 fn collada_mesh_to_mesh(mesh: &collada::Mesh) -> Result<Mesh> {

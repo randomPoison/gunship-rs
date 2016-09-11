@@ -1,6 +1,6 @@
 pub extern crate gl_util;
 
-use {Counter, GpuMesh, Renderer};
+use {BuildMaterialError, Counter, GpuMesh, Renderer};
 use anchor::*;
 use bootstrap::window::Window;
 use camera::*;
@@ -308,7 +308,7 @@ impl Renderer for GlRender {
         self.default_material.clone()
     }
 
-    fn build_material(&mut self, source: MaterialSource) -> Result<Material, ()> {
+    fn build_material(&mut self, source: MaterialSource) -> Result<Material, BuildMaterialError> {
         use polygon_material::material_source::PropertyType;
 
         // COMPILE SHADER SOURCE
@@ -418,7 +418,7 @@ impl Renderer for GlRender {
                 uniform_declarations,
                 replaced_source);
 
-            GlShader::new(&self.context, replaced_source, ShaderType::Vertex).map_err(|err| ())?
+            GlShader::new(&self.context, replaced_source, ShaderType::Vertex).map_err(|err| BuildMaterialError)?
         };
 
         // Generate the GLSL source for the fragment shader.
@@ -430,7 +430,7 @@ impl Renderer for GlRender {
                 .iter()
                 .find(|program_source| program_source.is_fragment())
                 .map(|program_source| program_source.source())
-                .ok_or(())?;
+                .ok_or(BuildMaterialError)?;
 
             // Perform text replacements for the various keywords.
             let replaced_source = raw_source
@@ -467,10 +467,10 @@ impl Renderer for GlRender {
                 uniform_declarations,
                 replaced_source);
 
-            GlShader::new(&self.context, replaced_source, ShaderType::Fragment).map_err(|err| ())?
+            GlShader::new(&self.context, replaced_source, ShaderType::Fragment).map_err(|err| BuildMaterialError)?
         };
 
-        let program = Program::new(&self.context, &[vert_shader, frag_shader]).map_err(|err| ())?;
+        let program = Program::new(&self.context, &[vert_shader, frag_shader]).map_err(|err| BuildMaterialError)?;
 
         let program_id = self.shader_counter.next();
         self.programs.insert(program_id, program);
