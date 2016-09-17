@@ -1,9 +1,10 @@
-use engine::Engine;
 use std::fs::File;
 use std::io;
 use std::io::prelude::*;
 use std::path::Path;
 use std::string::FromUtf8Error;
+
+pub mod collada;
 
 /// Load all data from the specified file as an array of bytes.
 pub fn load_file_bytes<P: AsRef<Path>>(path: P) -> Result<Vec<u8>, io::Error> {
@@ -51,25 +52,25 @@ pub fn load_mesh<P: AsRef<Path>>(path: P) -> Result<Mesh, LoadMeshError> {
     println!("start load mesh");
 
     let text = load_file_text(path)?;
-    let mesh = ::resource::collada::load_resources(text)?;
+    let mesh = collada::load_resources(text)?;
 
-    let mesh_id = Engine::renderer(|renderer| {
-        renderer.register_mesh(&mesh)
-    });
+    // let mesh_id = Engine::renderer(|renderer| {
+    //     renderer.register_mesh(&mesh)
+    // });
 
-    println!("registered mesh with id: {:?}", mesh_id);
+    println!("registered mesh with id: {:?}", mesh);
 
     println!("Done with load mesh");
-    Ok(mesh_id)
+    Ok(mesh)
 }
 
 // #[derive(Debug)]
-pub type Mesh = ::polygon::GpuMesh;
+pub type Mesh = ::polygon::geometry::mesh::Mesh;
 
 #[derive(Debug)]
 pub enum LoadMeshError {
     LoadTextError(LoadTextError),
-    ParseColladaError(::resource::collada::Error),
+    ParseColladaError(collada::Error),
 }
 
 impl From<LoadTextError> for LoadMeshError {
@@ -78,8 +79,8 @@ impl From<LoadTextError> for LoadMeshError {
     }
 }
 
-impl From<::resource::collada::Error> for LoadMeshError {
-    fn from(from: ::resource::collada::Error) -> LoadMeshError {
+impl From<collada::Error> for LoadMeshError {
+    fn from(from: collada::Error) -> LoadMeshError {
         LoadMeshError::ParseColladaError(from)
     }
 }
@@ -89,18 +90,18 @@ pub fn load_material<P: AsRef<Path>>(path: P) -> Result<Material, LoadMaterialEr
 
     let text = load_file_text(path)?;
     let material_source = ::polygon::material::MaterialSource::from_str(text)?;
-    let result = Engine::renderer(move |renderer| {
-        let material = renderer.build_material(material_source)?;
-        let material_id = renderer.register_material(material);
-        Ok(material_id)
-    });
+    // let result = Engine::renderer(move |renderer| {
+    //     let material = renderer.build_material(material_source)?;
+    //     let material_id = renderer.register_material(material);
+    //     Ok(material_id)
+    // });
 
     println!("end load material");
-    result
+    Ok(material_source)
 }
 
 // #[derive(Debug)]
-pub type Material = ::polygon::material::MaterialId;
+pub type Material = ::polygon::material::MaterialSource;
 
 #[derive(Debug)]
 pub enum LoadMaterialError {

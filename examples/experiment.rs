@@ -1,14 +1,17 @@
 #[macro_use]
 extern crate gunship;
 
-use gunship::*;
+use gunship::async::*;
+use gunship::async::engine::EngineBuilder;
 
 fn main() {
     let mut builder = EngineBuilder::new();
     builder.max_workers(4);
-    builder.build();
+    builder.build(|| {
+        setup_scene();
+    });
 
-    setup_scene();
+    // ENGINE HAS BEEN SHUT DOWN!
 }
 
 /// Things to do:
@@ -19,8 +22,8 @@ fn main() {
 /// 4. Create entity in scene and assign it the camera.
 fn setup_scene() {
     let (mesh, material) = await_all!(
-        resource::async::load_mesh("examples/meshes/cube.dae"),
-        resource::async::load_material("lib/polygon_rs/resources/materials/diffuse_flat.material"));
+        resource::load_mesh("examples/meshes/gun_small.dae"),
+        resource::load_material("lib/polygon_rs/resources/materials/diffuse_flat.material"));
 
     println!("mesh: {:?}", mesh);
     println!("material: {:?}", material);
