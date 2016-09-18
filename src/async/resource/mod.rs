@@ -1,10 +1,27 @@
+use polygon::GpuMesh;
+use std::cell::UnsafeCell;
 use std::fs::File;
 use std::io;
 use std::io::prelude::*;
+use std::mem;
 use std::path::Path;
 use std::string::FromUtf8Error;
+use std::sync::atomic::*;
+use std::sync::mpsc::Sender;
 
 pub mod collada;
+
+thread_local! {
+    // TODO: We don't want this to be completely public, only pub(crate), but `thread_local`
+    // doesn't support pub(crate) syntax.
+    pub static RENDER_MESSAGE_CHANNEL: UnsafeCell<Sender<RenderResourceMessage>> = unsafe { UnsafeCell::new(mem::uninitialized()) };
+}
+
+static MESH_ID_COUNTER: AtomicUsize = AtomicUsize::new(1);
+
+pub enum RenderResourceMessage {
+    Mesh(MeshId, ::polygon::geometry::mesh::Mesh),
+}
 
 /// Load all data from the specified file as an array of bytes.
 pub fn load_file_bytes<P: AsRef<Path>>(path: P) -> Result<Vec<u8>, io::Error> {
@@ -51,21 +68,34 @@ impl From<FromUtf8Error> for LoadTextError {
 pub fn load_mesh<P: AsRef<Path>>(path: P) -> Result<Mesh, LoadMeshError> {
     println!("start load mesh");
 
+    // Load mesh source and parse mesh data.
     let text = load_file_text(path)?;
-    let mesh = collada::load_resources(text)?;
+    let mesh_data = collada::load_resources(text)?;
 
-    // let mesh_id = Engine::renderer(|renderer| {
-    //     renderer.register_mesh(&mesh)
-    // });
+    // Create handle for mesh data and asynchronously register it with the renderer.
+    let mesh_id = MESH_ID_COUNTER.fetch_add(1, Ordering::Relaxed);
 
-    println!("registered mesh with id: {:?}", mesh);
+    RENDER_MESSAGE_CHANNEL.with(move |channel| {
+        let channel = unsafe { &*channel.get() };
+        channel
+            .send(RenderResourceMessage::Mesh(mesh_id, mesh_data))
+            .expect("Unable to send mesh data to renderer");
+    });
 
     println!("Done with load mesh");
-    Ok(mesh)
+    Ok(Mesh(mesh_id))
 }
 
-// #[derive(Debug)]
-pub type Mesh = ::polygon::geometry::mesh::Mesh;
+type MeshId = usize;
+
+#[derive(Debug)]
+pub struct Mesh(MeshId);
+
+impl Drop for Mesh {
+    fn drop(&mut self) {
+        // TODO: How do we cleanup a mesh?
+    }
+}
 
 #[derive(Debug)]
 pub enum LoadMeshError {
@@ -88,8 +118,10 @@ impl From<collada::Error> for LoadMeshError {
 pub fn load_material<P: AsRef<Path>>(path: P) -> Result<Material, LoadMaterialError> {
     println!("start load material");
 
+    // Load and parse material data.
     let text = load_file_text(path)?;
     let material_source = ::polygon::material::MaterialSource::from_str(text)?;
+
     // let result = Engine::renderer(move |renderer| {
     //     let material = renderer.build_material(material_source)?;
     //     let material_id = renderer.register_material(material);

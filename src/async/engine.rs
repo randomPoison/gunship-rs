@@ -1,9 +1,12 @@
-use async::scheduler;
+use async::*;
+use async::resource::RenderResourceMessage;
 use bootstrap::window::Window;
+use fiber;
 use polygon::{Renderer, RendererBuilder};
 use std::mem;
 use std::ptr::{self, Unique};
 use std::sync::{Arc, Barrier};
+use std::sync::mpsc::{self, Sender, Receiver};
 use std::thread;
 
 #[derive(Debug)]
@@ -32,55 +35,86 @@ impl EngineBuilder {
     pub fn build<F, T>(self, func: F) -> T
         where F: FnOnce() -> T
     {
-        let engine = {
-            let window = {
-                let mut window = unsafe { mem::uninitialized() };
-                let mut out = unsafe { Unique::new(&mut window as *mut _) };
+        let window = {
+            let mut window = unsafe { mem::uninitialized() };
+            let mut out = unsafe { Unique::new(&mut window as *mut _) };
 
-                let barrier = Arc::new(Barrier::new(2));
-                let barrier_clone = barrier.clone();
+            let barrier = Arc::new(Barrier::new(2));
+            let barrier_clone = barrier.clone();
 
-                thread::spawn(move || {
-                    let mut window = Window::new("gunship game").unwrap();
+            thread::spawn(move || {
+                let mut window = Window::new("gunship game").unwrap();
 
-                    let mut message_pump = window.message_pump();
+                let mut message_pump = window.message_pump();
 
-                    // write data out to `window` without dropping the old (uninitialized) value.
-                    unsafe { ptr::write(out.get_mut(), window); }
+                // write data out to `window` without dropping the old (uninitialized) value.
+                unsafe { ptr::write(out.get_mut(), window); }
 
-                    // Sync with
-                    barrier_clone.wait();
+                // Sync with
+                barrier_clone.wait();
 
-                    // We're done using the barrier, drop it so that the `Arc` can deallocate once
-                    // the other thread has receieved the Window.
-                    mem::drop(barrier_clone);
+                // We're done using the barrier, drop it so that the `Arc` can deallocate once
+                // the other thread has receieved the Window.
+                mem::drop(barrier_clone);
 
-                    message_pump.run();
-                });
+                message_pump.run();
+            });
 
-                // Wait until window thread finishe creating the window.
-                barrier.wait();
+            // Wait until window thread finishe creating the window.
+            barrier.wait();
 
-                window
-            };
-
-            let renderer = RendererBuilder::new(&window).build();
-
-            Engine {
-                window: window,
-                renderer: renderer,
-            }
+            window
         };
+
+        let renderer = RendererBuilder::new(&window).build();
+        let (sender, receiever) = mpsc::channel();
 
         // Init aysnc subsystem.
         scheduler::init();
-        scheduler::start_workers(self.max_workers);
 
-        let boxed_engine = Box::new(engine);
+        // Spawn our worker threads.
+        for _ in 0..self.max_workers {
+            let sender = sender.clone();
+            ::std::thread::spawn(move || {
+                // Initialize thread-local renderer message channel.
+                resource::RENDER_MESSAGE_CHANNEL.with(move |channel| unsafe {
+                    ptr::write(channel.get(), sender);
+                });
 
-        unsafe { INSTANCE = Some(&*boxed_engine); }
+                // Initialize worker thread to support fibers and wait for work to be available.
+                fiber::init();
+                scheduler::wait_for_work();
+            });
+        }
 
-        run!(start());
+        let mut engine = Box::new(Engine {
+            window: window,
+            renderer: renderer,
+            render_message_channel: receiever,
+        });
+
+        unsafe { INSTANCE = Some(&*engine); }
+
+        run!({
+            loop {
+                // TODO: Update?
+
+                // Before drawing, process any pending render messages. These will be resources that were
+                // loaded but need to be registered with the renderer before the next draw.
+                while let Ok(message) = engine.render_message_channel.try_recv() {
+                    match message {
+                        RenderResourceMessage::Mesh(mesh_id, mesh_data) => {
+                            let gpu_mesh = engine.renderer.register_mesh(&mesh_data);
+                            println!("sent mesh for {:?} to the gpu: {:?}", mesh_id, gpu_mesh);
+                        },
+                    }
+                }
+
+                // TODO: Draw.
+
+                // TODO: Wait for frame time?
+            }
+        });
 
         func()
     }
@@ -95,14 +129,11 @@ impl EngineBuilder {
 pub struct Engine {
     window: Window,
     renderer: Box<Renderer>,
+    render_message_channel: Receiver<RenderResourceMessage>,
 }
 
 impl Drop for Engine {
     fn drop(&mut self) {
         unsafe { INSTANCE = None; }
     }
-}
-
-fn start() {
-    unimplemented!();
 }

@@ -23,18 +23,6 @@ pub fn init() {
     Scheduler::with(|_| {});
 }
 
-pub fn start_workers(worker_count: usize) {
-    for _ in 0..worker_count {
-        ::std::thread::spawn(|| {
-            // Initialize worker thread for fibers.
-            fiber::init();
-
-            // Wait until work is available for this thread.
-            wait_for_work();
-        });
-    }
-}
-
 /// Creates a fiber from the given function.
 ///
 /// # Unsafety
