@@ -202,9 +202,10 @@ fn map_event(event: *mut Object) -> Option<Message> {
         NSLeftMouseUp => Message::MouseButtonReleased(0),
         NSRightMouseDown => Message::MouseButtonPressed(1),
         NSRightMouseUp => Message::MouseButtonReleased(1),
-        NSMouseMoved => MouseMove(0, 0), // TODO: Get actual movement amount.
-        NSLeftMouseDragged => MouseMove(0, 0), // TODO: Get actual movement amount.
-        NSRightMouseDragged => MouseMove(0, 0), // TODO: Get actual movement amount.
+        NSMouseMoved | NSLeftMouseDragged | NSRightMouseDragged => {
+            let pos: NSPoint = unsafe { msg_send![event, locationInWindow] };
+            MousePos(pos.x as i32, pos.y as i32)
+        },
         //NSMouseEntered => !,
         //NSMouseExited => !,
         NSKeyDown => KeyDown(ScanCode::Unsupported),
@@ -306,13 +307,12 @@ unsafe fn open_window(app: *mut Object) -> *mut Object {
 
     let options: NSTrackingAreaOptions =
         NSTrackingActiveAlways |
-        NSTrackingInVisibleRect |
+        NSTrackingActiveAlways |
         NSTrackingMouseEnteredAndExited |
         NSTrackingMouseMoved;
 
     let view: *mut Object = msg_send![window, contentView];
     let bounds: NSRect = msg_send![view, bounds];
-    println!("bounds: {:?}", bounds);
     let tracking_area: *mut Object = msg_send![NSTrackingArea, alloc];
     msg_send![
         tracking_area,
