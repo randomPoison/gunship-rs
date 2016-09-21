@@ -37,7 +37,7 @@ pub struct GpuMesh(usize);
 derive_Counter!(GpuMesh);
 
 /// The common interface that all rendering systems must provide.
-pub trait Renderer {
+pub trait Renderer: 'static + Send {
     /// Renders one frame based on the renderer's current state to the current render target.
     fn draw(&mut self);
 

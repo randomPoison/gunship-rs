@@ -688,6 +688,8 @@ impl Renderer for GlRender {
     }
 }
 
+unsafe impl Send for GlRender {}
+
 #[derive(Debug)]
 pub enum Error {
     ContextError(ContextError),
