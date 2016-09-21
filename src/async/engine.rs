@@ -58,6 +58,8 @@ impl EngineBuilder {
                 mem::drop(barrier_clone);
 
                 message_pump.run();
+
+                println!("walking off end of window pump thread, window is going to close");
             });
 
             // Wait until window thread finishe creating the window.
@@ -77,8 +79,8 @@ impl EngineBuilder {
             let sender = sender.clone();
             ::std::thread::spawn(move || {
                 // Initialize thread-local renderer message channel.
-                resource::RENDER_MESSAGE_CHANNEL.with(move |channel| unsafe {
-                    ptr::write(channel.get(), sender);
+                resource::RENDER_MESSAGE_CHANNEL.with(move |channel| {
+                    *channel.borrow_mut() = Some(sender);
                 });
 
                 // Initialize worker thread to support fibers and wait for work to be available.
@@ -86,6 +88,11 @@ impl EngineBuilder {
                 scheduler::wait_for_work();
             });
         }
+
+        // Set the current thread's channel.
+        resource::RENDER_MESSAGE_CHANNEL.with(move |channel| {
+            *channel.borrow_mut() = Some(sender);
+        });
 
         let mut engine = Box::new(Engine {
             window: window,
@@ -107,6 +114,11 @@ impl EngineBuilder {
                             let gpu_mesh = engine.renderer.register_mesh(&mesh_data);
                             println!("sent mesh for {:?} to the gpu: {:?}", mesh_id, gpu_mesh);
                         },
+                        RenderResourceMessage::Material(material_id, material_source) => {
+                            let material = engine.renderer.build_material(material_source).expect("TODO: Handle material compilation failure");
+                            let gpu_material = engine.renderer.register_material(material);
+                            println!("sent material for {:?} to the gpu: {:?}", material_id, gpu_material);
+                        }
                     }
                 }
 

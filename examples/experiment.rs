@@ -25,6 +25,14 @@ fn setup_scene() {
         resource::load_mesh("examples/meshes/gun_small.dae"),
         resource::load_material("lib/polygon_rs/resources/materials/diffuse_flat.material"));
 
-    println!("mesh: {:?}", mesh);
-    println!("material: {:?}", material);
+    println!("received mesh: {:?}, material: {:?}", mesh, material);
+
+    // let mesh_transform = Transform::new();
+    // let mesh_renderer = MeshRenderer::new(&mesh, &mesh_transform);
+    //
+    // let camera_transform = Transform::new();
+    // let camera = Camera::new(&camera_transform);
+
+    // TODO: Wait until the game is done running?
+    loop {}
 }

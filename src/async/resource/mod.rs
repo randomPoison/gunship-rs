@@ -1,5 +1,5 @@
 use polygon::GpuMesh;
-use std::cell::UnsafeCell;
+use std::cell::RefCell;
 use std::fs::File;
 use std::io;
 use std::io::prelude::*;
@@ -14,13 +14,26 @@ pub mod collada;
 thread_local! {
     // TODO: We don't want this to be completely public, only pub(crate), but `thread_local`
     // doesn't support pub(crate) syntax.
-    pub static RENDER_MESSAGE_CHANNEL: UnsafeCell<Sender<RenderResourceMessage>> = unsafe { UnsafeCell::new(mem::uninitialized()) };
+    pub static RENDER_MESSAGE_CHANNEL: RefCell<Option<Sender<RenderResourceMessage>>> = RefCell::new(None);
 }
 
 static MESH_ID_COUNTER: AtomicUsize = AtomicUsize::new(1);
+static MATERIAL_ID_COUNTER: AtomicUsize = AtomicUsize::new(1);
 
+#[derive(Debug)]
 pub enum RenderResourceMessage {
     Mesh(MeshId, ::polygon::geometry::mesh::Mesh),
+    Material(MaterialId, ::polygon::material::MaterialSource),
+}
+
+fn send_render_message(message: RenderResourceMessage) {
+    RENDER_MESSAGE_CHANNEL.with(move |channel| {
+        let borrow = channel.borrow();
+        let channel = borrow.as_ref().expect("Render message channel was `None`");
+        channel
+            .send(message)
+            .expect("Unable to send render resource message");
+    });
 }
 
 /// Load all data from the specified file as an array of bytes.
@@ -75,12 +88,7 @@ pub fn load_mesh<P: AsRef<Path>>(path: P) -> Result<Mesh, LoadMeshError> {
     // Create handle for mesh data and asynchronously register it with the renderer.
     let mesh_id = MESH_ID_COUNTER.fetch_add(1, Ordering::Relaxed);
 
-    RENDER_MESSAGE_CHANNEL.with(move |channel| {
-        let channel = unsafe { &*channel.get() };
-        channel
-            .send(RenderResourceMessage::Mesh(mesh_id, mesh_data))
-            .expect("Unable to send mesh data to renderer");
-    });
+    send_render_message(RenderResourceMessage::Mesh(mesh_id, mesh_data));
 
     println!("Done with load mesh");
     Ok(Mesh(mesh_id))
@@ -122,18 +130,18 @@ pub fn load_material<P: AsRef<Path>>(path: P) -> Result<Material, LoadMaterialEr
     let text = load_file_text(path)?;
     let material_source = ::polygon::material::MaterialSource::from_str(text)?;
 
-    // let result = Engine::renderer(move |renderer| {
-    //     let material = renderer.build_material(material_source)?;
-    //     let material_id = renderer.register_material(material);
-    //     Ok(material_id)
-    // });
+    let material_id = MATERIAL_ID_COUNTER.fetch_add(1, Ordering::Relaxed);
+
+    send_render_message(RenderResourceMessage::Material(material_id, material_source));
 
     println!("end load material");
-    Ok(material_source)
+    Ok(Material(material_id))
 }
 
-// #[derive(Debug)]
-pub type Material = ::polygon::material::MaterialSource;
+type MaterialId = usize;
+
+#[derive(Debug)]
+pub struct Material(MaterialId);
 
 #[derive(Debug)]
 pub enum LoadMaterialError {
