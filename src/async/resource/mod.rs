@@ -94,7 +94,7 @@ pub fn load_mesh<P: AsRef<Path>>(path: P) -> Result<Mesh, LoadMeshError> {
     Ok(Mesh(mesh_id))
 }
 
-type MeshId = usize;
+pub type MeshId = usize;
 
 #[derive(Debug)]
 pub struct Mesh(MeshId);

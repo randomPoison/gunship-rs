@@ -1,8 +1,9 @@
 use async::*;
-use async::resource::RenderResourceMessage;
+use async::resource::{MeshId, RenderResourceMessage};
 use bootstrap::window::Window;
 use fiber;
-use polygon::{Renderer, RendererBuilder};
+use polygon::{GpuMesh, Renderer, RendererBuilder};
+use std::collections::HashMap;
 use std::mem;
 use std::ptr::{self, Unique};
 use std::sync::{Arc, Barrier};
@@ -30,6 +31,10 @@ impl EngineBuilder {
     }
 
     /// Consumes the builder and creates the `Engine` instance.
+    ///
+    /// `func` is invoked once the engine has been setup, and teardown will begin once `func`
+    /// returns. Therefore, `func` should kick off all game functionality and block until the game
+    /// is ready to exit.
     ///
     /// No `Engine` object is returned because this method instantiates the engine singleton.
     pub fn build<F, T>(self, func: F) -> T
@@ -98,6 +103,8 @@ impl EngineBuilder {
             window: window,
             renderer: renderer,
             render_message_channel: receiever,
+
+            mesh_map: HashMap::new(),
         });
 
         unsafe { INSTANCE = Some(&*engine); }
@@ -113,11 +120,16 @@ impl EngineBuilder {
                         RenderResourceMessage::Mesh(mesh_id, mesh_data) => {
                             let gpu_mesh = engine.renderer.register_mesh(&mesh_data);
                             println!("sent mesh for {:?} to the gpu: {:?}", mesh_id, gpu_mesh);
+
+                            let last = engine.mesh_map.insert(mesh_id, gpu_mesh);
+                            assert!(last.is_none(), "Duplicate mesh_id found: {:?}", mesh_id);
                         },
                         RenderResourceMessage::Material(material_id, material_source) => {
                             let material = engine.renderer.build_material(material_source).expect("TODO: Handle material compilation failure");
                             let gpu_material = engine.renderer.register_material(material);
                             println!("sent material for {:?} to the gpu: {:?}", material_id, gpu_material);
+
+                            // TODO: Create an association between `material_id` and `material_source`.
                         }
                     }
                 }
@@ -142,6 +154,8 @@ pub struct Engine {
     window: Window,
     renderer: Box<Renderer>,
     render_message_channel: Receiver<RenderResourceMessage>,
+
+    mesh_map: HashMap<MeshId, GpuMesh>,
 }
 
 impl Drop for Engine {
