@@ -6,22 +6,16 @@
 extern crate objc;
 
 #[cfg(target_os = "windows")]
-pub mod windows;
+#[path="windows\\mod.rs"]
+pub mod platform;
 
-#[cfg(target_os = "windows")]
-pub use windows::init::init;
-
-#[cfg(target_os = "linux")]
-pub mod linux;
-
-#[cfg(target_os = "linux")]
-pub use linux::init::init;
+#[cfg(target_os="linux")]
+#[path="linux/mod.rs"]
+pub mod platform;
 
 #[cfg(target_os = "macos")]
-pub mod macos;
-
-#[cfg(target_os = "macos")]
-pub use macos::init::init;
+#[path="macos/mod.rs"]
+pub mod platform;
 
 pub mod window;
 pub mod input;

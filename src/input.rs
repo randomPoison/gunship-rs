@@ -16,7 +16,7 @@ pub fn set_cursor(visible: bool) {
 pub fn set_capture(capture: bool) {
     if capture {
         let window = Engine::window();
-        let (top, left, bottom, right) = window.borrow().get_rect();
+        let (top, left, bottom, right) = window.get_rect();
         bootstrap::input::set_cursor_bounds(top, left, bottom, right);
     } else {
         bootstrap::input::clear_cursor_bounds();

@@ -1,23 +1,25 @@
 use input::ScanCode;
 use std::{mem, ptr};
 use std::collections::VecDeque;
+use std::sync::{Arc, Mutex};
 use super::input::{register_raw_input, handle_raw_input};
+use super::gdi32;
 use super::ToCU16Str;
-use windows::kernel32;
-use windows::winapi::*;
-use windows::user32;
-use windows::winmm;
+use super::kernel32;
+use super::winapi::*;
+use super::user32;
+use super::winmm;
 use window::Message;
 use window::Message::*;
 
 static CLASS_NAME: &'static str = "bootstrap";
 static WINDOW_PROP: &'static str = "window";
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Window {
-    pub handle: HWND,
-    pub dc: HDC,
-    pub messages: Box<VecDeque<Message>>
+    handle: HWND,
+    device_context: HDC,
+    inner: WindowInner,
 }
 
 impl Window {
@@ -43,7 +45,11 @@ impl Window {
         };
 
         let handle = unsafe {
-            user32::RegisterClassExW(&class_info);
+            let result = user32::RegisterClassExW(&class_info);
+            if result == 0 {
+                println!("ERROR: Unable to create WINAPI window class");
+            }
+
             user32::CreateWindowExW(
                 0,
                 class_u.as_ptr(),
@@ -63,18 +69,18 @@ impl Window {
 
         // TODO handle any errors maybe?
 
-        let dc = unsafe {
+        let device_context = unsafe {
             user32::GetDC(handle)
         };
 
-        let mut messages = Box::new(VecDeque::new());
-        let messages_ptr = &mut *messages as *mut VecDeque<Message>;
+        let inner = WindowInner::new(handle);
+        let messages_ptr = inner.as_ptr();
 
         // give the window a pointer to our Window object
         let window = Window {
             handle: handle,
-            dc: dc,
-            messages: messages,
+            device_context: device_context,
+            inner: inner,
         };
 
         unsafe {
@@ -89,27 +95,58 @@ impl Window {
             _ => panic!("invalid result from winmm::timeBeginPeriod()"),
         }
 
+        let pfd = PIXELFORMATDESCRIPTOR {
+            nSize: mem::size_of::<PIXELFORMATDESCRIPTOR>() as WORD,
+            nVersion: 1,
+            dwFlags: PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER,
+            iPixelType: PFD_TYPE_RGBA,
+            cColorBits: 32,
+            cRedBits: 0,
+            cRedShift: 0,
+            cGreenBits: 0,
+            cGreenShift: 0,
+            cBlueBits: 0,
+            cBlueShift: 0,
+            cAlphaBits: 0,
+            cAlphaShift: 0,
+            cAccumBits: 0,
+            cAccumRedBits: 0,
+            cAccumGreenBits: 0,
+            cAccumBlueBits: 0,
+            cAccumAlphaBits: 0,
+            cDepthBits: 24,
+            cStencilBits: 8,
+            cAuxBuffers: 0,
+            iLayerType: PFD_MAIN_PLANE,
+            bReserved: 0,
+            dwLayerMask: 0,
+            dwVisibleMask: 0,
+            dwDamageMask: 0
+        };
+
+        unsafe {
+            let pixel_format = gdi32::ChoosePixelFormat(device_context, &pfd);
+            if pixel_format == 0 {
+                let error_code = kernel32::GetLastError();
+                println!("WARNING: Unable to find appropriate pixel format, OpenGL rendering might not work, last error: 0x{:x}", error_code);
+            }
+
+            let result = gdi32::SetPixelFormat(device_context, pixel_format, &pfd);
+            if result == 0 {
+                let error_code = kernel32::GetLastError();
+                println!("WARNING: Failed to set pixel format, OpenGL rendering might not work, last error: 0x{:x}", error_code);
+            }
+        }
+
         window
     }
 
     pub fn next_message(&mut self) -> Option<Message> {
-        let mut message = unsafe { mem::uninitialized::<MSG>() };
+        self.inner.next_message()
+    }
 
-        loop {
-            let result = unsafe {
-                user32::PeekMessageW(&mut message, self.handle, 0, 0, true as u32)
-            };
-            if result > 0 {
-                unsafe {
-                    user32::TranslateMessage(&message);
-                    user32::DispatchMessageW(&message);
-                }
-            } else {
-                break;
-            }
-        }
-
-        self.messages.pop_front()
+    pub fn wait_message(&mut self) -> Option<Message> {
+        self.inner.wait_message()
     }
 
     pub fn get_rect(&self) -> (i32, i32, i32, i32) {
@@ -120,6 +157,18 @@ impl Window {
 
         assert!(result != 0, "Failed to get window rect");
         (rect.top, rect.left, rect.bottom, rect.right)
+    }
+
+    pub fn inner(&self) -> WindowInner {
+        self.inner.clone()
+    }
+
+    pub fn handle(&self) -> HWND {
+        self.handle
+    }
+
+    pub fn device_context(&self) -> HDC {
+        self.device_context
     }
 }
 
@@ -132,20 +181,122 @@ impl Drop for Window {
     }
 }
 
+unsafe impl Send for Window {}
+
+#[derive(Debug, Clone)]
+pub struct WindowInner {
+    handle: HWND,
+    messages: Arc<Mutex<VecDeque<Message>>>,
+}
+
+impl WindowInner {
+    fn new(handle: HWND) -> WindowInner {
+        WindowInner {
+            handle: handle,
+            messages: Arc::new(Mutex::new(VecDeque::new())),
+        }
+    }
+
+    fn as_ptr(&self) -> *const Mutex<VecDeque<Message>> {
+        &*self.messages as *const _
+    }
+
+    pub fn next_message(&mut self) -> Option<Message> {
+        self.process_pending_messages();
+        self.messages
+            .lock()
+            .expect("Unable to acquire lock on window mutex")
+            .pop_front()
+    }
+
+    pub fn wait_message(&mut self) -> Option<Message> {
+        // TODO: What if the window is closed or something else has happened that'll prevent us
+        // from ever getting another message?
+        loop {
+            if self.process_pending_messages() {
+                let maybe_message = self.messages
+                    .lock()
+                    .expect("Unable to acquire lock on window mutex")
+                    .pop_front();
+                if let Some(message) = maybe_message {
+                    return Some(message)
+                } else {
+                    continue;
+                }
+            }
+
+            if unsafe { user32::WaitMessage() } == FALSE {
+                println!("WARNING: Failed to wait for window messages");
+            }
+        }
+    }
+
+    pub fn pump_forever(&mut self) {
+        // TODO: What if the window is closed or something else has happened that'll prevent us
+        // from ever getting another message?
+        loop {
+            self.process_pending_messages();
+            if unsafe { user32::WaitMessage() } == FALSE {
+                println!("WARNING: Failed to wait for window messages");
+            }
+        }
+    }
+
+    /// Returns `true` if a message was processed.
+    fn process_pending_messages(&self) -> bool {
+        let mut processed_message = false;
+
+        unsafe {
+            let mut message = mem::uninitialized::<MSG>();
+            while user32::PeekMessageW(&mut message, self.handle, 0, 0, TRUE as u32) > 0 {
+                user32::TranslateMessage(&message);
+                user32::DispatchMessageW(&message);
+
+                processed_message = true;
+            }
+        }
+
+        processed_message
+    }
+}
+
 #[allow(non_snake_case)]
-unsafe extern "system"
-fn message_callback(
+unsafe extern "system" fn message_callback(
     hwnd: HWND,
     uMsg: UINT,
     wParam: WPARAM,
     lParam: LPARAM) -> LRESULT
 {
-    let messages_ptr = user32::GetPropW(hwnd, WINDOW_PROP.to_c_u16().as_ptr()) as *mut VecDeque<Message>;
+    // match uMsg {
+    //     WM_NCCREATE => println!("WM_NCCREATE"),
+    //     WM_CREATE => println!("WM_CREATE"),
+    //     WM_ACTIVATEAPP => println!("WM_ACTIVATEAPP"),
+    //     WM_CLOSE => println!("WM_CLOSE"),
+    //     WM_DESTROY => println!("WM_DESTROY"),
+    //     WM_PAINT => println!("WM_PAINT"),
+    //     WM_SYSKEYDOWN => println!("WM_SYSKEYDOWN"),
+    //     WM_KEYDOWN => println!("WM_KEYDOWN"),
+    //     WM_SYSKEYUP => println!("WM_SYSKEYUP"),
+    //     WM_KEYUP => println!("WM_KEYUP"),
+    //     WM_MOUSEMOVE => println!("WM_MOUSEMOVE"),
+    //     WM_INPUT => println!("WM_INPUT"),
+    //     _ => println!("uknown message: {:?}", uMsg),
+    // }
+
+    let messages_ptr = user32::GetPropW(hwnd, WINDOW_PROP.to_c_u16().as_ptr()) as *const Mutex<VecDeque<Message>>;
     if !messages_ptr.is_null() {
-        let messages = &mut *messages_ptr;
+        let inner = &*messages_ptr;
+        let mut messages = inner.lock().expect("Unable to aquire lock on window message queue");
+
         match uMsg {
-            WM_ACTIVATEAPP => messages.push_back(Activate),
-            WM_CLOSE => messages.push_back(Close),
+            WM_ACTIVATEAPP => { messages.push_back(Activate); },
+            WM_CLOSE => {
+                messages.push_back(Close);
+
+                // Skip default proc to avoid closing the window. Allow client code to perform
+                // whatever handling they want before closing the window.
+                return 0;
+            },
             WM_DESTROY => messages.push_back(Destroy),
             //WM_PAINT => messages.push_back(Paint), // TODO We need a user defined window proc to allow painting outside of the main loop.
             WM_SYSKEYDOWN | WM_KEYDOWN => messages.push_back(KeyDown(convert_windows_scancode(wParam, lParam))),
@@ -155,8 +306,8 @@ fn message_callback(
                 let y_coord = ( ( lParam >> 16 ) as i16 ) as i32;
                 messages.push_back(MousePos(x_coord, y_coord));
             },
-            WM_INPUT => handle_raw_input(messages, lParam),
-            _ => (),
+            WM_INPUT => handle_raw_input(&mut *messages, lParam),
+            _ => {},
         }
     }
 

@@ -1,4 +1,5 @@
-#![feature(raw, augmented_assignments, op_assign_traits)]
+#![feature(const_fn)]
+#![feature(slice_patterns)]
 #![cfg_attr(test, feature(test))]
 
 pub mod point;
@@ -15,6 +16,8 @@ pub use self::vector::{Vector2, Vector3};
 pub use self::matrix::{Matrix3, Matrix4};
 pub use self::color::Color;
 pub use self::quaternion::Quaternion;
+
+pub use std::f32::consts::PI;
 
 pub const EPSILON: f32 = 1e-6;
 

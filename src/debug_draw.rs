@@ -1,30 +1,13 @@
-use std::rc::Rc;
 use std::ptr;
-use std::f32::consts::PI;
 use std::sync::Mutex;
 
 use math::*;
-use polygon::Camera;
-use polygon::gl_render::{GLRender, ShaderProgram, GLMeshData};
-use polygon::geometry::*;
-use resource::ResourceManager;
+use polygon::{Renderer, GpuMesh};
+use polygon::geometry::mesh::MeshBuilder;
 
 static mut instance: *const Mutex<DebugDrawInner> = 0 as *const _;
 
-#[derive(Debug)]
-pub struct DebugDraw {
-    renderer: Rc<GLRender>,
-
-    shader: ShaderProgram,
-    unit_cube: GLMeshData,
-    unit_sphere: GLMeshData,
-
-    inner: Box<Mutex<DebugDrawInner>>,
-
-    // Vecs used for dynamically reconstructing meshes.
-    line_vertices: Vec<f32>,
-    line_indices: Vec<u32>,
-}
+type MeshIndex = u32;
 
 static CUBE_VERTS: [f32; 32] =
     [ 0.5,  0.5,  0.5, 1.0,
@@ -35,6 +18,7 @@ static CUBE_VERTS: [f32; 32] =
      -0.5,  0.5, -0.5, 1.0,
      -0.5, -0.5,  0.5, 1.0,
      -0.5, -0.5, -0.5, 1.0,];
+
 static CUBE_INDICES: [MeshIndex; 24] =
     [0, 1,
      1, 3,
@@ -49,8 +33,20 @@ static CUBE_INDICES: [MeshIndex; 24] =
      2, 6,
      3, 7,];
 
+pub struct DebugDraw {
+    // material: Material,
+    _unit_cube: GpuMesh,
+    _unit_sphere: GpuMesh,
+
+    inner: Box<Mutex<DebugDrawInner>>,
+
+    // Vecs used for dynamically reconstructing meshes.
+    _line_vertices: Vec<f32>,
+    _line_indices: Vec<MeshIndex>,
+}
+
 impl DebugDraw {
-    pub fn new(renderer: Rc<GLRender>, resource_manager: &ResourceManager) -> DebugDraw {
+    pub fn new(renderer: &mut Renderer) -> DebugDraw {
         assert!(unsafe { instance.is_null() }, "Cannot create more than one instance of DebugDraw at a time");
 
         let mut inner = Box::new(Mutex::new(DebugDrawInner {
@@ -65,7 +61,7 @@ impl DebugDraw {
         let unit_sphere = {
             const VERTS_PER_CIRCLE: usize = 50;
             let mut sphere_verts = Vec::new();
-            let mut sphere_indices = Vec::<u32>::new();
+            let mut sphere_indices = Vec::<MeshIndex>::new();
 
             // Vertices around X axis.
             sphere_verts.push(Point::new(0.0, 0.0, 1.0));
@@ -73,8 +69,8 @@ impl DebugDraw {
                 let percent = offset as f32 / VERTS_PER_CIRCLE as f32;
                 let theta = percent * 2.0 * PI;
                 sphere_verts.push(Point::new(0.0, theta.sin(), theta.cos()));
-                sphere_indices.push(sphere_verts.len() as u32 - 2);
-                sphere_indices.push(sphere_verts.len() as u32 - 1);
+                sphere_indices.push(sphere_verts.len() as MeshIndex - 2);
+                sphere_indices.push(sphere_verts.len() as MeshIndex - 1);
             }
 
             // Vertices around Y axis.
@@ -83,8 +79,8 @@ impl DebugDraw {
                 let percent = offset as f32 / VERTS_PER_CIRCLE as f32;
                 let theta = percent * 2.0 * PI;
                 sphere_verts.push(Point::new(theta.cos(), 0.0, theta.sin()));
-                sphere_indices.push(sphere_verts.len() as u32 - 2);
-                sphere_indices.push(sphere_verts.len() as u32 - 1);
+                sphere_indices.push(sphere_verts.len() as MeshIndex - 2);
+                sphere_indices.push(sphere_verts.len() as MeshIndex - 1);
             }
 
             // Vertices around Z axis.
@@ -93,72 +89,30 @@ impl DebugDraw {
                 let percent = offset as f32 / VERTS_PER_CIRCLE as f32;
                 let theta = percent * 2.0 * PI;
                 sphere_verts.push(Point::new(theta.cos(), theta.sin(), 0.0));
-                sphere_indices.push(sphere_verts.len() as u32 - 2);
-                sphere_indices.push(sphere_verts.len() as u32 - 1);
+                sphere_indices.push(sphere_verts.len() as MeshIndex - 2);
+                sphere_indices.push(sphere_verts.len() as MeshIndex - 1);
             }
 
-            build_mesh(&*renderer, Point::as_ref(&*sphere_verts), &*sphere_indices)
+            build_mesh(renderer, Point::as_ref(&*sphere_verts), &*sphere_indices)
         };
 
         DebugDraw {
-            renderer: renderer.clone(),
-
-            shader: resource_manager.get_shader("shaders/debug_draw.glsl").unwrap(),
-            unit_cube: build_mesh(&*renderer, &CUBE_VERTS, &CUBE_INDICES),
-            unit_sphere: unit_sphere,
+            // material: resource_manager.get_material("lib/polygon_rs/resources/materials/diffuse_flat.material").unwrap().clone(),
+            _unit_cube: build_mesh(&mut *renderer, &CUBE_VERTS, &CUBE_INDICES),
+            _unit_sphere: unit_sphere,
 
             inner: inner,
 
-            line_vertices: Vec::new(),
-            line_indices: Vec::new(),
+            _line_vertices: Vec::new(),
+            _line_indices: Vec::new(),
         }
     }
 
-    pub fn flush_commands(&mut self, camera: &Camera) {
+    pub fn flush_commands(&mut self) {
         let inner = self.inner.lock().unwrap();
-        for command in &inner.command_buffer {
-            match command {
-                &DebugDrawCommand::Line { start, end, color: _ } => {
-                    self.line_vertices.extend(start.as_array());
-                    self.line_vertices.extend(end.as_array());
-                },
-                &DebugDrawCommand::Box { transform, color } => {
-                    self.renderer.draw_wireframe(
-                        camera,
-                        &self.shader,
-                        &self.unit_cube,
-                        transform,
-                        color);
-                },
-                &DebugDrawCommand::Sphere { center, radius, color } => {
-                    let model_transform =
-                        Matrix4::from_point(center) * Matrix4::scale(radius, radius, radius);
-                    self.renderer.draw_wireframe(
-                        camera,
-                        &self.shader,
-                        &self.unit_sphere,
-                        model_transform,
-                        color);
-                },
-            }
+        for _command in &inner.command_buffer {
+            warn_once!("Debug drawing is currently broken :(");
         }
-
-        if !self.line_vertices.is_empty() {
-            for index in 0..self.line_vertices.len() / 4 {
-                self.line_indices.push(index as u32);
-            }
-            let line_mesh = build_mesh(&*self.renderer, &self.line_vertices, &self.line_indices);
-            self.renderer.draw_wireframe(
-                camera,
-                &self.shader,
-                &line_mesh,
-                Matrix4::identity(),
-                color::WHITE);
-            self.renderer.delete_mesh(line_mesh);
-        }
-
-        self.line_vertices.clear();
-        self.line_indices.clear();
     }
 
     // TODO: This function is a hack to get debug pausing working. This should be better handled
@@ -178,14 +132,14 @@ impl Drop for DebugDraw {
 }
 
 /// Creates a mesh from a list of vertices and indices.
-fn build_mesh(renderer: &GLRender, vertices: &[f32], indices: &[MeshIndex]) -> GLMeshData {
+fn build_mesh(renderer: &mut Renderer, vertices: &[f32], indices: &[MeshIndex]) -> GpuMesh {
     let mesh = MeshBuilder::new()
     .set_position_data(Point::slice_from_f32_slice(vertices))
     .set_indices(indices)
     .build()
     .unwrap(); // TODO: Don't panic? I think in this case panicking is a bug in the engine and is pretty legit.
 
-    renderer.gen_mesh(&mesh)
+    renderer.register_mesh(&mesh)
 }
 
 #[derive(Debug, Clone)]

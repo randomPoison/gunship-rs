@@ -19,65 +19,107 @@
 //! the color as a property. Then we can make two materials, both using the same shader but one set
 //! to show red and the other set to show blue.
 
-use gl_render::{GpuTexture, ShaderProgram};
 use math::*;
+use shader::Shader;
 use std::collections::HashMap;
 use std::collections::hash_map::Iter as HashMapIter;
+use texture::GpuTexture;
+
+pub use polygon_material::material_source::MaterialSource;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct MaterialId(usize);
+derive_Counter!(MaterialId);
 
 /// Represents combination of a shader and set values for its uniform properties.
 #[derive(Debug, Clone)]
 pub struct Material {
-    shader:     ShaderProgram,
+    shader: Shader,
     properties: HashMap<String, MaterialProperty>,
-    dirty:      bool,
 }
 
 impl Material {
-    pub fn new(shader: ShaderProgram) -> Material {
+    /// Creates a new material using the specified shader.
+    pub fn new(shader: Shader) -> Material {
         Material {
-            shader:     shader,
+            shader: shader,
             properties: HashMap::new(),
-            dirty:      false,
         }
     }
 
-    pub fn shader(&self) -> &ShaderProgram {
+    /// Gets a reference to the shader used by the material.
+    pub fn shader(&self) -> &Shader {
         &self.shader
     }
 
+    /// Gets an iterator yielding the the current material properties.
     pub fn properties(&self) -> HashMapIter<String, MaterialProperty> {
         self.properties.iter()
     }
 
-    pub fn dirty(&self) -> bool {
-        self.dirty
+    /// Gets the value of a material property.
+    pub fn get_property(&self, name: &str) -> Option<&MaterialProperty> {
+        self.properties.get(name)
     }
 
+    /// Sets a property value to be the specified color.
     pub fn set_color<S: Into<String>>(&mut self, name: S, color: Color) {
         self.properties.insert(name.into(), MaterialProperty::Color(color));
-        self.dirty = true;
     }
 
+    /// Gets the value of a color property.
+    pub fn get_color(&self, name: &str) -> Option<&Color> {
+        match self.properties.get(name) {
+            Some(&MaterialProperty::Color(ref color)) => Some(color),
+            _ => None,
+        }
+    }
+
+    /// Sets a property value to be the specified `f32` value.
+    pub fn set_f32<S: Into<String>>(&mut self, name: S, value: f32) {
+        self.properties.insert(name.into(), MaterialProperty::f32(value));
+    }
+
+    /// Gets the value of a `f32` material property.
+    pub fn get_f32(&self, name: &str) -> Option<&f32> {
+        match self.properties.get(name) {
+            Some(&MaterialProperty::f32(ref value)) => Some(value),
+            _ => None,
+        }
+    }
+
+    /// Sets a property value to be the specified `Vector3` value.
+    pub fn set_vector3<S: Into<String>>(&mut self, name: S, value: Vector3) {
+        self.properties.insert(name.into(), MaterialProperty::Vector3(value));
+    }
+
+    /// Gets the value of a `Vector3` material property.
+    pub fn get_vector3(&self, name: &str) -> Option<&Vector3> {
+        match self.properties.get(name) {
+            Some(&MaterialProperty::Vector3(ref value)) => Some(value),
+            _ => None,
+        }
+    }
+
+    /// Sets a property value to be the specified texture.
     pub fn set_texture<S: Into<String>>(&mut self, name: S, texture: GpuTexture) {
         self.properties.insert(name.into(), MaterialProperty::Texture(texture));
-        self.dirty = true;
     }
 
-    /// Marks the material as no longer being dirty.
+    /// Removes a property from the material.
     ///
-    /// This should only be called by the renderer once it has had a chance to process any change
-    /// to materials. Marking a material as clean when it has not been fully processed can result
-    /// changes not being fully applied.
-    ///
-    /// TODO: Can we make this private to polygon in a way that the renderers can see it but nobody
-    /// else?
-    pub fn set_clean(&mut self) {
-        self.dirty = false;
+    /// The existing property is returned if any.
+    pub fn clear_property(&mut self, name: &str) -> Option<MaterialProperty> {
+        self.properties.remove(name)
     }
 }
 
+/// Represents a value that can be sent to the GPU and used in shader programs.
 #[derive(Debug, Clone)]
+#[allow(bad_style)]
 pub enum MaterialProperty {
     Color(Color),
     Texture(GpuTexture),
+    f32(f32),
+    Vector3(Vector3),
 }

@@ -3,8 +3,8 @@ use std::mem::{self, size_of};
 use std::ptr;
 use window::Message::*;
 use window::*;
-use windows::winapi::*;
-use windows::user32;
+use super::winapi::*;
+use super::user32;
 
 // use windows::winapi::winuser::RAWINPUTDEVICE;
 // use windows::xinput::*;

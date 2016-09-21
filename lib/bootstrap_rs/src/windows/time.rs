@@ -1,7 +1,7 @@
 use std::ops::{Add, AddAssign, Sub};
 
-use windows::winapi::*;
-use windows::kernel32;
+use super::winapi::*;
+use super::kernel32;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct TimeMark(i64);

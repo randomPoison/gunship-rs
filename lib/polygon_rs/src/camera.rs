@@ -1,18 +1,16 @@
-use math::Point;
-use math::Matrix4;
-use math::Quaternion;
+use anchor::AnchorId;
+use math::*;
 
 /// A camera in the scene.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub struct Camera
 {
-    pub fov: f32,
-    pub aspect: f32,
-    pub near: f32,
-    pub far: f32,
+    fov: f32,
+    aspect: f32,
+    near: f32,
+    far: f32,
 
-    pub position: Point,
-    pub rotation: Quaternion,
+    anchor: Option<AnchorId>,
 }
 
 impl Camera
@@ -24,21 +22,8 @@ impl Camera
             near: near,
             far: far,
 
-            position: Point::origin(),
-            rotation: Quaternion::identity(),
+            anchor: None,
         }
-    }
-
-    /// Calculates the view transform for the camera.
-    ///
-    /// The view transform the matrix that converts from world coordinates
-    /// to camera coordinates.
-    pub fn view_matrix(&self) -> Matrix4 {
-        self.rotation.as_matrix4().transpose() * Matrix4::translation(-self.position.x, -self.position.y, -self.position.z)
-    }
-
-    pub fn inverse_view_matrix(&self) -> Matrix4 {
-        Matrix4::from_point(self.position) * self.rotation.as_matrix4()
     }
 
     /// Calculates the projection matrix for the camera.
@@ -57,4 +42,31 @@ impl Camera
         projection[3][2] = -1.0;
         projection
     }
+
+    pub fn anchor(&self) -> Option<AnchorId> {
+        self.anchor
+    }
+
+    pub fn set_anchor(&mut self, anchor_id: AnchorId) {
+        self.anchor = Some(anchor_id);
+    }
 }
+
+impl Default for Camera {
+    /// Creates a new
+    fn default() -> Camera {
+        Camera {
+            fov: PI / 3.0,
+            aspect: 1.0,
+            near: 0.001,
+            far: 1_000.0,
+
+            anchor: None,
+        }
+    }
+}
+
+/// Identifies an achor that has been registered with the renderer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct CameraId(usize);
+derive_Counter!(CameraId);

@@ -9,6 +9,7 @@ winapi = "*"
 user32-sys = "*"
 kernel32-sys = "*"
 winmm-sys = "*"
+gdi32-sys = "0.2"
 # xinput-sys = "*"
 
 # Begin macos dependencies.

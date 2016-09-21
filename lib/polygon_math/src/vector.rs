@@ -1,7 +1,11 @@
+use {IsZero, Dot, Lerp, Point};
 use std::ops::{Mul, MulAssign, Div, DivAssign, Neg, Add, AddAssign, Sub, SubAssign, Index, IndexMut};
-use super::{IsZero, Dot, Lerp};
 
-#[repr(C)] #[derive(Debug, Clone, Copy, PartialEq)]
+// VECTOR 3
+// ================================================================================================
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+#[repr(C)]
 pub struct Vector3 {
     pub x: f32,
     pub y: f32,
@@ -35,17 +39,6 @@ impl Vector3 {
 
     pub fn forward() -> Vector3 {
         Vector3::new(0.0, 0.0, -1.0)
-    }
-
-    /// TODO: Implement the `From` trait rather than making a separate method.
-    pub fn from_slice(data: &[f32]) -> Vector3 {
-        assert!(data.len() == 3);
-
-        Vector3 {
-            x: data[0],
-            y: data[1],
-            z: data[2],
-        }
     }
 
     pub fn cross(first: Vector3, second: Vector3) -> Vector3 {
@@ -114,6 +107,16 @@ impl Vector3 {
     //         self.z * rhs.x - self.x * rhs.z,
     //         self.x * rhs.y - self.y * rhs.x)
     // }
+}
+
+impl Default for Vector3 {
+    fn default() -> Vector3 {
+        Vector3 {
+            x: 0.0,
+            y: 0.0,
+            z: 0.0,
+        }
+    }
 }
 
 impl Dot for Vector3 {
@@ -290,6 +293,68 @@ impl IndexMut<usize> for Vector3 {
     }
 }
 
+impl<'a> From<&'a [f32]> for Vector3 {
+    fn from(from: &[f32]) -> Vector3 {
+        assert!(from.len() == 3);
+
+        Vector3 {
+            x: from[0],
+            y: from[1],
+            z: from[2],
+        }
+    }
+}
+
+impl <'a> From<[f32; 3]> for Vector3 {
+    fn from(from: [f32; 3]) -> Vector3 {
+        Vector3 {
+            x: from[0],
+            y: from[1],
+            z: from[2],
+        }
+    }
+}
+
+impl From<Point> for Vector3 {
+    /// Creates a new `Vector3` from a `Point`.
+    ///
+    /// This behaves as if the point had been subtracted from the origin, yielding a `Vector3` with
+    /// the same x, y, and z coordinates as the original point. The conversion can be expressed as
+    /// `(x, y, z, 1.0) => <x, y, z>`.
+    fn from(from: Point) -> Vector3 {
+        Vector3 {
+            x: from.x,
+            y: from.y,
+            z: from.z,
+        }
+    }
+}
+
+impl From<(f32, f32, f32)> for Vector3 {
+    fn from(from: (f32, f32, f32)) -> Vector3 {
+        Vector3 {
+            x: from.0,
+            y: from.1,
+            z: from.2,
+        }
+    }
+}
+
+impl Into<[f32; 3]> for Vector3 {
+    fn into(self) -> [f32; 3] {
+        [self.x, self.y, self.z]
+    }
+}
+
+impl Into<(f32, f32, f32)> for Vector3 {
+    fn into(self) -> (f32, f32, f32) {
+        (self.x, self.y, self.z)
+    }
+}
+
+// VECTOR 2
+// ================================================================================================
+
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd)]
 pub struct Vector2 {
     pub x: f32,
@@ -323,6 +388,15 @@ impl Vector2 {
                 data.as_ptr() as *const Vector2,
                 data.len() / 2,
             )
+        }
+    }
+}
+
+impl Default for Vector2 {
+    fn default() -> Vector2 {
+        Vector2 {
+            x: 0.0,
+            y: 0.0,
         }
     }
 }

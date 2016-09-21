@@ -12,21 +12,21 @@
 //! parameters with special enum types that only contain variants that are valid options for that
 //! function.
 
-#[cfg(windows)]
-#[path="windows.rs"]
+#![feature(const_fn)]
+#![allow(bad_style)]
+
+#[cfg(target_os="windows")]
+#[path="windows\\mod.rs"]
 pub mod platform;
 
-#[cfg(target_os="linux")]
-#[path="linux.rs"]
-pub mod platform;
-
-#[cfg(target_os="macos")]
-#[path="macos.rs"]
+#[cfg(target_os = "linux")]
+#[path="linux/mod.rs"]
 pub mod platform;
 
 pub mod types;
 
 pub use self::types::*;
+pub use self::platform::*;
 
 /// Macro used for generating bindings to OpenGL procs.
 ///
@@ -34,37 +34,87 @@ pub use self::types::*;
 /// the various functions that are part of the OpenGL API we must load pointers to those functions.
 /// This macro generates the necessary boilerplate for loading and stashing those pointers, as well
 /// as handling failure when those pointers fail to load (i.e. panicking).
+///
+/// TODO: Add a variant where the same gl proc can be mapped to multiple rust functions to improve
+/// type safety specification.
 macro_rules! gl_proc {
     ( $proc_name:ident:
         $( #[$attr:meta] )* fn $fn_name:ident( $( $arg:ident : $arg_ty:ty ),* ) $( -> $result:ty )* ) => {
         $( #[$attr] )*
         pub unsafe fn $fn_name( $( $arg: $arg_ty, )* ) $( -> $result )* {
-            static mut PROC_PTR: Option<extern "C" fn( $( $arg_ty, )* ) $( -> $result )*> = None;
+            $fn_name::load();
 
-            if let None = PROC_PTR {
-                PROC_PTR =
-                    $crate::platform::load_proc(stringify!( $proc_name ))
-                    .map(|ptr| ::std::mem::transmute(ptr));
-            }
-
-            match PROC_PTR {
+            match $fn_name::load() {
                 Some(gl_proc) => gl_proc( $( $arg ),* ),
                 None => panic!("Failed to load gl proc for {}", stringify!( $proc_name )),
+            }
+        }
+
+        pub mod $fn_name {
+            #[allow(unused_imports)]
+            use types::*;
+
+            static mut PROC_PTR: Option<ProcType> = None;
+
+            pub type ProcType = extern "system" fn( $( $arg_ty, )* ) $( -> $result )*;
+
+            pub unsafe fn load() -> Option<ProcType> {
+                if let None = PROC_PTR {
+                    PROC_PTR =
+                        $crate::platform::load_proc(stringify!( $proc_name ))
+                        .map(|ptr| ::std::mem::transmute(ptr));
+                }
+
+                PROC_PTR
             }
         }
     }
 }
 
-/// Initializes OpenGl and create the context.
-pub fn create_context() -> platform::Context {
-    platform::init();
-    platform::create_context()
-}
+gl_proc!(glActiveTexture:
+    /// Selects active texture unit.
+    ///
+    /// [Wiki page](https://www.opengl.org/wiki/GLAPI/glActiveTexture)
+    ///
+    /// Core since version 1.3
+    ///
+    /// Selects which texture unit subsequent texture state calls will affect. The number of
+    /// texture units an implementation supports is implementation dependent, but must be at least
+    /// 96 (80 in GL 4.2, 48 in GL 3.3).
+    fn active_texture(texture: u32));
 
-/// Destroys and existing OpenGL context.
-pub fn destroy_context(context: platform::Context) {
-    platform::destroy_context(context);
-}
+gl_proc!(glAttachShader:
+    /// Attaches a shader object to a program object.
+    ///
+    /// [Wiki page](https://www.opengl.org/wiki/GLAPI/glAttachShader)
+    ///
+    /// Core since version 2.0
+    ///
+    /// In order to create a complete shader program, there must be a way to specify the list of
+    /// things that will be linked together. Program objects provide this mechanism. Shaders
+    /// that are to be linked together in a program object must first be attached to that program
+    /// object. `attach_shader` attaches the shader object specified by shader​ to the program
+    /// object specified by program​. This indicates that shader​ will be included in link
+    /// operations that will be performed on program​.
+    ///
+    /// All operations that can be performed on a shader object are valid whether or not the
+    /// shader object is attached to a program object. It is permissible to attach a shader
+    /// object to a program object before source code has been loaded into the shader object or
+    /// before the shader object has been compiled. It is permissible to attach multiple shader
+    /// objects of the same type because each may contain a portion of the complete shader. It
+    /// is also permissible to attach a shader object to more than one program object. If a
+    /// shader object is deleted while it is attached to a program object, it will be flagged for
+    /// deletion, and deletion will not occur until `detach_shader` is called to detach it from
+    /// all program objects to which it is attached.
+    ///
+    /// # Errors
+    ///
+    /// - `GL_INVALID_VALUE` is generated if either program​ or shader​ is not a value generated by
+    ///   OpenGL.
+    /// - `glInvalidOperation` is generated if program​ is not a program object.
+    /// - `glInvalidOperation` is generated if shader​ is not a shader object.
+    /// - `glInvalidOperation` is generated if shader​ is already attached to program​.
+    fn attach_shader(program: ProgramObject, shader: ShaderObject));
 
 gl_proc!(glBindBuffer:
     /// Binds a named buffer object.
@@ -171,6 +221,67 @@ gl_proc!(glBindBuffer:
     ///   `gen_buffers`.
     fn bind_buffer(target: BufferTarget, buffer: BufferName));
 
+gl_proc!(glBindTexture:
+    /// Binds a named texture to a texturing target.
+    ///
+    /// Lets you create or use a named texture. Calling `bind_texture` with target​ set to
+    /// `Texture1d`, `Texture2d`, `Texture3d`, `Texture1dArray`, `Texture2dArray`,
+    /// `TextureRectangle`, `TextureCubeMap`, `TextureCubeMapArray`, `TextureBuffer`,
+    /// `Texture2dMultisample` or `Texture2dMultisampleArray` and texture​ set to the name of the
+    /// new texture binds the texture name to the target. When a texture is bound to a target
+    /// the previous binding for that target is automatically broken.
+    ///
+    /// Texture names are `u32` values. The value zero is reserved to represent the default
+    /// texture for each texture target. Texture names and the corresponding texture contents are
+    /// local to the shared object space of the current GL rendering context; two rendering
+    /// contexts share texture names only if they explicitly enable sharing between contexts
+    /// through the appropriate GL windows interfaces functions.
+    ///
+    /// You must use `gen_textures` to generate a set of new texture names.
+    ///
+    /// When a texture is first bound it assumes the specified target: A texture first bound to
+    /// `Texture1d` becomes one-dimensional texture, a texture first bound to `Texture2d` becomes
+    /// two-dimensional texture, a texture first bound to `Texture3d` becomes three-dimensional
+    /// texture, a texture first bound to `Texture1dArray` becomes one-dimensional array texture,
+    /// a texture first bound to `Texture2dArray` becomes two-dimensional arary texture, a
+    /// texture first bound to `TextureRectangle` becomes rectangle texture, a texture first
+    /// bound to `TextureCubeMap` becomes a cube-mapped texture, a texture first bound to
+    /// `TextureCubeMapArray` becomes a cube-mapped array texture, a texture first bound to
+    /// `TextureBuffer` becomes a buffer texture, a texture first bound to `Texture2dMultisample`
+    /// becomes a two-dimensional multisampled texture, and a texture first bound to
+    /// `Texture2dMultisampleArray` becomes a two-dimensional multisampled array texture. The
+    /// state of a one-dimensional texture immediately after it is first bound is equivalent to
+    /// the state of the default `Texture1d` at GL initialization, and similarly for the other
+    /// texture types.
+    ///
+    /// While a texture is bound, GL operations on the target to which it is bound affect the
+    /// bound texture, and queries of the target to which it is bound return state from the bound
+    /// texture. In effect, the texture targets become aliases for the textures currently bound
+    /// to them, and the texture name zero refers to the default textures that were bound to them
+    /// at initialization.
+    ///
+    /// A texture binding created with `bind_texture` remains active until a different texture
+    /// is bound to the same target, or until the bound texture is deleted with
+    /// `delete_textures`.
+    ///
+    /// Once created, a named texture may be re-bound to its same original target as often as
+    /// needed. It is usually much faster to use `bind_texture` to bind an existing named
+    /// texture to one of the texture targets than it is to reload the texture image using
+    /// `tex_image_1d`, `tex_image_2d`, `tex_image_3d` or another similar function.
+    ///
+    /// # Notes
+    ///
+    /// * The `Texture2dMultisample` and `Texture2dMultisampleArray` targets are available only
+    ///   if the GL version is 3.2 or higher.
+    ///
+    /// # Errors
+    ///
+    /// * `GL_INVALID_VALUE` is generated if target​ is not a name returned from a previous call
+    ///   to `gen_textures`.
+    /// * `GL_INVALID_OPERATION` is generated if texture​ was previously created with a target
+    ///   that doesn't match that of target​.
+    fn bind_texture(target: TextureBindTarget, texture: TextureObject));
+
 gl_proc!(glBindVertexArray:
     /// Binds a named vertex array object.
     ///
@@ -191,6 +302,78 @@ gl_proc!(glBindVertexArray:
     /// - `GL_INVALID_OPERATION` is generated if array​ is not zero or the name of a vertex array
     ///   object previously returned from a call to `gen_vertex_arrays`.
     fn bind_vertex_array(name: VertexArrayName));
+
+gl_proc!(glBlendFunc:
+    /// Specifies pixel arithmetic for both RGB and alpha components.
+    ///
+    /// Pixels can be drawn using a function that blends the incoming (source) RGBA values with
+    /// the RGBA values that are already in the frame buffer (the destination values). Blending is
+    /// initially disabled. Use `enable` and `disable` with argument `ServerCapability::Blend` to
+    /// enable and disable blending.
+    ///
+    /// `blend_func` is equivalent to calling `blend_func_separate` with `src_factor` for both the
+    /// `src_rbg` and `src_alpha` parameters, and `dest_factor` for both the `dest_rbg` and
+    /// `dest_alpha` parameters.
+    ///
+    /// In the table and in subsequent equations, first source, second source and destination
+    /// color components are referred to as (Rs0, Gs0, Bs0, As0), (Rs1, Gs1, Bs1, As1) and (Rd,
+    /// Gd, Bd, Ad), respectively. The color specified by glBlendColor​ is referred to as (Rc, Gc,
+    /// Bc, Ac).
+    ///
+    /// Source and destination scale factors are referred to as (sR, sG, sB, sA) and (dR, dG, dB,
+    /// dA).
+    ///
+    /// | Parameter             | RGB Factor                  | Alpha Factor |
+    /// |-----------------------|-----------------------------|--------------|
+    /// | Zero                  | (0, 0, 0)                   | 0            |
+    /// | One                   | (1, 1, 1)                   | 1            |
+    /// | SourceColor           | (Rs0, Gs0, Bs0)             | As0          |
+    /// | OneMinusSourceColor   | (1, 1, 1) - (Rs0, Gs0, Bs0) | 1 - As0      |
+    /// | DestColor             | (Rd, Gd, Bd)                | Ad           |
+    /// | OneMinusDestColor     | (1, 1, 1) - (Rd, Gd, Bd)    | 1 - Ad       |
+    /// | SourceAlpha           | (As0, As0, As0)             | As0          |
+    /// | OneMinusSourceAlpha   | (1, 1, 1) - (As0, As0, As0) | 1 - As0      |
+    /// | DestAlpha             | (Ad, Ad, Ad)                | Ad           |
+    /// | OneMinusDestAlpha     | (1, 1, 1) - (Ad, Ad, Ad)    | Ad           |
+    /// | ConstantColor         | (Rc, Gc, Bc)                | Ac           |
+    /// | OneMinusConstantColor | (1, 1, 1) - (Rc, Gc, Bc)    | 1 - Ac       |
+    /// | ConstantAlpha         | (Ac, Ac, Ac)                | Ac           |
+    /// | OneMinusConstantAlpha | (1, 1, 1) - (Ac, Ac, Ac)    | 1 - Ac       |
+    /// | SourceAlphaSaturate   | (i, i, i)                   | 1            |
+    /// | Source1Color          | (Rs1, Gs1, Bs1)             | As1          |
+    /// | OneMinusSourceColor   | (1, 1, 1) - (Rs1, Gs1, Bs1) | 1 - As1      |
+    /// | Source1Alpha          | (As1, As1, As1)             | As1          |
+    /// | OneMinusSourceAlpha   | (1, 1, 1) - (As1, As1, As1) | 1 - As1      |
+    ///
+    /// In the table,
+    ///
+    /// ```
+    /// i = min(As0, (1 - Ad))
+    /// ```
+    ///
+    /// Despite the apparent precision of the above equations, blending arithmetic is not exactly
+    /// specified, because blending operates with imprecise integer color values. However, a blend
+    /// factor that should be equal to 1 is guaranteed not to modify its multiplicand, and a blend
+    /// factor equal to 0 reduces its multiplicand to 0. For example, when `src_factor` is
+    /// `SourceAlpha`, `dest_factor` is `OneMinusSourceAlpha`, and `As0` is equal to 1, the
+    /// equations reduce to simple replacement:
+    ///
+    /// ```
+    /// Rd = Rs0
+    /// Gd = Gs0
+    /// Bd = Bs0
+    /// Ad = As0
+    /// ```
+    ///
+    /// # Notes
+    ///
+    /// - When more than one color buffer is enabled for drawing the GL performs blending
+    ///   separately for each enabled buffer, using the contents of that buffer for destination
+    ///   color (See `draw_buffer`).
+    /// - When dual source blending is enabled (i.e. one of the blend factors requiring the second
+    ///   color input is used), the maximum number of enabled draw buffers is given by
+    ///   `GL_MAX_DUAL_SOURCE_DRAW_BUFFERS`, which may be lower than `GL_MAX_DRAW_BUFFERS`.
+    fn blend_func(src_factor: SourceFactor, dest_factor: DestFactor));
 
 gl_proc!(glBufferData:
     /// Creates and initializes a buffer object's data store.
@@ -283,9 +466,129 @@ gl_proc!(glClear:
 gl_proc!(glClearColor:
     fn clear_color(red: f32, green: f32, blue: f32, alpha: f32));
 
+gl_proc!(glCompileShader:
+    /// Compiles a shader object.
+    ///
+    /// [Wiki page](https://www.opengl.org/wiki/GLAPI/glCompileShader)
+    ///
+    /// Core since version 2.0
+    ///
+    /// Compiles the source code strings that have been stored in the shader object specified
+    /// by shader​.
+    ///
+    /// The compilation status will be stored as part of the shader object's state. This value
+    /// will be set to `true` if the shader was compiled without errors and is ready for use,
+    /// and `false` otherwise. It can be queried by calling `get_shader` with arguments `shader​`
+    /// and `GL_COMPILE_STATUS`.
+    ///
+    /// Compilation of a shader can fail for a number of reasons as specified by the OpenGL
+    /// Shading Language Specification. Whether or not the compilation was successful, information
+    /// about the compilation can be obtained from the shader object's information log by
+    /// calling `get_shader_info_log`.
+    ///
+    /// # Errors
+    ///
+    /// - `GL_INVALID_VALUE` is generated if shader​ is not a value generated by OpenGL.
+    fn compile_shader(shader: ShaderObject));
+
+gl_proc!(glCreateProgram:
+    /// Creates a program object.
+    ///
+    /// [Wiki page](https://www.opengl.org/wiki/GLAPI/glCreateProgram)
+    ///
+    /// Core since version 2.0
+    ///
+    /// Creates an empty program object and returns a non-zero value by which it can be
+    /// referenced. A program object is an object to which shader objects can be attached.
+    /// This provides a mechanism to specify the shader objects that will be linked to create a
+    /// program. It also provides a means for checking the compatibility of the shaders that will
+    /// be used to create a program (for instance, checking the compatibility between a vertex
+    /// shader and a fragment shader). When no longer needed as part of a program object, shader
+    /// objects can be detached.
+    ///
+    /// One or more executables are created in a program object by successfully attaching shader
+    /// objects to it with `attach_shader`, successfully compiling the shader objects with
+    /// `compile_shader`, and successfully linking the program object with `link_program`. These
+    /// executables are made part of current state when `use_program` is called. Program objects
+    /// can be deleted by calling `delete_program`. The memory associated with the program object
+    /// will be deleted when it is no longer part of current rendering state for any context.
+    ///
+    /// # Notes
+    ///
+    /// - Like buffer and texture objects, the name space for program objects may be shared
+    ///   across a set of contexts, as long as the server sides of the contexts share the same
+    ///   address space. If the name space is shared across contexts, any attached objects and
+    ///   the data associated with those attached objects are shared as well.
+    /// - Applications are responsible for providing the synchronization across API calls when
+    ///   objects are accessed from different execution threads.
+    ///
+    /// # Errors
+    ///
+    /// - This function returns 0 (the null program object) if an error occurs creating the
+    ///   program object.
+    fn create_program() -> ProgramObject);
+
+gl_proc!(glCreateShader:
+    /// Creates a shader object.
+    ///
+    /// [Wiki page](https://www.opengl.org/wiki/GLAPI/glCreateShader)
+    ///
+    /// Core since version 2.0
+    ///
+    /// Creates an empty shader object and returns a non-zero value by which it can be referenced.
+    /// A shader object is used to maintain the source code strings that define a shader.
+    /// `shader_type` indicates the type of shader to be created. The following types are
+    /// supported:
+    ///
+    /// - `VertexShader`
+    /// - `TessControlShader`
+    /// - `TessEvaluationShader`
+    /// - `GeometryShader`
+    /// - `FragmentShader`
+    /// - `ComputeShader`
+    ///
+    /// When created, a shader object's `GL_SHADER_TYPE` parameter is set to the `shader_type`.
+    ///
+    /// # Notes
+    ///
+    /// - Like buffer and texture objects, the name space for shader objects may be shared across a
+    ///   set of contexts, as long as the server sides of the contexts share the same address space.
+    ///   If the name space is shared across contexts, any attached objects and the data associated
+    ///   with those attached objects are shared as well.
+    /// - Applications are responsible for providing the synchronization across API calls when
+    ///   objects are accessed from different execution threads.
+    /// - `ComputeShader` is available only if the GL version is 4.3 or higher.
+    ///
+    /// # Errors
+    ///
+    /// - This function returns 0 (the null shader object) if an error occurs creating the shader
+    ///   object.
+    fn create_shader(shader_type: ShaderType) -> ShaderObject);
+
+gl_proc!(glCullFace:
+    /// Specifies whether front- or back-faces should be culled.
+    ///
+    /// [Wiki page](https://www.opengl.org/wiki/GLAPI/glCullFace)
+    ///
+    /// Core since version 1.0
+    ///
+    /// Specifies whether front- or back-facing facets are culled (as specified by mode) when
+    /// facet culling is enabled. Facet culling is initially disabled. To enable and disable facet
+    /// culling, call `enable` and `disable` commands with the argument `CullFace`. Facets include
+    /// triangles, quadrilaterals, polygons, and rectangles.
+    ///
+    /// `front_face` specifies which of the clockwise and counterclockwise facets are front-facing
+    /// and back-facing.
+    ///
+    /// # Notes
+    ///
+    /// - If `mode​` is `FrontAndBack` no facets are drawn but other primitives such as points and
+    ///   lines are drawn.
+    fn cull_face(mode: Face));
+
 gl_proc!(glDebugMessageCallback:
     fn debug_message_callback(
-        callback: extern "C" fn(DebugSource, DebugType, UInt, DebugSeverity, SizeI, *const u8, *mut ()),
+        callback: Option<DebugMessageCallback>,
         user_param: *mut ()
     ));
 
@@ -309,6 +612,60 @@ gl_proc!(glDeleteBuffers:
     /// `GL_INVALID_VALUE` is generated if `num_buffers` is negative.
     fn delete_buffers(num_buffers: i32, buffers: *const BufferName));
 
+gl_proc!(glDeleteProgram:
+    /// Deletes a program object.
+    ///
+    /// [Wiki page](https://www.opengl.org/wiki/GLAPI/glDeleteProgram)
+    ///
+    /// Core since version 2.0
+    ///
+    /// Frees the memory and invalidates the name associated with the program object specified by
+    /// `program_object`.​ This command effectively undoes the effects of a call to
+    /// `create_program`.
+    ///
+    /// If a program object is in use as part of current rendering state it will be flagged for
+    /// deletion but it will not be deleted until it is no longer part of current state for any
+    /// rendering context. If a program object to be deleted has shader objects attached to it
+    /// those shader objects will be automatically detached but not deleted unless they have
+    /// already been flagged for deletion by a previous call to `delete_shader`.
+    ///
+    /// A value of 0 (a "null" program object) for `program_object` will be silently ignored.
+    ///
+    /// To determine whether a program object has been flagged for deletion call
+    /// `get_program_param` with arguments `program_object` and `DeleteStatus`.
+    fn delete_program(program_object: ProgramObject));
+
+gl_proc!(glDeleteShader:
+    /// Deletes a shader object.
+    ///
+    /// [Wiki page](https://www.opengl.org/wiki/GLAPI/glDeleteShader)
+    ///
+    /// Core since version 2.0
+    ///
+    /// Frees the memory and invalidates the name associated with the shader object specified by
+    /// `shader_object`. This command effectively undoes the effects of a call to `create_shader`.
+    ///
+    /// If a shader object to be deleted is attached to a program object it will be flagged for
+    /// deletion but it will not be deleted until it is no longer attached to any program object,
+    /// for any rendering context (i.e., it must be detached from wherever it was attached before
+    /// it will be deleted).
+    ///
+    /// To determine whether an object has been flagged for deletion call `get_shader_param` with
+    /// arguments `shader_object` and `DeleteStatus`.
+    fn delete_shader(shader_object: ShaderObject));
+
+gl_proc!(glDeleteTextures:
+    /// Deletes named textures.
+    ///
+    /// Deletes `count` textures named by the elements of the array `textures​`. After a texture
+    /// is deleted it has no contents or dimensionality and its name is free for reuse (for
+    /// example by `gen_textures`). If a texture that is currently bound is deleted the binding
+    /// reverts to 0 (the default texture).
+    ///
+    /// `delete_textures` silently ignores 0's and names that do not correspond to existing
+    /// textures.
+    fn delete_textures(count: u32, textures: *mut TextureObject));
+
 gl_proc!(glDeleteVertexArrays:
     /// Deletes name vertex array objects.
     ///
@@ -327,7 +684,67 @@ gl_proc!(glDeleteVertexArrays:
     /// `GL_INVALID_VALUE` is generated if `num_arrays`​ is negative.
     fn delete_vertex_arrays(num_arrays: i32, arrays: *const VertexArrayName));
 
+gl_proc!(glDepthFunc:
+    /// Specifies the value used for the depth buffer comparison.
+    ///
+    /// [Wiki page](https://www.opengl.org/wiki/GLAPI/glDepthFunc)
+    ///
+    /// Core since version 1.0
+    ///
+    /// Specifies the function used to compare each incoming pixel depth value with the depth
+    /// value present in the depth buffer. The comparison is performed only if depth testing is
+    /// enabled (see `enable` and `disable` of `DepthTest`).
+    ///
+    /// `func​` specifies the conditions under which the pixel will be drawn. The comparison
+    /// functions are as follows:
+    ///
+    /// - `Never` - Never passes.
+    /// - `Less` - Passes if the incoming depth value is less than the stored depth value.
+    /// - `Equal` - Passes if the incoming depth value is equal to the stored depth value.
+    /// - `LessThanOrEqual` - Passes if the incoming depth value is less than or equal to the
+    ///   stored depth value.
+    /// - `Greater` - Passes if the incoming depth value is greater than the stored depth value.
+    /// - `NotEqual` - Passes if the incoming depth value is not equal to the stored depth value.
+    /// - `GreaterThanOrEqual` - Passes if the incoming depth value is greater than or equal to
+    ///   the stored depth value.
+    /// - `Always` - Always passes.
+    ///
+    /// The initial value of `func​` is `Less`. Initially depth testing is disabled. If depth
+    /// testing is disabled or if no depth buffer exists it is as if the depth test always passes.
+    fn depth_func(func: Comparison));
+
+gl_proc!(glDetachShader:
+    /// Detaches a shader object from a program object to which it is attached.
+    ///
+    /// [Wiki page](https://www.opengl.org/wiki/GLAPI/glDetachShader)
+    ///
+    /// Cores since version 2.0
+    ///
+    /// Detaches the shader object specified by `shader​_object` from the program object specified
+    /// by `program_object`. This command can be used to undo the effect of the command
+    /// `attach_shader`.
+    ///
+    /// If `shader_object` has already been flagged for deletion by a call to `delete_shader` and
+    /// it is not attached to any other program object it will be deleted after it has been
+    /// detached.
+    ///
+    /// # Errors
+    ///
+    /// - `GL_INVALID_OPERATION` is generated if `shader​_object` is not attached to
+    ///   `program​_object`.
+    fn detach_shader(program_object: ProgramObject, shader_object: ShaderObject));
+
 gl_proc!(glDisable:
+    /// Disables server-side GL capabilities.
+    ///
+    /// [Wiki page](https://www.opengl.org/wiki/GLAPI/glEnable)
+    ///
+    /// Core since version 1.0
+    ///
+    /// Disables various server capabilities. Use `is_enabled` or `get` to determine the current
+    /// setting of any capability. The initial value for each capability with the exception of
+    /// `Diter` and `Multisample` is `false`. The initial value for `Dither` and `Multisample` is
+    /// `true`.
     fn disable(capability: ServerCapability));
 
 gl_proc!(glDisableVertexAttribArray:
@@ -426,6 +843,16 @@ gl_proc!(glDrawElements:
     fn draw_elements(mode: DrawMode, count: i32, index_type: IndexType, offset: usize));
 
 gl_proc!(glEnable:
+    /// Enables server-side GL capabilities.
+    ///
+    /// [Wiki page](https://www.opengl.org/wiki/GLAPI/glEnable)
+    ///
+    /// Core since version 1.0
+    ///
+    /// Enables various server capabilities. Use `is_enabled` or `get` to determine the current
+    /// setting of any capability. The initial value for each capability with the exception of
+    /// `Diter` and `Multisample` is `false`. The initial value for `Dither` and `Multisample` is
+    /// `true`.
     fn enable(capability: ServerCapability));
 
 gl_proc!(glEnableVertexAttribArray:
@@ -447,6 +874,30 @@ gl_proc!(glEnableVertexAttribArray:
     ///   equal to `GL_MAX_VERTEX_ATTRIBS`.
     /// - `GL_INVALID_OPERATION` is generated if no vertex array object is bound.
     fn enable_vertex_attrib_array(attrib: AttributeLocation));
+
+gl_proc!(glFrontFace:
+    /// Defines front- and back-facing polygons.
+    ///
+    /// [Wiki page](https://www.opengl.org/wiki/GLAPI/glFrontFace)
+    ///
+    /// Core since version 1.0
+    ///
+    /// In a scene composed entirely of opaque closed surfaces, back-facing polygons are never
+    /// visible. Eliminating these invisible polygons has the obvious benefit of speeding up the
+    /// rendering of the image. To enable and disable elimination of back-facing polygons, call
+    /// `enable` and `disable` with argument `CullFace`.
+    ///
+    /// The projection of a polygon to window coordinates is said to have clockwise winding if an
+    /// imaginary object following the path from its first vertex, its second vertex, and so on,
+    /// to its last vertex, and finally back to its first vertex, moves in a clockwise direction
+    /// about the interior of the polygon. The polygon's winding is said to be counterclockwise if
+    /// the imaginary object following the same path moves in a counterclockwise direction about
+    /// the interior of the polygon. `front_face` specifies whether polygons with clockwise
+    /// winding in window coordinates, or counterclockwise winding in window coordinates, are
+    /// taken to be front-facing. Passing `CounterClockwise` to `mode​` selects counterclockwise
+    /// polygons as front-facing; `Clockwise` selects clockwise polygons as front-facing.
+    /// By default counterclockwise polygons are taken to be front-facing.
+    fn front_face(mode: WindingOrder));
 
 gl_proc!(glGenBuffers:
     /// Generates buffer object names.
@@ -470,6 +921,20 @@ gl_proc!(glGenBuffers:
     /// `GL_INVALID_VALUE` is generated if `num_buffers`​ is negative.
     fn gen_buffers(num_buffers: i32, buffers: *mut BufferName));
 
+gl_proc!(glGenTextures:
+    /// Generates texture names.
+    ///
+    /// Returns `count`​ texture names in `textures​`. There is no guarantee that the names form a
+    /// contiguous set of integers; however, it is guaranteed that none of the returned names
+    /// was in use immediately before the call to `gen_textures`.
+    ///
+    /// The generated textures have no dimensionality; they assume the dimensionality of the
+    /// texture target to which they are first bound (see `bind_texture`).
+    ///
+    /// Texture names returned by a call to `gen_textures` are not returned by subsequent calls,
+    /// unless they are first deleted with `delete_textures`.
+    fn gen_textures(count: u32, textures: *mut TextureObject));
+
 gl_proc!(glGenVertexArrays:
     /// Generates vertex array object names.
     ///
@@ -492,6 +957,1120 @@ gl_proc!(glGenVertexArrays:
     /// `GL_INVALID_VALUE` is generated if `num_arrays`​ is negative.
     fn gen_vertex_arrays(num_arrays: i32, arrays: *mut VertexArrayName));
 
+gl_proc!(glGetAttribLocation:
+    /// Returns the location of an attribute variable.
+    ///
+    /// [Wiki page](https://www.opengl.org/wiki/GLAPI/glGetAttribLocation)
+    ///
+    /// Core since 2.0
+    ///
+    /// Queries the previously linked program object specified by `program` for the attribute
+    /// variable specified by `name` and returns the index of the generic vertex attribute that is
+    /// bound to that attribute variable. If `name` is a matrix attribute variable, the index of
+    /// the first column of the matrix is returned. If the named attribute variable is not an
+    /// active attribute in the specified program object or if name starts with the reserved
+    /// prefix "gl_" a value of -1 is returned.
+    ///
+    /// The association between an attribute variable name and a generic attribute index can be
+    /// specified at any time by calling `bind_attrib_location`. Attribute bindings do not go
+    /// into effect until `link_program` is called. After a program object has been linked
+    /// successfully, the index values for attribute variables remain fixed until the next link
+    /// command occurs. The attribute values can only be queried after a link if the link was
+    /// successful. `get_attrib_location` returns the binding that actually went into effect the
+    /// last time `link_program` was called for the specified program object. Attribute bindings
+    /// that have been specified since the last link operation are not returned by
+    /// `get_attrib_location`.
+    ///
+    /// # Errors
+    ///
+    /// - `GL_INVALID_OPERATION` is generated if `program` has not been successfully linked.
+    fn get_attrib_location(program: ProgramObject, name: *const u8) -> i32);
+
+gl_proc!(glGetIntegerv:
+    /// Returns the value for simple state variables.
+    ///
+    /// These four commands return values for simple state variables in GL. `name` is a symbolic
+    /// constant indicating the state variable to be returned, and params is a pointer to an
+    /// array of the indicated type in which to place the returned data.
+    ///
+    /// Type conversion is performed if params has a different type than the state variable
+    /// value being requested. If glGetBooleanv is called, a floating-point (or integer) value
+    /// is converted to GL_FALSE if and only if it is 0.0 (or 0). Otherwise, it is converted to
+    /// GL_TRUE. If glGetIntegerv is called, boolean values are returned as GL_TRUE or GL_FALSE,
+    /// and most floating-point values are rounded to the nearest integer value. Floating-point
+    /// colors and normals, however, are returned with a linear mapping that maps 1.0 to the
+    /// most positive representable integer value and -1.0-1.0 to the most negative representable
+    /// integer value. If glGetFloatv or glGetDoublev is called, boolean values are returned as
+    ///  GL_TRUE or GL_FALSE, and integer values are converted to floating-point values.
+    ///
+    /// The following values for `name` are accepted:
+    ///
+    /// - `MajorVersion` - `params` returns one value, the major version number of the OpenGL API
+    ///   supported by the current context.
+    /// - `MinorVersion` - `params` returns one value, the minor version number of the OpenGL API
+    ///   supported by the current context.
+    /// - GL_NUM_EXTENSIONS - `params` returns one value, the number of extensions supported by
+    ///   the GL implementation for the current context. See `get_string`.
+    fn get_integers(name: IntegerName, params: *mut i32));
+
+gl_proc!(glGetProgramInfoLog:
+    /// Returns the information log for the program object.
+    ///
+    /// [Wiki page](https://www.opengl.org/wiki/GLAPI/glGetProgramInfoLog)
+    ///
+    /// Core since version 2.0
+    ///
+    /// Returns the information log for the specified program object. The information log for
+    /// a program object is modified when the program object is linked or validated. The string
+    /// that is returned will be null terminated.
+    ///
+    /// `get_program_info_log` returns in `log_out` as much of the information log as it can,
+    /// up to a maximum of `max_length` characters. The number of characters actually returned,
+    /// excluding the null termination character, is specified by `length_out`. If the length of
+    /// the returned string is not required, a value of 0 can be passed in the length​ argument.
+    /// The size of the buffer required to store the returned information log can be obtained by
+    /// calling `get_program` with the value `InfoLogLength`.
+    ///
+    /// The information log for a program object is either an empty string, or a string
+    /// containing information about the last link operation, or a string containing information
+    /// about the last validation operation. It may contain diagnostic messages, warning
+    /// messages, and other information. When a program object is created, its information log
+    /// will be a string of length 0.
+    ///
+    /// # Notes
+    ///
+    /// - The information log for a program object is the OpenGL implementer's primary mechanism
+    ///   for conveying information about linking and validating. Therefore, the information log
+    ///   can be helpful to application developers during the development process, even when
+    ///   these operations are successful. Application developers should not expect different
+    ///   OpenGL implementations to produce identical information logs.
+    ///
+    /// # Errors
+    ///
+    /// - `GL_INVALID_VALUE` is generated if program​ is not a value generated by OpenGL.
+    /// - `GL_INVALID_OPERATION` is generated if program​ is not a program object.
+    /// - `GL_INVALID_VALUE` is generated if `max_length` is less than 0.
+    fn get_program_info_log(
+        program: ProgramObject,
+        max_length: i32,
+        length_out: *mut i32,
+        log_out: *mut u8));
+
+gl_proc!(glGetProgramiv:
+    /// Returns a parameter from a program object.
+    ///
+    /// [Wiki page](https://www.opengl.org/wiki/GLAPI/glGetProgram)
+    ///
+    /// Core since version 2.0
+    ///
+    /// Returns in `param_out` the value of a parameter for a specific program object. The
+    /// following parameters are defined:
+    ///
+    /// - `DeleteStatus` - `param_out` returns `true` if program​ is currently flagged for
+    ///   deletion, and `false` otherwise.
+    /// - `LinkStatus` - `param_out` returns `true` if the last link operation on program​ was
+    ///   successful, and `false` otherwise.
+    /// - `ValidateStatus` - `param_out` returns `true` or if the last validation operation on
+    ///   program​ was successful, and `false` otherwise.
+    /// - `InfoLogLength` - `param_out` returns the number of characters in the information log
+    ///   for program​ including the null termination character (i.e., the size of the character
+    ///   buffer required to store the information log). If program​ has no information log, a
+    ///   value of 0 is returned.
+    /// - `AttachedShaders` - `param_out` returns the number of shader objects attached to program​.
+    /// - `ActiveAtomicCounterBuffers` - `param_out` returns the number of active attribute
+    ///   atomic counter buffers used by program​.
+    /// - `ActiveAttributes` - `param_out` returns the number of active attribute variables
+    ///   for program​.
+    /// - `ActiveAttributeMaxLength` - `param_out` returns the length of the longest active
+    ///   attribute name for program​, including the null termination character (i.e., the size of
+    ///   the character buffer required to store the longest attribute name). If no active
+    ///   attributes exist, 0 is returned.
+    /// - `ActiveUniforms` - `param_out` returns the number of active uniform variables for program​.
+    /// - `ActiveUniformMaxLength` - `param_out` returns the length of the longest active
+    ///   uniform variable name for program​, including the null termination character (i.e., the
+    ///   size of the character buffer required to store the longest uniform variable name). If
+    ///   no active uniform variables exist, 0 is returned.
+    /// - `ProgramBinaryLength` - `param_out` returns the length of the program binary, in bytes
+    ///   that will be returned by a call to `get_program_binary`. When a progam's `LinkStatus`
+    ///   is `false`, its program binary length is zero.
+    /// - `ComputeWorkGroupSize` - `param_out` returns an array of three integers containing the
+    ///   local work group size of the compute program as specified by its input layout
+    ///   qualifier(s). program​ must be the name of a program object that has been previously
+    ///   linked successfully and contains a binary for the compute shader stage.
+    /// - `TransformFeedbackBufferMode` - `param_out` returns a symbolic constant indicating the
+    ///   buffer mode used when transform feedback is active. This may be `SeparateAttribs`
+    ///   or `InterleavedAttribs`.
+    /// - `TransformFeedbackVaryings` - `param_out` returns the number of varying variables to
+    ///   capture in transform feedback mode for the program.
+    /// - `TransformFeedbackVaryingMaxLength` - `param_out` returns the length of the longest
+    ///   variable name to be used for transform feedback, including the null-terminator.
+    /// - `GeometryVerticesOut` - `param_out` returns the maximum number of vertices that the
+    ///   geometry shader in program​ will output.
+    /// - `GeometryInputType` - `param_out` returns a symbolic constant indicating the primitive
+    ///   type accepted as input to the geometry shader contained in program​.
+    /// - `GeometryOutputType` - `param_out` returns a symbolic constant indicating the primitive
+    ///   type that will be output by the geometry shader contained in program​.
+    ///
+    /// # Notes
+    ///
+    /// - `ActiveUniformBlocks` and `ActiveUniformBlockMaxNameLength` are available only if the
+    ///   GL version 3.1 or greater.
+    /// - `GeometryVerticesOut`, `GeometryInputType` and `GeometryOutputType` are accepted only
+    ///   if the GL version is 3.2 or greater.
+    /// - `ComputeWorkGroupSize` is accepted only if the GL version is 4.3 or greater.
+    /// - If an error is generated, no change is made to the contents of params​.
+    ///
+    /// # Errors
+    ///
+    /// - `GL_INVALID_VALUE` is generated if program​ is not a value generated by OpenGL.
+    /// - `GL_INVALID_OPERATION` is generated if program​ does not refer to a program object.
+    /// - `GL_INVALID_OPERATION` is generated if `param_type` is `GeometryVerticesOut`,
+    ///   `GeometryInputType`, or `GeometryOutputType`, and program​ does not contain a
+    ///   geometry shader.
+    /// - `GL_INVALID_OPERATION` is generated if `param_type` is `ComputeWorkGroupSize` and
+    ///   program​ does not contain a binary for the compute shader stage.
+    fn get_program_param(
+        program: ProgramObject,
+        param_type: ProgramParam,
+        param_out: *mut i32));
+
+gl_proc!(glGetShaderInfoLog:
+    /// Returns the information log for a shader object.
+    ///
+    /// [Wiki page](https://www.opengl.org/wiki/GLAPI/glGetShaderInfoLog)
+    ///
+    /// Core since version 2.0
+    ///
+    /// Returns the information log for the specified shader object. The information log for a
+    /// shader object is modified when the shader is compiled. The string that is returned will
+    /// be null terminated.
+    ///
+    /// `get_shader_info_log` returns in `log_out` as much of the information log as it can, up
+    /// to a maximum of `max_length` characters. The number of characters actually returned,
+    /// excluding the null termination character, is specified by `length_out`​. If the length of the
+    /// returned string is not required, a value of 0 can be passed in the `length​_out` argument. The
+    /// size of the buffer required to store the returned information log can be obtained by
+    /// calling `get_shader` with the value `InfoLogLength`.
+    ///
+    /// The information log for a shader object is a string that may contain diagnostic messages,
+    /// warning messages, and other information about the last compile operation. When a shader
+    /// object is created, its information log will be a string of length 0.
+    ///
+    /// # Notes
+    ///
+    /// - The information log for a shader object is the OpenGL implementer's primary mechanism
+    ///   for conveying information about the compilation process. Therefore, the information
+    ///   log can be helpful to application developers during the development process, even when
+    ///   compilation is successful. Application developers should not expect different OpenGL
+    ///   implementations to produce identical information logs.
+    ///
+    /// # Errors
+    ///
+    /// - `InvalidValue` is generated if shader​ is not a value generated by OpenGL.
+    /// - `InvalidOperation` is generated if shader​ is not a shader object.
+    /// - `InvalidValue` is generated if maxLength​ is less than 0.
+    fn get_shader_info_log(
+        shader: ShaderObject,
+        max_length: i32,
+        length_out: *mut i32,
+        log_out: *mut u8));
+
+gl_proc!(glGetShaderiv:
+    /// Returns a parameter from a shader object.
+    ///
+    /// [Wiki page](https://www.opengl.org/wiki/GLAPI/glGetShader)
+    ///
+    /// Core since version 2.0
+    ///
+    /// glGetShader returns in params​ the value of a parameter for a specific shader object. The following parameters are defined:
+    ///
+    /// - `ShaderType` - params​ returns `VertexShader` if shader​ is a vertex shader object,
+    ///   `GeometryShader` if shader​ is a geometry shader object, and `FragmentShader` if shader​
+    ///   is a fragment shader object.
+    /// - `DeleteStatus` - params​ returns `tre` if shader​ is currently flagged for deletion, and
+    ///   `false` otherwise.
+    /// - `CompileStatus` - params​ returns `true` if the last compile operation on shader​ was
+    ///   successful, and `false` otherwise.
+    /// - `InfoLogLength` - params​ returns the number of characters in the information log for
+    ///   shader​ including the null termination character (i.e., the size of the character buffer
+    ///   required to store the information log). If shader​ has no information log, a value of 0
+    ///   is returned.
+    /// - `ShaderSourceLength` - params​ returns the length of the concatenation of the source
+    ///   strings that make up the shader source for the shader​, including the null termination
+    ///   character. (i.e., the size of the character buffer required to store the shader source).
+    ///   If no source code exists 0 is returned.
+    ///
+    /// # Notes
+    ///
+    /// - If an error is generated, no change is made to the contents of params​.
+    ///
+    /// # Errors
+    ///
+    /// - `GL_INVALID_VALUE` is generated if shader​ is not a value generated by OpenGL.
+    /// - `GL_INVALID_OPERATION` is generated if shader​ does not refer to a shader object.
+    fn get_shader_param(shader: ShaderObject, param_type: ShaderParam, param_out: *mut i32));
+
+gl_proc!(glGetString:
+    /// Returns a string describing the current OpenGL.
+    ///
+    /// [Wiki page](https://www.opengl.org/wiki/GLAPI/glGetString)
+    ///
+    /// Core since version 1.0
+    ///
+    /// Returns a pointer to a static string describing some aspect of the current GL
+    /// connection. name​ can be one of the following:
+    /// - `Vendor` - Returns the company responsible for this GL implementation. This name does
+    ///   not change from release to release.
+    /// - `Renderer` - Returns the name of the renderer. This name is typically specific to a
+    ///   particular configuration of a hardware platform. It does not change from release to
+    ///   release.
+    /// - `Version` - Returns a version or release number.
+    /// - `ShadingLanguageVersion` - Returns a version or release number for the shading language.
+    ///
+    /// Strings `Vendor` and `Renderer` together uniquely specify a platform. They do not change
+    /// from release to release and should be used by platform-recognition algorithms.
+    ///
+    /// The `Version` and `ShadingLanguageVersion` strings retrieved from `get_string()` begin
+    /// with a version number. The version number uses one of these forms:
+    ///
+    /// ```
+    /// major_number​.minor_number​
+    /// ```
+    ///
+    /// or
+    ///
+    /// ```
+    /// major_number​.minor_number​.release_number​
+    /// ```
+    ///
+    /// Vendor-specific information may follow the version number. Its format depends on the
+    /// implementation, but a space always separates the version number and the vendor-specific
+    /// information.
+    fn get_string(name: StringName) -> *const i8);
+
+gl_proc!(glUniform1f:
+    /// Specify the value of a uniform variable for the current program object.
+    ///
+    /// [Wiki page](https://www.opengl.org/wiki/GLAPI/glUniform)
+    ///
+    /// Core since version 2.0
+    ///
+    /// Modifies the value of a uniform variable. The location of the uniform variable to be
+    /// modified is specified by `location​`, which should be a value returned by
+    /// `get_uniform_location`​. `uniform_f32x1` operates on the program object that was made part
+    /// of current state by calling `use_program`.
+    ///
+    /// The command `uniform_f32x1` is used to change the value of the uniform variable specified by
+    /// `location​` using the value passed as arguments. The number specified in the command should
+    /// match the number of components in the data type of the specified uniform variable (i.e.
+    /// `uniform_f32x1` should be used to set a `float` variable).
+    ///
+    /// All active uniform variables defined in a program object are initialized to 0 when the
+    /// program object is linked successfully. They retain the values assigned to them by a call
+    /// to `uniform_*` until the next successful link operation occurs on the program object,
+    /// when they are once again initialized to 0.
+    ///
+    /// # Notes
+    ///
+    /// - `uniform_i32x1` and `uniform_i32v` are the only two functions that may be used to load
+    ///   uniform variables defined as opaque types. Loading opaque types with any other function
+    ///   will result in a `GL_INVALID_OPERATION` error.
+    /// - If count​ is greater than 1 and the indicated uniform variable is not an array, a
+    ///   `GL_INVALID_OPERATION` error is generated and the specified uniform variable will remain
+    ///   unchanged.
+    /// - Other than the preceding exceptions, if the type and size of the uniform variable as
+    ///   defined in the shader do not match the type and size specified in the name of the
+    ///   command used to load its value, a `GL_INVALID_OPERATION` error will be generated and
+    ///   the specified uniform variable will remain unchanged.
+    /// - If `location​` is a value other than -1 and it does not represent a valid uniform variable
+    ///   location in the current program object, an error will be generated, and no changes will
+    ///   be made to the uniform variable storage of the current program object. If location​ is
+    ///   equal to -1, the data passed in will be silently ignored and the specified uniform
+    ///   variable will not be changed.
+    fn uniform_f32x1(location: UniformLocation, value: f32));
+
+gl_proc!(glUniform2f:
+    /// Specify the value of a uniform variable for the current program object.
+    ///
+    /// [Wiki page](https://www.opengl.org/wiki/GLAPI/glUniform)
+    ///
+    /// Core since version 2.0
+    ///
+    /// Modifies the value of a uniform variable. The location of the uniform variable to be
+    /// modified is specified by `location​`, which should be a value returned by
+    /// `get_uniform_location`​. `uniform_f32x2` operates on the program object that was made part
+    /// of current state by calling `use_program`.
+    ///
+    /// The command `uniform_f32x2` is used to change the value of the uniform variable specified by
+    /// `location​` using the value passed as arguments. The number specified in the command should
+    /// match the number of components in the data type of the specified uniform variable (i.e.
+    /// `uniform_f32x2` should be used to set a `vec2` variable).
+    ///
+    /// All active uniform variables defined in a program object are initialized to 0 when the
+    /// program object is linked successfully. They retain the values assigned to them by a call
+    /// to `uniform_*` until the next successful link operation occurs on the program object,
+    /// when they are once again initialized to 0.
+    ///
+    /// # Notes
+    ///
+    /// - `uniform_i32x1` and `uniform_i32v` are the only two functions that may be used to load
+    ///   uniform variables defined as opaque types. Loading opaque types with any other function
+    ///   will result in a `GL_INVALID_OPERATION` error.
+    /// - If count​ is greater than 1 and the indicated uniform variable is not an array, a
+    ///   `GL_INVALID_OPERATION` error is generated and the specified uniform variable will remain
+    ///   unchanged.
+    /// - Other than the preceding exceptions, if the type and size of the uniform variable as
+    ///   defined in the shader do not match the type and size specified in the name of the
+    ///   command used to load its value, a `GL_INVALID_OPERATION` error will be generated and
+    ///   the specified uniform variable will remain unchanged.
+    /// - If `location​` is a value other than -1 and it does not represent a valid uniform variable
+    ///   location in the current program object, an error will be generated, and no changes will
+    ///   be made to the uniform variable storage of the current program object. If location​ is
+    ///   equal to -1, the data passed in will be silently ignored and the specified uniform
+    ///   variable will not be changed.
+    fn uniform_f32x2(location: UniformLocation, x: f32, y: f32));
+
+gl_proc!(glUniform3f:
+    /// Specify the value of a uniform variable for the current program object.
+    ///
+    /// [Wiki page](https://www.opengl.org/wiki/GLAPI/glUniform)
+    ///
+    /// Core since version 2.0
+    ///
+    /// Modifies the value of a uniform variable. The location of the uniform variable to be
+    /// modified is specified by `location​`, which should be a value returned by
+    /// `get_uniform_location`​. `uniform_f32x3` operates on the program object that was made part
+    /// of current state by calling `use_program`.
+    ///
+    /// The command `uniform_f32x4` is used to change the value of the uniform variable specified by
+    /// `location​` using the value passed as arguments. The number specified in the command should
+    /// match the number of components in the data type of the specified uniform variable (i.e.
+    /// `uniform_f32x3` should be used to set a `vec3` variable).
+    ///
+    /// All active uniform variables defined in a program object are initialized to 0 when the
+    /// program object is linked successfully. They retain the values assigned to them by a call
+    /// to `uniform_*` until the next successful link operation occurs on the program object,
+    /// when they are once again initialized to 0.
+    ///
+    /// # Notes
+    ///
+    /// - `uniform_i32x1` and `uniform_i32v` are the only two functions that may be used to load
+    ///   uniform variables defined as opaque types. Loading opaque types with any other function
+    ///   will result in a `GL_INVALID_OPERATION` error.
+    /// - If count​ is greater than 1 and the indicated uniform variable is not an array, a
+    ///   `GL_INVALID_OPERATION` error is generated and the specified uniform variable will remain
+    ///   unchanged.
+    /// - Other than the preceding exceptions, if the type and size of the uniform variable as
+    ///   defined in the shader do not match the type and size specified in the name of the
+    ///   command used to load its value, a `GL_INVALID_OPERATION` error will be generated and
+    ///   the specified uniform variable will remain unchanged.
+    /// - If `location​` is a value other than -1 and it does not represent a valid uniform variable
+    ///   location in the current program object, an error will be generated, and no changes will
+    ///   be made to the uniform variable storage of the current program object. If location​ is
+    ///   equal to -1, the data passed in will be silently ignored and the specified uniform
+    ///   variable will not be changed.
+    fn uniform_f32x3(location: UniformLocation, x: f32, y: f32, z: f32));
+
+gl_proc!(glUniform4f:
+    /// Specify the value of a uniform variable for the current program object.
+    ///
+    /// [Wiki page](https://www.opengl.org/wiki/GLAPI/glUniform)
+    ///
+    /// Core since version 2.0
+    ///
+    /// Modifies the value of a uniform variable. The location of the uniform variable to be
+    /// modified is specified by `location​`, which should be a value returned by
+    /// `get_uniform_location`​. `uniform_f32x4` operates on the program object that was made part
+    /// of current state by calling `use_program`.
+    ///
+    /// The command `uniform_f32x4` is used to change the value of the uniform variable specified by
+    /// `location​` using the value passed as arguments. The number specified in the command should
+    /// match the number of components in the data type of the specified uniform variable (i.e.
+    /// `uniform_f32x4` should be used to set a `vec4` variable).
+    ///
+    /// All active uniform variables defined in a program object are initialized to 0 when the
+    /// program object is linked successfully. They retain the values assigned to them by a call
+    /// to `uniform_*` until the next successful link operation occurs on the program object,
+    /// when they are once again initialized to 0.
+    ///
+    /// # Notes
+    ///
+    /// - `uniform_i32x1` and `uniform_i32v` are the only two functions that may be used to load
+    ///   uniform variables defined as opaque types. Loading opaque types with any other function
+    ///   will result in a `GL_INVALID_OPERATION` error.
+    /// - If count​ is greater than 1 and the indicated uniform variable is not an array, a
+    ///   `GL_INVALID_OPERATION` error is generated and the specified uniform variable will remain
+    ///   unchanged.
+    /// - Other than the preceding exceptions, if the type and size of the uniform variable as
+    ///   defined in the shader do not match the type and size specified in the name of the
+    ///   command used to load its value, a `GL_INVALID_OPERATION` error will be generated and
+    ///   the specified uniform variable will remain unchanged.
+    /// - If `location​` is a value other than -1 and it does not represent a valid uniform variable
+    ///   location in the current program object, an error will be generated, and no changes will
+    ///   be made to the uniform variable storage of the current program object. If location​ is
+    ///   equal to -1, the data passed in will be silently ignored and the specified uniform
+    ///   variable will not be changed.
+    fn uniform_f32x4(location: UniformLocation, x: f32, y: f32, z: f32, w: f32));
+
+gl_proc!(glUniform1i:
+    /// Specify the value of a uniform variable for the current program object.
+    ///
+    /// [Wiki page](https://www.opengl.org/wiki/GLAPI/glUniform)
+    ///
+    /// Core since version 2.0
+    ///
+    /// Modifies the value of a uniform variable. The location of the uniform variable to be
+    /// modified is specified by `location​`, which should be a value returned by
+    /// `get_uniform_location`​. `uniform_i32x1` operates on the program object that was made part
+    /// of current state by calling `use_program`.
+    ///
+    /// The command `uniform_i32x1` is changes the value of the uniform variable specified by
+    /// `location​` using the value passed as arguments. The number specified in the command should
+    /// match the number of components in the data type of the specified uniform variable (i.e.
+    /// `uniform_i32x1` should be used to set an `int` or sampler variable).
+    ///
+    /// All active uniform variables defined in a program object are initialized to 0 when the
+    /// program object is linked successfully. They retain the values assigned to them by a call
+    /// to `uniform_*` until the next successful link operation occurs on the program object,
+    /// when they are once again initialized to 0.
+    ///
+    /// # Notes
+    ///
+    /// - `uniform_i32x1` and `uniform_i32x1v` are the only two functions that may be used to load
+    ///   uniform variables defined as opaque types. Loading opaque types with any other function
+    ///   will result in a `GL_INVALID_OPERATION` error.
+    /// - If count​ is greater than 1 and the indicated uniform variable is not an array, a
+    ///   `GL_INVALID_OPERATION` error is generated and the specified uniform variable will remain
+    ///   unchanged.
+    /// - Other than the preceding exceptions, if the type and size of the uniform variable as
+    ///   defined in the shader do not match the type and size specified in the name of the
+    ///   command used to load its value, a `GL_INVALID_OPERATION` error will be generated and
+    ///   the specified uniform variable will remain unchanged.
+    /// - If `location​` is a value other than -1 and it does not represent a valid uniform variable
+    ///   location in the current program object, an error will be generated, and no changes will
+    ///   be made to the uniform variable storage of the current program object. If location​ is
+    ///   equal to -1, the data passed in will be silently ignored and the specified uniform
+    ///   variable will not be changed.
+    fn uniform_i32x1(location: UniformLocation, value: i32));
+
+gl_proc!(glUniform1iv:
+    /// Specify the value of a uniform variable for the current program object.
+    ///
+    /// [Wiki page](https://www.opengl.org/wiki/GLAPI/glUniform)
+    ///
+    /// Core since version 2.0
+    ///
+    /// Modifies the value of a uniform variable. The location of the uniform variable to be
+    /// modified is specified by `location​`, which should be a value returned by
+    /// `get_uniform_location`​. `uniform_i32x1v` operates on the program object that was made part
+    /// of current state by calling `use_program`.
+    ///
+    /// The command `uniform_i32x1v` can be used to modify a single uniform variable or a uniform
+    /// variable array. This command passes a count and a pointer to the values to be loaded into
+    /// a uniform variable or a uniform variable array. A count of 1 should be used if modifying
+    /// the value of a single uniform variable, and a count of 1 or greater can be used to modify
+    /// an entire array or part of an array. When loading n elements starting at an arbitrary
+    /// position m in a uniform variable array, elements `m + n - 1` in the array will be replaced
+    /// with the new values. If m`​ + n​ - 1` is larger than the size of the uniform variable array,
+    /// values for all array elements beyond the end of the array will be ignored.
+    ///
+    /// All active uniform variables defined in a program object are initialized to 0 when the
+    /// program object is linked successfully. They retain the values assigned to them by a call
+    /// to `uniform_*` until the next successful link operation occurs on the program object,
+    /// when they are once again initialized to 0.
+    ///
+    /// # Notes
+    ///
+    /// - `uniform_i32x1` and `uniform_i32x1v` are the only two functions that may be used to load
+    ///   uniform variables defined as opaque types. Loading opaque types with any other function
+    ///   will result in a `GL_INVALID_OPERATION` error.
+    /// - If count​ is greater than 1 and the indicated uniform variable is not an array, a
+    ///   `GL_INVALID_OPERATION` error is generated and the specified uniform variable will remain
+    ///   unchanged.
+    /// - Other than the preceding exceptions, if the type and size of the uniform variable as
+    ///   defined in the shader do not match the type and size specified in the name of the
+    ///   command used to load its value, a `GL_INVALID_OPERATION` error will be generated and
+    ///   the specified uniform variable will remain unchanged.
+    /// - If `location​` is a value other than -1 and it does not represent a valid uniform variable
+    ///   location in the current program object, an error will be generated, and no changes will
+    ///   be made to the uniform variable storage of the current program object. If location​ is
+    ///   equal to -1, the data passed in will be silently ignored and the specified uniform
+    ///   variable will not be changed.
+    fn uniform_i32x1v(location: UniformLocation, count: i32, data: *const i32));
+
+gl_proc!(glUniform4fv:
+    /// Specify the value of a uniform variable for the current program object.
+    ///
+    /// [Wiki page](https://www.opengl.org/wiki/GLAPI/glUniform)
+    ///
+    /// Core since version 2.0
+    ///
+    /// Modifies the value of a uniform variable. The location of the uniform variable to be
+    /// modified is specified by `location​`, which should be a value returned by
+    /// `get_uniform_location`​. `uniform_f32x1` operates on the program object that was made part
+    /// of current state by calling `use_program`.
+    ///
+    /// The command `uniform_f32x4v` can be used to modify a single uniform variable or a uniform
+    /// variable array. These commands pass a count and a pointer to the values to be loaded into
+    /// a uniform variable or a uniform variable array. A count of 1 should be used if modifying
+    /// the value of a single uniform variable, and a count of 1 or greater can be used to modify
+    /// an entire array or part of an array. When loading n elements starting at an arbitrary
+    /// position m in a uniform variable array, elements m + n - 1 in the array will be replaced
+    /// with the new values. If m​ + n​ - 1 is larger than the size of the uniform variable array,
+    /// values for all array elements beyond the end of the array will be ignored.
+    ///
+    /// The number of `f32` values pointed to by `data` should be 4 * `count`.
+    ///
+    /// All active uniform variables defined in a program object are initialized to 0 when the
+    /// program object is linked successfully. They retain the values assigned to them by a call
+    /// to `uniform_*` until the next successful link operation occurs on the program object,
+    /// when they are once again initialized to 0.
+    ///
+    /// # Notes
+    ///
+    /// - `uniform_i32x1` and `uniform_i32v` are the only two functions that may be used to load
+    ///   uniform variables defined as opaque types. Loading opaque types with any other function
+    ///   will result in a `GL_INVALID_OPERATION` error.
+    /// - If count​ is greater than 1 and the indicated uniform variable is not an array, a
+    ///   `GL_INVALID_OPERATION` error is generated and the specified uniform variable will remain
+    ///   unchanged.
+    /// - Other than the preceding exceptions, if the type and size of the uniform variable as
+    ///   defined in the shader do not match the type and size specified in the name of the
+    ///   command used to load its value, a `GL_INVALID_OPERATION` error will be generated and
+    ///   the specified uniform variable will remain unchanged.
+    /// - If `location​` is a value other than -1 and it does not represent a valid uniform variable
+    ///   location in the current program object, an error will be generated, and no changes will
+    ///   be made to the uniform variable storage of the current program object. If location​ is
+    ///   equal to -1, the data passed in will be silently ignored and the specified uniform
+    ///   variable will not be changed.
+    fn uniform_f32x4v(uniform: UniformLocation, count: i32, data: *const f32));
+
+gl_proc!(glUniformMatrix4fv:
+    /// Specify the value of a uniform variable for the current program object.
+    ///
+    /// [Wiki page](https://www.opengl.org/wiki/GLAPI/glUniform)
+    ///
+    /// Core since version 2.0
+    ///
+    /// Modifies the value of a uniform variable. The location of the uniform variable to be
+    /// modified is specified by `location​`, which should be a value returned by
+    /// `get_uniform_location`​. `uniform_matrix_f32x4v` operates on the program object that was
+    /// made part of current state by calling `use_program`.
+    ///
+    /// The command `uniform_matrix_f32x4v` is used to modify a 4x4 matrix of `f32` values. If
+    /// `transpose​` is `False` each matrix is assumed to be supplied in column major order. If
+    /// transpose​ is `True` each matrix is assumed to be supplied in row major order. The `count​`
+    /// argument indicates the number of matrices to be passed. A count of 1 should be used if
+    /// modifying the value of a single matrix, and a count greater than 1 can be used to modify
+    /// an array of matrices.
+    ///
+    /// All active uniform variables defined in a program object are initialized to 0 when the
+    /// program object is linked successfully. They retain the values assigned to them by a call
+    /// to `uniform_*` until the next successful link operation occurs on the program object,
+    /// when they are once again initialized to 0.
+    ///
+    /// # Params
+    ///
+    /// - `location` - Specifies the location of the uniform value to be modified.
+    /// - `count` - Specifies the number of matrices that are to be modified. This should be 1 if
+    ///   the targeted uniform variable is not an array of matrices, and 1 or more if it is an
+    ///   array of matrices.
+    /// - `transpose` - Specifies whether to transpose the matrix as the values are loaded into
+    ///   the uniform variable.
+    /// - `values` - Specifies a pointer to an array of `count​` * 16 `f32` values that will be
+    ///   used to update the specified uniform variable.
+    ///
+    /// # Notes
+    ///
+    /// - `uniform_i32x1` and `uniform_i32v` are the only two functions that may be used to load
+    ///   uniform variables defined as opaque types. Loading opaque types with any other function
+    ///   will result in a `GL_INVALID_OPERATION` error.
+    /// - If count​ is greater than 1 and the indicated uniform variable is not an array, a
+    ///   `GL_INVALID_OPERATION` error is generated and the specified uniform variable will remain
+    ///   unchanged.
+    /// - Other than the preceding exceptions, if the type and size of the uniform variable as
+    ///   defined in the shader do not match the type and size specified in the name of the
+    ///   command used to load its value, a `GL_INVALID_OPERATION` error will be generated and
+    ///   the specified uniform variable will remain unchanged.
+    /// - If `location​` is a value other than -1 and it does not represent a valid uniform variable
+    ///   location in the current program object, an error will be generated, and no changes will
+    ///   be made to the uniform variable storage of the current program object. If location​ is
+    ///   equal to -1, the data passed in will be silently ignored and the specified uniform
+    ///   variable will not be changed.
+    fn uniform_matrix_f32x4v(
+        uniform: UniformLocation,
+        count: i32,
+        transpose: Boolean,
+        values: *const f32));
+
+gl_proc!(glUniformMatrix3fv:
+    /// Specify the value of a uniform variable for the current program object.
+    ///
+    /// [Wiki page](https://www.opengl.org/wiki/GLAPI/glUniform)
+    ///
+    /// Core since version 2.0
+    ///
+    /// Modifies the value of a uniform variable. The location of the uniform variable to be
+    /// modified is specified by `location​`, which should be a value returned by
+    /// `get_uniform_location`​. `uniform_matrix_f32x3v` operates on the program object that was
+    /// made part of current state by calling `use_program`.
+    ///
+    /// The command `uniform_matrix_f32x3v` is used to modify a 3x3 matrix of `f32` values. If
+    /// `transpose​` is `False` each matrix is assumed to be supplied in column major order. If
+    /// transpose​ is `True` each matrix is assumed to be supplied in row major order. The `count​`
+    /// argument indicates the number of matrices to be passed. A count of 1 should be used if
+    /// modifying the value of a single matrix, and a count greater than 1 can be used to modify
+    /// an array of matrices.
+    ///
+    /// All active uniform variables defined in a program object are initialized to 0 when the
+    /// program object is linked successfully. They retain the values assigned to them by a call
+    /// to `uniform_*` until the next successful link operation occurs on the program object,
+    /// when they are once again initialized to 0.
+    ///
+    /// # Params
+    ///
+    /// - `location` - Specifies the location of the uniform value to be modified.
+    /// - `count` - Specifies the number of matrices that are to be modified. This should be 1 if
+    ///   the targeted uniform variable is not an array of matrices, and 1 or more if it is an
+    ///   array of matrices.
+    /// - `transpose` - Specifies whether to transpose the matrix as the values are loaded into
+    ///   the uniform variable.
+    /// - `values` - Specifies a pointer to an array of `count​` * 16 `f32` values that will be
+    ///   used to update the specified uniform variable.
+    ///
+    /// # Notes
+    ///
+    /// - `uniform_i32x1` and `uniform_i32v` are the only two functions that may be used to load
+    ///   uniform variables defined as opaque types. Loading opaque types with any other function
+    ///   will result in a `GL_INVALID_OPERATION` error.
+    /// - If count​ is greater than 1 and the indicated uniform variable is not an array, a
+    ///   `GL_INVALID_OPERATION` error is generated and the specified uniform variable will remain
+    ///   unchanged.
+    /// - Other than the preceding exceptions, if the type and size of the uniform variable as
+    ///   defined in the shader do not match the type and size specified in the name of the
+    ///   command used to load its value, a `GL_INVALID_OPERATION` error will be generated and
+    ///   the specified uniform variable will remain unchanged.
+    /// - If `location​` is a value other than -1 and it does not represent a valid uniform variable
+    ///   location in the current program object, an error will be generated, and no changes will
+    ///   be made to the uniform variable storage of the current program object. If location​ is
+    ///   equal to -1, the data passed in will be silently ignored and the specified uniform
+    ///   variable will not be changed.
+    fn uniform_matrix_f32x3v(
+        uniform: UniformLocation,
+        count: i32,
+        transpose: Boolean,
+        values: *const f32));
+
+gl_proc!(glGetUniformLocation:
+    /// Returns the location of a uniform variable.
+    ///
+    /// [Wiki page](https://www.opengl.org/wiki/GLAPI/glGetUniformLocation)
+    ///
+    /// Core since verion 2.0
+    ///
+    /// Returns an integer that represents the location of a specific uniform variable within a
+    /// program object. name must be a null terminated string that contains no white space. name
+    /// must be an active uniform variable name in program that is not a structure, an array of
+    /// structures, or a subcomponent of a vector or a matrix. This function returns -1 if name
+    /// does not correspond to an active uniform variable in program, if name starts with the
+    /// reserved prefix "gl_", or if name is associated with an atomic counter or a named
+    /// uniform block.
+    ///
+    /// Uniform variables that are structures or arrays of structures may be queried by calling
+    /// `get_uniform_location_raw` for each field within the structure. The array element
+    /// operator "[]" and the structure field operator "." may be used in name in order to select
+    /// elements within an array or fields within a structure. The result of using these
+    /// operators is not allowed to be another structure, an array of structures, or a
+    /// subcomponent of a vector or a matrix. Except if the last part of name indicates a
+    /// uniform variable array, the location of the first element of an array can be retrieved
+    /// by using the name of the array, or by using the name appended by "[0]".
+    ///
+    /// The actual locations assigned to uniform variables are not known until the program object
+    /// is linked successfully. After linking has occurred, the command `get_uniform_location_raw`
+    /// can be used to obtain the location of a uniform variable. This location value can then be
+    /// passed to the `uniform_*` functions to set the value of the uniform variable or to
+    /// `get_uniform` in order to query the current value of the uniform variable. After a program
+    /// object has been linked successfully, the index values for uniform variables remain fixed
+    /// until the next link command occurs. Uniform variable locations and values can only be
+    /// queried after a link if the link was successful.
+    ///
+    /// # Errors
+    ///
+    /// - `GL_INVALID_VALUE` is generated if program is not a value generated by OpenGL.
+    /// - `GL_INVALID_OPERATION` is generated if program is not a program object.
+    /// - `GL_INVALID_OPERATION` is generated if program has not been successfully linked.
+    fn get_uniform_location(program: ProgramObject, uniform_name: *const u8) -> i32);
+
+gl_proc!(glLinkProgram:
+    /// Links a program object.
+    ///
+    /// [Wiki page](https://www.opengl.org/wiki/GLAPI/glLinkProgram)
+    ///
+    /// Core since version 2.0
+    ///
+    /// Links the program object specified by `program​`. If any shader objects of type
+    /// `VertexShader` are attached to `program​`, they will be used to create an executable that
+    /// will run on the programmable vertex processor. If any shader objects of type
+    /// `GeometryShader` are attached to `program​`, they will be used to create an executable that
+    /// will run on the programmable geometry processor. If any shader objects of type
+    /// `FragmentShader` are attached to `program​`, they will be used to create an executable that
+    /// will run on the programmable fragment processor.
+    ///
+    /// The status of the link operation will be stored as part of the program object's state.
+    /// This value will be set to `true` if the program object was linked without errors and is
+    /// ready for use, and `false` otherwise. It can be queried by calling `get_program` with
+    /// arguments program​ and `LinkStatus`.
+    ///
+    /// As a result of a successful link operation, all active user-defined uniform variables
+    /// belonging to program​ will be initialized to 0, and each of the program object's active
+    /// uniform variables will be assigned a location that can be queried by calling
+    /// `get_uniform_location`. Also, any active user-defined attribute variables that have not
+    /// been bound to a generic vertex attribute index will be bound to one at this time.
+    ///
+    /// Linking of a program object can fail for a number of reasons as specified in the OpenGL
+    /// Shading Language Specification. The following lists some of the conditions that will
+    /// cause a link error.
+    ///
+    /// - The number of active attribute variables supported by the implementation has been
+    ///   exceeded.
+    /// - The storage limit for uniform variables has been exceeded.
+    /// - The number of active uniform variables supported by the implementation has been exceeded.
+    /// - The main function is missing for the vertex, geometry or fragment shader.
+    /// - A varying variable actually used in the fragment shader is not declared in the same way
+    ///   (or is not declared at all) in the vertex shader, or geometry shader shader if present.
+    /// - A reference to a function or variable name is unresolved.
+    /// - A shared global is declared with two different types or two different initial values.
+    /// - One or more of the attached shader objects has not been successfully compiled.
+    /// - Binding a generic attribute matrix caused some rows of the matrix to fall outside the
+    ///   allowed maximum of `GL_MAX_VERTEX_ATTRIBS`.
+    /// - Not enough contiguous vertex attribute slots could be found to bind attribute matrices.
+    /// - The program object contains objects to form a fragment shader but does not contain
+    ///   objects to form a vertex shader.
+    /// - The program object contains objects to form a geometry shader but does not contain
+    ///   objects to form a vertex shader.
+    /// - The program object contains objects to form a geometry shader and the input primitive
+    ///   type, output primitive type, or maximum output vertex count is not specified in any
+    ///   compiled geometry shader object.
+    /// - The program object contains objects to form a geometry shader and the input primitive
+    ///   type, output primitive type, or maximum output vertex count is specified differently
+    ///   in multiple geometry shader objects.
+    /// - The number of active outputs in the fragment shader is greater than the value of
+    ///   `GL_MAX_DRAW_BUFFERS`.
+    /// - The program has an active output assigned to a location greater than or equal to the
+    ///   value of `GL_MAX_DUAL_SOURCE_DRAW_BUFFERS` and has an active output assigned an index
+    ///   greater than or equal to one.
+    /// - More than one varying out variable is bound to the same number and index.
+    /// - The explicit binding assigments do not leave enough space for the linker to
+    ///   automatically assign a location for a varying out array, which requires multiple
+    ///   contiguous locations.
+    /// - The count​ specified by glTransformFeedbackVaryings​ is non-zero, but the program object
+    ///   has no vertex or geometry shader.
+    /// - Any variable name specified to `transform_feedback_varyings` in the varyings​ array is
+    ///   not declared as an output in the vertex shader (or the geometry shader, if active).
+    /// - Any two entries in the varyings​ array given `transform_feedback_varyings` specify the
+    ///   same varying variable.
+    /// - The total number of components to capture in any transform feedback varying variable
+    ///   is greater than the constant `GL_MAX_TRANSFORM_FEEDBACK_SEPARATE_COMPONENTS` and the
+    ///   buffer mode is `GL_SEPARATE_ATTRIBS`.
+    /// - When a program object has been successfully linked, the program object can be made
+    ///   part of current state by calling `use_program`. Whether or not the link operation was
+    ///   successful, the program object's information log will be overwritten. The information
+    ///   log can be retrieved by calling `get_program_info_log`.
+    ///
+    /// `link_program` will also install the generated executables as part of the current
+    /// rendering state if the link operation was successful and the specified program object is
+    /// already currently in use as a result of a previous call to `use_program`. If the program
+    /// object currently in use is relinked unsuccessfully, its link status will be set to
+    /// `false`, but the executables and associated state will remain part of the current state
+    /// until a subsequent call to `use_program` removes it from use. After it is removed from
+    /// use, it cannot be made part of current state until it has been successfully relinked.
+    ///
+    /// If program​ contains shader objects of type `VertexShader`, and optionally of type
+    /// `GeometryShader`, but does not contain shader objects of type `FragmentShader`, the
+    /// vertex shader executable will be installed on the programmable vertex processor, the
+    /// geometry shader executable, if present, will be installed on the programmable geometry
+    /// processor, but no executable will be installed on the fragment processor. The results of
+    /// rasterizing primitives with such a program will be undefined.
+    ///
+    /// The program object's information log is updated and the program is generated at the time
+    /// of the link operation. After the link operation, applications are free to modify attached
+    /// shader objects, compile attached shader objects, detach shader objects, delete shader
+    /// objects, and attach additional shader objects. None of these operations affects the
+    /// information log or the program that is part of the program object.
+    ///
+    /// # Notes
+    ///
+    /// - If the link operation is unsuccessful any information about a previous link operation
+    ///   on program​ is lost (i.e., a failed link does not restore the old state of program​ ).
+    ///   Certain information can still be retrieved from program​ even after an unsuccessful
+    ///   link operation. See for instance `get_active_attrib` and `get_active_uniform`.
+    ///
+    /// # Errors
+    ///
+    /// - `GL_INVALID_VALUE` is generated if program​ is not a value generated by OpenGL.
+    /// - `GL_INVALID_OPERATION` is generated if program​ is not a program object.
+    /// - `GL_INVALID_OPERATION` is generated if program​ is the currently active program object
+    ///   and transform feedback mode is active.
+    fn link_program(program: ProgramObject));
+
+gl_proc!(glObjectLabel:
+    /// Labels a named object for use in debug messages.
+    ///
+    /// [Wiki page](https://www.opengl.org/wiki/GLAPI/glObjectLabel)
+    ///
+    /// Core since version 4.3
+    ///
+    /// Labels the object identified by `name​` within the namespace given by `identifier​`.
+    ///
+    /// `label​` points to a string that will be used to label the object. `length​` contains the
+    /// number of characters in `label​`. If `length​` is negative, it is implied that label​
+    /// contains a null-terminated string. If label​ is `NULL`, any debug label is effectively
+    /// removed from the object.
+    fn set_object_label(identifier: DebugMessageId, name: u32, length: i32, label: u8));
+
+gl_proc!(glPolygonMode:
+    /// Selects the polygon rasterization mode.
+    ///
+    /// [Wiki page](http://docs.gl/gl2/glPolygonMode)
+    ///
+    /// Core since version 1.0
+    ///
+    /// Controls the interpretation of polygons for rasterization. `face`​ describes which polygons
+    /// mode​ applies to: The polygon mode affects only the final rasterization of polygons. In
+    /// particular, a polygon's vertices are lit and the polygon is clipped and possibly culled
+    /// before these modes are applied.
+    ///
+    /// Three modes are defined and can be specified in mode​:
+    ///
+    /// - `Point` - Polygon vertices that are marked as the start of a boundary edge are drawn as
+    ///   points. Point attributes such as `GL_POINT_SIZE` and `GL_POINT_SMOOTH` control the
+    ///   rasterization of the points. Polygon rasterization attributes other than
+    ///   `GL_POLYGON_MODE` have no effect.
+    /// - `Line` - Boundary edges of the polygon are drawn as line segments. Line attributes such
+    ///    as `GL_LINE_WIDTH` and `GL_LINE_SMOOTH` control the rasterization of the lines. Polygon
+    ///    rasterization attributes other than `GL_POLYGON_MODE` have no effect.
+    /// - `Fill` - The interior of the polygon is filled. Polygon attributes such as
+    ///   `GL_POLYGON_SMOOTH` control the rasterization of the polygon.
+    ///
+    /// # Notes
+    ///
+    /// Vertices are marked as boundary or nonboundary with an edge flag. Edge flags are generated
+    /// internally by the GL when it decomposes polygons; they can be set explicitly using
+    /// `edge_flag`.
+    fn polygon_mode(face: Face, mode: PolygonMode));
+
+gl_proc!(glShaderSource:
+    /// Replaces the source code in a shader object.
+    ///
+    /// [Wiki page](https://www.opengl.org/wiki/GLAPI/glShaderSource)
+    ///
+    /// Core since version 2.0
+    ///
+    /// Sets the source code in `shader​` to the source code in the array of strings specified by
+    /// `string​s`. Any source code previously stored in the shader object is completely replaced.
+    /// The number of strings in the array is specified by count​. If length​ is null, each string
+    /// is assumed to be null terminated. If length​ is a value other than 0, it points to an
+    /// array containing a string length for each of the corresponding elements of string​. Each
+    /// element in the length​ array may contain the length of the corresponding string (the null
+    /// character is not counted as part of the string length) or a value less than 0 to indicate
+    /// that the string is null terminated. The source code strings are not scanned or parsed at
+    /// this time; they are simply copied into the specified shader object.
+    ///
+    /// # Notes
+    ///
+    /// - OpenGL copies the shader source code strings when glShaderSource is called, so an
+    ///   application may free its copy of the source code strings immediately after the function
+    ///   returns.
+    ///
+    /// # Errors
+    ///
+    /// - `GL_INVALID_OPERATION` is generated if shader​ is not a shader object.
+    /// - `GL_INVALID_VALUE` is generated if count​ is less than 0.
+    fn shader_source(
+        shader: ShaderObject,
+        count: i32,
+        strings: *const *const u8,
+        length: *const i32));
+
+gl_proc!(glTexImage2D:
+    /// Specifies a two-dimensional texture image.
+    ///
+    /// [Wiki page](https://www.opengl.org/wiki/GLAPI/glTexImage2D)
+    ///
+    /// Core since version 1.0
+    ///
+    /// Texturing allows elements of an image array to be read by shaders.
+    ///
+    /// To define texture images, call `tex_image_2d`. The arguments describe the parameters of
+    /// the texture image, such as height, width, width of the border, level-of-detail number
+    /// (see `tex_parameter`), and number of color components provided. The last three arguments
+    /// describe how the image is represented in memory.
+    ///
+    /// If target​ is `ProxyTexture2d`, `ProxyTexture1dArray`, `ProxyTextureCubeMap`, or
+    /// `ProxyTextureRectangle`, no data is read from data​, but all of the texture image state
+    /// is recalculated, checked for consistency, and checked against the implementation's
+    /// capabilities. If the implementation cannot handle a texture of the requested texture
+    /// size, it sets all of the image state to 0, but does not generate an error (see
+    /// `get_error`). To query for an entire mipmap array, use an image array level greater than
+    /// or equal to 1.
+    ///
+    /// If target​ is `Texture2d`, `TextureRectangle` or one of the `TextureCubeMap` targets, data
+    /// is read from `data​` as a sequence of signed or unsigned bytes, shorts, or longs, or
+    /// single-precision floating-point values, depending on type​. These values are grouped into
+    /// sets of one, two, three, or four values, depending on format​, to form elements. Each
+    /// byte in `data` is treated as eight 1-bit elements, with bit ordering determined by `UnpackLsbFirst`
+    /// (see `pixel_store`).
+    ///
+    /// If target​ is `Texture1dArray`, data is interpreted as an array of one-dimensional images.
+    ///
+    /// If a non-zero named buffer object is bound to the `PixelUnpackBuffer` target (see
+    /// `bind_buffer`) while a texture image is specified, data​ is treated as a byte offset into
+    /// the buffer object's data store.
+    ///
+    /// The first element corresponds to the lower left corner of the texture image. Subsequent
+    /// elements progress left-to-right through the remaining texels in the lowest row of the
+    /// texture image, and then in successively higher rows of the texture image. The final
+    /// element corresponds to the upper right corner of the texture image.
+    ///
+    /// format​ determines the composition of each element in data​. It can assume one of these
+    /// symbolic values:
+    ///
+    /// - `Red` - Each element is a single red component. The GL converts it to floating point
+    ///   and assembles it into an RGBA element by attaching 0 for green and blue, and 1 for
+    ///   alpha. Each component is clamped to the range [0,1].
+    /// - `Rg` - Each element is a red/green double. The GL converts it to floating point and
+    ///   assembles it into an RGBA element by attaching 0 for blue, and 1 for alpha. Each
+    ///   component is clamped to the range [0,1].
+    /// - `Rgb`, `Bgr` - Each element is an RGB (or BGR) triple. The GL converts it to floating point and
+    ///   assembles it into an RGBA element by attaching 1 for alpha. Each component is clamped
+    ///   to the range [0,1].
+    /// - `Rgba`, `Bgra` - Each element contains all four components. Each component is clamped
+    ///   to the range [0,1].
+    /// - `DepthComponent` - Each element is a single depth value. The GL converts it to floating
+    ///   point and clamps to the range [0,1].
+    /// - `DepthStencil` - Each element is a pair of depth and stencil values. The depth
+    ///   component of the pair is interpreted as in `DepthComponent`. The stencil component is
+    ///   interpreted based on specified the depth + stencil internal format.
+    ///
+    /// If an application wants to store the texture at a certain resolution or in a certain
+    /// format, it can request the resolution and format with internalFormat​. The GL will choose
+    /// an internal representation that closely approximates that requested by internalFormat​,
+    /// but it may not match exactly. (The representations specified by `Red`, `Rg`, `Rgb`, and
+    /// `Rgba` must match exactly.)
+    ///
+    /// `internal_format` may be one of the formats from the tables below:
+    ///
+    /// > TODO: Add tables. Blech that's a lot of info to copy in.
+    ///
+    /// # Parameters
+    ///
+    /// * `target` - Specifies the target texture.
+    /// * `level` - Specifies the level-of-detail number. Level 0 is the base image level. Level
+    ///   n is the nth mipmap reduction image. If target​ is `TextureRectangle` or
+    ///   `ProxyTextureRectangle`, `level​` must be 0.
+    /// * `internal_format` - Specifies the number of color components in the texture. Must be
+    ///   one of base internal formats given in Table 1, one of the sized internal formats given
+    ///   in Table 2, or one of the compressed internal formats given in Table 3, below.
+    /// * `width` - Specifies the width of the texture image. All implementations support texture
+    ///   images that are at least 1024 texels wide.
+    /// * `height` - Specifies the height of the texture image, or the number of layers in a
+    ///   texture array, in the case of the `Texture1dArray` and `ProxyTexture1dArray` targets.
+    ///   All implementations support 2D texture images that are at least 1024 texels high, and
+    ///   texture arrays that are at least 256 layers deep.
+    /// * `border` - This value must be 0.
+    /// * `format` - Specifies the format of the pixel data. For transfers of depth, stencil, or
+    ///   depth/stencil data, you must use `DepthComponent`, `StencilIndex`, or `DepthStencil`,
+    ///   where appropriate. For transfers of normalized integer or floating-point color image
+    ///   data, you must use one of the following: `Red`, `Green`, `Blue`, `Rg`, `Rgb`, `Bgr`,
+    ///   `Rgba`, and `Bgra`. For transfers of non-normalized integer data, you must use one of
+    ///   the following: `RedInteger`, `GreenInteger`, `BlueInteger`, `RgInteger`, `RgbInteger`,
+    ///   `BgrInteger`, `RgbaInteger`, and `BgraInteger`.
+    /// * `type` - Specifies the data type of the pixel data.
+    /// * `data` - Specifies a pointer to the image data in memory, or if a buffer is bound to
+    ///   `PixelUnpackBuffer`, this provides an integer offset into the bound buffer object. If
+    ///   a buffer is not bound to `PixelUnpackBuffer`, and this parameter is NULL, no
+    ///   Pixel Transfer will be performed.
+    fn texture_image_2d(
+        target: Texture2dTarget,
+        level: i32,
+        internal_format: TextureInternalFormat,
+        width: i32,
+        height: i32,
+        border: i32,
+        format: TextureFormat,
+        data_type: TextureDataType,
+        data: *const ()));
+
+gl_proc!(glTexParameteri:
+    /// Sets texture parameters.
+    ///
+    /// [Wiki page](https://www.opengl.org/wiki/GLAPI/glTexParameter)
+    ///
+    /// Core since version 1.0
+    ///
+    /// TODO: Ugh the docs for this one are annoying.
+    fn texture_parameter_i32(
+        target: TextureParameterTarget,
+        name: TextureParameterName,
+        param: i32));
+
+gl_proc!(glUseProgram:
+    /// Installs a program as part of the current rendering state.
+    ///
+    /// [Wiki page](https://www.opengl.org/wiki/GLAPI/glUseProgram)
+    ///
+    /// Core since version 2.0
+    ///
+    /// Installs the program object specified by `program​` as part of current rendering state.
+    /// One or more executables are created in a program object by successfully attaching shader
+    /// objects to it with `attach_shader`, successfully compiling the shader objects with
+    /// `compile_shader`, and successfully linking the program object with `link_program`.
+    ///
+    /// A program object will contain an executable that will run on the vertex processor if it
+    /// contains one or more shader objects of type `VertexShader` that have been successfully
+    /// compiled and linked. A program object will contain an executable that will run on the
+    /// geometry processor if it contains one or more shader objects of type `GeometryShader` that
+    /// have been successfully compiled and linked. Similarly, a program object will contain an
+    /// executable that will run on the fragment processor if it contains one or more shader
+    /// objects of type `FragmentShader` that have been successfully compiled and linked.
+    ///
+    /// While a program object is in use, applications are free to modify attached shader
+    /// objects, compile attached shader objects, attach additional shader objects, and detach
+    /// or delete shader objects. None of these operations will affect the executables that are
+    /// part of the current state. However, relinking the program object that is currently in
+    /// use will install the program object as part of the current rendering state if the link
+    /// operation was successful (see `link_program`). If the program object currently in use is
+    /// relinked unsuccessfully, its link status will be set to `false`, but the executables and
+    /// associated state will remain part of the current state until a subsequent call to
+    /// `use_program` removes it from use. After it is removed from use, it cannot be made part
+    /// of current state until it has been successfully relinked.
+    ///
+    /// If `program​` is zero (the null program object), then the current rendering state refers to
+    /// an invalid program object and the results of shader execution are undefined. However, this
+    /// is not an error.
+    ///
+    /// If program​ does not contain shader objects of type `FragmentShader`, an executable will
+    /// be installed on the vertex, and possibly geometry processors, but the results of fragment
+    /// shader execution will be undefined.
+    ///
+    /// # Notes
+    ///
+    /// - Like buffer and texture objects, the name space for program objects may be shared
+    ///   across a set of contexts, as long as the server sides of the contexts share the same
+    ///   address space. If the name space is shared across contexts, any attached objects and
+    ///   the data associated with those attached objects are shared as well.
+    /// - Applications are responsible for providing the synchronization across API calls when
+    ///   objects are accessed from different execution threads.
+    ///
+    /// # Errors
+    ///
+    /// - `GL_INVALID_VALUE` is generated if program​ is neither 0 nor a value generated by OpenGL.
+    /// - `GL_INVALID_OPERATION` is generated if program​ is not a program object.
+    /// - `GL_INVALID_OPERATION` is generated if program​'s most recent link operation was not
+    ///   successful.
+    /// - `GL_INVALID_OPERATION` is generated if transform feedback mode is active.
+    fn use_program(program: ProgramObject));
+
 gl_proc!(glVertexAttribPointer:
     /// Defines an array of generic vertex attribute data.
     ///
@@ -502,7 +2081,7 @@ gl_proc!(glVertexAttribPointer:
     /// Specifies the location and data format of the array of generic vertex attributes to use when
     /// rendering.
     ///
-    /// If normalized​ is set to `true` it indicates that values stored in an integer format are to be
+    /// If `normalize` is set to `true` it indicates that values stored in an integer format are to be
     /// mapped to the range [-1,1] (for signed values) or [0,1] (for unsigned values) when they are
     /// accessed and converted to floating point. Otherwise, values will be converted to floats
     /// directly without normalization.
@@ -517,7 +2096,7 @@ gl_proc!(glVertexAttribPointer:
     /// (`GL_ARRAY_BUFFER_BINDING`) is saved as generic vertex attribute array state
     /// (`GL_VERTEX_ATTRIB_ARRAY_BUFFER_BINDING`) for `attrib`​.
     ///
-    /// When a generic vertex attribute array is specified `size​`, `gl_type​`, `normalized​`, `stride​`,
+    /// When a generic vertex attribute array is specified `size​`, `gl_type​`, `normalize`, `stride​`,
     /// and `offset` are saved as vertex array state, in addition to the current vertex array buffer
     /// object binding.
     ///
@@ -532,9 +2111,9 @@ gl_proc!(glVertexAttribPointer:
     /// - `size` - Specifies the number of components per generic vertex attribute. Must be 1, 2, 3, 4.
     ///   Additionally, the symbolic constant `GL_BGRA` is accepted by `vertex_attrib_pointer`. The
     ///   initial value is 4.
-    /// - `type` - Specifies the data type of each component in the array. The different functions take
-    ///   different values. The initial value is `Float`.
-    /// - `normalized` - For `vertex_attrib_pointer` specifies whether fixed-point data values should
+    /// - `type` - Specifies the data type of each component in the array. The different functions
+    ///   take different values. The initial value is `Float`.
+    /// - `normalize` - Specifies whether fixed-point data values should
     ///   be normalized (`true`) or converted directly as fixed-point values (`false`) when they are
     ///   accessed.
     /// - `stride` - Specifies the byte offset between consecutive generic vertex attributes. If
@@ -572,110 +2151,35 @@ gl_proc!(glVertexAttribPointer:
         attrib: AttributeLocation,
         size: i32,
         gl_type: GlType,
-        normalized: bool,
+        normalize: Boolean,
         stride: i32,
         offset: usize));
 
+gl_proc!(glViewport:
+    /// Sets the viewport.
+    ///
+    /// [Wiki Page](https://www.opengl.org/wiki/GLAPI/glViewport)
+    ///
+    /// Core since 1.0
+    ///
+    /// Specifies the affine transformation of `x` and `y` from normalized device coordinates to
+    /// window coordinates. Let `(xnd, ynd)` be normalized device coordinates. Then the window
+    /// coordinates `(xw, yw)` are computed as follows:
+    ///
+    /// ```
+    /// xw = (xnd + 1)(width / 2) + x
+    /// yw = (ynd + 1)(height / 2) + y
+    /// ```
+    ///
+    /// Viewport width and height are silently clamped to a range that depends on the
+    /// implementation. To query this range, call glGet with argument `GL_MAX_VIEWPORT_DIMS`.
+    ///
+    /// # Errors
+    ///
+    /// - `GL_INVALID_VALUE` is generated if either width or height is negative.
+    fn viewport(x: i32, y: i32, width: i32, height: i32));
+
 /*
-gen_proc_loader! {
-    glGetError:
-        fn get_error() -> ErrorCode,
-    glGetIntegerv:
-        fn get_integers(name: IntegerName, params: *mut i32),
-    glGetString:
-        fn get_string(name: StringName) -> *const i8,
-    glViewport:
-        fn viewport(x: i32, y: i32, width: i32, height: i32),
-    glCreateShader:
-        fn create_shader(shader_type: ShaderType) -> ShaderObject,
-    glShaderSource:
-        fn shader_source(
-            shader: ShaderObject,
-            count: i32,
-            strings: *const *const u8,
-            length: *const i32),
-    glCompileShader:
-        fn compile_shader(shader: ShaderObject),
-    glGetShaderiv:
-        fn get_shader_param(shader: ShaderObject, param_type: ShaderParam, param_out: *mut i32),
-    glGetShaderInfoLog:
-        fn get_shader_info_log(
-            shader: ShaderObject,
-            max_length: i32,
-            length_out: *mut i32,
-            log_out: *mut u8),
-    glCreateProgram:
-        fn create_program() -> ProgramObject,
-    glAttachShader:
-        fn attach_shader(program: ProgramObject, shader: ShaderObject),
-    glLinkProgram:
-        fn link_program(program: ProgramObject),
-    glGetProgramiv:
-        fn get_program_param(
-            program: ProgramObject,
-            param_type: ProgramParam,
-            param_out: *mut i32),
-    glGetProgramInfoLog:
-        fn get_program_info_log(
-            program: ProgramObject,
-            max_length: i32,
-            length_out: *mut i32,
-            log_out: *mut u8),
-    glUseProgram:
-        fn use_program(program: ProgramObject),
-    glGetAttribLocation:
-        fn get_attrib_location(program: ProgramObject, attrib_name: *const i8) -> i32,
-    glGetUniformLocation:
-        fn get_uniform_location(program: ProgramObject, uniform_name: *const i8) -> i32,
-    glUniform1f:
-        fn uniform_1f(uniform: UniformLocation, value: f32),
-    glUniformMatrix4fv:
-        fn uniform_matrix_4fv(
-            uniform: UniformLocation,
-            count: i32,
-            transpose: bool,
-            values: *const f32),
-    glUniform4fv:
-        fn uniform_4fv(uniform: UniformLocation, count: i32, data: *const f32),
-    glDepthFunc:
-        fn depth_func(func: Comparison),
-    glBlendFunc:
-        fn blend_func(src_factor: SourceFactor, dest_factor: DestFactor),
-    glGenTextures:
-        fn gen_textures(count: u32, textures: *mut TextureObject),
-    glBindTexture:
-        fn bind_texture(target: TextureBindTarget, texture: TextureObject),
-    glTexImage2D:
-        fn texture_image_2d(
-            target:          Texture2dTarget,
-            level:           i32,
-            internal_format: TextureInternalFormat,
-            width:           i32,
-            height:          i32,
-            border:          i32,
-            format:          TextureFormat,
-            data_type:       TextureDataType,
-            data:            *const ()),
-    glDeleteTextures:
-        fn delete_textures(count: u32, textures: *mut TextureObject),
-}
+glGetError:
+    fn get_error() -> ErrorCode
 */
-
-pub extern "C" fn debug_callback(
-    source: DebugSource,
-    message_type: DebugType,
-    _id: UInt,
-    severity: DebugSeverity,
-    _length: SizeI,
-    message: *const u8,
-    _user_param: *mut ()
-) {
-    use std::ffi::CStr;
-
-    println!(
-        "Recieved some kind of debug message. source: {:?}, type: {:?}, severity: {:?}, message: {:?}",
-        source,
-        message_type,
-        severity,
-        unsafe { CStr::from_ptr(message as *const _) })
-}

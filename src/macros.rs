@@ -15,6 +15,7 @@ macro_rules! derive_Singleton {
 
         unsafe impl $crate::singleton::Singleton for $type_name {
             fn set_instance(instance: Self) {
+                println!("setting instance");
                 if unsafe { INSTANCE.is_some() } {
                     panic!("Cannot create singleton instance");
                 }
@@ -23,6 +24,7 @@ macro_rules! derive_Singleton {
                 unsafe {
                     INSTANCE = Some(Box::into_raw(instance));
                 }
+                println!("done setting instance");
             }
 
             fn instance() -> &'static Self {
@@ -39,6 +41,21 @@ macro_rules! derive_Singleton {
                     Box::from_raw(instance);
                     INSTANCE = None;
                 }
+            }
+        }
+    }
+}
+
+// TODO: Do we need to make this threadsafe?
+#[macro_export]
+macro_rules! warn_once {
+    ($message: expr) => {
+        static mut HAS_WARNED: bool = false;
+
+        unsafe {
+            if !HAS_WARNED {
+                HAS_WARNED = true;
+                println!($message);
             }
         }
     }
