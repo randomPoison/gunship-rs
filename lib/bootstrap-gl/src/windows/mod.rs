@@ -34,21 +34,19 @@ pub unsafe fn destroy_context(context: Context) {
 }
 
 pub unsafe fn load_proc(proc_name: &str) -> Option<extern "system" fn()> {
-    let string = CString::new(proc_name);
-    let cstr = string.unwrap().as_ptr();
+    let string = CString::new(proc_name).unwrap();
+    let cstr = string.as_ptr();
     let ptr = opengl32::wglGetProcAddress(cstr);
 
     if ptr.is_null() {
         let actual_dc = opengl32::wglGetCurrentDC();
         let actual_context = opengl32::wglGetCurrentContext();
-        let hwnd = user32::GetActiveWindow();
         println!(
-            "pointer for {} was null, last error: 0x{:X}, active dc: {:?}, active context: {:?}, hwnd: {:?}",
+            "pointer for {} was null, last error: 0x{:X}, active dc: {:?}, active context: {:?}",
             proc_name,
             kernel32::GetLastError(),
             actual_dc,
-            actual_context,
-            hwnd);
+            actual_context);
     }
 
     Some(mem::transmute(ptr))
