@@ -1,3 +1,4 @@
+#![feature(alloc)]
 #![feature(associated_type_defaults)]
 #![feature(conservative_impl_trait)]
 #![feature(const_fn)]

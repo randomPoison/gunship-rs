@@ -3,6 +3,7 @@ extern crate gunship;
 
 use gunship::async::*;
 use gunship::async::engine::EngineBuilder;
+use gunship::async::transform::Transform;
 
 fn main() {
     let mut builder = EngineBuilder::new();
@@ -27,10 +28,10 @@ fn setup_scene() {
 
     println!("received mesh: {:?}, material: {:?}", mesh, material);
 
-    // let mesh_transform = Transform::new();
+    let mesh_transform = Transform::new();
     // let mesh_renderer = MeshRenderer::new(&mesh, &mesh_transform);
-    //
-    // let camera_transform = Transform::new();
+
+    let camera_transform = Transform::new();
     // let camera = Camera::new(&camera_transform);
 
     // TODO: Wait until the game is done running?

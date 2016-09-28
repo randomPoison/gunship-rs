@@ -1,40 +1,15 @@
-use polygon::GpuMesh;
-use std::cell::RefCell;
+use async::engine::{self, RenderMessage};
 use std::fs::File;
 use std::io;
 use std::io::prelude::*;
-use std::mem;
 use std::path::Path;
 use std::string::FromUtf8Error;
-use std::sync::atomic::*;
-use std::sync::mpsc::Sender;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 pub mod collada;
 
-thread_local! {
-    // TODO: We don't want this to be completely public, only pub(crate), but `thread_local`
-    // doesn't support pub(crate) syntax.
-    pub static RENDER_MESSAGE_CHANNEL: RefCell<Option<Sender<RenderResourceMessage>>> = RefCell::new(None);
-}
-
 static MESH_ID_COUNTER: AtomicUsize = AtomicUsize::new(1);
 static MATERIAL_ID_COUNTER: AtomicUsize = AtomicUsize::new(1);
-
-#[derive(Debug)]
-pub enum RenderResourceMessage {
-    Mesh(MeshId, ::polygon::geometry::mesh::Mesh),
-    Material(MaterialId, ::polygon::material::MaterialSource),
-}
-
-fn send_render_message(message: RenderResourceMessage) {
-    RENDER_MESSAGE_CHANNEL.with(move |channel| {
-        let borrow = channel.borrow();
-        let channel = borrow.as_ref().expect("Render message channel was `None`");
-        channel
-            .send(message)
-            .expect("Unable to send render resource message");
-    });
-}
 
 /// Load all data from the specified file as an array of bytes.
 pub fn load_file_bytes<P: AsRef<Path>>(path: P) -> Result<Vec<u8>, io::Error> {
@@ -88,7 +63,7 @@ pub fn load_mesh<P: AsRef<Path>>(path: P) -> Result<Mesh, LoadMeshError> {
     // Create handle for mesh data and asynchronously register it with the renderer.
     let mesh_id = MESH_ID_COUNTER.fetch_add(1, Ordering::Relaxed);
 
-    send_render_message(RenderResourceMessage::Mesh(mesh_id, mesh_data));
+    engine::send_render_message(RenderMessage::Mesh(mesh_id, mesh_data));
 
     println!("Done with load mesh");
     Ok(Mesh(mesh_id))
@@ -132,13 +107,13 @@ pub fn load_material<P: AsRef<Path>>(path: P) -> Result<Material, LoadMaterialEr
 
     let material_id = MATERIAL_ID_COUNTER.fetch_add(1, Ordering::Relaxed);
 
-    send_render_message(RenderResourceMessage::Material(material_id, material_source));
+    engine::send_render_message(RenderMessage::Material(material_id, material_source));
 
     println!("end load material");
     Ok(Material(material_id))
 }
 
-type MaterialId = usize;
+pub type MaterialId = usize;
 
 #[derive(Debug)]
 pub struct Material(MaterialId);

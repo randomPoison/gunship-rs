@@ -1,13 +1,16 @@
 use async::*;
-use async::resource::{MeshId, RenderResourceMessage};
+use async::resource::{MaterialId, MeshId};
+use async::transform::{TransformInnerHandle, TransformGraph};
 use bootstrap::window::Window;
 use fiber;
 use polygon::{GpuMesh, Renderer, RendererBuilder};
+use polygon::anchor::Anchor;
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::mem;
 use std::ptr::{self, Unique};
 use std::sync::{Arc, Barrier};
-use std::sync::mpsc::{self, Sender, Receiver};
+use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 
 #[derive(Debug)]
@@ -82,9 +85,9 @@ impl EngineBuilder {
         // Spawn our worker threads.
         for _ in 0..self.max_workers {
             let sender = sender.clone();
-            ::std::thread::spawn(move || {
+            thread::spawn(move || {
                 // Initialize thread-local renderer message channel.
-                resource::RENDER_MESSAGE_CHANNEL.with(move |channel| {
+                RENDER_MESSAGE_CHANNEL.with(move |channel| {
                     *channel.borrow_mut() = Some(sender);
                 });
 
@@ -95,7 +98,7 @@ impl EngineBuilder {
         }
 
         // Set the current thread's channel.
-        resource::RENDER_MESSAGE_CHANNEL.with(move |channel| {
+        RENDER_MESSAGE_CHANNEL.with(move |channel| {
             *channel.borrow_mut() = Some(sender);
         });
 
@@ -105,6 +108,8 @@ impl EngineBuilder {
             render_message_channel: receiever,
 
             mesh_map: HashMap::new(),
+
+            scene_graph: TransformGraph::new(),
         });
 
         unsafe { INSTANCE = Some(&*engine); }
@@ -117,14 +122,21 @@ impl EngineBuilder {
                 // loaded but need to be registered with the renderer before the next draw.
                 while let Ok(message) = engine.render_message_channel.try_recv() {
                     match message {
-                        RenderResourceMessage::Mesh(mesh_id, mesh_data) => {
+                        RenderMessage::Anchor(transform_inner) => {
+                            let anchor = Anchor::new();
+                            let anchor_id = engine.renderer.register_anchor(anchor);
+
+                            transform_inner.set_anchor(anchor_id);
+                            println!("created anchor: {:?} for transform: {:?}", anchor_id, transform_inner);
+                        },
+                        RenderMessage::Mesh(mesh_id, mesh_data) => {
                             let gpu_mesh = engine.renderer.register_mesh(&mesh_data);
                             println!("sent mesh for {:?} to the gpu: {:?}", mesh_id, gpu_mesh);
 
                             let last = engine.mesh_map.insert(mesh_id, gpu_mesh);
                             assert!(last.is_none(), "Duplicate mesh_id found: {:?}", mesh_id);
                         },
-                        RenderResourceMessage::Material(material_id, material_source) => {
+                        RenderMessage::Material(material_id, material_source) => {
                             let material = engine.renderer.build_material(material_source).expect("TODO: Handle material compilation failure");
                             let gpu_material = engine.renderer.register_material(material);
                             println!("sent material for {:?} to the gpu: {:?}", material_id, gpu_material);
@@ -133,6 +145,8 @@ impl EngineBuilder {
                         }
                     }
                 }
+
+                // TODO: Update renderer's anchors with flattened scene graph.
 
                 // TODO: Draw.
 
@@ -152,14 +166,47 @@ impl EngineBuilder {
 
 pub struct Engine {
     window: Window,
+
     renderer: Box<Renderer>,
-    render_message_channel: Receiver<RenderResourceMessage>,
+    render_message_channel: Receiver<RenderMessage>,
 
     mesh_map: HashMap<MeshId, GpuMesh>,
+
+    scene_graph: TransformGraph,
 }
 
 impl Drop for Engine {
     fn drop(&mut self) {
         unsafe { INSTANCE = None; }
     }
+}
+
+thread_local! {
+    // TODO: We don't want this to be completely public, only pub(crate), but `thread_local`
+    // doesn't support pub(crate) syntax.
+    pub static RENDER_MESSAGE_CHANNEL: RefCell<Option<Sender<RenderMessage>>> = RefCell::new(None);
+}
+
+pub fn scene_graph<F, T>(func: F) -> T
+    where F: FnOnce(&TransformGraph) -> T
+{
+    let engine = unsafe { &*INSTANCE.expect("Engine instance was `None`") };
+    func(&engine.scene_graph)
+}
+
+#[derive(Debug)]
+pub enum RenderMessage {
+    Anchor(TransformInnerHandle),
+    Mesh(MeshId, ::polygon::geometry::mesh::Mesh),
+    Material(MaterialId, ::polygon::material::MaterialSource),
+}
+
+pub fn send_render_message(message: RenderMessage) {
+    RENDER_MESSAGE_CHANNEL.with(move |channel| {
+        let borrow = channel.borrow();
+        let channel = borrow.as_ref().expect("Render message channel was `None`");
+        channel
+            .send(message)
+            .expect("Unable to send render resource message");
+    });
 }
