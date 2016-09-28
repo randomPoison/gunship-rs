@@ -10,6 +10,8 @@ extern crate bootstrap_rs as bootstrap;
 extern crate bootstrap_audio as bs_audio;
 extern crate fiber;
 extern crate hash;
+#[macro_use]
+extern crate lazy_static;
 extern crate polygon;
 extern crate polygon_math as math;
 
