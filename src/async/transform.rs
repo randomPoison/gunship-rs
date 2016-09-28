@@ -14,6 +14,41 @@ const ROW_CAPACITY: usize = 1024;
 // support dynamically adding rows.
 const MAX_ROWS: usize = 64;
 
+
+lazy_static! {
+    static ref DUMMY_PARENT: Box<TransformData> = {
+        let inner = Arc::new(TransformInner {
+            data: Mutex::new(ptr::null_mut()),
+            anchor: Mutex::new(None),
+        });
+
+        let mut transform_data = Box::new(TransformData {
+            inner: inner,
+
+            // Nobody should ever be looking at the dummy node's parent,
+            // but just in case we create a zeroed parent pointer which should give us a clue as to
+            // what's going when this crashes if someone tries to look up the parent.
+            parent: Mutex::new(unsafe { ::std::mem::zeroed() }),
+
+            position: Point::origin(),
+            rotation: Quaternion::identity(),
+            scale: Vector3::one(),
+
+            position_derived: Point::origin(),
+            rotation_derived: Quaternion::identity(),
+            scale_derived: Vector3::one(),
+        });
+
+        {
+            let data_ptr = &mut *transform_data as *mut _;
+            let mut inner_data = transform_data.inner.data.lock().unwrap();
+            *inner_data = data_ptr;
+        }
+
+        transform_data
+    };
+}
+
 /// A handle to a node in the scene graph.
 pub struct Transform {
     inner: TransformInnerHandle,
@@ -64,7 +99,7 @@ impl TransformGraph {
         assert!(row.len() < ROW_CAPACITY, "Row 0 exceeded row capacity");
         row.push(TransformData {
             inner: inner.clone(),
-            parent: None,
+            parent: Mutex::new(DUMMY_PARENT.inner.clone()),
 
             position: Point::origin(),
             rotation: Quaternion::identity(),
@@ -111,7 +146,7 @@ pub type TransformInnerHandle = Arc<TransformInner>;
 #[derive(Debug)]
 struct TransformData {
     inner: TransformInnerHandle,
-    parent: Option<TransformInnerHandle>,
+    parent: Mutex<TransformInnerHandle>,
 
     position: Point,
     rotation: Quaternion,
