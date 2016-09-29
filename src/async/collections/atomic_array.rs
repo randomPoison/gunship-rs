@@ -1,7 +1,8 @@
 use async::collections::alloc::raw_vec::RawVec;
 use std::cell::UnsafeCell;
-use std::ops::Index;
+use std::ops::{Deref, Index};
 use std::ptr;
+use std::slice::{self, Iter, IterMut};
 use std::sync::atomic::{ AtomicBool, AtomicUsize, Ordering };
 
 /// A dynamically allocated, fixed-size array container.
@@ -82,6 +83,36 @@ impl<T> AtomicArray<T> {
     pub fn capacity(&self) -> usize {
         unsafe { &*self.buffer.get() }.cap()
     }
+
+    pub fn as_slice(&self) -> &[T] {
+        unsafe {
+            slice::from_raw_parts(
+                self.buffer().ptr(),
+                self.len.load(Ordering::SeqCst),
+            )
+        }
+    }
+
+    pub fn as_slice_mut(&mut self) -> &mut [T] {
+        unsafe {
+            slice::from_raw_parts_mut(
+                self.buffer().ptr(),
+                self.len.load(Ordering::SeqCst),
+            )
+        }
+    }
+
+    fn buffer(&self) -> &RawVec<T> {
+        unsafe { &*self.buffer.get() }
+    }
+}
+
+impl<T> Deref for AtomicArray<T> {
+    type Target = [T];
+
+    fn deref(&self) -> &[T] {
+        self.as_slice()
+    }
 }
 
 impl<T> Index<usize> for AtomicArray<T> {
@@ -92,6 +123,24 @@ impl<T> Index<usize> for AtomicArray<T> {
         assert!(index < len, "Index out of bounds, length is {} but index was {}", len, index);
 
         unsafe { &*(&*self.buffer.get()).ptr().offset(index as isize) }
+    }
+}
+
+impl<'a, T> IntoIterator for &'a AtomicArray<T> {
+    type Item = &'a T;
+    type IntoIter = Iter<'a, T>;
+
+    fn into_iter(self) -> Iter<'a, T> {
+        self.as_slice().into_iter()
+    }
+}
+
+impl<'a, T> IntoIterator for &'a mut AtomicArray<T> {
+    type Item = &'a mut T;
+    type IntoIter = IterMut<'a, T>;
+
+    fn into_iter(self) -> IterMut<'a, T> {
+        self.as_slice_mut().into_iter()
     }
 }
 

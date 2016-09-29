@@ -31,11 +31,11 @@ lazy_static! {
             parent: Mutex::new(unsafe { ::std::mem::zeroed() }),
 
             position: Point::origin(),
-            rotation: Quaternion::identity(),
+            orientation: Quaternion::identity(),
             scale: Vector3::one(),
 
             position_derived: Point::origin(),
-            rotation_derived: Quaternion::identity(),
+            orientation_derived: Quaternion::identity(),
             scale_derived: Vector3::one(),
         });
 
@@ -87,6 +87,10 @@ impl TransformGraph {
         }
     }
 
+    pub fn rows(&self) -> &[UnsafeCell<AtomicArray<TransformData>>] {
+        self.rows.as_slice()
+    }
+
     fn create_node(&self) -> TransformInnerHandle {
         // Create inner transform.
         let inner = Arc::new(TransformInner {
@@ -102,11 +106,11 @@ impl TransformGraph {
             parent: Mutex::new(DUMMY_PARENT.inner.clone()),
 
             position: Point::origin(),
-            rotation: Quaternion::identity(),
+            orientation: Quaternion::identity(),
             scale: Vector3::zero(),
 
             position_derived: Point::origin(),
-            rotation_derived: Quaternion::identity(),
+            orientation_derived: Quaternion::identity(),
             scale_derived: Vector3::zero(),
         });
 
@@ -144,15 +148,31 @@ impl TransformInner {
 pub type TransformInnerHandle = Arc<TransformInner>;
 
 #[derive(Debug)]
-struct TransformData {
-    inner: TransformInnerHandle,
-    parent: Mutex<TransformInnerHandle>,
+pub struct TransformData {
+    pub inner: TransformInnerHandle,
+    pub parent: Mutex<TransformInnerHandle>,
 
-    position: Point,
-    rotation: Quaternion,
-    scale: Vector3,
+    pub position: Point,
+    pub orientation: Quaternion,
+    pub scale: Vector3,
 
-    position_derived: Point,
-    rotation_derived: Quaternion,
-    scale_derived: Vector3,
+    pub position_derived: Point,
+    pub orientation_derived: Quaternion,
+    pub scale_derived: Vector3,
+}
+
+impl TransformData {
+    pub fn update_derived_from_parent(&mut self) {
+        let parent_handle = self.parent.lock().expect("Unable to acquire lock on parent handle");
+        let parent_data = parent_handle.data.lock().expect("Unable to acquire lock on node data");
+        let parent_data = unsafe { &**parent_data };
+
+        self.position_derived = parent_data.position_derived + self.position.as_vector3();
+        self.orientation_derived = parent_data.orientation_derived * self.orientation;
+        self.scale_derived = parent_data.scale_derived * self.scale;
+    }
+
+    pub fn anchor(&self) -> Option<AnchorId> {
+        *self.inner.anchor.lock().expect("Unable to acquire lock on node's acnhor")
+    }
 }
