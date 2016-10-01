@@ -1,7 +1,8 @@
 use async::*;
 use async::resource::{MaterialId, MeshId};
+use async::scheduler::Fiber;
 use async::transform::{TransformInnerHandle, TransformGraph};
-use bootstrap::window::Window;
+use bootstrap::window::{Message, Window};
 use fiber;
 use polygon::{GpuMesh, Renderer, RendererBuilder};
 use polygon::anchor::Anchor;
@@ -19,6 +20,7 @@ pub struct EngineBuilder {
 }
 
 static mut INSTANCE: Option<*const Engine> = None;
+static mut MAIN_LOOP: Option<Fiber> = None;
 
 /// A builder for configuring the components and systems registered with the game engine.
 ///
@@ -80,7 +82,7 @@ impl EngineBuilder {
         let (sender, receiever) = mpsc::channel();
 
         // Init aysnc subsystem.
-        scheduler::init();
+        scheduler::init_thread();
 
         // Spawn our worker threads.
         for _ in 0..self.max_workers {
@@ -92,8 +94,7 @@ impl EngineBuilder {
                 });
 
                 // Initialize worker thread to support fibers and wait for work to be available.
-                fiber::init();
-                scheduler::wait_for_work();
+                scheduler::run_wait_fiber();
             });
         }
 
@@ -114,10 +115,18 @@ impl EngineBuilder {
 
         unsafe { INSTANCE = Some(&*engine); }
 
-        run!({
+        let main_loop = run!({
             let engine = &mut *engine;
 
-            loop {
+            'main: loop {
+                // Process any pending window messages.
+                for message in &mut engine.window {
+                    // TODO: Process input messages.
+                    if let Message::Close = message {
+                        break 'main;
+                    }
+                }
+
                 // TODO: Update?
 
                 // Before drawing, process any pending render messages. These will be resources that were
@@ -174,6 +183,9 @@ impl EngineBuilder {
             }
         });
 
+        println!("main loop fiber: {:?}", main_loop);
+        unsafe { MAIN_LOOP = Some(main_loop); }
+
         func()
     }
 
@@ -229,4 +241,9 @@ pub fn send_render_message(message: RenderMessage) {
             .send(message)
             .expect("Unable to send render resource message");
     });
+}
+
+/// Suspends the calling worker until the engine main loop has finished.
+pub fn wait_for_quit() {
+    unsafe { scheduler::wait_for(MAIN_LOOP.as_ref().expect("`MAIN_LOOP` was `None`").clone()); }
 }

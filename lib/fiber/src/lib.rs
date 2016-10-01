@@ -21,7 +21,7 @@ pub mod platform;
 /// Represents a fiber with its own stack and thread state.
 ///
 /// The fiber's lifetime is associated with any data it borrows when created.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Fiber {
     inner: platform::Fiber,
 }

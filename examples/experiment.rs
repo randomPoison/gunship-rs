@@ -34,6 +34,6 @@ fn setup_scene() {
     let camera_transform = Transform::new();
     // let camera = Camera::new(&camera_transform);
 
-    // TODO: Wait until the game is done running?
-    loop {}
+    // Wait until the game quits.
+    engine::wait_for_quit();
 }

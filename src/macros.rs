@@ -65,8 +65,8 @@ macro_rules! warn_once {
 macro_rules! run {
     ($($future: expr),*) => {
         $(
-            $crate::async::scheduler::run(move || { $future });
-        )*
+            $crate::async::scheduler::run(move || { $future })
+        ),*
     }
 }
 
