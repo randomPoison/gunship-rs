@@ -19,6 +19,7 @@ fiber = { version = "0.1", path = "lib/fiber" }
 hash = { path = "lib/hash" }
 lazy_static = "0.2.1"
 parse_collada = { path = "lib/parse_collada" }
+parse-obj = { version = "0.1", path = "lib/parse-obj" }
 polygon = { path = "lib/polygon_rs" }
 polygon_math = { path = "lib/polygon_math" }
 stopwatch = { path = "lib/stopwatch" }

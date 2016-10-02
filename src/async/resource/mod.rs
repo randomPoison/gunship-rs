@@ -1,4 +1,7 @@
 use async::engine::{self, RenderMessage};
+use polygon::geometry::mesh::{BuildMeshError, MeshBuilder};
+use polygon::math::Vector2;
+use obj::{self, Obj};
 use std::fs::File;
 use std::io;
 use std::io::prelude::*;
@@ -54,9 +57,63 @@ impl From<FromUtf8Error> for LoadTextError {
 /// Loads a mesh data from the specified path and performs any necessary processing to prepare it
 /// to be used in rendering.
 pub fn load_mesh<P: AsRef<Path>>(path: P) -> Result<Mesh, LoadMeshError> {
-    // Load mesh source and parse mesh data.
-    let text = load_file_text(path)?;
-    let mesh_data = collada::load_resources(text)?;
+    let path = path.as_ref();
+
+    // Load mesh source and parse mesh data based on file type.
+    let mesh_data = match path.extension() {
+        Some(ext) if ext == "dae" => {
+            let text = load_file_text(path)?;
+            collada::load_resources(text)?
+        },
+        Some(ext) if ext == "obj" => {
+            let text = load_file_text(path)?;
+
+            // Load mesh file and normalize indices for OpenGL.
+            let obj = Obj::from_str(&*text)?;
+
+            // Gather vertex data so that OpenGL can use them.
+            let mut positions = Vec::new();
+            let mut normals = Vec::new();
+            let mut texcoords = Vec::new();
+
+            // Iterate over each of the faces in the mesh.
+            for face in obj.faces() {
+                // Iterate over each of the vertices in the face to combine the position and normal into
+                // a single vertex.
+                for (position, maybe_tex, maybe_normal) in face {
+                    positions.push(position.into());
+
+                    // NOTE: The w texcoord is provided according to the bitmap spec but we don't need to
+                    // use it here, so we simply ignore it.
+                    if let Some((u, v, _w)) = maybe_tex {
+                        texcoords.push(Vector2::new(u, v));
+                    }
+
+                    if let Some(normal) = maybe_normal {
+                        normals.push(normal.into());
+                    }
+                }
+            }
+
+            // Create indices list.
+            let indices_count = obj.position_indices().len() as u32 * 3;
+            let indices: Vec<u32> = (0..indices_count).collect();
+
+            MeshBuilder::new()
+                .set_position_data(&*positions)
+                .set_normal_data(&*normals)
+                .set_texcoord_data(&*texcoords)
+                .set_indices(&*indices)
+                .build()?
+        },
+        _ => {
+            let path = path
+                .as_os_str()
+                .to_string_lossy()
+                .into_owned();
+            return Err(LoadMeshError::UnsupportedFileType(path));
+        },
+    };
 
     // Create handle for mesh data and asynchronously register it with the renderer.
     let mesh_id = MESH_ID_COUNTER.fetch_add(1, Ordering::Relaxed);
@@ -86,8 +143,17 @@ impl Drop for Mesh {
 
 #[derive(Debug)]
 pub enum LoadMeshError {
+    BuildMeshError(BuildMeshError),
     LoadTextError(LoadTextError),
     ParseColladaError(collada::Error),
+    ParseObjError(obj::Error),
+    UnsupportedFileType(String),
+}
+
+impl From<BuildMeshError> for LoadMeshError {
+    fn from(from: BuildMeshError) -> LoadMeshError {
+        LoadMeshError::BuildMeshError(from)
+    }
 }
 
 impl From<LoadTextError> for LoadMeshError {
@@ -99,6 +165,12 @@ impl From<LoadTextError> for LoadMeshError {
 impl From<collada::Error> for LoadMeshError {
     fn from(from: collada::Error) -> LoadMeshError {
         LoadMeshError::ParseColladaError(from)
+    }
+}
+
+impl From<obj::Error> for LoadMeshError {
+    fn from(from: obj::Error) -> LoadMeshError {
+        LoadMeshError::ParseObjError(from)
     }
 }
 

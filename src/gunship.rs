@@ -12,6 +12,7 @@ extern crate fiber;
 extern crate hash;
 #[macro_use]
 extern crate lazy_static;
+extern crate parse_obj as obj;
 extern crate polygon;
 
 pub extern crate polygon_math as math;
