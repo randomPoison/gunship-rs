@@ -13,7 +13,8 @@ extern crate hash;
 #[macro_use]
 extern crate lazy_static;
 extern crate polygon;
-extern crate polygon_math as math;
+
+pub extern crate polygon_math as math;
 
 pub mod stopwatch {
     extern crate stopwatch;

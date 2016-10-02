@@ -1,11 +1,14 @@
 use async::*;
+use async::camera::CameraData;
+use async::mesh_renderer::MeshRendererData;
 use async::resource::{MaterialId, MeshId};
 use async::scheduler::Fiber;
 use async::transform::{TransformInnerHandle, TransformGraph};
 use bootstrap::window::{Message, Window};
-use fiber;
 use polygon::{GpuMesh, Renderer, RendererBuilder};
-use polygon::anchor::Anchor;
+use polygon::anchor::{Anchor, AnchorId};
+use polygon::camera::{Camera as RenderCamera, CameraId};
+use polygon::mesh_instance::MeshInstance;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::mem;
@@ -111,6 +114,7 @@ impl EngineBuilder {
             mesh_map: HashMap::new(),
 
             scene_graph: TransformGraph::new(),
+            camera: None,
         });
 
         unsafe { INSTANCE = Some(&*engine); }
@@ -140,12 +144,19 @@ impl EngineBuilder {
                             transform_inner.set_anchor(anchor_id);
                             println!("created anchor: {:?} for transform: {:?}", anchor_id, transform_inner);
                         },
-                        RenderMessage::Mesh(mesh_id, mesh_data) => {
-                            let gpu_mesh = engine.renderer.register_mesh(&mesh_data);
-                            println!("sent mesh for {:?} to the gpu: {:?}", mesh_id, gpu_mesh);
+                        RenderMessage::Camera(camera_data, transform_inner) => {
+                            assert!(engine.camera.is_none(), "Can't add camera, one is already registered");
 
-                            let last = engine.mesh_map.insert(mesh_id, gpu_mesh);
-                            assert!(last.is_none(), "Duplicate mesh_id found: {:?}", mesh_id);
+                            let anchor_id = match transform_inner.anchor() {
+                                Some(anchor) => anchor,
+                                None => unimplemented!(), // TODO: Create the anchor.
+                            };
+
+                            let mut camera = RenderCamera::default();
+                            camera.set_anchor(anchor_id);
+                            let camera_id = engine.renderer.register_camera(camera);
+
+                            engine.camera = Some((camera_data, camera_id));
                         },
                         RenderMessage::Material(material_id, material_source) => {
                             let material = engine.renderer.build_material(material_source).expect("TODO: Handle material compilation failure");
@@ -153,6 +164,31 @@ impl EngineBuilder {
                             println!("sent material for {:?} to the gpu: {:?}", material_id, gpu_material);
 
                             // TODO: Create an association between `material_id` and `material_source`.
+                        },
+                        RenderMessage::Mesh(mesh_id, mesh_data) => {
+                            let gpu_mesh = engine.renderer.register_mesh(&mesh_data);
+                            let last = engine.mesh_map.insert(mesh_id, gpu_mesh);
+                            assert!(last.is_none(), "Duplicate mesh_id found: {:?}", mesh_id);
+                        },
+                        RenderMessage::MeshInstance(mesh_renderer_data, transform_inner) => {
+                            let anchor_id = match transform_inner.anchor() {
+                                Some(anchor) => anchor,
+                                None => unimplemented!(), // TODO: Create the anchor.
+                            };
+
+                            let gpu_mesh = *engine
+                                .mesh_map
+                                .get(&mesh_renderer_data.mesh_id())
+                                .expect("No gpu mesh found for mesh id");
+
+                            let mut mesh_instance = MeshInstance::new(
+                                gpu_mesh,
+                                engine.renderer.default_material(),
+                            );
+                            mesh_instance.material_mut().set_color("surface_color", ::math::Color::rgb(1.0, 0.0, 0.0)); // HACK HACK HACK
+                            mesh_instance.set_anchor(anchor_id);
+
+                            let _ = engine.renderer.register_mesh_instance(mesh_instance);
                         }
                     }
                 }
@@ -177,7 +213,20 @@ impl EngineBuilder {
                     }
                 }
 
+                // Update the camera.
+                if let Some((ref camera_data, ref camera_id)) = engine.camera {
+                    let render_camera = engine.renderer
+                        .get_camera_mut(*camera_id)
+                        .expect("Camera didn't exist for camera id");
+
+                    render_camera.set_fov(camera_data.fov());
+                    render_camera.set_aspect(camera_data.aspect());
+                    render_camera.set_near(camera_data.near());
+                    render_camera.set_far(camera_data.far());
+                }
+
                 // TODO: Draw.
+                engine.renderer.draw();
 
                 // TODO: Wait for frame time?
             }
@@ -205,6 +254,7 @@ pub struct Engine {
     mesh_map: HashMap<MeshId, GpuMesh>,
 
     scene_graph: TransformGraph,
+    camera: Option<(Box<CameraData>, CameraId)>,
 }
 
 impl Drop for Engine {
@@ -229,8 +279,10 @@ pub fn scene_graph<F, T>(func: F) -> T
 #[derive(Debug)]
 pub enum RenderMessage {
     Anchor(TransformInnerHandle),
-    Mesh(MeshId, ::polygon::geometry::mesh::Mesh),
+    Camera(Box<CameraData>, TransformInnerHandle),
     Material(MaterialId, ::polygon::material::MaterialSource),
+    Mesh(MeshId, ::polygon::geometry::mesh::Mesh),
+    MeshInstance(Box<MeshRendererData>, TransformInnerHandle),
 }
 
 pub fn send_render_message(message: RenderMessage) {

@@ -58,12 +58,22 @@ impl Transform {
     pub fn new() -> Transform {
         engine::scene_graph(|scene_graph| Transform { inner: scene_graph.create_node() })
     }
+
+    pub fn inner(&self) -> TransformInnerHandle {
+        self.inner.clone()
+    }
+
+    pub fn set_position(&self, position: Point) {
+        let mut data = self.inner.data.lock().expect("Unable to acquire lock on transform data");
+        let data = unsafe { &mut **data };
+        data.position = position;
+    }
 }
 
 impl Drop for Transform {
     fn drop(&mut self) {
         // TODO: Mark transform and all its children as destroyed in the manager.
-        println!("WARNING: Drop hasn't been implemented for Transform yet");
+        warn_once!("WARNING: Drop hasn't been implemented for Transform yet");
     }
 }
 
@@ -133,6 +143,15 @@ unsafe impl Sync for TransformGraph {}
 pub struct TransformInner {
     data: Mutex<*mut TransformData>,
     anchor: Mutex<Option<AnchorId>>,
+}
+
+impl TransformInner {
+    pub fn anchor(&self) -> Option<AnchorId> {
+        self.anchor
+            .lock()
+            .expect("Unable to acquire lock on anchor")
+            .clone()
+    }
 }
 
 unsafe impl Send for TransformInner {}

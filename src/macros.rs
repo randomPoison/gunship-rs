@@ -46,7 +46,7 @@ macro_rules! derive_Singleton {
     }
 }
 
-// TODO: Do we need to make this threadsafe?
+// TODO: Make this threadsafe by useing `std::sync::Once`.
 #[macro_export]
 macro_rules! warn_once {
     ($message: expr) => {

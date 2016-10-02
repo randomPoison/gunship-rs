@@ -54,8 +54,6 @@ impl From<FromUtf8Error> for LoadTextError {
 /// Loads a mesh data from the specified path and performs any necessary processing to prepare it
 /// to be used in rendering.
 pub fn load_mesh<P: AsRef<Path>>(path: P) -> Result<Mesh, LoadMeshError> {
-    println!("start load mesh");
-
     // Load mesh source and parse mesh data.
     let text = load_file_text(path)?;
     let mesh_data = collada::load_resources(text)?;
@@ -65,7 +63,6 @@ pub fn load_mesh<P: AsRef<Path>>(path: P) -> Result<Mesh, LoadMeshError> {
 
     engine::send_render_message(RenderMessage::Mesh(mesh_id, mesh_data));
 
-    println!("Done with load mesh");
     Ok(Mesh(mesh_id))
 }
 
@@ -73,6 +70,13 @@ pub type MeshId = usize;
 
 #[derive(Debug)]
 pub struct Mesh(MeshId);
+
+impl Mesh {
+    // TODO: Make this private to the crate.
+    pub fn id(&self) -> MeshId {
+        self.0
+    }
+}
 
 impl Drop for Mesh {
     fn drop(&mut self) {
@@ -99,8 +103,6 @@ impl From<collada::Error> for LoadMeshError {
 }
 
 pub fn load_material<P: AsRef<Path>>(path: P) -> Result<Material, LoadMaterialError> {
-    println!("start load material");
-
     // Load and parse material data.
     let text = load_file_text(path)?;
     let material_source = ::polygon::material::MaterialSource::from_str(text)?;
@@ -109,7 +111,6 @@ pub fn load_material<P: AsRef<Path>>(path: P) -> Result<Material, LoadMaterialEr
 
     engine::send_render_message(RenderMessage::Material(material_id, material_source));
 
-    println!("end load material");
     Ok(Material(material_id))
 }
 
