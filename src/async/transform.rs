@@ -117,11 +117,11 @@ impl TransformGraph {
 
             position: Point::origin(),
             orientation: Quaternion::identity(),
-            scale: Vector3::zero(),
+            scale: Vector3::one(),
 
             position_derived: Point::origin(),
             orientation_derived: Quaternion::identity(),
-            scale_derived: Vector3::zero(),
+            scale_derived: Vector3::one(),
         });
 
         // Hook up inner's pointer to data.
