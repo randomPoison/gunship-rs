@@ -4,6 +4,7 @@ use async::mesh_renderer::MeshRendererData;
 use async::resource::{MaterialId, MeshId};
 use async::scheduler::Fiber;
 use async::transform::{TransformInnerHandle, TransformGraph};
+use cell_extras::InitCell;
 use bootstrap::window::{Message, Window};
 use polygon::{GpuMesh, Renderer, RendererBuilder};
 use polygon::anchor::{Anchor, AnchorId};
@@ -92,9 +93,7 @@ impl EngineBuilder {
             let sender = sender.clone();
             thread::spawn(move || {
                 // Initialize thread-local renderer message channel.
-                RENDER_MESSAGE_CHANNEL.with(move |channel| {
-                    *channel.borrow_mut() = Some(sender);
-                });
+                RENDER_MESSAGE_CHANNEL.with(move |channel| { channel.init(sender); });
 
                 // Initialize worker thread to support fibers and wait for work to be available.
                 scheduler::run_wait_fiber();
@@ -102,9 +101,7 @@ impl EngineBuilder {
         }
 
         // Set the current thread's channel.
-        RENDER_MESSAGE_CHANNEL.with(move |channel| {
-            *channel.borrow_mut() = Some(sender);
-        });
+        RENDER_MESSAGE_CHANNEL.with(move |channel| { channel.init(sender); });
 
         let mut engine = Box::new(Engine {
             window: window,
@@ -266,7 +263,7 @@ impl Drop for Engine {
 thread_local! {
     // TODO: We don't want this to be completely public, only pub(crate), but `thread_local`
     // doesn't support pub(crate) syntax.
-    pub static RENDER_MESSAGE_CHANNEL: RefCell<Option<Sender<RenderMessage>>> = RefCell::new(None);
+    pub static RENDER_MESSAGE_CHANNEL: InitCell<Sender<RenderMessage>> = InitCell::new();
 }
 
 pub fn scene_graph<F, T>(func: F) -> T
@@ -287,8 +284,6 @@ pub enum RenderMessage {
 
 pub fn send_render_message(message: RenderMessage) {
     RENDER_MESSAGE_CHANNEL.with(move |channel| {
-        let borrow = channel.borrow();
-        let channel = borrow.as_ref().expect("Render message channel was `None`");
         channel
             .send(message)
             .expect("Unable to send render resource message");

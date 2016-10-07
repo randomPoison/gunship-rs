@@ -8,6 +8,7 @@
 
 extern crate bootstrap_rs as bootstrap;
 extern crate bootstrap_audio as bs_audio;
+extern crate cell_extras;
 extern crate fiber;
 extern crate hash;
 #[macro_use]
