@@ -1,7 +1,6 @@
 use async::engine::{self, RenderMessage};
 use async::resource::{Mesh, MeshId};
 use async::transform::Transform;
-use polygon::mesh_instance::MeshInstanceId;
 use std::marker::PhantomData;
 
 #[derive(Debug)]

@@ -7,10 +7,9 @@ use async::transform::{TransformInnerHandle, TransformGraph};
 use cell_extras::InitCell;
 use bootstrap::window::{Message, Window};
 use polygon::{GpuMesh, Renderer, RendererBuilder};
-use polygon::anchor::{Anchor, AnchorId};
+use polygon::anchor::Anchor;
 use polygon::camera::{Camera as RenderCamera, CameraId};
 use polygon::mesh_instance::MeshInstance;
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::mem;
 use std::ptr::{self, Unique};
@@ -191,22 +190,19 @@ impl EngineBuilder {
                 }
 
                 // Update renderer's anchors with flattened scene graph.
-                for row in engine.scene_graph.rows() {
-                    // TODO: Don't deal with the `UnsafeCell` directly here if possible.
-                    for node in unsafe { &mut *row.get() } {
+                for node in engine.scene_graph.roots() {
+                    let node = node.borrow();
 
-                        // TODO: Do something like pre-sorting so we only try to update out of
-                        // date nodes.
-                        node.update_derived_from_parent();
-                        if let Some(anchor_id) = node.anchor() {
-                            // Send position/rotation/scale to renderer anchor.
-                            let anchor = engine.renderer
-                                .get_anchor_mut(anchor_id)
-                                .expect("Node had anchor id but render did not have specified anchor");
-                            anchor.set_position(node.position_derived);
-                            anchor.set_orientation(node.orientation_derived);
-                            anchor.set_scale(node.scale_derived);
-                        }
+                    // TODO: Do something like pre-sorting so we only try to update out of
+                    // date nodes.
+                    if let Some(anchor_id) = node.anchor() {
+                        // Send position/rotation/scale to renderer anchor.
+                        let anchor = engine.renderer
+                            .get_anchor_mut(anchor_id)
+                            .expect("Node had anchor id but render did not have specified anchor");
+                        anchor.set_position(node.position);
+                        anchor.set_orientation(node.orientation);
+                        anchor.set_scale(node.scale);
                     }
                 }
 
