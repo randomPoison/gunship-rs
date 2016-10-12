@@ -24,6 +24,7 @@ pub struct FiberId(PlatformId);
 /// Represents a fiber with its own stack and thread state.
 ///
 /// The fiber's lifetime is associated with any data it borrows when created.
+#[derive(Debug)]
 pub struct Fiber(PlatformId);
 
 /// A global cache mapping threads to their currently running fiber.
