@@ -1,13 +1,15 @@
 extern crate kernel32;
 extern crate winapi;
 
-use std::boxed::FnBox;
+use ::{Fiber, PREV};
+use std::mem;
 use std::ptr;
+use std::raw::TraitObject;
 use self::winapi::*;
 
-pub type Fiber = LPVOID;
+pub type PlatformId = LPVOID;
 
-pub fn init() -> Fiber {
+pub fn init() -> PlatformId {
     let fiber = unsafe { kernel32::ConvertThreadToFiber(ptr::null_mut()) };
 
     if fiber.is_null() {
@@ -17,12 +19,14 @@ pub fn init() -> Fiber {
     fiber
 }
 
-pub fn create_fiber(stack_size: usize, func: Box<FnBox()>) -> Fiber {
+pub fn create_fiber(stack_size: usize, func: &Fn(Fiber)) -> PlatformId {
     let fiber = unsafe {
+        let trait_obj: TraitObject = mem::transmute(func);
+
         kernel32::CreateFiber(
             stack_size as u32,
             Some(fiber_proc),
-            Box::into_raw(Box::new(func)) as LPVOID,
+            Box::into_raw(Box::new(trait_obj)) as LPVOID,
         )
     };
 
@@ -34,12 +38,16 @@ pub fn create_fiber(stack_size: usize, func: Box<FnBox()>) -> Fiber {
     fiber
 }
 
-pub fn make_active(fiber: Fiber) {
+/// Makes `fiber` active, then returns the handle of the fiber that resumed the current one.
+pub fn resume(fiber: PlatformId) {
     unsafe { kernel32::SwitchToFiber(fiber); }
 }
 
 /// `data` is secretly a pointer to a `Box<Box<FnBox()>>`.
 unsafe extern "system" fn fiber_proc(data: LPVOID) {
-    let func = Box::from_raw(data as *mut Box<FnBox()>);
-    func();
+    let trait_obj = *Box::from_raw(data as *mut TraitObject);
+    let func: &Fn(Fiber) = mem::transmute(trait_obj);
+
+    let prev_fiber = PREV.with(|prev| prev.get().expect("PREV was None in fiber_proc()"));
+    func(Fiber(prev_fiber));
 }
