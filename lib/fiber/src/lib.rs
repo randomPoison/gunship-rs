@@ -42,13 +42,13 @@ thread_local! {
 /// older than 7 the main thread must be converted to a fiber on startup). This function performs
 /// any necessary initialization and returns the active fiber. This function must be called for all
 /// spawned threads to ensure that it is safe to use fibers from those threads.
-pub fn init() -> Fiber {
+pub fn init() -> FiberId {
     let platform_fiber = platform::init();
 
     // Initialize our thread-local cache of the current fiber.
     CURRENT.with(|current| current.set(Some(platform_fiber)));
 
-    Fiber(platform_fiber)
+    FiberId(platform_fiber)
 }
 
 impl Fiber {
@@ -61,12 +61,9 @@ impl Fiber {
     pub fn new<F>(stack_size: usize, func: F) -> Fiber
         where
         F: Fn(Fiber),
-        F: Send,
+        F: 'static + Send,
     {
-        Fiber(platform::create_fiber(
-            stack_size,
-            &func,
-        ))
+        Fiber(platform::create_fiber(stack_size, func))
     }
 
     /// Makes the fiber active, consuming in the process.
@@ -108,7 +105,11 @@ impl Fiber {
     }
 }
 
+// `Fiber` has pointers internally (at least on some platforms) so we need to manually implement
+// `Send` and `Sync`. Sending should always be safe since fibers are designed to move between
+// threads. The only thing potentially unsafe about sharing is that
 unsafe impl Send for Fiber {}
+unsafe impl Sync for Fiber {}
 
 /// Returns the fiber that is currently executing on this thread.
 ///
