@@ -4,7 +4,6 @@ extern crate winapi;
 use ::{Fiber, PREV};
 use std::mem;
 use std::ptr;
-use std::raw::TraitObject;
 use self::winapi::*;
 
 pub type PlatformId = LPVOID;
@@ -19,23 +18,13 @@ pub fn init() -> PlatformId {
     fiber
 }
 
-pub fn create_fiber<F>(stack_size: usize, func: F) -> PlatformId
-    where
-    F: Fn(Fiber),
-    F: 'static + Send,
+pub fn create_fiber(stack_size: usize, func: fn(Fiber) -> !) -> PlatformId
 {
-    let boxed_func = Box::new(func) as Box<Fn(Fiber)>;
-
-    // `box_fun` is two pointers, so it can't be passed directly. We need to box it again
-    // so that we have a single pointer to the trait object that we can use when the fiber
-    // is started.
-    let func_ptr = Box::into_raw(Box::new(boxed_func)) as LPVOID;
-
     let fiber = unsafe {
         kernel32::CreateFiber(
             stack_size as u32,
             Some(fiber_proc),
-            func_ptr,
+            func as LPVOID,
         )
     };
 
@@ -54,7 +43,7 @@ pub unsafe fn resume(fiber: PlatformId) {
 
 /// `data` is secretly a pointer to a `Box<Box<FnBox()>>`.
 unsafe extern "system" fn fiber_proc(data: LPVOID) {
-    let func = *Box::from_raw(data as *mut Box<Fn(Fiber)>);
+    let func: fn(Fiber) -> ! = mem::transmute(data);
     let prev_fiber = PREV.with(|prev| prev.get().expect("PREV was None in fiber_proc()"));
 
     func(Fiber(prev_fiber));

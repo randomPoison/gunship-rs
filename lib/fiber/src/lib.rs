@@ -2,14 +2,55 @@
 //!
 //! Fibers are threads that must be manually scheduled by the client application, as opposed to
 //! threads which are automatically managed and scheduled by the OS. Each fiber has its own stack
-//! space and can be yield its time to another thread at any point during execution. This allows
-//! for different forms of concurrency to be implemented in a way that's optimal for the client
-//! application.
+//! space and can be yield its time on the system thread to another fiber at any point during
+//! execution. This allows for different forms of concurrency that can't be supported with
+//! normal system threads.
 //!
 //! This library is meant to be the base for a fiber-pool system, in which a fixed number of worker
 //! fibers are created and used to asynchronously complete units of work.
-
-#![feature(raw)]
+//!
+//! # Fibers and Threads
+//!
+//! Fibers are run on top of system threads, with one fiber running on a thread at a time. Once
+//! a fiber has been suspended it can be resumed on any thread (i.e the same thread it was
+//! previously on or any other thread). You don't have to have multiple threads to use fibers,
+//! but if only using a single thread fibers won't run in parallel. As such, it's generally best
+//! to use fibers in combination with a pool of worker threads.
+//!
+//! Being able to move a fiber between threads also has implications for the thread-safety of
+//! your code. There are a number of system-primitives that don't take well to moving between
+//! threads, and so you must be careful when you resume fibers. Notably, [`Mutex`][mutex]
+//!
+//! # Unsafety
+//!
+//! Unlike any other function in Rust, fiber procs can be suspended on one thread and resumed
+//! on another, pulling any stack-owned data along with it. That means that it's possible to
+//! create a `!Send` type, suspend the fiber, and resume the fiber on another thread,
+//! violating the `!Send` nature of the type. As such, it's unsafe to ever call `Fiber::resume()`
+//! while a `!Send` type is alive and in scope.
+//!
+//! # Examples
+//!
+//! Basic usage:
+//!
+//! ```
+//! use fiber::Fiber;
+//!
+//! // Function to be run by the fiber. Return type must be `!`, this indicates that it will never
+//! // return. This is necessary because fibers cannot be destroyed on some platforms.
+//! fn fiber_proc(suspended: Fiber) -> ! {
+//!     println!("Suspended fiber: {:?}", suspended);
+//!     unsafe { suspended.resume(); }
+//!
+//!     panic!("Uh-oh, shouldn't have resumed this fiber again");
+//! }
+//!
+//! let fiber = Fiber::new(1024, fiber_proc);
+//! let fiber_id = fiber.id();
+//!
+//! let prev = unsafe { fiber.resume() };
+//! assert_eq!(fiber_id, prev.id());
+//! ```
 
 use platform::PlatformId;
 use std::cell::Cell;
@@ -21,9 +62,17 @@ pub mod platform;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct FiberId(PlatformId);
 
+// `FiberId` contains a raw pointer (at least on some platforms) so it's not `Send`/`Sync` by
+// default, but it can't actually be used for anything unsafe so we manually confirm that it can
+// be shared and sent between threads.
+unsafe impl Send for FiberId {}
+unsafe impl Sync for FiberId {}
+
 /// Represents a fiber with its own stack and thread state.
 ///
 /// The fiber's lifetime is associated with any data it borrows when created.
+// TODO: What do we do about `Drop`? If you drop a `Fiber` it's basically leaking a sizeable chunk
+// of memory. Should we emit a warning or panic?
 #[derive(Debug)]
 pub struct Fiber(PlatformId);
 
@@ -42,6 +91,7 @@ thread_local! {
 /// older than 7 the main thread must be converted to a fiber on startup). This function performs
 /// any necessary initialization and returns the active fiber. This function must be called for all
 /// spawned threads to ensure that it is safe to use fibers from those threads.
+// TODO: How do we handle double-initialization? Panic or just ignore it?
 pub fn init() -> FiberId {
     let platform_fiber = platform::init();
 
@@ -55,15 +105,15 @@ impl Fiber {
     /// Creates a new fiber with the specified stack size and has it begin executing the specified
     /// function.
     ///
-    /// # Panics
+    /// # Fiber Proc
     ///
-    /// Panics if `init()` has not yet been called on the current thread.
-    pub fn new<F>(stack_size: usize, func: F) -> Fiber
-        where
-        F: Fn(Fiber),
-        F: 'static + Send,
+    /// TODO: Talk about fiber proc and why it can't return.
+    // TODO: Should we return a `Result` here? Do we want to allow thread creation to fail? That'd
+    // kind of be like the equivalent of OOM when requesting a heap allocation, in which case
+    // I think the stdlib panics.
+    pub fn new(stack_size: usize, fiber_proc: fn(Fiber) -> !) -> Fiber
     {
-        Fiber(platform::create_fiber(stack_size, func))
+        Fiber(platform::create_fiber(stack_size, fiber_proc))
     }
 
     /// Makes the fiber active, consuming in the process.
@@ -107,7 +157,8 @@ impl Fiber {
 
 // `Fiber` has pointers internally (at least on some platforms) so we need to manually implement
 // `Send` and `Sync`. Sending should always be safe since fibers are designed to move between
-// threads. The only thing potentially unsafe about sharing is that
+// threads. The only thing potentially unsafe about sharing would be trying to resume a fiber
+// on two different threads, but the signature of `Fiber::resume()` statically prevents that.
 unsafe impl Send for Fiber {}
 unsafe impl Sync for Fiber {}
 
