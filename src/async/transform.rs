@@ -1,4 +1,4 @@
-use async::engine::{self, RenderMessage};
+use async::engine::{self, EngineMessage};
 use async::collections::atomic_array::AtomicArray;
 use cell_extras::atomic_ref_cell::*;
 use std::ptr;
@@ -77,7 +77,7 @@ impl TransformGraph {
             *data = self.row.last().unwrap();
         }
 
-        engine::send_render_message(RenderMessage::Anchor(inner.clone()));
+        engine::send_message(EngineMessage::Anchor(inner.clone()));
 
         inner
     }

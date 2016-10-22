@@ -1,4 +1,4 @@
-use async::engine::{self, RenderMessage};
+use async::engine::{self, EngineMessage};
 use async::resource::{Mesh, MeshId};
 use async::transform::Transform;
 use std::marker::PhantomData;
@@ -17,7 +17,7 @@ impl MeshRenderer {
 
         let ptr = &mut *data as *mut _;
 
-        engine::send_render_message(RenderMessage::MeshInstance(data, transform.inner()));
+        engine::send_message(EngineMessage::MeshInstance(data, transform.inner()));
 
         MeshRenderer {
             data: ptr,

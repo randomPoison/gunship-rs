@@ -1,4 +1,4 @@
-use async::engine::{self, RenderMessage};
+use async::engine::{self, EngineMessage};
 use async::transform::Transform;
 use std::f32::consts::PI;
 use std::marker::PhantomData;
@@ -16,7 +16,7 @@ impl Camera {
 
         let ptr = &mut *camera_data as *mut _;
 
-        engine::send_render_message(RenderMessage::Camera(camera_data, transform.inner()));
+        engine::send_message(EngineMessage::Camera(camera_data, transform.inner()));
 
         Camera {
             data: ptr,

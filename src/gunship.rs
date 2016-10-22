@@ -1,9 +1,9 @@
 #![feature(alloc)]
-#![feature(associated_type_defaults)]
 #![feature(conservative_impl_trait)]
 #![feature(const_fn)]
+#![feature(drop_types_in_const)]
+#![feature(fnbox)]
 #![feature(question_mark)]
-#![feature(unboxed_closures)]
 #![feature(unique)]
 
 extern crate bootstrap_rs as bootstrap;

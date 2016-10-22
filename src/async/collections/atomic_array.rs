@@ -63,7 +63,7 @@ impl<T> AtomicArray<T> {
         unimplemented!();
     }
 
-    pub fn swap_remove(&mut self, index: usize) -> Option<T> {
+    pub fn swap_remove(&mut self, _index: usize) -> Option<T> {
         unimplemented!();
     }
 

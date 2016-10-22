@@ -5,303 +5,210 @@
 //! accessible, instead we use various standalone functions like `start()` and `wait_for()` to
 //! safely manage access to the scheduler.
 
-use fiber;
-use std::cell::Cell;
-use std::collections::{HashMap, HashSet};
-use std::iter::FromIterator;
-use std::ptr::Unique;
+use fiber::{self, Fiber, FiberId};
+use cell_extras::AtomicInitCell;
+use std::boxed::FnBox;
+use std::collections::{HashMap, HashSet, VecDeque};
+use std::fmt::{self, Debug, Formatter};
+use std::mem;
 use std::sync::{Condvar, Mutex, Once, ONCE_INIT};
-
-pub use fiber::Fiber;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::mpsc::{self, Receiver};
 
 const DEFAULT_STACK_SIZE: usize = 64 * 1024;
 
-static mut CONDVAR: *const Condvar = ::std::ptr::null();
-static mut INSTANCE: *const Mutex<Scheduler> = ::std::ptr::null();
+static CONDVAR: AtomicInitCell<Condvar> = AtomicInitCell::new();
+static INSTANCE: AtomicInitCell<Mutex<Scheduler>> = AtomicInitCell::new();
 static INSTANCE_INIT: Once = ONCE_INIT;
+static WORK_COUNTER: AtomicUsize = AtomicUsize::new(1);
 
-thread_local! {
-    /// Special fiber only used when needed to suspend a finished fiber.
-    ///
-    /// If a fiber finishes or needs to be supended while waiting on other fibers, it can't suspend
-    /// unless there's another fiber for the thread to start executing. Normally this other fiber
-    /// would be the next one in the work queue, but if there's no ready work then `WAIT_FIBER` is
-    /// made active so that the previous fiber can be properly suspended.
-    static WAIT_FIBER: Cell<Option<Fiber>> = Cell::new(None);
-
-    /// Used to track which fiber was previously running after switching active fibers.
-    ///
-    /// The scheduler needs to track which fibers are active as it cannot try to make a fiber
-    /// active on one thread if it's already active on another. It's not until a thread starts
-    /// executing a fiber that it becomes safe to reuse or resume the previous fiber.
-    static PREV_FIBER: Cell<Option<Fiber>> = Cell::new(None);
+/// Represents the result of a computation that may finish at some point in the future.
+#[derive(Debug)]
+pub struct Async<T> {
+    work: WorkId,
+    receiver: Receiver<T>,
 }
 
+impl<T> Async<T> {
+    /// Suspend the current fiber until the async operation finishes.
+    pub fn await(self) -> T {
+        let Async { work, receiver } = self;
+
+        // If work has already finished then don't bother suspending the current fiber.
+        if let Ok(result) = receiver.try_recv() {
+            return result;
+        }
+
+        Scheduler::with(|scheduler| { scheduler.add_dependency(work); });
+
+        // Suspend the current thread and schedule it to be resumed once `work` completes.
+        suspend();
+
+        receiver.try_recv().expect("Failed to receive result of async computation")
+    }
+
+    pub fn work_id(&self) -> WorkId {
+        self.work
+    }
+}
+
+/// A shareable reference to a work unit, counterpart to `Async<T>`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct WorkId(usize);
+
+impl WorkId {
+    /// Suspends the current fiber until this work unit has completed.
+    ///
+    /// If the work unit has already finished then `await()` will return immediately.
+    pub fn await(self) {
+        if Scheduler::with(|scheduler| scheduler.running_work.contains(&self)) {
+            Scheduler::with(|scheduler| scheduler.add_dependency(self));
+            suspend();
+        }
+    }
+}
+
+/// Initializes a newly-spawned worker thread.
+///
+/// Prepares the worker thread by initializing it for Fiber usage.
+// TODO: This should probably only be public within the crate. Only the engine should be using this,
+// and only at startup, we probably don't want user code to be spawning threads anyway.
 pub fn init_thread() {
-    // Setup this thread for running fibers and create an initial fiber for it. This will become
-    // the wait fiber for this thread.
-    let fiber = fiber::init();
-    // LOG: println!("initialized thread with fiber: {:?}", fiber);
+    // Make sure the scheduler is initialized before first use.
+    Scheduler::with(|_| {});
 
-    let fiber_proc = move || {
-        // The current fiber has been resumed. Let the scheduler know that the previous fiber is no
-        // longer active.
-        let prev = PREV_FIBER.with(|prev| prev.get());
-        Scheduler::with(|scheduler| {
-            scheduler.handle_resumed(Fiber::current().unwrap(), prev);
-        });
-
-        loop {
-            wait_for_work();
-        }
-    };
-
-    let wait = Fiber::new(
-        DEFAULT_STACK_SIZE,
-        fiber_proc,
-    );
-
-    // LOG: println!("Created wait fiber for thread: {:?}", wait);
-
-    WAIT_FIBER.with(|wait_fiber| wait_fiber.set(Some(wait)));
-    Scheduler::with(|scheduler| { scheduler.handle_resumed(fiber, None); });
+    // Manually convert current thread into a fiber because reasons.
+    let current = fiber::init();
 }
 
+// TODO: This should probably only be public within the crate. Only the engine should be using this,
+// and only at startup, we probably don't want user code to be spawning threads anyway.
 pub fn run_wait_fiber() {
+    // Make sure the scheduler is initialized before first use.
+    Scheduler::with(|_| {});
+
     // Setup this thread for running fibers and create an initial fiber for it. This will become
     // the wait fiber for this thread.
-    let fiber = fiber::init();
-    // LOG: println!("initialized thread with wait fiber: {:?}", fiber);
+    fiber::init();
 
-    WAIT_FIBER.with(|wait_fiber| { wait_fiber.set(Some(fiber)); });
-    Scheduler::with(|scheduler| { scheduler.handle_resumed(fiber, None); });
+    fiber_routine();
+}
 
+pub fn start<F, T>(func: F) -> Async<T>
+    where
+    F: FnOnce() -> T,
+    F: 'static + Send,
+    T: 'static + Send,
+{
+    // Create the channel that'll be used to send the result of the operation to the `Async` object.
+    let (sender, receiver) = mpsc::sync_channel(1);
+
+    let work_id = WorkId(WORK_COUNTER.fetch_add(1, Ordering::Relaxed));
+
+    let work_proc = Box::new(move || {
+        let result = func();
+        sender.try_send(result).expect("Failed to send async result");
+    });
+
+    Scheduler::with(move |scheduler| scheduler.schedule_work(Work {
+        func: work_proc,
+        id: work_id,
+    }));
+
+    Async {
+        work: work_id,
+        receiver: receiver,
+    }
+}
+
+/// Suspends the current fiber and makes the wait fiber active.
+///
+/// Generally you shouldn't need to call this directly, but if you have one piece of code that
+/// runs synchronously for a long time you can use `suspend()` to yield time to other work.
+pub fn suspend() {
+    let next_fiber = Scheduler::with(|scheduler| scheduler.next_fiber());
+
+    let suspended = unsafe { next_fiber.resume() };
+
+    Scheduler::with(move |scheduler| scheduler.handle_suspended(suspended));
+}
+
+fn fiber_routine() {
     loop {
-        wait_for_work();
-    }
-}
+        match Scheduler::with(|scheduler| scheduler.next()) {
+            Some(NextWork::Work(Work { func, id })) => {
+                Scheduler::with(|scheduler| scheduler.start_work(id));
+                func();
+                Scheduler::with(|scheduler| scheduler.finish_work(id));
+            },
+            Some(NextWork::Fiber(fiber)) => {
+                println!("resuming next ready fiber: {:?}", fiber);
+                let suspended = unsafe { fiber.resume() };
+                Scheduler::with(move |scheduler| scheduler.handle_suspended(suspended));
+            },
+            None => {
+                // If there's no new work and no fibers ready to run then we want to block the
+                // thread until some becomes available.
+                let mutex = INSTANCE.borrow();
+                let condvar = CONDVAR.borrow();
 
-/// Creates a fiber from the given function.
-///
-/// # Unsafety
-///
-/// `out` must live long enough that the fiber can still write its result when it completes, or it
-/// will write to invalid memory. Unlike `await()` this function doens't suspend the current fiber
-/// so any code calling `create_fiber()` must ensure that it suspends the current fiber until `func` has
-/// had a chance to write to `out`.
-///
-/// Working with fibers directly is inherently unsafe as making a fiber active at the wrong time
-/// could leave an operation in an undefined state.
-pub unsafe fn create_fiber<F, I, E>(
-    func: F,
-    out: &mut Option<Result<I, E>>,
-) -> Fiber
-    where
-    F: FnOnce() -> Result<I, E>,
-    F: 'static + Send,
-    I: 'static + Send,
-    E: 'static + Send,
-{
-    // `*mut _` isn't `Send` (for good reason), so we need to assure the compiler that we know what
-    // we're doing. `Unique` specifies that a `*mut _` isn't shared, so it's safe(-er) to send
-    // between threads.
-    let mut out_ptr = Unique::new(out as *mut _);
-
-    let fiber_proc = move || {
-        let prev = PREV_FIBER.with(|prev| prev.get());
-        Scheduler::with(|scheduler| {
-            scheduler.handle_resumed(Fiber::current().unwrap(), prev);
-        });
-
-        // Run the future, writing the result to `out`.
-        *out_ptr.get_mut() = Some(func());
-
-        // Finish the current fiber and run the next one.
-        finish();
-    };
-
-    let fiber = Fiber::new(
-        DEFAULT_STACK_SIZE,
-        fiber_proc,
-    );
-
-    // LOG: println!("created fiber: {:?}", fiber);
-
-    fiber
-}
-
-/// Schedules the provided future without suspending the current fiber.
-pub fn run<F>(func: F) -> Fiber
-    where
-    F: FnOnce(),
-    F: 'static + Send,
-{
-    let fiber_proc = move || {
-        let prev = PREV_FIBER.with(|prev| prev.get());
-        Scheduler::with(|scheduler| {
-            scheduler.handle_resumed(Fiber::current().unwrap(), prev);
-        });
-
-        // Run the future, writing the result to `out`.
-        func();
-
-        // Finish the current fiber and run the next one.
-        unsafe { finish(); }
-    };
-
-    let fiber = Fiber::new(
-        DEFAULT_STACK_SIZE,
-        fiber_proc,
-    );
-
-    // LOG: println!("created and starting fiber: {:?}", fiber);
-
-    unsafe { start(fiber); }
-
-    fiber
-}
-
-/// Suspends the current fiber until the specified future completes.
-///
-/// The result of the provided fiber will be written to `out`. It's generally not advisable to
-/// call `await()` directly, instead use the `await!()` macro which returns the result directly.
-// TODO: What happens if `func` crashes or never completes?
-pub fn await<F, I, E>(func: F, out: &mut Option<Result<I, E>>)
-    where
-    F: FnOnce() -> Result<I, E>,
-    F: 'static + Send,
-    I: 'static + Send,
-    E: 'static + Send,
-{
-    unsafe {
-        let fiber = create_fiber(func, out);
-        wait_for(fiber);
-    }
-}
-
-/// Suspends the current fiber until all fibers in `fibers` complete.
-///
-/// It's generally not advisable to call `await_all()` directly, instead use the `await_all!()`
-/// macro, which handles the work of converting futures into fibers and returning their results
-/// after.
-pub unsafe fn await_all<I: IntoIterator<Item = Fiber> + Clone>(fibers: I) {
-    wait_for_all(fibers);
-}
-
-/// Schedules `fiber` without suspending the current fiber.
-pub unsafe fn start(fiber: Fiber) {
-    Scheduler::with(move |scheduler| {
-        scheduler.schedule(fiber);
-    });
-}
-
-/// Suspends the current fiber until `fiber` completes.
-pub unsafe fn wait_for(fiber: Fiber) {
-    Scheduler::with(move |scheduler| {
-        let current = Fiber::current().expect("Unable to get current fiber");
-        scheduler.wait_for(current, fiber);
-    });
-
-    wait_for_work();
-}
-
-/// Suspends the current fiber until all fibers in `fibers` complete.
-pub unsafe fn wait_for_all<I>(fibers: I)
-    where
-    I: IntoIterator<Item = Fiber>,
-    I: Clone,
-{
-    Scheduler::with(move |scheduler| {
-        let current = Fiber::current().expect("Unable to get current fiber");
-        scheduler.wait_for_all(current, fibers);
-    });
-
-    wait_for_work();
-}
-
-/// Ends the current fiber and begins the next ready one.
-pub unsafe fn finish() {
-    Scheduler::with(|scheduler| {
-        let current = Fiber::current().expect("Unable to get current fiber");
-        scheduler.finish(current);
-    });
-
-    wait_for_work();
-}
-
-/// Suspends the current thread until the scheduler has more work available.
-pub fn wait_for_work() {
-    // Retrieve the wait fiber for this thread.
-    let wait_fiber = WAIT_FIBER.with(|wait| wait.get()).unwrap();
-    let current = Fiber::current().unwrap();
-
-    // Update the thread-local cache so that the next fiber can destroy this fiber or mark it as
-    // suspended as necessary.
-    PREV_FIBER.with(|prev| { prev.set(Fiber::current()); });
-
-    // If we're on the the wait fiber, we are good to wait, using `CONDVAR` until work is
-    // available. If we're on one of the normal work fibers then we can switch the next available
-    // work unit, but if there isn't one then we need to immediately switch to the wait fiber so
-    // that the current fiber can properly suspend.
-    let next = if current == wait_fiber {
-        let mut next;
-        unsafe {
-            let mutex = &*INSTANCE;
-            let condvar = &*CONDVAR;
-
-            let mut scheduler = mutex.lock().expect("Scheduler mutex was poisoned");
-            next = scheduler.next();
-            while next.is_none() {
-                scheduler =
-                    condvar
-                    .wait(scheduler)
+                let _ = condvar
+                    .wait(mutex.lock().expect("Scheduler mutex was poisoned"))
                     .expect("Scheduler mutex was poisoned");
-                next = scheduler.next();
-            }
+            },
         }
-
-        next.unwrap()
-    } else {
-        if let Some(next) = Scheduler::with(|scheduler| scheduler.next()) {
-            next
-        } else {
-            wait_fiber
-        }
-    };
-
-    // LOG: println!("{:?} => {:?}", current, next);
-    debug_assert!(next != current, "next {:?} cannot be current {:?}", next, current);
-    next.make_active();
-
-    // =============================== CROSSING THREAD LINES =============================== //
-    // We are now potentially on a different thread, BE WARNED!
-
-
-
-    // The current fiber has been resumed. Let the scheduler know that the previous fiber is no
-    // longer active.
-    let prev = PREV_FIBER.with(|prev| prev.get());
-    Scheduler::with(|scheduler| {
-        scheduler.handle_resumed(current, prev);
-    });
+    }
 }
 
-pub struct Scheduler {
-    running: HashSet<Fiber>,
+struct Work {
+    func: Box<FnBox()>,
+    id: WorkId,
+}
+
+impl Debug for Work {
+    fn fmt(&self, formatter: &mut Formatter) -> Result<(), fmt::Error> {
+        write!(formatter, "Work {{ id: {:?} }}", self.id)
+    }
+}
+
+enum NextWork {
+    Work(Work),
+    Fiber(Fiber),
+}
+
+struct Scheduler {
+    /// Work units that are currently in progress.
+    running_work: HashSet<WorkId>,
+
+    work_map: HashMap<FiberId, WorkId>,
+
+    /// New units of work that haven't been started on a fiber yet.
+    ///
+    /// These are ready to be made active at any time.
+    new_work: VecDeque<Work>,
 
     /// Fibers that have no pending dependencies.
     ///
     /// These are ready to be made active at any time.
-    // TODO: This should be a queue, right?
-    ready: Vec<Fiber>,
+    ready_fibers: VecDeque<Fiber>,
 
     /// A map specifying which pending fibers depend on which others.
     ///
-    /// Once all of a fiber's dependencies complete it should be moved to `ready`.
-    pending: HashMap<Fiber, HashSet<Fiber>>,
+    /// Once all of a fiber's dependencies complete it should be moved to `new_work`.
+    dependencies: HashMap<FiberId, (Option<Fiber>, HashSet<WorkId>)>,
 
-    finished: HashSet<Fiber>
+    // TODO: Should we distinguise between "finished" and "ready" fibers? My intuition is that we'd
+    // want to give fibers that actively have work CPU time before we resume fibers that would be
+    // pulling new work, but maybe not? If we threw them all into one queue I guess the worst case
+    // scenario would be there's no work left, a bunch of empty fibers, and only a few fibers with
+    // active work. In which case we might have to cycle through a bunch of fibers before we can
+    // start doing actual work.
+    finished: VecDeque<Fiber>,
+
+    finished_work: HashSet<WorkId>,
 }
+
+unsafe impl Send for Scheduler {}
 
 impl Scheduler {
     /// Provides safe access to the scheduler instance.
@@ -318,113 +225,148 @@ impl Scheduler {
     {
         INSTANCE_INIT.call_once(|| {
             let scheduler = Scheduler {
-                running: HashSet::new(),
-                ready: Vec::new(),
-                pending: HashMap::new(),
-                finished: HashSet::new(),
+                running_work: HashSet::new(),
+                work_map: HashMap::new(),
+                new_work: VecDeque::new(),
+                ready_fibers: VecDeque::new(),
+                dependencies: HashMap::new(),
+                finished: VecDeque::new(),
+                finished_work: HashSet::new(),
             };
 
-            let boxed_scheduler = Box::new(Mutex::new(scheduler));
-            unsafe { INSTANCE = Box::into_raw(boxed_scheduler); }
-
-            let boxed_condvar = Box::new(Condvar::new());
-            unsafe { CONDVAR = Box::into_raw(boxed_condvar); }
+            INSTANCE.init(Mutex::new(scheduler));
+            CONDVAR.init(Condvar::new());
         });
 
-        let mutex = unsafe {
-            assert!(!INSTANCE.is_null(), "Scheduler instance is null");
-            &*INSTANCE
-        };
-        let mut guard = mutex.lock().expect("Scheduler mutex was poisoned");
+        let instance = INSTANCE.borrow();
+
+        let mut guard = instance.lock().expect("Scheduler mutex was poisoned");
         func(&mut *guard)
     }
 
-    /// Schedules `fiber` without any dependencies;
-    fn schedule(&mut self, fiber: Fiber) {
-        debug_assert!(!self.running.contains(&fiber), "Can't schedule fiber {:?} which is already running", fiber);
-
-        self.ready.push(fiber);
-
-        let condvar = unsafe { &*CONDVAR };
-        condvar.notify_one();
+    /// Add a new unit of work to the pending queue.
+    fn schedule_work(&mut self, work: Work) {
+        self.new_work.push_back(work);
+        CONDVAR.borrow().notify_one();
     }
 
-    /// Schedules `dependency` and suspends `pending` until it finishes.
-    fn wait_for(&mut self, pending: Fiber, dependency: Fiber) {
-        self.wait_for_all(pending, [dependency].iter().cloned());
+    /// Adds `dependency` as a dependency of the currently running fiber.
+    fn add_dependency(&mut self, dependency: WorkId) {
+        self.add_dependencies([dependency].iter().cloned());
     }
 
-    /// Schedules the current fiber as pending, with dependencies on `fibers`.
-    fn wait_for_all<I>(&mut self, pending: Fiber, dependencies: I)
+    /// Adds all work items in `dependencies` as dependencies of the currently running fiber.
+    fn add_dependencies<I>(&mut self, dependencies: I)
         where
-        I: IntoIterator<Item = Fiber>,
-        I: Clone,
+        I: IntoIterator<Item = WorkId>,
     {
-        debug_assert!(!self.pending.contains_key(&pending), "Marking a fiber as pending but it is already pending: {:?}", pending);
+        let pending = fiber::current().unwrap();
+        debug_assert!(
+            !self.dependencies.contains_key(&pending),
+            "Marking a fiber as pending but it is already pending: {:?}",
+            pending,
+        );
 
         // Add `pending` to set of pending fibers and list `dependencies` as dependencies.
-        let dependencies_set = HashSet::from_iter(dependencies.clone());
-        self.pending.insert(pending, dependencies_set);
+        let &mut (_, ref mut dependencies_set) =
+            self.dependencies
+            .entry(pending)
+            .or_insert((None, HashSet::new()));
 
         // Add `fibers` to the list of ready fibers.
         for dependency in dependencies {
-            // LOG: println!("making {:?} a dependency of {:?}", dependency, pending);
-            if !self.running.contains(&dependency) {
-                self.schedule(dependency);
-            }
+            dependencies_set.insert(dependency);
         }
+
+        println!("  Dependencies for {:?}: {:?}", pending, dependencies_set);
     }
 
-    /// Removes the specified fiber from the scheduler and updates dependents.
-    fn finish(&mut self, fiber: Fiber) {
-        // LOG: println!("finishing: {:?}", fiber);
+    fn start_work(&mut self, new_work: WorkId) {
+        let current = fiber::current().unwrap();
+        self.running_work.insert(new_work);
+        self.work_map.insert(current, new_work);
+    }
 
-        // Remove `fiber` as a dependency from other fibers, tracking any pending fibers that no
-        // longer have any dependencies.
-        let mut ready: Vec<Fiber> = Vec::new();
-        for (pending, ref mut dependencies) in &mut self.pending {
-            if dependencies.remove(&fiber) {
-                // LOG: println!("removed {:?} as a dependency for {:?}", fiber, pending);
+    /// Removes the specified unit of work from the scheduler, updating any dependent work.
+    fn finish_work(&mut self, finished_work: WorkId) {
+
+        // Iterate over all suspended work units, removing `finished_work` as a dependency where
+        // necessary. If any of the work units no longer have dependencies then
+        let mut ready = Vec::new();
+        for (&pending_fiber, &mut (_, ref mut dependencies)) in &mut self.dependencies {
+            if dependencies.remove(&finished_work) {
             }
             if dependencies.len() == 0 {
-                // LOG: println!("{:?} has no dependencies, moving it to ready queue", pending);
-                ready.push(*pending);
+                ready.push(pending_fiber);
             }
         }
 
-        // Remove any ready fibers from the pending set and add them to the ready set.
-        for ready in ready {
-            self.pending.remove(&ready);
-            self.schedule(ready);
+        for ready_work in ready {
+            let (maybe_fiber, _) = self.dependencies.remove(&ready_work).unwrap();
+            if let Some(ready_fiber) = maybe_fiber {
+                self.ready_fibers.push_back(ready_fiber);
+                CONDVAR.borrow().notify_one();
+            }
         }
 
-        // Mark the fiber as complete. The actual work of updating dependencies won't happen until
-        // the fiber has suspended, in `handle_suspended()`.
-        self.finished.insert(fiber);
+        let fiber = fiber::current().unwrap();
+        assert!(self.running_work.remove(&finished_work), "{:?} wasn't in running work set when it finished", finished_work);
+        assert!(self.work_map.remove(&fiber).is_some(), "{:?} didn't have {:?} associated in the work map", fiber, finished_work);
+
+        self.finished_work.insert(finished_work);
     }
 
     /// Performs the necessary bookkeeping when a fiber becomes active.
-    fn handle_resumed(&mut self, resumed: Fiber, prev: Option<Fiber>) {
-        // LOG: println!("resumed fiber: {:?}, prev: {:?}", resumed, prev);
-
-        // Mark `resumed` as now being actively running.
-        let was_not_running = self.running.insert(resumed.clone());
-        debug_assert!(was_not_running, "Added {:?} as running but it was already running", resumed);
-
-        // Handle `prev` if there was a previous fiber.
-        if let Some(prev) = prev {
-            let was_running = self.running.remove(&prev);
-            debug_assert!(was_running, "Suspended a fiber that wasn't running: {:?}", prev);
-
-            if self.finished.remove(&prev) {
-                // TODO: Recycle fiber somehow.
-            }
+    fn handle_suspended(&mut self, suspended: Fiber) {
+        // If the suspended fiber has dependencies then update the dependencies map with the
+        // actual fiber, that way when its dependencies complete it can be resumed. Otherwise, the
+        // fiber is done and ready to take on more work. This means that we need to make sure that
+        // we always call `add_dependencies()` before suspending a fiber, otherwise a fiber could
+        // be marked as done before it's ready.
+        if let Some(&mut (ref mut none_fiber, ref dependencies)) = self.dependencies.get_mut(&suspended.id()) {
+            assert!(none_fiber.is_none(), "Dependencies map already had a fiber assicated with fiber ID");
+            mem::replace(none_fiber, Some(suspended));
+        } else if self.work_map.contains_key(&suspended.id()) {
+            self.ready_fibers.push_back(suspended);
+        } else {
+            self.finished.push_back(suspended);
         }
     }
 
-    /// Gets the next ready fiber and makes it active on the current thread.
-    fn next(&mut self) -> Option<Fiber> {
-        let popped = self.ready.pop();
-        popped
+    /// Gets the next ready fiber, or creates a new one if necessary.
+    fn next_fiber(&mut self) -> Fiber {
+        self.ready_fibers.pop_front()
+            .map(|fiber| { println!("next ready fiber: {:?}", fiber); fiber })
+
+            .or_else(|| self.finished.pop_front())
+            .map(|fiber| { println!("resuming a finished fiber: {:?}", fiber); fiber })
+
+            .unwrap_or_else(|| {
+                let fiber_proc = move |prev| {
+                    // The current fiber has been resumed. Let the scheduler know that the previous fiber is no
+                    // longer active.
+                    Scheduler::with(|scheduler| scheduler.handle_suspended(prev));
+
+                    fiber_routine();
+                };
+
+                let fiber = Fiber::new(DEFAULT_STACK_SIZE, fiber_proc);
+                fiber
+            })
+    }
+
+    /// Gets the next available work for a thread, either a new unit of work or a ready fiber.
+    ///
+    /// Prioritizes new work over pending fibers, and will only return ready fibers that already
+    /// have work. To get *any* next fiber, including ones without active work or a new one if no
+    /// existing fibers are available, use `next_fiber()`.
+    fn next(&mut self) -> Option<NextWork> {
+        println!("new work: {:?}", self.new_work);
+        println!("ready fibers: {:?}", self.ready_fibers);
+        if let Some(work) = self.new_work.pop_front() {
+            Some(NextWork::Work(work))
+        } else {
+            self.ready_fibers.pop_front().map(|fiber| NextWork::Fiber(fiber))
+        }
     }
 }

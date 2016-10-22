@@ -1,4 +1,5 @@
-use async::engine::{self, RenderMessage};
+use async::engine::{self, EngineMessage};
+use async::scheduler::{self, Async};
 use polygon::geometry::mesh::{BuildMeshError, MeshBuilder};
 use polygon::math::Vector2;
 use obj::{self, Obj};
@@ -15,23 +16,38 @@ static MESH_ID_COUNTER: AtomicUsize = AtomicUsize::new(1);
 static MATERIAL_ID_COUNTER: AtomicUsize = AtomicUsize::new(1);
 
 /// Load all data from the specified file as an array of bytes.
-pub fn load_file_bytes<P: AsRef<Path>>(path: P) -> Result<Vec<u8>, io::Error> {
-    let mut file = File::open(path)?;
+pub fn load_file_bytes<P>(path: P) -> Async<Result<Vec<u8>, io::Error>>
+    where
+    P: 'static,
+    P: AsRef<Path> + Send
+{
+    scheduler::start(move || {
 
-    let mut bytes = if let Ok(metadata) = file.metadata() {
-        Vec::with_capacity(metadata.len() as usize)
-    } else {
-        Vec::new()
-    };
+        let mut file = File::open(path)?;
 
-    file.read_to_end(&mut bytes)?;
-    Ok(bytes)
+        let mut bytes = if let Ok(metadata) = file.metadata() {
+            Vec::with_capacity(metadata.len() as usize)
+        } else {
+            Vec::new()
+        };
+
+        file.read_to_end(&mut bytes)?;
+
+        Ok(bytes)
+    })
 }
 
 /// Load all data from the specified file as a `String`.
-pub fn load_file_text<P: AsRef<Path>>(path: P) -> Result<String, LoadTextError> {
-    let bytes = load_file_bytes(path)?;
-    String::from_utf8(bytes).map_err(|utf8_err| utf8_err.into())
+pub fn load_file_text<P>(path: P) -> Async<Result<String, LoadTextError>>
+    where
+    P: 'static,
+    P: AsRef<Path> + Send
+{
+    scheduler::start(move || {
+        let bytes = load_file_bytes(path).await()?;
+        let result = String::from_utf8(bytes).map_err(|utf8_err| utf8_err.into());
+        result
+    })
 }
 
 #[derive(Debug)]
@@ -56,71 +72,73 @@ impl From<FromUtf8Error> for LoadTextError {
 ///
 /// Loads a mesh data from the specified path and performs any necessary processing to prepare it
 /// to be used in rendering.
-pub fn load_mesh<P: AsRef<Path>>(path: P) -> Result<Mesh, LoadMeshError> {
-    let path = path.as_ref();
+pub fn load_mesh<P>(path: P) -> Async<Result<Mesh, LoadMeshError>>
+    where
+    P: 'static,
+    P: AsRef<Path> + Send + Into<String>
+{
+    scheduler::start(move || {
+        let extension: Option<String> = path.as_ref().extension().map(|ext| ext.to_string_lossy().into_owned());
 
-    // Load mesh source and parse mesh data based on file type.
-    let mesh_data = match path.extension() {
-        Some(ext) if ext == "dae" => {
-            let text = load_file_text(path)?;
-            collada::load_resources(text)?
-        },
-        Some(ext) if ext == "obj" => {
-            let text = load_file_text(path)?;
+        // Load mesh source and parse mesh data based on file type.
+        let mesh_data = match extension {
+            Some(ref ext) if ext == "dae" => {
+                let text = load_file_text(path).await()?;
+                collada::load_resources(text)?
+            },
+            Some(ref ext) if ext == "obj" => {
+                let text = load_file_text(path).await()?;
 
-            // Load mesh file and normalize indices for OpenGL.
-            let obj = Obj::from_str(&*text)?;
+                // Load mesh file and normalize indices for OpenGL.
+                let obj = Obj::from_str(&*text)?;
 
-            // Gather vertex data so that OpenGL can use them.
-            let mut positions = Vec::new();
-            let mut normals = Vec::new();
-            let mut texcoords = Vec::new();
+                // Gather vertex data so that OpenGL can use them.
+                let mut positions = Vec::new();
+                let mut normals = Vec::new();
+                let mut texcoords = Vec::new();
 
-            // Iterate over each of the faces in the mesh.
-            for face in obj.faces() {
-                // Iterate over each of the vertices in the face to combine the position and normal into
-                // a single vertex.
-                for (position, maybe_tex, maybe_normal) in face {
-                    positions.push(position.into());
+                // Iterate over each of the faces in the mesh.
+                for face in obj.faces() {
+                    // Iterate over each of the vertices in the face to combine the position and normal into
+                    // a single vertex.
+                    for (position, maybe_tex, maybe_normal) in face {
+                        positions.push(position.into());
 
-                    // NOTE: The w texcoord is provided according to the bitmap spec but we don't need to
-                    // use it here, so we simply ignore it.
-                    if let Some((u, v, _w)) = maybe_tex {
-                        texcoords.push(Vector2::new(u, v));
-                    }
+                        // NOTE: The w texcoord is provided according to the bitmap spec but we don't need to
+                        // use it here, so we simply ignore it.
+                        if let Some((u, v, _w)) = maybe_tex {
+                            texcoords.push(Vector2::new(u, v));
+                        }
 
-                    if let Some(normal) = maybe_normal {
-                        normals.push(normal.into());
+                        if let Some(normal) = maybe_normal {
+                            normals.push(normal.into());
+                        }
                     }
                 }
-            }
 
-            // Create indices list.
-            let indices_count = obj.position_indices().len() as u32 * 3;
-            let indices: Vec<u32> = (0..indices_count).collect();
+                // Create indices list.
+                let indices_count = obj.position_indices().len() as u32 * 3;
+                let indices: Vec<u32> = (0..indices_count).collect();
 
-            MeshBuilder::new()
-                .set_position_data(&*positions)
-                .set_normal_data(&*normals)
-                .set_texcoord_data(&*texcoords)
-                .set_indices(&*indices)
-                .build()?
-        },
-        _ => {
-            let path = path
-                .as_os_str()
-                .to_string_lossy()
-                .into_owned();
-            return Err(LoadMeshError::UnsupportedFileType(path));
-        },
-    };
+                MeshBuilder::new()
+                    .set_position_data(&*positions)
+                    .set_normal_data(&*normals)
+                    .set_texcoord_data(&*texcoords)
+                    .set_indices(&*indices)
+                    .build()?
+            },
+            _ => {
+                return Err(LoadMeshError::UnsupportedFileType(path.into()));
+            },
+        };
 
-    // Create handle for mesh data and asynchronously register it with the renderer.
-    let mesh_id = MESH_ID_COUNTER.fetch_add(1, Ordering::Relaxed);
+        // Create handle for mesh data and asynchronously register it with the renderer.
+        let mesh_id = MESH_ID_COUNTER.fetch_add(1, Ordering::Relaxed);
 
-    engine::send_render_message(RenderMessage::Mesh(mesh_id, mesh_data));
+        engine::send_message(EngineMessage::Mesh(mesh_id, mesh_data));
 
-    Ok(Mesh(mesh_id))
+        Ok(Mesh(mesh_id))
+    })
 }
 
 pub type MeshId = usize;
@@ -174,16 +192,22 @@ impl From<obj::Error> for LoadMeshError {
     }
 }
 
-pub fn load_material<P: AsRef<Path>>(path: P) -> Result<Material, LoadMaterialError> {
-    // Load and parse material data.
-    let text = load_file_text(path)?;
-    let material_source = ::polygon::material::MaterialSource::from_str(text)?;
+pub fn load_material<P>(path: P) -> Async<Result<Material, LoadMaterialError>>
+    where
+    P: 'static,
+    P: AsRef<Path> + Send
+{
+    scheduler::start(move || {
+        // Load and parse material data.
+        let text = load_file_text(path).await()?;
+        let material_source = ::polygon::material::MaterialSource::from_str(text)?;
 
-    let material_id = MATERIAL_ID_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let material_id = MATERIAL_ID_COUNTER.fetch_add(1, Ordering::Relaxed);
 
-    engine::send_render_message(RenderMessage::Material(material_id, material_source));
+        engine::send_message(EngineMessage::Material(material_id, material_source));
 
-    Ok(Material(material_id))
+        Ok(Material(material_id))
+    })
 }
 
 pub type MaterialId = usize;
