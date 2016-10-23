@@ -10,6 +10,7 @@ use cell_extras::AtomicInitCell;
 use std::boxed::FnBox;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt::{self, Debug, Formatter};
+use std::marker::PhantomData;
 use std::mem;
 use std::sync::{Condvar, Mutex, Once, ONCE_INIT};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -24,26 +25,17 @@ static WORK_COUNTER: AtomicUsize = AtomicUsize::new(1);
 
 /// Represents the result of a computation that may finish at some point in the future.
 #[derive(Debug)]
-pub struct Async<T> {
+pub struct Async<'a, T> {
     work: WorkId,
     receiver: Receiver<T>,
+    _phantom: PhantomData<&'a FnMut()>,
 }
 
-impl<T> Async<T> {
+impl<'a, T> Async<'a, T> {
     /// Suspend the current fiber until the async operation finishes.
     pub fn await(self) -> T {
-        let Async { work, receiver } = self;
-
-        // If work has already finished then don't bother suspending the current fiber.
-        if let Ok(result) = receiver.try_recv() {
-            return result;
-        }
-
-        Scheduler::with(|scheduler| { scheduler.add_dependency(work); });
-
-        // Suspend the current thread and schedule it to be resumed once `work` completes.
-        suspend();
-
+        let Async { work, receiver, .. } = self;
+        work.await();
         receiver.try_recv().expect("Failed to receive result of async computation")
     }
 
@@ -61,7 +53,7 @@ impl WorkId {
     ///
     /// If the work unit has already finished then `await()` will return immediately.
     pub fn await(self) {
-        if Scheduler::with(|scheduler| scheduler.running_work.contains(&self)) {
+        if Scheduler::with(|scheduler| !scheduler.finished_work.contains(&self)) {
             Scheduler::with(|scheduler| scheduler.add_dependency(self));
             suspend();
         }
@@ -78,7 +70,7 @@ pub fn init_thread() {
     Scheduler::with(|_| {});
 
     // Manually convert current thread into a fiber because reasons.
-    let current = fiber::init();
+    fiber::init();
 }
 
 // TODO: This should probably only be public within the crate. Only the engine should be using this,
@@ -94,21 +86,37 @@ pub fn run_wait_fiber() {
     fiber_routine();
 }
 
-pub fn start<F, T>(func: F) -> Async<T>
+pub fn start<'a, F, T>(func: F) -> Async<'a, T>
     where
     F: FnOnce() -> T,
-    F: 'static + Send,
-    T: 'static + Send,
+    F: 'a + Send,
+    T: 'a + Send,
 {
+    // Normally we can't box a closure with a non 'static lifetime because it could outlive its
+    // borrowed data. In this case the lifetime parameter on the returned `Async` ensures that
+    // the closure can't outlive the borrowed data, so we use this evil magic to convince the
+    // compiler to allow us to box the closure.
+    unsafe fn erase_lifetime<'a, F>(func: F) -> Box<FnBox()>
+        where
+        F: FnOnce(),
+        F: 'a + Send,
+    {
+        let boxed_proc = Box::new(func);
+        let proc_ptr = Box::into_raw(boxed_proc) as *mut FnBox();
+        Box::from_raw(::std::mem::transmute(proc_ptr))
+    }
+
     // Create the channel that'll be used to send the result of the operation to the `Async` object.
     let (sender, receiver) = mpsc::sync_channel(1);
 
     let work_id = WorkId(WORK_COUNTER.fetch_add(1, Ordering::Relaxed));
 
-    let work_proc = Box::new(move || {
-        let result = func();
-        sender.try_send(result).expect("Failed to send async result");
-    });
+    let work_proc = unsafe {
+        erase_lifetime(move || {
+            let result = func();
+            sender.try_send(result).expect("Failed to send async result");
+        })
+    };
 
     Scheduler::with(move |scheduler| scheduler.schedule_work(Work {
         func: work_proc,
@@ -118,6 +126,7 @@ pub fn start<F, T>(func: F) -> Async<T>
     Async {
         work: work_id,
         receiver: receiver,
+        _phantom: PhantomData,
     }
 }
 
@@ -133,7 +142,7 @@ pub fn suspend() {
     Scheduler::with(move |scheduler| scheduler.handle_suspended(suspended));
 }
 
-fn fiber_routine() {
+fn fiber_routine() -> ! {
     loop {
         match Scheduler::with(|scheduler| scheduler.next()) {
             Some(NextWork::Work(Work { func, id })) => {
@@ -142,7 +151,6 @@ fn fiber_routine() {
                 Scheduler::with(|scheduler| scheduler.finish_work(id));
             },
             Some(NextWork::Fiber(fiber)) => {
-                println!("resuming next ready fiber: {:?}", fiber);
                 let suspended = unsafe { fiber.resume() };
                 Scheduler::with(move |scheduler| scheduler.handle_suspended(suspended));
             },
@@ -261,6 +269,7 @@ impl Scheduler {
         I: IntoIterator<Item = WorkId>,
     {
         let pending = fiber::current().unwrap();
+
         debug_assert!(
             !self.dependencies.contains_key(&pending),
             "Marking a fiber as pending but it is already pending: {:?}",
@@ -277,8 +286,6 @@ impl Scheduler {
         for dependency in dependencies {
             dependencies_set.insert(dependency);
         }
-
-        println!("  Dependencies for {:?}: {:?}", pending, dependencies_set);
     }
 
     fn start_work(&mut self, new_work: WorkId) {
@@ -289,13 +296,11 @@ impl Scheduler {
 
     /// Removes the specified unit of work from the scheduler, updating any dependent work.
     fn finish_work(&mut self, finished_work: WorkId) {
-
         // Iterate over all suspended work units, removing `finished_work` as a dependency where
         // necessary. If any of the work units no longer have dependencies then
         let mut ready = Vec::new();
         for (&pending_fiber, &mut (_, ref mut dependencies)) in &mut self.dependencies {
-            if dependencies.remove(&finished_work) {
-            }
+            dependencies.remove(&finished_work);
             if dependencies.len() == 0 {
                 ready.push(pending_fiber);
             }
@@ -323,8 +328,8 @@ impl Scheduler {
         // fiber is done and ready to take on more work. This means that we need to make sure that
         // we always call `add_dependencies()` before suspending a fiber, otherwise a fiber could
         // be marked as done before it's ready.
-        if let Some(&mut (ref mut none_fiber, ref dependencies)) = self.dependencies.get_mut(&suspended.id()) {
-            assert!(none_fiber.is_none(), "Dependencies map already had a fiber assicated with fiber ID");
+        if let Some(&mut (ref mut none_fiber, _)) = self.dependencies.get_mut(&suspended.id()) {
+            debug_assert!(none_fiber.is_none(), "Dependencies map already had a fiber assicated with fiber ID");
             mem::replace(none_fiber, Some(suspended));
         } else if self.work_map.contains_key(&suspended.id()) {
             self.ready_fibers.push_back(suspended);
@@ -336,22 +341,17 @@ impl Scheduler {
     /// Gets the next ready fiber, or creates a new one if necessary.
     fn next_fiber(&mut self) -> Fiber {
         self.ready_fibers.pop_front()
-            .map(|fiber| { println!("next ready fiber: {:?}", fiber); fiber })
-
             .or_else(|| self.finished.pop_front())
-            .map(|fiber| { println!("resuming a finished fiber: {:?}", fiber); fiber })
-
             .unwrap_or_else(|| {
-                let fiber_proc = move |prev| {
+                fn fiber_proc(prev: Fiber) -> ! {
                     // The current fiber has been resumed. Let the scheduler know that the previous fiber is no
                     // longer active.
                     Scheduler::with(|scheduler| scheduler.handle_suspended(prev));
 
                     fiber_routine();
-                };
+                }
 
-                let fiber = Fiber::new(DEFAULT_STACK_SIZE, fiber_proc);
-                fiber
+                Fiber::new(DEFAULT_STACK_SIZE, fiber_proc)
             })
     }
 
@@ -361,8 +361,6 @@ impl Scheduler {
     /// have work. To get *any* next fiber, including ones without active work or a new one if no
     /// existing fibers are available, use `next_fiber()`.
     fn next(&mut self) -> Option<NextWork> {
-        println!("new work: {:?}", self.new_work);
-        println!("ready fibers: {:?}", self.ready_fibers);
         if let Some(work) = self.new_work.pop_front() {
             Some(NextWork::Work(work))
         } else {

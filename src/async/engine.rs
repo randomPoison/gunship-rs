@@ -70,8 +70,6 @@ impl EngineBuilder {
                 mem::drop(barrier_clone);
 
                 message_pump.run();
-
-                println!("walking off end of window pump thread, window is going to close");
             });
 
             // Wait until window thread finishe creating the window.
@@ -122,7 +120,6 @@ impl EngineBuilder {
         func();
 
         wait_for_quit();
-
     }
 
     pub fn max_workers(&mut self, workers: usize) -> &mut EngineBuilder {
@@ -151,6 +148,7 @@ impl Drop for Engine {
     }
 }
 
+// `Engine` does handles synchronization internally, so it's meant be shared between threads.
 unsafe impl Send for Engine {}
 unsafe impl Sync for Engine {}
 
@@ -184,7 +182,7 @@ pub fn send_message(message: EngineMessage) {
     });
 }
 
-pub fn start<F>(func: F)
+pub fn run_each_frame<F>(func: F)
     where
     F: 'static,
     F: FnMut(),
@@ -213,8 +211,19 @@ fn main_loop(engine: Engine) {
         }
 
         // Kick off all game behaviors and wait for them to complete.
-        if let Some(ref func) = engine.behaviors.iter_mut().next() {
-            unimplemented!();
+        if engine.behaviors.len() > 0 {
+            let mut pending = Vec::with_capacity(engine.behaviors.len());
+
+            // Start all behaviors...
+            for behavior in engine.behaviors.iter_mut() {
+                let async = scheduler::start(&mut **behavior);
+                pending.push(async);
+            }
+
+            // ... then wait for each of them to finish.
+            for async in pending {
+                async.await();
+            }
         } else {
             // There are no per-frame behaviors. We suspend the main loop fiber anyway to give
             // other work some time on the thread. Generally this case only matters when debugging
@@ -246,9 +255,9 @@ fn main_loop(engine: Engine) {
 
                     engine.camera = Some((camera_data, camera_id));
                 },
-                EngineMessage::Material(material_id, material_source) => {
+                EngineMessage::Material(_material_id, material_source) => {
                     let material = engine.renderer.build_material(material_source).expect("TODO: Handle material compilation failure");
-                    let gpu_material = engine.renderer.register_material(material);
+                    let _gpu_material = engine.renderer.register_material(material);
 
                     // TODO: Create an association between `material_id` and `material_source`.
                 },

@@ -10,7 +10,7 @@ use gunship::math::*;
 
 fn main() {
     let mut builder = EngineBuilder::new();
-    builder.max_workers(4);
+    builder.max_workers(1);
     builder.build(|| {
         setup_scene();
     });
@@ -25,14 +25,15 @@ fn main() {
 /// 3. Create transform in scene and assign it a mesh and material.
 /// 4. Create transform in scene and assign it the camera.
 fn setup_scene() {
-    let (mesh, material) = await_all!(
-        resource::load_mesh("examples/meshes/cube.dae"),
-        resource::load_material("lib/polygon_rs/resources/materials/diffuse_flat.material"));
+    // Start both async operations but don't await either, allowing both to run concurrently.
+    let async_mesh = resource::load_mesh("lib/polygon_rs/resources/meshes/epps_head.obj");
+    // let async_material = resource::load_material("lib/polygon_rs/resources/materials/diffuse_flat.material");
 
-    let mesh = mesh.unwrap();
-    let material = material.unwrap();
+    // Await the operations, suspending this fiber until they complete.
+    let mesh = async_mesh.await().unwrap();
+    // let material = async_material.await().unwrap();
 
-    println!("received mesh: {:?}, material: {:?}", mesh, material);
+    println!("received mesh: {:?}", mesh);
 
     let mesh_transform = Transform::new();
     let mesh_renderer = MeshRenderer::new(&mesh, &mesh_transform);
@@ -41,5 +42,24 @@ fn setup_scene() {
     camera_transform.set_position(Point::new(0.0, 0.0, 10.0));
     let camera = Camera::new(&camera_transform);
 
-    engine::wait_for_quit();
+    let mut time: f32 = 0.0;
+    engine::run_each_frame(move || {
+        time += 0.01;
+        let new_pos = Point::new(
+            time.cos(),
+            time.sin(),
+            0.0,
+        );
+        mesh_transform.set_position(new_pos);
+    });
+
+    engine::run_each_frame(move || {
+        time += 0.013;
+        let new_pos = Point::new(
+            0.0,
+            0.0,
+            10.0 + time.cos() * 2.0,
+        );
+        camera_transform.set_position(new_pos);
+    });
 }

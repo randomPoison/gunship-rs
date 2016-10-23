@@ -16,13 +16,12 @@ static MESH_ID_COUNTER: AtomicUsize = AtomicUsize::new(1);
 static MATERIAL_ID_COUNTER: AtomicUsize = AtomicUsize::new(1);
 
 /// Load all data from the specified file as an array of bytes.
-pub fn load_file_bytes<P>(path: P) -> Async<Result<Vec<u8>, io::Error>>
+pub fn load_file_bytes<'a, P>(path: P) -> Async<'a, Result<Vec<u8>, io::Error>>
     where
-    P: 'static,
-    P: AsRef<Path> + Send
+    P: 'a,
+    P: AsRef<Path> + Send,
 {
     scheduler::start(move || {
-
         let mut file = File::open(path)?;
 
         let mut bytes = if let Ok(metadata) = file.metadata() {
@@ -38,10 +37,10 @@ pub fn load_file_bytes<P>(path: P) -> Async<Result<Vec<u8>, io::Error>>
 }
 
 /// Load all data from the specified file as a `String`.
-pub fn load_file_text<P>(path: P) -> Async<Result<String, LoadTextError>>
+pub fn load_file_text<'a, P>(path: P) -> Async<'a, Result<String, LoadTextError>>
     where
-    P: 'static,
-    P: AsRef<Path> + Send
+    P: 'a,
+    P: AsRef<Path> + Send,
 {
     scheduler::start(move || {
         let bytes = load_file_bytes(path).await()?;
@@ -72,9 +71,9 @@ impl From<FromUtf8Error> for LoadTextError {
 ///
 /// Loads a mesh data from the specified path and performs any necessary processing to prepare it
 /// to be used in rendering.
-pub fn load_mesh<P>(path: P) -> Async<Result<Mesh, LoadMeshError>>
+pub fn load_mesh<'a, P>(path: P) -> Async<'a, Result<Mesh, LoadMeshError>>
     where
-    P: 'static,
+    P: 'a,
     P: AsRef<Path> + Send + Into<String>
 {
     scheduler::start(move || {
@@ -192,9 +191,9 @@ impl From<obj::Error> for LoadMeshError {
     }
 }
 
-pub fn load_material<P>(path: P) -> Async<Result<Material, LoadMaterialError>>
+pub fn load_material<'a, P>(path: P) -> Async<'a, Result<Material, LoadMaterialError>>
     where
-    P: 'static,
+    P: 'a,
     P: AsRef<Path> + Send
 {
     scheduler::start(move || {
