@@ -10,5 +10,4 @@ pub mod mesh_renderer;
 pub mod prelude;
 pub mod resource;
 pub mod scheduler;
-pub mod time;
 pub mod transform;

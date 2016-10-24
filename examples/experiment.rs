@@ -44,7 +44,7 @@ fn setup_scene() {
 
     let mut time: f32 = 0.0;
     engine::run_each_frame(move || {
-        time += 0.01;
+        time += 0.05;
         let new_pos = Point::new(
             time.cos(),
             time.sin(),
