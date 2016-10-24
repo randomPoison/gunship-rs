@@ -15,6 +15,7 @@ use std::mem;
 use std::ptr::{self, Unique};
 use std::sync::{Arc, Barrier};
 use std::sync::mpsc::{self, Receiver, Sender};
+use std::time::{Duration, Instant};
 use std::thread;
 
 #[derive(Debug)]
@@ -197,11 +198,16 @@ pub fn wait_for_quit() {
 }
 
 fn main_loop(engine: Engine) {
+    // TODO: This should be a constant, but we can't create constant `Duration` objects right now.
+    let target_frame_time = Duration::from_millis(1000 / 60);
+
     let mut engine = Box::new(engine);
     INSTANCE.init(unsafe { Unique::new(&mut *engine) });
     let engine = &mut *engine;
 
     'main: loop {
+        let start_time = Instant::now();
+
         // Process any pending window messages.
         for message in &mut engine.window {
             // TODO: Process input messages.
@@ -324,6 +330,35 @@ fn main_loop(engine: Engine) {
         // TODO: Draw.
         engine.renderer.draw();
 
-        // TODO: Wait for frame time?
+        // If we've already exceeded the frame time then we don't want run the wait code below
+        // as the subtraction will overflow.
+        if start_time.elapsed() > target_frame_time {
+            if !cfg!(feature = "timing") {
+                println!(
+                    "WARNING: Missed frame time. Frame time: {:?}, target frame time: {:?}",
+                    start_time.elapsed(),
+                    target_frame_time,
+                );
+            }
+
+            continue;
+        }
+
+        // Sleep the thread while there's more than a millisecond left.
+        let mut remaining_time_ms = target_frame_time - start_time.elapsed();
+        while remaining_time_ms > Duration::from_millis(1) {
+            thread::sleep(remaining_time_ms);
+
+            if start_time.elapsed() > target_frame_time {
+                continue 'main;
+            } else {
+                remaining_time_ms = target_frame_time - start_time.elapsed();
+            }
+        }
+
+        // When there's less than a millisecond left the system scheduler isn't accurate enough to
+        // awake it at the right time and it's possible to sleep too long. To avoid that we simply
+        // busy loop until it's time for the next frame.
+        while start_time.elapsed() < target_frame_time {}
     }
 }
