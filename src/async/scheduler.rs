@@ -40,6 +40,15 @@ static INSTANCE_INIT: Once = ONCE_INIT;
 static WORK_COUNTER: AtomicUsize = AtomicUsize::new(1);
 
 /// Represents the result of a computation that may finish at some point in the future.
+///
+/// Use `scheduler::start()` to run some work asynchronously, getting an `Async<T>` representing the
+/// result of the work. Use `Async::await()` to suspend the current fiber until the work completes
+/// and get the result. By default, dropping an `Async<T>` will suspend the current fiber until
+/// the work finishes, but you can use `Async::forget()` to ignore the result without blocking.
+///
+/// # Sharing Data Across Work
+///
+/// It's possible to share
 #[derive(Debug)]
 pub struct Async<'a, T> {
     work: WorkId,
@@ -88,8 +97,7 @@ impl WorkId {
     ///
     /// If the work unit has already finished then `await()` will return immediately.
     pub fn await(self) {
-        if Scheduler::with(|scheduler| !scheduler.finished_work.contains(&self)) {
-            Scheduler::with(|scheduler| scheduler.add_dependency(self));
+        if Scheduler::with(|scheduler| scheduler.add_dependency(self)) {
             suspend();
         }
     }
@@ -294,32 +302,30 @@ impl Scheduler {
     }
 
     /// Adds `dependency` as a dependency of the currently running fiber.
-    fn add_dependency(&mut self, dependency: WorkId) {
-        self.add_dependencies([dependency].iter().cloned());
-    }
-
-    /// Adds all work items in `dependencies` as dependencies of the currently running fiber.
-    fn add_dependencies<I>(&mut self, dependencies: I)
-        where
-        I: IntoIterator<Item = WorkId>,
-    {
+    ///
+    /// Returns `true` if work is still in progress and was added as a dependency, false otherwise.
+    fn add_dependency(&mut self, dependency: WorkId) -> bool {
         let pending = fiber::current().unwrap();
 
-        debug_assert!(
-            !self.dependencies.contains_key(&pending),
-            "Marking a fiber as pending but it is already pending: {:?}",
-            pending,
-        );
+        if !self.finished_work.contains(&dependency) {
+            debug_assert!(
+                !self.dependencies.contains_key(&pending),
+                "Marking a fiber as pending but it is already pending: {:?}",
+                pending,
+            );
 
-        // Add `pending` to set of pending fibers and list `dependencies` as dependencies.
-        let &mut (_, ref mut dependencies_set) =
+            // Add `pending` to set of pending fibers and list `dependencies` as dependencies.
+            let &mut (_, ref mut dependencies_set) =
             self.dependencies
             .entry(pending)
             .or_insert((None, HashSet::new()));
 
-        // Add `fibers` to the list of ready fibers.
-        for dependency in dependencies {
+            // Add `fibers` to the list of ready fibers.
             dependencies_set.insert(dependency);
+
+            true
+        } else {
+            false
         }
     }
 
