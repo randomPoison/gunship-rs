@@ -228,8 +228,8 @@ enum NextWork {
 }
 
 struct Scheduler {
-    /// Work units that are currently in progress.
-    running_work: HashSet<WorkId>,
+    /// Work units that are currently pending or in progress.
+    current_work: HashSet<WorkId>,
 
     work_map: HashMap<FiberId, WorkId>,
 
@@ -255,8 +255,6 @@ struct Scheduler {
     // active work. In which case we might have to cycle through a bunch of fibers before we can
     // start doing actual work.
     finished: VecDeque<Fiber>,
-
-    finished_work: HashSet<WorkId>,
 }
 
 unsafe impl Send for Scheduler {}
@@ -276,13 +274,12 @@ impl Scheduler {
     {
         INSTANCE_INIT.call_once(|| {
             let scheduler = Scheduler {
-                running_work: HashSet::new(),
+                current_work: HashSet::new(),
                 work_map: HashMap::new(),
                 new_work: VecDeque::new(),
                 ready_fibers: VecDeque::new(),
                 dependencies: HashMap::new(),
                 finished: VecDeque::new(),
-                finished_work: HashSet::new(),
             };
 
             INSTANCE.init(Mutex::new(scheduler));
@@ -297,6 +294,7 @@ impl Scheduler {
 
     /// Add a new unit of work to the pending queue.
     fn schedule_work(&mut self, work: Work) {
+        assert!(self.current_work.insert(work.id), "Work's ID was already present in current work set");
         self.new_work.push_back(work);
         CONDVAR.borrow().notify_one();
     }
@@ -307,7 +305,7 @@ impl Scheduler {
     fn add_dependency(&mut self, dependency: WorkId) -> bool {
         let pending = fiber::current().unwrap();
 
-        if !self.finished_work.contains(&dependency) {
+        if self.current_work.contains(&dependency) {
             debug_assert!(
                 !self.dependencies.contains_key(&pending),
                 "Marking a fiber as pending but it is already pending: {:?}",
@@ -330,8 +328,9 @@ impl Scheduler {
     }
 
     fn start_work(&mut self, new_work: WorkId) {
+        debug_assert!(self.current_work.contains(&new_work), "Work ID was not in current work set");
+
         let current = fiber::current().unwrap();
-        self.running_work.insert(new_work);
         self.work_map.insert(current, new_work);
     }
 
@@ -356,10 +355,8 @@ impl Scheduler {
         }
 
         let fiber = fiber::current().unwrap();
-        assert!(self.running_work.remove(&finished_work), "{:?} wasn't in running work set when it finished", finished_work);
+        assert!(self.current_work.remove(&finished_work), "{:?} wasn't in current work set when it finished", finished_work);
         assert!(self.work_map.remove(&fiber).is_some(), "{:?} didn't have {:?} associated in the work map", fiber, finished_work);
-
-        self.finished_work.insert(finished_work);
     }
 
     /// Performs the necessary bookkeeping when a fiber becomes active.
