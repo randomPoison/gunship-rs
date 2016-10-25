@@ -10,7 +10,7 @@ use gunship::math::*;
 
 fn main() {
     let mut builder = EngineBuilder::new();
-    builder.max_workers(1);
+    builder.max_workers(4);
     builder.build(|| {
         setup_scene();
     });

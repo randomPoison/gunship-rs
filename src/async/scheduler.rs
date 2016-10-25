@@ -4,6 +4,22 @@
 //! project to make use of async functionality. The actual scheduler instance is not publicly
 //! accessible, instead we use various standalone functions like `start()` and `wait_for()` to
 //! safely manage access to the scheduler.
+//!
+//! # Scheduling Work
+//!
+//! Use `scheduler::start()` to run some work asynchronously, getting an `Async<T>` representing the
+//! result of the work. Use `Async::await()` to suspend the current fiber until the work completes
+//! and get the result. By default, dropping an `Async<T>` will suspend the current fiber until
+//! the work finishes, but you can use `Async::forget()` to ignore the result without blocking.
+//!
+//! # Sharing Data Between Work
+//!
+//! Unlike with `std::thread::spawn()`, it's possible for work started with `scheduler::start()`
+//! to borrow data from the caller:
+//!
+//! ```
+//!
+//! ```
 
 use fiber::{self, Fiber, FiberId};
 use cell_extras::AtomicInitCell;
@@ -34,13 +50,32 @@ pub struct Async<'a, T> {
 impl<'a, T> Async<'a, T> {
     /// Suspend the current fiber until the async operation finishes.
     pub fn await(self) -> T {
-        let Async { work, receiver, .. } = self;
-        work.await();
-        receiver.try_recv().expect("Failed to receive result of async computation")
-    }
+        let result = {
+            let Async { work, ref receiver, .. } = self;
+            work.await();
+            receiver.try_recv().expect("Failed to receive result of async computation")
+        };
 
+        // Don't run the destuctor since we've already waited on the result.
+        mem::forget(self);
+
+        result
+    }
+}
+
+impl<T> Async<'static, T> {
     pub fn work_id(&self) -> WorkId {
         self.work
+    }
+
+    pub fn forget(self) {
+        mem::forget(self);
+    }
+}
+
+impl<'a, T> Drop for Async<'a, T> {
+    fn drop(&mut self) {
+        self.work.await();
     }
 }
 
