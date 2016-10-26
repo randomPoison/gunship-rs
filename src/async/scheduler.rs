@@ -65,18 +65,15 @@ impl<'a, T> Async<'a, T> {
             receiver.try_recv().expect("Failed to receive result of async computation")
         };
 
-        // Don't run the destuctor since we've already waited on the result.
-        mem::forget(self);
-
         result
+    }
+
+    pub fn work_id(&self) -> WorkId {
+        self.work
     }
 }
 
 impl<T> Async<'static, T> {
-    pub fn work_id(&self) -> WorkId {
-        self.work
-    }
-
     pub fn forget(self) {
         mem::forget(self);
     }
