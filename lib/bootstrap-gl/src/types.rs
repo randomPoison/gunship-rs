@@ -69,6 +69,10 @@ impl BufferName {
     pub const fn null() -> BufferName {
         BufferName(0)
     }
+
+    pub fn is_null(self) -> bool {
+        self == BufferName(0)
+    }
 }
 
 #[repr(u32)]
@@ -159,6 +163,7 @@ pub enum DebugSeverity {
     High = 0x9146,
     Medium = 0x9147,
     Low = 0x9148,
+    Notification = 0x826B,
 }
 
 #[repr(u32)]
@@ -262,10 +267,20 @@ pub enum IndexType {
 
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Integer64Name {
+    // Version 3.0
+    MajorVersion = 0x821B,
+    MinorVersion = 0x821C,
+    NumExtensions = 0x821D,
+    Timestamp = 0x8E28
+}
+
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum IntegerName {
     // Version 3.0
-    MajorVersion  = 0x821B,
-    MinorVersion  = 0x821C,
+    MajorVersion = 0x821B,
+    MinorVersion = 0x821C,
     NumExtensions = 0x821D,
 }
 
@@ -303,6 +318,41 @@ pub enum ProgramParam {
     ActiveUniformMaxLength = 0x8B87,
     ActiveAttributes = 0x8B89,
     ActiveAttributeMaxLength = 0x8B8A,
+}
+
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum QueryCounterTarget {
+    Timestamp = 0x8E28,
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct QueryObject(pub u32);
+
+impl QueryObject {
+    pub fn null() -> QueryObject {
+        QueryObject(0)
+    }
+}
+
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum QueryResultType {
+    Result = 0x8866,
+    ResultAvailable = 0x8867,
+    ResultNoWait = 0x9194,
+}
+
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum QueryType {
+    SamplesPassed = 0x8914,
+    AnySamplesPassed = 0x8C2F,
+    AnySamplesPassedConservative = 0x8D6A,
+    PrimitivesGenerated = 0x8C87,
+    TransformFeedbackPrimitivesWritten = 0x8C88,
+    TimeElapsed = 0x88BF,
 }
 
 #[repr(u32)]
@@ -626,6 +676,10 @@ pub struct VertexArrayName(pub u32);
 impl VertexArrayName {
     pub const fn null() -> VertexArrayName {
         VertexArrayName(0)
+    }
+
+    pub fn is_null(self) -> bool {
+        self == VertexArrayName(0)
     }
 }
 
