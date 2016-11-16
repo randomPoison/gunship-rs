@@ -23,18 +23,9 @@ extern crate hash;
 extern crate lazy_static;
 extern crate parse_obj as obj;
 extern crate polygon;
+extern crate stopwatch;
 
 pub extern crate polygon_math as math;
-
-pub mod stopwatch {
-    extern crate stopwatch;
-
-    #[cfg(feature="timing")]
-    pub use self::stopwatch::{Collector, Stopwatch};
-
-    #[cfg(not(feature="timing"))]
-    pub use self::stopwatch::null::{Collector, Stopwatch};
-}
 
 #[macro_use]
 pub mod macros;

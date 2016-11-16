@@ -31,6 +31,7 @@ use std::mem;
 use std::sync::{Condvar, Mutex, Once, ONCE_INIT};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::{self, Receiver};
+use stopwatch;
 
 const DEFAULT_STACK_SIZE: usize = 64 * 1024;
 
@@ -179,6 +180,7 @@ pub fn suspend() {
 
     let suspended = unsafe { next_fiber.resume() };
 
+    stopwatch::switch_context(suspended.id(), fiber::current().unwrap());
     Scheduler::with(move |scheduler| scheduler.handle_suspended(suspended));
 }
 
@@ -192,6 +194,7 @@ fn fiber_routine() -> ! {
             },
             Some(NextWork::Fiber(fiber)) => {
                 let suspended = unsafe { fiber.resume() };
+                stopwatch::switch_context(suspended.id(), fiber::current().unwrap());
                 Scheduler::with(move |scheduler| scheduler.handle_suspended(suspended));
             },
             None => {
@@ -378,10 +381,12 @@ impl Scheduler {
         self.ready_fibers.pop_front()
             .or_else(|| self.finished.pop_front())
             .unwrap_or_else(|| {
-                fn fiber_proc(prev: Fiber) -> ! {
+                fn fiber_proc(suspended: Fiber) -> ! {
+                    stopwatch::switch_context(suspended.id(), fiber::current().unwrap());
+
                     // The current fiber has been resumed. Let the scheduler know that the previous fiber is no
                     // longer active.
-                    Scheduler::with(|scheduler| scheduler.handle_suspended(prev));
+                    Scheduler::with(|scheduler| scheduler.handle_suspended(suspended));
 
                     fiber_routine();
                 }

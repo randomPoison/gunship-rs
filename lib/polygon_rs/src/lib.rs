@@ -3,6 +3,7 @@
 extern crate bootstrap_rs as bootstrap;
 extern crate parse_bmp;
 extern crate polygon_material;
+extern crate stopwatch;
 
 pub extern crate polygon_math as math;
 
