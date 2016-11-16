@@ -4,6 +4,7 @@ name = "stopwatch"
 version = "0.0.0"
 authors = ["David LeGare <excaliburhissheath@gmail.com>"]
 
-[dependencies.bootstrap_rs]
-version="*"
-path="../bootstrap_rs"
+[dependencies]
+bootstrap_rs = { path = "../bootstrap_rs" }
+fiber = { path = "../fiber" }
+lazy_static = "0.1.*"

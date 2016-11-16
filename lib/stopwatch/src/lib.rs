@@ -1,103 +1,69 @@
 extern crate bootstrap_rs as bootstrap;
+extern crate fiber;
+#[macro_use]
+extern crate lazy_static;
 
-use std::cmp::Ordering;
+use fiber::FiberId;
+use std::cell::RefCell;
 use std::collections::HashMap;
-// use std::fs::OpenOptions;
-// use std::io::Write;
-use std::ptr;
+use std::fmt::{self, Debug, Formatter};
+use std::mem;
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
-use bootstrap::time::{Timer, TimeMark};
-
-pub mod null;
-
-/// A global access point for collecting logs. This allows client code to create stopwatches
-/// anywhere without having to pass the Collector around.
-static mut COLLECTOR: *mut Collector = 0 as *mut Collector;
-
-pub struct Collector {
-    nodes:      Vec<StackNode>,
-    call_stack: Vec<usize>,
+thread_local! {
+    static CONTEXT: RefCell<Context> = RefCell::new(Context { stack: Vec::new() });
 }
 
-impl Collector {
-    pub fn new() -> Result<Box<Collector>, ()> {
-        unsafe {
-            if !COLLECTOR.is_null() {
-                return Err(());
-            }
-        }
-
-        let mut boxed = Box::new(Collector {
-            nodes:      Vec::new(),
-            call_stack: Vec::new(),
-        });
-
-        unsafe {
-            COLLECTOR = &mut *boxed;
-        }
-
-        Ok(boxed)
-    }
-
-    pub fn flush_to_file(&mut self, _file_name: &str) {
-        // TODO: Actually write to a file.
-        // let mut file = OpenOptions::new()
-        //     .create(true)
-        //     .write(true)
-        //     .open(file_name).unwrap();
-        // for log in self.logs.drain(0..) {
-        //     writeln!(file, "{}", log).unwrap();
-        // }
-
-        // For now we're going to just print to the console.
-        self.print_node(&self.nodes[0], 0);
-    }
-
-    fn print_node<'a>(&'a self, node: &'a StackNode, depth: usize) {
-        for _ in 0..depth {
-            print!("    ");
-        }
-
-        let mut sorted_data = node.data.clone();
-        sorted_data.sort_by(|lhs, rhs| {
-            if lhs < rhs {
-                Ordering::Less
-            } else {
-                Ordering::Greater
-            }
-        });
-        let median = sorted_data[sorted_data.len() / 2];
-        println!("{}: median {:.6}ms", node.name, median);
-
-        for (_, child_index) in &node.children {
-            self.print_node(&self.nodes[*child_index], depth + 1);
-        }
-    }
+lazy_static! {
+    static ref CONTEXT_MAP: Mutex<HashMap<FiberId, Context>> = Mutex::new(HashMap::with_capacity(1024));
 }
 
-impl Drop for Collector {
-    fn drop(&mut self) {
-        unsafe { COLLECTOR = ptr::null_mut(); }
-    }
+/// Swaps the currently tracked execution context with the specified context.
+pub fn switch_context(old: FiberId, new: FiberId) {
+    let mut context_map = CONTEXT_MAP.lock().expect("Unable to acquire lock on context map");
+
+    let new_context = context_map.remove(&new).unwrap_or(Context { stack: Vec::new() });
+    let old_context = with_context(move |context| {
+        let mut new_context = new_context;
+        mem::swap(context, &mut new_context);
+        new_context
+    });
+
+    context_map.insert(old, old_context);
 }
 
 pub struct Stopwatch {
-    timer:      Timer,
-    start_time: TimeMark,
-    name:       &'static str,
+    name: &'static str,
 }
 
 impl Stopwatch {
     pub fn new(name: &'static str) -> Stopwatch {
-        assert!(unsafe { !COLLECTOR.is_null() }, "Cannot create a stopwatch until a Collector has been made.");
+        let data = StopwatchData {
+            name: name,
+            start_time: Instant::now(),
+            budget: None,
+            children: Vec::new(),
+        };
 
-        push_call_stack(name);
+        with_context(move |context| context.push(data));
 
-        let timer = Timer::new();
-        let start_time = timer.now();
         Stopwatch {
-            timer: timer,
-            start_time: start_time,
+            name: name,
+        }
+    }
+
+    pub fn with_budget(name: &'static str, budget: Duration) -> Stopwatch {
+        let data = StopwatchData {
+            name: name,
+            start_time: Instant::now(),
+            budget: Some(budget),
+            children: Vec::new(),
+        };
+
+        with_context(move |context| context.push(data));
+
+        Stopwatch {
             name: name,
         }
     }
@@ -105,78 +71,137 @@ impl Stopwatch {
 
 impl Drop for Stopwatch {
     fn drop(&mut self) {
-        let elapsed = self.timer.elapsed_ms(self.start_time);
-        pop_call_stack(self.name, elapsed);
+        with_context(|context| context.pop(self));
     }
 }
 
-fn push_call_stack(name: &'static str) {
-    unsafe {
-        debug_assert!(!COLLECTOR.is_null(), "Cannot push call stack without a collector instance.");
+#[derive(Debug)]
+struct Context {
+    stack: Vec<StopwatchData>,
+}
 
-        let collector = &mut *COLLECTOR;
-        // Get the index of the node that's going to be the new top node.
-        let top_index = match collector.call_stack.last() {
-            Some(top_index) => {
-                // TODO: Sucks that we have to re-borrow the top node a bunch of times to convince
-                // the borrow checker we're in the clear, maybe revisit this once non-lexical
-                // borrows drop.
-                let has_child = {
-                    let top_node = &mut collector.nodes[*top_index];
-                    top_node.children.contains_key(name)
-                };
-                if !has_child {
-                    // We need to add a new child node to the top node.
-                    let new_child = StackNode::new(name);
-                    let child_index = collector.nodes.len();
-                    collector.nodes.push(new_child);
-                    let mut top_node = &mut collector.nodes[*top_index];
-                    top_node.children.insert(name, child_index);
-                }
+impl Context {
+    fn push(&mut self, data: StopwatchData) {
+        self.stack.push(data);
+    }
 
-                let top_node = &mut collector.nodes[*top_index];
-                *top_node.children.get(name).unwrap()
-            },
-            None => {
-                // Create new stack node if there are none, otherwise the first node is the root.
-                if collector.nodes.len() == 0 {
-                    let node = StackNode::new(name);
-                    collector.nodes.push(node);
-                }
-                0
+    fn pop(&mut self, current: &Stopwatch) {
+        let end_time = Instant::now();
+
+        let data = self.stack
+            .pop()
+            .unwrap_or_else(|| panic!("Stopwatch stack corrupted, no stopwatches left to pop, trying to pop \"{}\"", current.name));
+        assert_eq!(data.name, current.name, "Stopwatch stack corrupted, mismatched stopwatch popped");
+
+        let record = StopwatchRecord {
+            name: data.name,
+            start_time: data.start_time,
+            end_time: end_time,
+            budget: data.budget,
+            children: data.children,
+        };
+
+        // If the budget was exceeded, then log record and its child hierarchy.
+        if let Some(budget) = record.budget {
+            assert!(record.duration().as_secs() == 0, "TODO: Support durations greater than 1 second");
+
+            if record.duration() > budget {
+                // TODO: What's a better way for stopwatch to handle logging? We don't want to
+                // print to stdout, but we don't necessarily know what logging method a client
+                // crate would want to use.
+                println!(
+                    "Budget for {} exceeded: Budget was {:?}, actual was {:?} (exceeded by {:?})",
+                    record.name,
+                    PrettyDuration(budget),
+                    PrettyDuration(record.duration()),
+                    PrettyDuration(record.duration() - budget));
+
+                log_timing_hierarchy(&record, 1, record.duration());
             }
-        };
-        collector.call_stack.push(top_index);
-    }
-}
-
-fn pop_call_stack<'a>(name: &'static str, duration: f32) {
-    unsafe {
-        debug_assert!(!COLLECTOR.is_null(), "Cannot pop call stack without a collector instance.");
-
-        let collector = &mut *COLLECTOR;
-        let node_index = match collector.call_stack.pop() {
-            Some(index) => index,
-            None => panic!("Tried to pop with node name {} but stack is empty", name),
-        };
-        let node = &mut collector.nodes[node_index];
-        debug_assert_eq!(name, node.name);
-        node.data.push(duration);
-    }
-}
-
-struct StackNode {
-    name:     &'static str,
-    children: HashMap<&'static str, usize>,
-    data:     Vec<f32>,
-}
-
-impl StackNode {
-    fn new(name: &'static str) -> StackNode {
-        StackNode {
-            name:     name,
-            children: HashMap::new(),
-            data:     Vec::new(),
         }
+
+        // Add record to parent's list of children if necessary.
+        if let Some(parent) = self.stack.last_mut() {
+            parent.children.push(record);
+        }
+    }
+}
+
+#[derive(Debug)]
+struct StopwatchData {
+    name: &'static str,
+    start_time: Instant,
+    budget: Option<Duration>,
+    children: Vec<StopwatchRecord>,
+}
+
+#[derive(Debug)]
+struct StopwatchRecord {
+    name: &'static str,
+    start_time: Instant,
+    end_time: Instant,
+    budget: Option<Duration>,
+    children: Vec<StopwatchRecord>,
+}
+
+impl StopwatchRecord {
+    fn duration(&self) -> Duration {
+        self.end_time - self.start_time
+    }
+}
+
+fn with_context<F, T>(func: F) -> T
+    where F: FnOnce(&mut Context) -> T
+{
+    CONTEXT.with(move |context_cell| {
+        let mut context = context_cell.borrow_mut();
+        func(&mut *context)
+    })
+}
+
+fn log_timing_hierarchy(record: &StopwatchRecord, depth: usize, root_time: Duration) {
+    let record_time = record.duration();
+
+    let record_percent = (record_time.subsec_nanos() as f32 / root_time.subsec_nanos() as f32) * 100.0;
+
+    // Calculate self time.
+    let child_time = record.children
+        .iter()
+        .fold(Duration::from_millis(0), |total, child| total + child.duration());
+    let self_time = record_time - child_time;
+    let self_percent = (self_time.subsec_nanos() as f32 / root_time.subsec_nanos() as f32) * 100.0;
+
+    // Left-pad current record.
+    // TODO: Use http://www.leftpad.io/ for this so that we don't have to maintain our own
+    // left-pad implementation.
+    for _ in 0..depth {
+        print!("  ");
+    }
+
+    // Print current record.
+    println!("{}: {:?} ({:.1}%)", record.name, PrettyDuration(record_time), record_percent);
+
+    if record.children.len() > 0 {
+        // Left-pad "self" entry
+        for _ in 0..depth + 1 {
+            print!("  ");
+        }
+
+        println!("Self: {:?} ({:.1}%)", PrettyDuration(self_time), self_percent);
+
+        // Log children recursively.
+        for child in &record.children {
+            log_timing_hierarchy(child, depth + 1, root_time);
+        }
+    }
+}
+
+pub struct PrettyDuration(pub Duration);
+
+impl Debug for PrettyDuration {
+    fn fmt(&self, formatter: &mut Formatter) -> Result<(), fmt::Error> {
+        let millis = (self.0.subsec_nanos() / 1_000_000) % 1_000;
+        let micros = (self.0.subsec_nanos() / 1_000) % 1_000;
+        write!(formatter, "{}ms {}μs", millis, micros)
     }
 }
