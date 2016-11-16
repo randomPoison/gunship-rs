@@ -1,5 +1,3 @@
-#![feature(question_mark)]
-
 extern crate parse_xml as xml;
 
 use std::convert::From;
