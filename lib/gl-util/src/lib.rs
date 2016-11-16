@@ -9,7 +9,6 @@
 #![feature(associated_consts)]
 #![feature(item_like_imports)]
 #![feature(pub_restricted)]
-#![feature(question_mark)]
 
 extern crate bootstrap_rs as bootstrap;
 extern crate bootstrap_gl as gl;
@@ -35,6 +34,7 @@ pub use gl::{
 };
 
 pub mod context;
+pub mod query;
 pub mod shader;
 pub mod texture;
 
@@ -78,18 +78,12 @@ impl VertexBuffer {
 
     /// Fills the buffer with the contents of the data slice.
     pub fn set_data_f32(&mut self, data: &[f32]) {
-        self.len = data.len();
-
-        let data_ptr = data.as_ptr() as *const ();
-        let byte_count = data.len() * mem::size_of::<f32>();
-
         unsafe {
             let _guard = ::context::ContextGuard::new(&self.context);
             gl::bind_buffer(BufferTarget::Array, self.buffer_name);
             gl::buffer_data(
                 BufferTarget::Array,
-                byte_count as isize,
-                data_ptr,
+                data,
                 BufferUsage::StaticDraw);
             gl::bind_buffer(BufferTarget::Array, BufferName::null());
         }
@@ -164,18 +158,12 @@ impl IndexBuffer {
 
     /// Fills the index buffer with the provided data.
     pub fn set_data_u32(&mut self, data: &[u32]) {
-        self.len = data.len();
-
-        let data_ptr = data.as_ptr() as *const ();
-        let byte_count = data.len() * mem::size_of::<u32>();
-
         unsafe {
             let _guard = ::context::ContextGuard::new(&self.context);
             gl::bind_buffer(BufferTarget::ElementArray, self.buffer_name);
             gl::buffer_data(
                 BufferTarget::ElementArray,
-                byte_count as isize,
-                data_ptr,
+                data,
                 BufferUsage::StaticDraw);
             gl::bind_buffer(BufferTarget::ElementArray, BufferName::null());
         }

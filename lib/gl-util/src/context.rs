@@ -35,20 +35,23 @@ impl Context {
         ) {
             use std::ffi::CStr;
 
-            let message = unsafe { CStr::from_ptr(message as *const _) }.to_string_lossy();
+            if severity != DebugSeverity::Notification {
+                let message = unsafe { CStr::from_ptr(message as *const _) }.to_string_lossy();
 
-            println!(
-                r#"Recieved some kind of debug message.
-                source: {:?},
-                type: {:?},
-                object_id: 0x{:x},
-                severity: {:?},
-                message: {}"#,
-                source,
-                message_type,
-                object_id,
-                severity,
-                message);
+                println!(
+                    r#"Recieved some kind of debug message.
+                    source: {:?},
+                    type: {:?},
+                    object_id: 0x{:x},
+                    severity: {:?},
+                    message: {}"#,
+                    source,
+                    message_type,
+                    object_id,
+                    severity,
+                    message,
+                );
+            }
         }
 
         unsafe {
