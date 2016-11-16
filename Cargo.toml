@@ -15,7 +15,7 @@ no-draw = []
 [dependencies]
 bootstrap_rs = { path = "lib/bootstrap_rs" }
 bootstrap_audio = { path = "lib/bootstrap_audio" }
-cell-extras = { path = "../../cell-extras" }
+cell-extras = { git = "https://github.com/excaliburHisSheath/cell-extras" }
 fiber = { version = "0.1", path = "lib/fiber" }
 hash = { path = "lib/hash" }
 lazy_static = "0.2.1"
