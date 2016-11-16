@@ -10,6 +10,7 @@ gl-util = { version = "0.1", path = "../gl-util" }
 parse-bmp = { version = "0.1", path = "../parse-bmp" }
 polygon_math = { version = "0.0", path = "../polygon_math" }
 polygon_material = { version = "0.0", path = "../polygon-material" }
+stopwatch = { path = "../stopwatch" }
 
 [dev_dependencies]
 parse-obj = { version = "0.1", path = "../parse-obj" }

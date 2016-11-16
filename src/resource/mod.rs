@@ -11,6 +11,7 @@ use polygon::geometry::mesh::Mesh;
 use polygon::material::*;
 use wav::Wave;
 
+pub mod async;
 pub mod collada;
 
 pub struct ResourceManager {
@@ -39,25 +40,27 @@ impl ResourceManager {
     }
 
     pub fn load_resource_file<P: AsRef<Path>>(&self, path: P) -> Result<(), String> {
-        let mut full_path = self.resource_path.borrow().clone();
-        full_path.push(path);
-        let metadata = match fs::metadata(&full_path) {
-            Err(why) => return Err(format!(
-                "Unable to read metadata for {}, either it doesn't exist or the user lacks permissions, {}",
-                full_path.display(),
-                &why)),
-            Ok(metadata) => metadata,
-        };
+        // let mut full_path = self.resource_path.borrow().clone();
+        // full_path.push(path);
+        // let metadata = match fs::metadata(&full_path) {
+        //     Err(why) => return Err(format!(
+        //         "Unable to read metadata for {}, either it doesn't exist or the user lacks permissions, {}",
+        //         full_path.display(),
+        //         &why)),
+        //     Ok(metadata) => metadata,
+        // };
+        //
+        // if !metadata.is_file() {
+        //     return Err(format!(
+        //         "{} could not be loaded because it is not a file",
+        //         full_path.display()));
+        // }
+        //
+        // collada::load_resources(full_path, self).unwrap(); // TODO: Don't panic?
+        //
+        // Ok(())
 
-        if !metadata.is_file() {
-            return Err(format!(
-                "{} could not be loaded because it is not a file",
-                full_path.display()));
-        }
-
-        collada::load_resources(full_path, self).unwrap(); // TODO: Don't panic?
-
-        Ok(())
+        unimplemented!()
     }
 
     /// Sets the path to the resources directory.

@@ -1,3 +1,5 @@
+// TODO: I'm pretty sure all the unicode functionality is available in crates outside of std, so
+// we should remove the unstable dependency.
 #![feature(unicode)]
 
 extern crate rustc_unicode;

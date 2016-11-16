@@ -1,6 +1,6 @@
 pub extern crate gl_util;
 
-use {Counter, GpuMesh, Renderer};
+use {BuildMaterialError, Counter, GpuMesh, Renderer};
 use anchor::*;
 use bootstrap::window::Window;
 use camera::*;
@@ -21,9 +21,10 @@ use self::gl_util::texture::{
 use shader::Shader;
 use std::collections::HashMap;
 use std::str;
+use stopwatch::Stopwatch;
 use texture::*;
 
-static DEFAULT_SHADER_BYTES: &'static [u8] = include_bytes!("../../resources/materials/texture_diffuse_lit.material");
+static DEFAULT_SHADER_BYTES: &'static [u8] = include_bytes!("../../resources/materials/diffuse_flat.material");
 
 #[derive(Debug)]
 pub struct GlRender {
@@ -103,6 +104,8 @@ impl GlRender {
         camera: &Camera,
         camera_anchor: &Anchor,
     ) {
+        let _stopwatch = Stopwatch::new("Drawing mesh");
+
         let default_texture = GlTexture2d::empty(&self.context);
 
         // Calculate the various transforms needed for rendering.
@@ -123,132 +126,162 @@ impl GlRender {
             .get(material.shader())
             .expect("Material is using a shader that does not exist");
 
-        // Set the shader to use.
-        let mut draw_builder = DrawBuilder::new(
-            &self.context,
-            &mesh_data.vertex_buffer,
-            DrawMode::Triangles,
-        );
-        draw_builder
-        .index_buffer(&mesh_data.index_buffer)
-        .program(program)
-        .cull(Face::Back)
-        .depth_test(Comparison::Less)
+        let mut draw_builder = {
+            let _stopwatch = Stopwatch::new("Initialize DrawBuilder");
 
-        // Associate vertex attributes with shader program variables.
-        .map_attrib_name("position", "vertex_position")
-        .map_attrib_name("normal", "vertex_normal")
-        .map_attrib_name("texcoord", "vertex_uv0")
+            // Set the shader to use.
+            let mut draw_builder = DrawBuilder::new(
+                &self.context,
+                &mesh_data.vertex_buffer,
+                DrawMode::Triangles,
+            );
+            draw_builder
+            .index_buffer(&mesh_data.index_buffer)
+            .program(program)
+            .cull(Face::Back)
+            .depth_test(Comparison::Less)
+
+            // Associate vertex attributes with shader program variables.
+            .map_attrib_name("position", "vertex_position")
+            .map_attrib_name("normal", "vertex_normal")
+            .map_attrib_name("texcoord", "vertex_uv0");
+
+            draw_builder
+        };
 
         // Set uniform transforms.
-        .uniform(
-            "model_transform",
-            GlMatrix {
-                data: model_transform.raw_data(),
-                transpose: true,
-            })
-        .uniform(
-            "normal_transform",
-            GlMatrix {
-                data: normal_transform.raw_data(),
-                transpose: true,
-            })
-        .uniform(
-            "view_normal_transform",
-            GlMatrix {
-                data: view_normal_transform.raw_data(),
-                transpose: true,
-            })
-        .uniform(
-            "view_transform",
-            GlMatrix {
-                data: view_transform.raw_data(),
-                transpose: true,
-            })
-        .uniform(
-            "model_view_transform",
-            GlMatrix {
-                data: model_view_transform.raw_data(),
-                transpose: true,
-            })
-        .uniform(
-            "projection_transform",
-            GlMatrix {
-                data: projection_transform.raw_data(),
-                transpose: true,
-            })
-        .uniform(
-            "model_view_projection",
-            GlMatrix {
-                data: model_view_projection.raw_data(),
-                transpose: true,
-            })
+        {
+            let _stopwatch = Stopwatch::new("Transform uniforms");
 
-        // Set uniform colors.
-        .uniform("global_ambient", [0.01, 0.01, 0.01, 1.0])
-
-        // Other uniforms.
-        .uniform("camera_position", *camera_anchor.position().as_array());
+            draw_builder
+            .uniform(
+                "model_transform",
+                GlMatrix {
+                    data: model_transform.raw_data(),
+                    transpose: true,
+                },
+            )
+            .uniform(
+                "normal_transform",
+                GlMatrix {
+                    data: normal_transform.raw_data(),
+                    transpose: true,
+                },
+            )
+            .uniform(
+                "view_normal_transform",
+                GlMatrix {
+                    data: view_normal_transform.raw_data(),
+                    transpose: true,
+                },
+            )
+            .uniform(
+                "view_transform",
+                GlMatrix {
+                    data: view_transform.raw_data(),
+                    transpose: true,
+                },
+            )
+            .uniform(
+                "model_view_transform",
+                GlMatrix {
+                    data: model_view_transform.raw_data(),
+                    transpose: true,
+                },
+            )
+            .uniform(
+                "projection_transform",
+                GlMatrix {
+                    data: projection_transform.raw_data(),
+                    transpose: true,
+                },
+            )
+            .uniform(
+                "model_view_projection",
+                GlMatrix {
+                    data: model_view_projection.raw_data(),
+                    transpose: true,
+                },
+            );
+        }
 
         // Apply material attributes.
-        for (name, property) in material.properties() {
-            match *property {
-                MaterialProperty::Color(ref color) => {
-                    draw_builder.uniform::<[f32; 4]>(name, color.into());
-                },
-                MaterialProperty::f32(value) => {
-                    draw_builder.uniform(name, value);
-                },
-                MaterialProperty::Vector3(value) => {
-                    draw_builder.uniform::<[f32; 3]>(name, value.into());
-                },
-                MaterialProperty::Texture(ref texture) => {
-                    let gl_texture =
+        {
+            let _stopwatch = Stopwatch::new("Material uniforms");
+
+            // Set uniform colors.
+            draw_builder.uniform("global_ambient", [0.01, 0.01, 0.01, 1.0]);
+
+            // Other uniforms.
+            draw_builder.uniform("camera_position", *camera_anchor.position().as_array());
+
+            for (name, property) in material.properties() {
+                match *property {
+                    MaterialProperty::Color(ref color) => {
+                        draw_builder.uniform::<[f32; 4]>(name, color.into());
+                    },
+                    MaterialProperty::f32(value) => {
+                        draw_builder.uniform(name, value);
+                    },
+                    MaterialProperty::Vector3(value) => {
+                        draw_builder.uniform::<[f32; 3]>(name, value.into());
+                    },
+                    MaterialProperty::Texture(ref texture) => {
+                        let gl_texture =
                         self.textures
                         .get(texture)
                         .unwrap_or(&default_texture);
-                    draw_builder.uniform(name, gl_texture);
-                },
+                        draw_builder.uniform(name, gl_texture);
+                    },
+                }
             }
         }
 
         // Render first light without blending so it overrides any objects behind it.
         // We also render it with light strength 0 so it only renders ambient color.
-        draw_builder
+        {
+            let _stopwatch = Stopwatch::new("Draw (no lights)");
+
+            draw_builder
             .uniform("light_position", *Point::origin().as_array())
             .uniform("light_strength", 0.0)
             .draw();
+        }
 
         // Render the rest of the lights with blending on the the depth check set to
         // less than or equal.
-        draw_builder
+        {
+            let _stopwatch = Stopwatch::new("Draw with lights");
+
+            draw_builder
             .depth_test(Comparison::LessThanOrEqual)
             .blend(SourceFactor::One, DestFactor::One);
 
-        for light in self.lights.values() {
-            // Send the light's position in view space.
-            let light_anchor = match light.anchor() {
-                Some(anchor_id) => self.anchors.get(&anchor_id).expect("No such anchor exists"),
-                None => panic!("Cannot render light if it's not attached to an anchor"),
-            };
-            draw_builder.uniform("light_position", *light_anchor.position().as_array());
+            for light in self.lights.values() {
+                // Send the light's position in view space.
+                let light_anchor = match light.anchor() {
+                    Some(anchor_id) => self.anchors.get(&anchor_id).expect("No such anchor exists"),
+                    None => panic!("Cannot render light if it's not attached to an anchor"),
+                };
+                draw_builder.uniform("light_position", *light_anchor.position().as_array());
 
-            let light_position_view = light_anchor.position() * view_transform;
-            draw_builder.uniform("light_position_view", *light_position_view.as_array());
+                let light_position_view = light_anchor.position() * view_transform;
+                draw_builder.uniform("light_position_view", *light_position_view.as_array());
 
-            // Send common light data.
-            draw_builder.uniform::<[f32; 4]>("light_color", light.color.into());
-            draw_builder.uniform("light_strength", light.strength);
+                // Send common light data.
+                draw_builder.uniform::<[f32; 4]>("light_color", light.color.into());
+                draw_builder.uniform("light_strength", light.strength);
 
-            // Send data specific to the current type of light.
-            match light.data {
-                LightData::Point(PointLight { radius }) => {
-                    draw_builder.uniform("light_radius", radius);
-                },
+                // Send data specific to the current type of light.
+                match light.data {
+                    LightData::Point(PointLight { radius }) => {
+                        draw_builder.uniform("light_radius", radius);
+                    },
+                }
+
+                // Draw the current light.
+                draw_builder.draw();
             }
-
-            // Draw the current light.
-            draw_builder.draw();
         }
     }
 }
@@ -270,11 +303,18 @@ impl Drop for GlRender {
 
 impl Renderer for GlRender {
     fn draw(&mut self) {
-        self.context.clear();
+        let _stopwatch = Stopwatch::new("GLRender::draw()");
+
+        {
+            let _stopwatch = Stopwatch::new("Clearing buffer");
+            self.context.clear();
+        }
 
         // TODO: Support rendering multiple cameras.
         // TODO: Should we warn if there are no cameras?
         if let Some(camera) = self.cameras.values().next() {
+            let _stopwatch = Stopwatch::new("Rendering camera");
+
             let camera_anchor = match camera.anchor() {
                 Some(ref anchor_id) => self.anchors.get(anchor_id).expect("no such anchor exists"),
                 None => unimplemented!(),
@@ -297,18 +337,22 @@ impl Renderer for GlRender {
                     model_transform,
                     normal_transform,
                     camera,
-                    camera_anchor);
+                    camera_anchor,
+                );
             }
         }
 
-        self.context.swap_buffers();
+        {
+            let _stopwatch = Stopwatch::new("Swap buffers");
+            self.context.swap_buffers();
+        }
     }
 
     fn default_material(&self) -> Material {
         self.default_material.clone()
     }
 
-    fn build_material(&mut self, source: MaterialSource) -> Result<Material, ()> {
+    fn build_material(&mut self, source: MaterialSource) -> Result<Material, BuildMaterialError> {
         use polygon_material::material_source::PropertyType;
 
         // COMPILE SHADER SOURCE
@@ -418,7 +462,7 @@ impl Renderer for GlRender {
                 uniform_declarations,
                 replaced_source);
 
-            GlShader::new(&self.context, replaced_source, ShaderType::Vertex).map_err(|err| ())?
+            GlShader::new(&self.context, replaced_source, ShaderType::Vertex).map_err(|err| BuildMaterialError)?
         };
 
         // Generate the GLSL source for the fragment shader.
@@ -430,7 +474,7 @@ impl Renderer for GlRender {
                 .iter()
                 .find(|program_source| program_source.is_fragment())
                 .map(|program_source| program_source.source())
-                .ok_or(())?;
+                .ok_or(BuildMaterialError)?;
 
             // Perform text replacements for the various keywords.
             let replaced_source = raw_source
@@ -467,10 +511,10 @@ impl Renderer for GlRender {
                 uniform_declarations,
                 replaced_source);
 
-            GlShader::new(&self.context, replaced_source, ShaderType::Fragment).map_err(|err| ())?
+            GlShader::new(&self.context, replaced_source, ShaderType::Fragment).map_err(|err| BuildMaterialError)?
         };
 
-        let program = Program::new(&self.context, &[vert_shader, frag_shader]).map_err(|err| ())?;
+        let program = Program::new(&self.context, &[vert_shader, frag_shader]).map_err(|err| BuildMaterialError)?;
 
         let program_id = self.shader_counter.next();
         self.programs.insert(program_id, program);

@@ -2,7 +2,8 @@ use std::thread;
 use std::collections::HashMap;
 use std::intrinsics::type_name;
 use std::mem;
-use std::ptr;
+use std::ptr::{self, Unique};
+use std::sync::{Arc, Barrier, Mutex};
 use std::time::Duration;
 
 use bootstrap::input::ScanCode;
@@ -26,7 +27,7 @@ pub const TARGET_FRAME_TIME_MS: f32 = TARGET_FRAME_TIME_SECONDS * 1000.0;
 static mut INSTANCE: *mut Engine = ptr::null_mut();
 
 pub struct Engine {
-    renderer: Box<Renderer>,
+    renderer: Mutex<Box<Renderer>>,
     window: Window,
     resource_manager: Box<ResourceManager>,
 
@@ -86,13 +87,19 @@ impl Engine {
         &*instance.resource_manager
     }
 
+    pub fn renderer<F, T>(func: F) -> T
+        where F: FnOnce(&mut Renderer) -> T,
+    {
+        let instance = Engine::instance();
+        let mut renderer = instance.renderer.lock().expect("Could not acquire lock on renderer mutex");
+        func(&mut **renderer)
+    }
+
     pub fn window() -> &'static Window {
         &Engine::instance().window
     }
 
     fn main_loop(&mut self) {
-        println!("starting main loop");
-
         let timer = Timer::new();
         let mut collector = Collector::new().unwrap();
 
@@ -131,8 +138,6 @@ impl Engine {
         };
 
         collector.flush_to_file("stopwatch.csv");
-
-        println!("exiting main loop");
     }
 
     fn update(&mut self) {
@@ -141,27 +146,23 @@ impl Engine {
         let scene = &mut self.scene;
 
         scene.input.clear();
-        loop {
-            let message = self.window.next_message(); // TODO: Make this an iterator to simplify this loop.
-            match message {
-                Some(message) => {
-                    match message {
-                        Activate => (),
-                        Close => self.close = true,
-                        Destroy => (),
-                        Paint => (),
 
-                        // Handle inputs.
-                        KeyDown(_)
-                      | KeyUp(_)
-                      | MouseMove(_, _)
-                      | MousePos(_, _)
-                      | MouseButtonPressed(_)
-                      | MouseButtonReleased(_)
-                      | MouseWheel(_) => scene.input.push_input(message),
-                    }
-                },
-                None => break
+        // TODO: Make this an iterator to simplify this loop.
+        while let Some(message) = self.window.next_message() {
+            match message {
+                Activate => (),
+                Close => self.close = true,
+                Destroy => (),
+                Paint => (),
+
+                // Handle inputs.
+                KeyDown(_)
+              | KeyUp(_)
+              | MouseMove(_, _)
+              | MousePos(_, _)
+              | MouseButtonPressed(_)
+              | MouseButtonReleased(_)
+              | MouseWheel(_) => scene.input.push_input(message),
             }
         }
 
@@ -206,7 +207,10 @@ impl Engine {
     fn draw(&mut self) {
         let _stopwatch = Stopwatch::new("draw");
 
-        self.renderer.draw();
+        self.renderer
+        .lock()
+        .expect("Unable to acquire lock on renderer mutex for drawing")
+        .draw();
     }
 
     #[cfg(feature="no-draw")]
@@ -216,13 +220,11 @@ impl Engine {
 unsafe impl Singleton for Engine {
     /// Creates the instance of the singleton.
     fn set_instance(engine: Engine) {
-        println!("setting instance");
         assert!(unsafe { INSTANCE.is_null() }, "Cannot create more than one Engine instance");
         let boxed_engine = Box::new(engine);
         unsafe {
             INSTANCE = Box::into_raw(boxed_engine);
         }
-        println!("done setting instance");
     }
 
     /// Retrieves an immutable reference to the singleton instance.
@@ -246,6 +248,7 @@ pub struct EngineBuilder {
     systems: HashMap<SystemId, Box<System>>,
     debug_systems: HashMap<SystemId, Box<System>>,
     managers: ManagerMap,
+    max_workers: usize,
 }
 
 /// A builder for configuring the components and systems registered with the game engine.
@@ -260,6 +263,7 @@ impl EngineBuilder {
             systems: HashMap::new(),
             debug_systems: HashMap::new(),
             managers: ManagerMap::new(),
+            max_workers: 1,
         };
 
         // Register internal component managers.
@@ -278,10 +282,36 @@ impl EngineBuilder {
     ///
     /// No `Engine` object is returned because this method instantiates the engine singleton.
     pub fn build(self) {
-
         let engine = {
-            let window = Window::new("gunship game");
-            let mut renderer = RendererBuilder::new().build();
+
+            let window = {
+                let mut window = unsafe { mem::uninitialized() };
+                let mut out = unsafe { Unique::new(&mut window as *mut _) };
+
+                let barrier = Arc::new(Barrier::new(2));
+                let barrier_clone = barrier.clone();
+
+                thread::spawn(move || {
+                    let mut window = Window::new("gunship game").unwrap();
+
+                    let mut message_pump = window.message_pump();
+
+                    // write data out to `window` without dropping the old (uninitialized) value.
+                    unsafe { ptr::write(out.get_mut(), window); }
+
+                    // Sync with
+                    barrier_clone.wait();
+
+                    message_pump.run();
+                });
+
+                // Wait until window thread finishe creating the window.
+                barrier.wait();
+
+                window
+            };
+
+            let mut renderer = RendererBuilder::new(&window).build();
             let debug_draw = DebugDraw::new(&mut *renderer);
 
             let resource_manager = Box::new(ResourceManager::new());
@@ -296,7 +326,7 @@ impl EngineBuilder {
 
             Engine {
                 window: window,
-                renderer: renderer,
+                renderer: Mutex::new(renderer),
                 resource_manager: resource_manager,
 
                 systems: self.systems,
@@ -315,23 +345,34 @@ impl EngineBuilder {
             }
         };
 
-        println!("made the engine, woo");
+        // Init aysnc subsystem.
+        ::async::init();
+        ::async::start_workers(self.max_workers);
 
         Engine::set_instance(engine);
+
+        run!(Engine::start());
+    }
+
+    pub fn max_workers(&mut self, workers: usize) -> &mut EngineBuilder {
+        assert!(workers > 0, "There must be at least one worker for the engine to run");
+        self.max_workers = workers;
+        self
     }
 
     /// Registers the manager for the specified component type.
     ///
     /// Defers internally to `register_manager()`.
-    pub fn register_component<T: Component>(&mut self) {
+    pub fn register_component<T: Component>(&mut self) -> &mut EngineBuilder {
         T::Manager::register(self);
+        self
     }
 
     /// Registers the specified manager with the engine.
     ///
     /// Defers internally to `ComponentManager::register()`.
 
-    pub fn register_manager<T: ComponentManager>(&mut self, manager: T) {
+    pub fn register_manager<T: ComponentManager>(&mut self, manager: T) -> &mut EngineBuilder {
         let manager_id = ManagerId::of::<T>();
         assert!(
             !self.managers.contains_key(&manager_id),
@@ -342,10 +383,12 @@ impl EngineBuilder {
 
         // Add the manager to the type map and the component id to the component map.
         self.managers.insert(manager_id, boxed_manager);
+
+        self
     }
 
     /// Registers the system with the engine.
-    pub fn register_system<T: System>(&mut self, system: T) {
+    pub fn register_system<T: System>(&mut self, system: T) -> &mut EngineBuilder {
         let system_id = SystemId::of::<T>();
 
         assert!(
@@ -353,10 +396,12 @@ impl EngineBuilder {
             "System {} with ID {:?} already registered", unsafe { type_name::<T>() }, &system_id);
 
         self.systems.insert(system_id, Box::new(system));
+
+        self
     }
 
     /// Registers the debug system with the engine.
-    pub fn register_debug_system<T: System>(&mut self, system: T) {
+    pub fn register_debug_system<T: System>(&mut self, system: T) -> &mut EngineBuilder {
         let system_id = SystemId::of::<T>();
 
         assert!(
@@ -364,5 +409,7 @@ impl EngineBuilder {
             "System {} with ID {:?} already registered", unsafe { type_name::<T>() }, &system_id);
 
         self.debug_systems.insert(system_id, Box::new(system));
+
+        self
     }
 }
