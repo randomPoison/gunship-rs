@@ -10,7 +10,7 @@ use gunship::math::*;
 
 fn main() {
     let mut builder = EngineBuilder::new();
-    builder.max_workers(4);
+    builder.max_workers(8);
     builder.build(|| {
         setup_scene();
     });
@@ -27,16 +27,20 @@ fn main() {
 fn setup_scene() {
     // Start both async operations but don't await either, allowing both to run concurrently.
     let async_mesh = resource::load_mesh("lib/polygon_rs/resources/meshes/epps_head.obj");
-    // let async_material = resource::load_material("lib/polygon_rs/resources/materials/diffuse_flat.material");
+    let async_material = resource::load_material("lib/polygon_rs/resources/materials/diffuse_flat.material");
+
+    // // EXAMPLE: `Async<T>` lifetime parameter.
+    // let async_mesh = {
+    //     let path = String::from("lib/polygon_rs/resources/meshes/epps_head.obj");
+    //     resource::load_mesh(&*path)
+    // };
 
     // Await the operations, suspending this fiber until they complete.
     let mesh = async_mesh.await().unwrap();
-    // let material = async_material.await().unwrap();
-
-    println!("received mesh: {:?}", mesh);
+    let _material = async_material.await().unwrap();
 
     let mesh_transform = Transform::new();
-    let mesh_renderer = MeshRenderer::new(&mesh, &mesh_transform);
+    let _mesh_renderer = MeshRenderer::new(&mesh, &mesh_transform);
 
     let camera_transform = Transform::new();
     camera_transform.set_position(Point::new(0.0, 0.0, 10.0));
@@ -44,17 +48,17 @@ fn setup_scene() {
 
     let mut time: f32 = 0.0;
     engine::run_each_frame(move || {
-        time += 0.05;
+        time += 1.0 / 60.0 * 2.0 * PI / 5.0;
         let new_pos = Point::new(
-            time.cos(),
-            time.sin(),
+            time.cos() * 3.0,
+            time.sin() * 3.0,
             0.0,
         );
         mesh_transform.set_position(new_pos);
     });
 
     engine::run_each_frame(move || {
-        time += 0.013;
+        time += 1.0 / 60.0 * 2.0 * PI;
         let new_pos = Point::new(
             0.0,
             0.0,
