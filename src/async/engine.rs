@@ -6,7 +6,7 @@ use async::scheduler::WorkId;
 use async::transform::{TransformInnerHandle, TransformGraph};
 use bootstrap::window::{Message, Window};
 use cell_extras::{AtomicInitCell, InitCell};
-use input::Input;
+use input::{self, Input, ScanCode};
 use polygon::{GpuMesh, Renderer, RendererBuilder};
 use polygon::anchor::Anchor;
 use polygon::camera::{Camera as RenderCamera, CameraId};
@@ -115,6 +115,8 @@ impl EngineBuilder {
             camera: None,
             behaviors: Vec::new(),
             input: Input::new(),
+
+            debug_pause: false,
         };
 
         let main_loop = scheduler::start(move || { main_loop(engine); });
@@ -145,6 +147,8 @@ pub struct Engine {
     camera: Option<(Box<CameraData>, CameraId)>,
     behaviors: Vec<Box<FnMut() + Send>>,
     input: Input,
+
+    debug_pause: bool,
 }
 
 impl Drop for Engine {
@@ -229,15 +233,21 @@ fn main_loop(engine: Engine) {
             engine.input.clear();
             for message in &mut engine.window {
                 // TODO: Process input messages.
-                if let Message::Close = message {
-                    break 'main;
-                } else {
-                    engine.input.push_input(message);
+                match message {
+                    Message::Close => break 'main,
+                    Message::Activate => {}, // We don't handle window focus currently.
+                    _ => engine.input.push_input(message),
                 }
             }
 
+            if input::key_pressed(ScanCode::F10) {
+                engine.debug_pause = !engine.debug_pause;
+            }
+
+            let debug_step = input::key_pressed(ScanCode::F11);
+
             // Kick off all game behaviors and wait for them to complete.
-            if engine.behaviors.len() > 0 {
+            if engine.behaviors.len() > 0 && (!engine.debug_pause || debug_step) {
                 let _stopwatch = Stopwatch::new("game behaviors");
                 let mut pending = Vec::with_capacity(engine.behaviors.len());
 
@@ -356,27 +366,26 @@ fn main_loop(engine: Engine) {
         // If we've already missed our target frame time then we want to immediately start the
         // next frame. Also, the remaining time calculations will overflow so we don't want to
         // run the below code.
-        if last_frame_time.elapsed() > target_frame_time {
-            last_frame_time = Instant::now();
-            continue;
-        }
+        let elapsed_time = last_frame_time.elapsed();
+        if elapsed_time < target_frame_time {
+            // Sleep the thread while there's more than a millisecond left.
+            let mut remaining_time_ms = target_frame_time - elapsed_time;
+            while remaining_time_ms > Duration::from_millis(1) {
+                thread::sleep(remaining_time_ms);
 
-        // Sleep the thread while there's more than a millisecond left.
-        let mut remaining_time_ms = target_frame_time - last_frame_time.elapsed();
-        while remaining_time_ms > Duration::from_millis(1) {
-            thread::sleep(remaining_time_ms);
-
-            if last_frame_time.elapsed() > target_frame_time {
-                break;
-            } else {
-                remaining_time_ms = target_frame_time - last_frame_time.elapsed();
+                let elapsed_time = last_frame_time.elapsed();
+                if elapsed_time > target_frame_time {
+                    break;
+                } else {
+                    remaining_time_ms = target_frame_time - elapsed_time;
+                }
             }
-        }
 
-        // When there's less than a millisecond left the system scheduler isn't accurate enough to
-        // awake it at the right time and it's possible to sleep too long. To avoid that we simply
-        // busy loop until it's time for the next frame.
-        while last_frame_time.elapsed() < target_frame_time {}
+            // When there's less than a millisecond left the system scheduler isn't accurate enough to
+            // awake it at the right time and it's possible to sleep too long. To avoid that we simply
+            // busy loop until it's time for the next frame.
+            while last_frame_time.elapsed() < target_frame_time {}
+        }
 
         last_frame_time = Instant::now();
     }
