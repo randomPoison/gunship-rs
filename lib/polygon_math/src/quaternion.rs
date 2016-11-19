@@ -244,6 +244,10 @@ impl Quaternion {
         }
     }
 
+    pub fn diff(self, rhs: Quaternion) -> Quaternion {
+        rhs * self.inverse()
+    }
+
     fn mul(self, rhs: f32) -> Quaternion {
         Quaternion {
             w: self.w * rhs,
