@@ -1,6 +1,11 @@
+//! The transform component, used for positioning objects in the scene.
+//!
+//! TODO: Document the transform "component", especially how there's no parent/child setup.
+
 use async::engine::{self, EngineMessage};
 use async::collections::atomic_array::AtomicArray;
 use cell_extras::atomic_ref_cell::*;
+use std::fmt::{self, Debug, Formatter};
 use std::ptr;
 use std::sync::Arc;
 use math::*;
@@ -16,17 +21,85 @@ pub struct Transform {
 }
 
 impl Transform {
+    /// Creates a new transform in the scene.
+    ///
+    /// By default transforms start at the origin of the world with a scale of 1 and are oriented
+    /// such that their "forward" is along global -z.
     pub fn new() -> Transform {
         engine::scene_graph(|scene_graph| Transform { inner: scene_graph.create_node() })
     }
 
-    pub fn inner(&self) -> TransformInnerHandle {
-        self.inner.clone()
+    /// Gets the current position of the transform.
+    pub fn position(&self) -> Point {
+        let data = self.inner.data();
+        data.position
     }
 
-    pub fn set_position(&self, position: Point) {
+    /// Sets the current position of the transform the specified point.
+    pub fn set_position(&mut self, position: Point) {
         let mut data = self.inner.data_mut();
         data.position = position;
+    }
+
+    /// Moves the transform by the specified offset.
+    pub fn translate(&mut self, offset: Vector3) {
+        let mut data = self.inner.data_mut();
+        data.position += offset;
+    }
+
+    /// Gets the current orientation of the transform.
+    pub fn orientation(&self) -> Quaternion {
+        let data = self.inner.data();
+        data.orientation
+    }
+
+    /// Sets the orientation of the transform.
+    pub fn set_orientation(&mut self, orientation: Quaternion) {
+        let mut data = self.inner.data_mut();
+        data.orientation = orientation;
+    }
+
+    /// Rotates the transform by the specified offset.
+    pub fn rotate(&mut self, offset: Quaternion) {
+        let mut data = self.inner.data_mut();
+        data.orientation *= offset;
+    }
+
+    /// Rotates the transform by the specified euler angles.
+    ///
+    /// TODO: Do the number represent clockwise or anitclockwise rotation around each axis? That
+    /// might be determined by the math library, but it should be noted in the module docs.
+    pub fn rotate_eulers(&mut self, x: f32, y: f32, z: f32) {
+        self.rotate(Quaternion::from_eulers(x, y, z));
+    }
+
+    /// Gets the scale of the transform.
+    pub fn scale(&self) -> Vector3 {
+        let data = self.inner.data();
+        data.scale
+    }
+
+    /// Sets the scale of the transform.
+    pub fn set_scale(&mut self, scale: Vector3) {
+        let mut data = self.inner.data_mut();
+        data.scale = scale;
+    }
+
+    /// Gets the forward vector for the transform.
+    ///
+    /// The forward vector for the transform is the global forward (-z) as rotated by the
+    /// transform's orientation.
+    pub fn forward(&self) -> Vector3 {
+        self.orientation() * Vector3::new(0.0, 0.0, -1.0)
+    }
+
+    pub fn right(&self) -> Vector3 {
+        self.orientation() * Vector3::new(1.0, 0.0, 0.0)
+    }
+
+    // TODO: This shouldn't be public, it's only needed by engine internals.
+    pub fn inner(&self) -> TransformInnerHandle {
+        self.inner.clone()
     }
 }
 
@@ -34,6 +107,19 @@ impl Drop for Transform {
     fn drop(&mut self) {
         // TODO: Mark transform and all its children as destroyed in the manager.
         warn_once!("WARNING: Drop hasn't been implemented for Transform yet");
+    }
+}
+
+impl Debug for Transform {
+    fn fmt(&self, formatter: &mut Formatter) -> Result<(), fmt::Error> {
+        let data = self.inner.data();
+        write!(
+            formatter,
+            "Transform {{ position: {:?}, orientation: {:?}, scale: {:?} }}",
+            data.position,
+            data.orientation,
+            data.scale,
+        )
     }
 }
 
