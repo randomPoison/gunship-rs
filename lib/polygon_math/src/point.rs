@@ -11,7 +11,7 @@ use vector::Vector3;
 /// Points are represented as cartesian coordinates with an `x`, `y`, and `z` position, as well as
 /// a `w` homogeneous coordinate for the purposes of linear algebra calculations.
 #[repr(C)]
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct Point {
     pub x: f32,
     pub y: f32,

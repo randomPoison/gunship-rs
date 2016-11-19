@@ -252,6 +252,12 @@ impl Quaternion {
     }
 }
 
+impl Default for Quaternion {
+    fn default() -> Quaternion {
+        Quaternion::identity()
+    }
+}
+
 impl Mul<Quaternion> for Quaternion {
     type Output = Quaternion;
 
