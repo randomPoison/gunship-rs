@@ -1,3 +1,13 @@
+/// Quaternion math used to represent orientation/rotation in 3D space.
+///
+/// TODO: Expand on the mathy stuff:
+/// - "Quaternion" really means "unit quaternion", since that's the only case we care about.
+/// - Multiplication means composing two rotations.
+/// - "Grassman product" is technically the type of multiplication used.
+/// - Multiplying by a `Vector3` rotates the vector.
+/// - Concatenation happens left-to-right, e.g. `v * q1 * q2 * q3` rotates `v` by `q1`, then `q2`,
+///   then `q3`. In theory that order shouldn't really matter, right? Rotation is commutative?
+
 use std::ops::{Mul, MulAssign};
 use std::f32::consts::PI;
 
@@ -224,6 +234,16 @@ impl Quaternion {
         return (first.mul(theta.cos()).add(normal.mul(theta.sin()))).normalized();
     }
 
+    /// Calculates the quaternion representing the opposite rotation.
+    pub fn inverse(self) -> Quaternion {
+        Quaternion {
+            w: self.w,
+            x: -self.x,
+            y: -self.y,
+            z: -self.z,
+        }
+    }
+
     fn mul(self, rhs: f32) -> Quaternion {
         Quaternion {
             w: self.w * rhs,
@@ -280,7 +300,23 @@ impl MulAssign<Quaternion> for Quaternion {
     }
 }
 
+impl Mul<Vector3> for Quaternion {
+    type Output = Vector3;
+
+    fn mul(self, rhs: Vector3) -> Vector3 {
+        let rhs_quat = Quaternion::from_vector3(rhs);
+        let result_quat = self * rhs_quat * self.inverse();
+        Vector3::new(result_quat.x, result_quat.y, result_quat.z)
+    }
+}
+
 // TODO: impl Mul<Vector3> for Quaternion (or maybe other way around).
+
+impl From<Vector3> for Quaternion {
+    fn from(from: Vector3) -> Quaternion {
+        Quaternion::from_vector3(from)
+    }
+}
 
 impl IsZero for Quaternion {
     fn is_zero(self) -> bool {
