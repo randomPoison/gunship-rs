@@ -31,6 +31,7 @@ pub extern crate polygon_math as math;
 pub mod macros;
 
 pub mod async;
+pub mod input;
 pub mod time;
 
 pub use async::*;
