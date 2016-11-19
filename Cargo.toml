@@ -4,12 +4,8 @@ name = "gunship"
 version = "0.1.0"
 authors = ["David LeGare <excaliburhissheath@gmail.com>"]
 
-[lib]
-name = "gunship"
-
 [features]
 timing = []
-hotloading = []
 no-draw = []
 
 [dependencies]
