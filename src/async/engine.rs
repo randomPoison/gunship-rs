@@ -4,8 +4,9 @@ use async::mesh_renderer::MeshRendererData;
 use async::resource::{MaterialId, MeshId};
 use async::scheduler::WorkId;
 use async::transform::{TransformInnerHandle, TransformGraph};
-use cell_extras::{AtomicInitCell, InitCell};
 use bootstrap::window::{Message, Window};
+use cell_extras::{AtomicInitCell, InitCell};
+use input::Input;
 use polygon::{GpuMesh, Renderer, RendererBuilder};
 use polygon::anchor::Anchor;
 use polygon::camera::{Camera as RenderCamera, CameraId};
@@ -113,6 +114,7 @@ impl EngineBuilder {
             scene_graph: TransformGraph::new(),
             camera: None,
             behaviors: Vec::new(),
+            input: Input::new(),
         };
 
         let main_loop = scheduler::start(move || { main_loop(engine); });
@@ -141,7 +143,8 @@ pub struct Engine {
 
     scene_graph: TransformGraph,
     camera: Option<(Box<CameraData>, CameraId)>,
-    behaviors: Vec<Box<FnMut() + Send + Sync>>,
+    behaviors: Vec<Box<FnMut() + Send>>,
+    input: Input,
 }
 
 impl Drop for Engine {
@@ -160,11 +163,20 @@ thread_local! {
     pub static RENDER_MESSAGE_CHANNEL: InitCell<Sender<EngineMessage>> = InitCell::new();
 }
 
+// TODO: This shouln't be public, it's for engine-internal use.
 pub fn scene_graph<F, T>(func: F) -> T
     where F: FnOnce(&TransformGraph) -> T
 {
     let engine = INSTANCE.borrow();
     unsafe { func(&(***engine).scene_graph) }
+}
+
+// TODO: This shouln't be public, it's for engine-internal use.
+pub fn input<F, T>(func: F) -> T
+    where F: FnOnce(&Input) -> T
+{
+    let engine = INSTANCE.borrow();
+    unsafe { func(&(***engine).input) }
 }
 
 pub enum EngineMessage {
@@ -173,7 +185,7 @@ pub enum EngineMessage {
     Material(MaterialId, ::polygon::material::MaterialSource),
     Mesh(MeshId, ::polygon::geometry::mesh::Mesh),
     MeshInstance(Box<MeshRendererData>, TransformInnerHandle),
-    Behavior(Box<FnMut() + Send + Sync>),
+    Behavior(Box<FnMut() + Send>),
 }
 
 pub fn send_message(message: EngineMessage) {
@@ -188,7 +200,7 @@ pub fn run_each_frame<F>(func: F)
     where
     F: 'static,
     F: FnMut(),
-    F: Send + Sync,
+    F: Send,
 {
     send_message(EngineMessage::Behavior(Box::new(func)));
 }
@@ -214,10 +226,13 @@ fn main_loop(engine: Engine) {
             let _stopwatch = Stopwatch::with_budget("main loop", target_frame_time);
 
             // Process any pending window messages.
+            engine.input.clear();
             for message in &mut engine.window {
                 // TODO: Process input messages.
                 if let Message::Close = message {
                     break 'main;
+                } else {
+                    engine.input.push_input(message);
                 }
             }
 
