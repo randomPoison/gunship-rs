@@ -49,6 +49,21 @@ impl Vector3 {
         }
     }
 
+    pub fn set_x(mut self, x: f32) -> Vector3 {
+        self.x = x;
+        self
+    }
+
+    pub fn set_y(mut self, y: f32) -> Vector3 {
+        self.y = y;
+        self
+    }
+
+    pub fn set_z(mut self, z: f32) -> Vector3 {
+        self.z = z;
+        self
+    }
+
     /// Normalizes the vector, returning the old length.
     ///
     /// If the vector is the zero vector it is not altered.
