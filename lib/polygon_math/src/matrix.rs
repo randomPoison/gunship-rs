@@ -3,6 +3,7 @@ use std::fmt::{Debug, Formatter, Error};
 use std::cmp::PartialEq;
 
 use vector::Vector3;
+use orientation::Orientation;
 use point::Point;
 use quaternion::Quaternion;
 use super::{IsZero, Dot};
@@ -12,9 +13,7 @@ use super::{IsZero, Dot};
 /// Matrices are row-major.
 #[derive(Clone, Copy)]
 #[repr(C)]
-pub struct Matrix4 {
-    data: [[f32; 4]; 4]
-}
+pub struct Matrix4([[f32; 4]; 4]);
 
 impl Matrix4 {
     /// Create a new empy matrix.
@@ -22,38 +21,32 @@ impl Matrix4 {
     /// The result matrix is filled entirely with zeroes, it is NOT an identity
     /// matrix. use Matrix4::identity() to get a new identit matrix.
     pub fn new() -> Matrix4 {
-        Matrix4 {
-            data: [
-                [0.0, 0.0, 0.0, 0.0],
-                [0.0, 0.0, 0.0, 0.0],
-                [0.0, 0.0, 0.0, 0.0],
-                [0.0, 0.0, 0.0, 0.0]
-            ]
-        }
+        Matrix4([
+            [0.0, 0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 0.0]
+        ])
     }
 
     /// Create a new identity matrix.
     pub fn identity() -> Matrix4 {
-        Matrix4 {
-            data: [
-                [1.0, 0.0, 0.0, 0.0],
-                [0.0, 1.0, 0.0, 0.0],
-                [0.0, 0.0, 1.0, 0.0],
-                [0.0, 0.0, 0.0, 1.0],
-            ]
-        }
+        Matrix4([
+            [1.0, 0.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0, 0.0],
+            [0.0, 0.0, 1.0, 0.0],
+            [0.0, 0.0, 0.0, 1.0],
+        ])
     }
 
     /// Create a new translation matrix.
     pub fn translation(x: f32, y: f32, z: f32) -> Matrix4 {
-        Matrix4 {
-            data: [
-                [1.0, 0.0, 0.0, x  ],
-                [0.0, 1.0, 0.0, y  ],
-                [0.0, 0.0, 1.0, z  ],
-                [0.0, 0.0, 0.0, 1.0],
-            ]
-        }
+        Matrix4([
+            [1.0, 0.0, 0.0, x  ],
+            [0.0, 1.0, 0.0, y  ],
+            [0.0, 0.0, 1.0, z  ],
+            [0.0, 0.0, 0.0, 1.0],
+        ])
     }
 
     /// Creates a new translation matrix from a point.
@@ -75,53 +68,45 @@ impl Matrix4 {
         let s3 = z.sin();
         let c3 = z.cos();
 
-        Matrix4 {
-            data: [
-                [               c2 * c3,               -c2 * s3,       s2, 0.0],
-                [c1 * s3 + c3 * s1 * s2, c1 * c3 - s1 * s2 * s3, -c2 * s1, 0.0],
-                [s1 * s3 - c1 * c3 * s2, c3 * s1 + c1 * s2 * s3,  c1 * c2, 0.0],
-                [                   0.0,                    0.0,      0.0, 1.0],
-            ]
-        }
+        Matrix4([
+            [c2 * c3,                -c2 * s3,               s2,       0.0],
+            [c1 * s3 + c3 * s1 * s2, c1 * c3 - s1 * s2 * s3, -c2 * s1, 0.0],
+            [s1 * s3 - c1 * c3 * s2, c3 * s1 + c1 * s2 * s3, c1 * c2,  0.0],
+            [0.0,                    0.0,                    0.0,      1.0],
+        ])
     }
 
     /// Creates a new rotation matrix from a quaternion.
-    pub fn from_quaternion(q: Quaternion) -> Matrix4 {
+    pub fn from_orientation(q: Orientation) -> Matrix4 {
         q.into()
     }
 
     pub fn from_matrix3(other: Matrix3) -> Matrix4 {
-        Matrix4 {
-            data: [
-                [other[0][0], other[0][1], other[0][2], 0.0],
-                [other[1][0], other[1][1], other[1][2], 0.0],
-                [other[2][0], other[2][1], other[2][2], 0.0],
-                [        0.0,         0.0,         0.0, 1.0],
-            ]
-        }
+        Matrix4([
+            [other[0][0], other[0][1], other[0][2], 0.0],
+            [other[1][0], other[1][1], other[1][2], 0.0],
+            [other[2][0], other[2][1], other[2][2], 0.0],
+            [0.0,         0.0,         0.0,         1.0],
+        ])
     }
 
     /// Creates a new scale matrix.
     pub fn scale(x: f32, y: f32, z: f32) -> Matrix4 {
-        Matrix4 {
-            data: [
-                [x,   0.0, 0.0, 0.0],
-                [0.0, y,   0.0, 0.0],
-                [0.0, 0.0, z,   0.0],
-                [0.0, 0.0, 0.0, 1.0],
-            ]
-        }
+        Matrix4([
+            [x,   0.0, 0.0, 0.0],
+            [0.0, y,   0.0, 0.0],
+            [0.0, 0.0, z,   0.0],
+            [0.0, 0.0, 0.0, 1.0],
+        ])
     }
 
     pub fn from_scale_vector(scale: Vector3) -> Matrix4 {
-        Matrix4 {
-            data: [
-                [scale.x, 0.0,     0.0,     0.0],
-                [0.0,     scale.y, 0.0,     0.0],
-                [0.0,     0.0,     scale.z, 0.0],
-                [0.0,     0.0,     0.0,     1.0],
-            ]
-        }
+        Matrix4([
+            [scale.x, 0.0,     0.0,     0.0],
+            [0.0,     scale.y, 0.0,     0.0],
+            [0.0,     0.0,     scale.z, 0.0],
+            [0.0,     0.0,     0.0,     1.0],
+        ])
     }
 
     pub fn transpose(&self) -> Matrix4 {
@@ -157,7 +142,31 @@ impl Matrix4 {
     pub fn raw_data(&self) -> &[f32; 16] {
         // It's safe to transmute a pointer to data to a &[f32; 16]
         // because the layout in memory is exactly the same.
-        unsafe { ::std::mem::transmute(&self.data) }
+        unsafe { ::std::mem::transmute(&self.0) }
+    }
+}
+
+impl From<Matrix3> for Matrix4 {
+    fn from(from: Matrix3) -> Matrix4 {
+        Matrix4([
+            [from[0][0], from[0][1], from[0][2], 0.0],
+            [from[1][0], from[1][1], from[1][2], 0.0],
+            [from[2][0], from[2][1], from[2][2], 0.0],
+            [0.0,        0.0,        0.0,        1.0],
+        ])
+    }
+}
+
+impl From<Orientation> for Matrix4 {
+    fn from(q: Orientation) -> Matrix4 {
+        let Orientation(Quaternion { v: Vector3 { x, y, z }, w }) = q;
+
+        Matrix4([
+            [(w*w + x*x - y*y - z*z), (2.0*x*y - 2.0*w*z),     (2.0*x*z + 2.0*w*y),     0.0],
+            [(2.0*x*y + 2.0*w*z),     (w*w - x*x + y*y - z*z), (2.0*y*z - 2.0*w*x),     0.0],
+            [(2.0*x*z - 2.0*w*y),     (2.0*y*z + 2.0*w*x),     (w*w - x*x - y*y + z*z), 0.0],
+            [0.0,                     0.0,                     0.0,                     1.0],
+        ])
     }
 }
 
@@ -184,14 +193,14 @@ impl Index<usize> for Matrix4 {
 
     fn index(&self, index: usize) -> &[f32; 4] {
         debug_assert!(index < 4, "Cannot get matrix row {} in a 4x4 matrix", index);
-        &self.data[index]
+        &self.0[index]
     }
 }
 
 impl IndexMut<usize> for Matrix4 {
     fn index_mut(&mut self, index: usize) -> &mut [f32; 4] {
         debug_assert!(index < 4, "Cannot get matrix row {} in a 4x4 matrix", index);
-        &mut self.data[index]
+        &mut self.0[index]
     }
 }
 
@@ -251,42 +260,16 @@ impl Mul<Matrix4> for Point {
 
 impl Debug for Matrix4 {
     fn fmt(&self, formatter: &mut Formatter) -> Result<(), Error> {
-        try!(formatter.write_str("\n"));
+        formatter.write_str("\n")?;
         for row in 0..4 {
-            try!(formatter.write_str("["));
+            formatter.write_str("[")?;
             for col in 0..4 {
-                try!(write!(formatter, "{:>+.8}, ", self[row][col]));
+                write!(formatter, "{:>+.8}, ", self[row][col])?;
             }
-            try!(formatter.write_str("]\n"));
+            formatter.write_str("]\n")?;
         }
 
         Ok(())
-    }
-}
-
-impl From<Matrix3> for Matrix4 {
-    fn from(from: Matrix3) -> Matrix4 {
-        Matrix4 {
-            data: [
-                [from[0][0], from[0][1], from[0][2], 0.0],
-                [from[1][0], from[1][1], from[1][2], 0.0],
-                [from[2][0], from[2][1], from[2][2], 0.0],
-                [0.0, 0.0, 0.0, 1.0],
-            ]
-        }
-    }
-}
-
-impl From<Quaternion> for Matrix4 {
-    fn from(q: Quaternion) -> Matrix4 {
-        Matrix4 {
-            data: [
-            [(q.w*q.w + q.x*q.x - q.y*q.y - q.z*q.z), (2.0*q.x*q.y - 2.0*q.w*q.z),             (2.0*q.x*q.z + 2.0*q.w*q.y),             0.0],
-            [(2.0*q.x*q.y + 2.0*q.w*q.z),             (q.w*q.w - q.x*q.x + q.y*q.y - q.z*q.z), (2.0*q.y*q.z - 2.0*q.w*q.x),             0.0],
-            [(2.0*q.x*q.z - 2.0*q.w*q.y),             (2.0*q.y*q.z + 2.0*q.w*q.x),             (q.w*q.w - q.x*q.x - q.y*q.y + q.z*q.z), 0.0],
-            [0.0,                                     0.0,                                     0.0,                                     1.0],
-            ]
-        }
     }
 }
 
@@ -302,18 +285,6 @@ impl Matrix3 {
             [0.0, 1.0, 0.0],
             [0.0, 0.0, 1.0],
         ])
-    }
-
-    pub fn from_matrix4(other: &Matrix4) -> Matrix3 {
-        Matrix3([
-            [other[0][0], other[0][1], other[0][2]],
-            [other[1][0], other[1][1], other[1][2]],
-            [other[2][0], other[2][1], other[2][2]],
-        ])
-    }
-
-    pub fn from_quaternion(q: Quaternion) -> Matrix3 {
-        q.into()
     }
 
     pub fn from_scale_vector(scale: Vector3) -> Matrix3 {
@@ -339,9 +310,9 @@ impl Matrix3 {
         let c3 = z.cos();
 
         Matrix3([
-            [               c2 * c3,               -c2 * s3,       s2],
+            [c2 * c3,                -c2 * s3,               s2      ],
             [c1 * s3 + c3 * s1 * s2, c1 * c3 - s1 * s2 * s3, -c2 * s1],
-            [s1 * s3 - c1 * c3 * s2, c3 * s1 + c1 * s2 * s3,  c1 * c2],
+            [s1 * s3 - c1 * c3 * s2, c3 * s1 + c1 * s2 * s3, c1 * c2 ],
         ])
     }
 
@@ -389,6 +360,28 @@ impl Matrix3 {
         let Matrix3(ref data) = *self;
 
         unsafe { &*(data as *const _ as *const [f32; 9]) }
+    }
+}
+
+impl From<Matrix4> for Matrix3 {
+    fn from(from: Matrix4) -> Matrix3 {
+        Matrix3([
+            [from[0][0], from[0][1], from[0][2]],
+            [from[1][0], from[1][1], from[1][2]],
+            [from[2][0], from[2][1], from[2][2]],
+        ])
+    }
+}
+
+impl From<Orientation> for Matrix3 {
+    fn from(q: Orientation) -> Matrix3 {
+        let Quaternion { v: Vector3 { x, y, z }, w } = q.into();
+
+        Matrix3([
+            [(w*w + x*x - y*y - z*z), (2.0*x*y - 2.0*w*z),     (2.0*x*z + 2.0*w*y)    ],
+            [(2.0*x*y + 2.0*w*z),     (w*w - x*x + y*y - z*z), (2.0*y*z - 2.0*w*x)    ],
+            [(2.0*x*z - 2.0*w*y),     (2.0*y*z + 2.0*w*x),     (w*w - x*x - y*y + z*z)],
+        ])
     }
 }
 
@@ -463,25 +456,5 @@ impl Debug for Matrix3 {
         }
 
         Ok(())
-    }
-}
-
-impl From<Matrix4> for Matrix3 {
-    fn from(from: Matrix4) -> Matrix3 {
-        Matrix3([
-            [from[0][0], from[0][1], from[0][2]],
-            [from[1][0], from[1][1], from[1][2]],
-            [from[2][0], from[2][1], from[2][2]],
-        ])
-    }
-}
-
-impl From<Quaternion> for Matrix3 {
-    fn from(q: Quaternion) -> Matrix3 {
-        Matrix3([
-            [(q.w*q.w + q.x*q.x - q.y*q.y - q.z*q.z), (2.0*q.x*q.y - 2.0*q.w*q.z),             (2.0*q.x*q.z + 2.0*q.w*q.y),           ],
-            [(2.0*q.x*q.y + 2.0*q.w*q.z),             (q.w*q.w - q.x*q.x + q.y*q.y - q.z*q.z), (2.0*q.y*q.z - 2.0*q.w*q.x),           ],
-            [(2.0*q.x*q.z - 2.0*q.w*q.y),             (2.0*q.y*q.z + 2.0*q.w*q.x),             (q.w*q.w - q.x*q.x - q.y*q.y + q.z*q.z)],
-        ])
     }
 }

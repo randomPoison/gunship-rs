@@ -2,20 +2,21 @@
 #![feature(slice_patterns)]
 #![cfg_attr(test, feature(test))]
 
-pub mod point;
-pub mod vector;
-pub mod matrix;
 pub mod color;
+pub mod matrix;
+pub mod orientation;
+pub mod point;
 pub mod quaternion;
+pub mod vector;
 
 #[cfg(test)]
 mod test;
 
-pub use self::point::Point;
-pub use self::vector::{Vector2, Vector3};
-pub use self::matrix::{Matrix3, Matrix4};
-pub use self::color::Color;
-pub use self::quaternion::Quaternion;
+pub use point::Point;
+pub use vector::{Vector2, Vector3};
+pub use matrix::{Matrix3, Matrix4};
+pub use color::Color;
+pub use orientation::Orientation;
 
 pub use std::f32::consts::PI;
 

@@ -1,10 +1,11 @@
 use {IsZero, Dot, Lerp, Point};
-use std::ops::{Mul, MulAssign, Div, DivAssign, Neg, Add, AddAssign, Sub, SubAssign, Index, IndexMut};
+use std::ops::*;
+use std::fmt::{self, Debug, Formatter};
 
 // VECTOR 3
 // ================================================================================================
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq)]
 #[repr(C)]
 pub struct Vector3 {
     pub x: f32,
@@ -18,6 +19,14 @@ impl Vector3 {
             x: x,
             y: y,
             z: z
+        }
+    }
+
+    pub fn from_vector2(from: Vector2, z: f32) -> Vector3 {
+        Vector3 {
+            x: from.x,
+            y: from.y,
+            z: z,
         }
     }
 
@@ -130,6 +139,23 @@ impl Default for Vector3 {
             x: 0.0,
             y: 0.0,
             z: 0.0,
+        }
+    }
+}
+
+impl Debug for Vector3 {
+    fn fmt(&self, fmt: &mut Formatter) -> Result<(), fmt::Error> {
+        if let Some(precision) = fmt.precision() {
+            write!(
+                fmt,
+                "Vector3 {{ x: {:+.3$}, y: {:+.3$}, z: {:+.3$} }}",
+                self.x,
+                self.y,
+                self.z,
+                precision,
+            )
+        } else {
+            write!(fmt, "Vector3 {{ x: {}, y: {}, z: {} }}", self.x, self.y, self.z)
         }
     }
 }
