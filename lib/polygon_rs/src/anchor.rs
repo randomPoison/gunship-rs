@@ -3,7 +3,7 @@ use math::*;
 #[derive(Debug)]
 pub struct Anchor {
     position: Point,
-    orientation: Quaternion,
+    orientation: Orientation,
     scale: Vector3,
 }
 
@@ -12,7 +12,7 @@ impl Anchor {
     pub fn new() -> Anchor {
         Anchor {
             position: Point::origin(),
-            orientation: Quaternion::identity(),
+            orientation: Orientation::new(),
             scale: Vector3::one(),
         }
     }
@@ -28,12 +28,12 @@ impl Anchor {
     }
 
     /// Gets the current orientation of the anchor.
-    pub fn orientation(&self) -> Quaternion {
+    pub fn orientation(&self) -> Orientation {
         self.orientation
     }
 
     /// Sets the orientation of the anchor.
-    pub fn set_orientation(&mut self, orientation: Quaternion) {
+    pub fn set_orientation(&mut self, orientation: Orientation) {
         self.orientation = orientation;
     }
 
@@ -50,7 +50,7 @@ impl Anchor {
     /// Calculates the matrix to convert from object space to world space.
     pub fn matrix(&self) -> Matrix4 {
         let position = Matrix4::from_point(self.position);
-        let orientation = Matrix4::from_quaternion(self.orientation);
+        let orientation = Matrix4::from(self.orientation);
         let scale = Matrix4::from_scale_vector(self.scale);
 
         position * (orientation * scale)
@@ -71,7 +71,7 @@ impl Anchor {
     ///
     /// The view transform the matrix that converts from world coordinates to camera coordinates.
     pub fn view_matrix(&self) -> Matrix4 {
-        let inv_orientation = self.orientation.as_matrix4().transpose();
+        let inv_orientation = Matrix4::from(self.orientation).transpose();
         let inv_translation = Matrix4::translation(
             -self.position.x,
             -self.position.y,
@@ -81,7 +81,7 @@ impl Anchor {
 
     /// Calculates the inverse view matrix.
     pub fn inverse_view_matrix(&self) -> Matrix4 {
-        Matrix4::from_point(self.position) * self.orientation.as_matrix4()
+        Matrix4::from_point(self.position) * self.orientation.into()
     }
 }
 

@@ -8,8 +8,8 @@ authors = ["David LeGare <excaliburhissheath@gmail.com>"]
 bootstrap_rs = { version = "0.0", path = "../bootstrap_rs" }
 gl-util = { version = "0.1", path = "../gl-util" }
 parse-bmp = { version = "0.1", path = "../parse-bmp" }
-polygon_math = { version = "0.0", path = "../polygon_math" }
-polygon_material = { version = "0.0", path = "../polygon-material" }
+polygon_math = { version = "0.1", path = "../polygon_math" }
+polygon_material = { version = "0.1", path = "../polygon-material" }
 stopwatch = { path = "../stopwatch" }
 
 [dev_dependencies]

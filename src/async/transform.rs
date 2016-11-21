@@ -48,21 +48,21 @@ impl Transform {
     }
 
     /// Gets the current orientation of the transform.
-    pub fn orientation(&self) -> Quaternion {
+    pub fn orientation(&self) -> Orientation {
         let data = self.inner.data();
         data.orientation
     }
 
     /// Sets the orientation of the transform.
-    pub fn set_orientation(&mut self, orientation: Quaternion) {
+    pub fn set_orientation(&mut self, orientation: Orientation) {
         let mut data = self.inner.data_mut();
         data.orientation = orientation;
     }
 
     /// Rotates the transform by the specified offset.
-    pub fn rotate(&mut self, offset: Quaternion) {
+    pub fn rotate(&mut self, offset: Orientation) {
         let mut data = self.inner.data_mut();
-        data.orientation *= offset;
+        data.orientation += offset;
     }
 
     /// Rotates the transform by the specified euler angles.
@@ -70,7 +70,7 @@ impl Transform {
     /// TODO: Do the number represent clockwise or anitclockwise rotation around each axis? That
     /// might be determined by the math library, but it should be noted in the module docs.
     pub fn rotate_eulers(&mut self, x: f32, y: f32, z: f32) {
-        self.rotate(Quaternion::from_eulers(x, y, z));
+        self.rotate(Orientation::from_eulers(x, y, z));
     }
 
     /// Gets the scale of the transform.
@@ -153,7 +153,7 @@ impl TransformGraph {
             inner: inner.clone(),
 
             position: Point::origin(),
-            orientation: Quaternion::identity(),
+            orientation: Orientation::new(),
             scale: Vector3::one(),
         }));
 
@@ -213,7 +213,7 @@ pub struct TransformData {
     pub inner: TransformInnerHandle,
 
     pub position: Point,
-    pub orientation: Quaternion,
+    pub orientation: Orientation,
     pub scale: Vector3,
 }
 
