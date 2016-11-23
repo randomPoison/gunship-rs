@@ -104,7 +104,7 @@ impl EngineBuilder {
         // Set the current thread's channel.
         RENDER_MESSAGE_CHANNEL.with(move |channel| { channel.init(sender); });
 
-        let engine = Engine {
+        let mut engine = Box::new(Engine {
             window: window,
             renderer: renderer,
             channel: receiever,
@@ -117,7 +117,9 @@ impl EngineBuilder {
             input: Input::new(),
 
             debug_pause: false,
-        };
+        });
+
+        INSTANCE.init(unsafe { Unique::new(&mut *engine) });
 
         let main_loop = scheduler::start(move || { main_loop(engine); });
 
@@ -183,6 +185,14 @@ pub fn input<F, T>(func: F) -> T
     unsafe { func(&(***engine).input) }
 }
 
+// TODO: This shouln't be public, it's for engine-internal use.
+pub fn window<F, T>(func: F) -> T
+    where F: FnOnce(&Window) -> T
+{
+    let engine = INSTANCE.borrow();
+    unsafe { func(&(***engine).window) }
+}
+
 pub enum EngineMessage {
     Anchor(TransformInnerHandle),
     Camera(Box<CameraData>, TransformInnerHandle),
@@ -214,12 +224,10 @@ pub fn wait_for_quit() {
     MAIN_LOOP.borrow().await();
 }
 
-fn main_loop(engine: Engine) {
+fn main_loop(mut engine: Box<Engine>) {
     // TODO: This should be a constant, but we can't create constant `Duration` objects right now.
     let target_frame_time = Duration::new(0, 1_000_000_000 / 60);
 
-    let mut engine = Box::new(engine);
-    INSTANCE.init(unsafe { Unique::new(&mut *engine) });
     let engine = &mut *engine;
 
     let mut last_frame_time = Instant::now();
