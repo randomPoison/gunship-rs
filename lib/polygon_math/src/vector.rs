@@ -38,6 +38,14 @@ impl Vector3 {
         Vector3::new(1.0, 1.0, 1.0)
     }
 
+    pub fn right() -> Vector3 {
+        Vector3::new(1.0, 0.0, 0.0)
+    }
+
+    pub fn left() -> Vector3 {
+        Vector3::new(-1.0, 0.0, 0.0)
+    }
+
     pub fn up() -> Vector3 {
         Vector3::new(0.0, 1.0, 0.0)
     }
@@ -48,6 +56,10 @@ impl Vector3 {
 
     pub fn forward() -> Vector3 {
         Vector3::new(0.0, 0.0, -1.0)
+    }
+
+    pub fn back() -> Vector3 {
+        Vector3::new(0.0, 0.0, 1.0)
     }
 
     pub fn cross(first: Vector3, second: Vector3) -> Vector3 {
@@ -408,6 +420,22 @@ impl Vector2 {
             x: x,
             y: y,
         }
+    }
+
+    pub fn right() -> Vector2 {
+        Vector2::new(1.0, 0.0)
+    }
+
+    pub fn left() -> Vector2 {
+        Vector2::new(-1.0, 0.0)
+    }
+
+    pub fn up() -> Vector2 {
+        Vector2::new(0.0, 1.0)
+    }
+
+    pub fn down() -> Vector2 {
+        Vector2::new(0.0, -1.0)
     }
 
     pub fn as_ref(vectors: &[Vector2]) -> &[f32] {
