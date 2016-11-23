@@ -85,16 +85,52 @@ impl Transform {
         data.scale = scale;
     }
 
-    /// Gets the forward vector for the transform.
+    /// Gets the right direction for the transform.
     ///
-    /// The forward vector for the transform is the global forward (-z) as rotated by the
-    /// transform's orientation.
-    pub fn forward(&self) -> Vector3 {
-        self.orientation() * Vector3::new(0.0, 0.0, -1.0)
+    /// The right direction for the transform is the global right vector (positive x axis) as
+    /// rotated by the transform's orientation. The returned vector will be normalized.
+    pub fn right(&self) -> Vector3 {
+        self.orientation() * Vector3::right()
     }
 
-    pub fn right(&self) -> Vector3 {
-        self.orientation() * Vector3::new(1.0, 0.0, 0.0)
+    /// Gets the left direction for the transform.
+    ///
+    /// The left for the transform is the global right vector (negative x axis) as
+    /// rotated by the transform's orientation. The returned vector will be normalized.
+    pub fn left(&self) -> Vector3 {
+        self.orientation() * Vector3::left()
+    }
+
+    /// Gets the up direction for the transform.
+    ///
+    /// The up direction for the transform is the global up vector (positive y axis) as
+    /// rotated by the transform's orientation. The returned vector will be normalized.
+    pub fn up(&self) -> Vector3 {
+        self.orientation() * Vector3::up()
+    }
+
+    /// Gets the down direction for the transform.
+    ///
+    /// The down direction for the transform is the global down vector (negative y axis) as
+    /// rotated by the transform's orientation. The returned vector will be normalized.
+    pub fn down(&self) -> Vector3 {
+        self.orientation() * Vector3::down()
+    }
+
+    /// Gets the forward direction for the transform.
+    ///
+    /// The forward direction for the transform is the global forward vector (negative z axis) as
+    /// rotated by the transform's orientation. The returned vector will be normalized.
+    pub fn forward(&self) -> Vector3 {
+        self.orientation() * Vector3::forward()
+    }
+
+    /// Gets the back direction for the transform.
+    ///
+    /// The back direction for the transform is the global back vector (positive z axis) as
+    /// rotated by the transform's orientation. The returned vector will be normalized.
+    pub fn back(&self) -> Vector3 {
+        self.orientation() * Vector3::back()
     }
 
     // TODO: This shouldn't be public, it's only needed by engine internals.
