@@ -130,6 +130,54 @@ impl Orientation {
         let bank = f32::atan2(2.0 * x * w - 2.0 * y * z, 1.0 - 2.0 * sqx - 2.0 * sqz);
         return Vector3::new(bank, heading, attitude);
     }
+
+    /// Gets the right direction for the orientation.
+    ///
+    /// The right direction for the orientation is the global right vector (positive x axis) as
+    /// rotated by the orientation. The returned vector will be normalized.
+    pub fn right(self) -> Vector3 {
+        self * Vector3::right()
+    }
+
+    /// Gets the left direction for the orientation.
+    ///
+    /// The left for the orientation is the global right vector (negative x axis) as
+    /// rotated by the orientation. The returned vector will be normalized.
+    pub fn left(self) -> Vector3 {
+        self * Vector3::left()
+    }
+
+    /// Gets the up direction for the orientation.
+    ///
+    /// The up direction for the orientation is the global up vector (positive y axis) as
+    /// rotated by the orientation. The returned vector will be normalized.
+    pub fn up(self) -> Vector3 {
+        self * Vector3::up()
+    }
+
+    /// Gets the down direction for the orientation.
+    ///
+    /// The down direction for the orientation is the global down vector (negative y axis) as
+    /// rotated by the orientation. The returned vector will be normalized.
+    pub fn down(self) -> Vector3 {
+        self * Vector3::down()
+    }
+
+    /// Gets the forward direction for the orientation.
+    ///
+    /// The forward direction for the orientation is the global forward vector (negative z axis) as
+    /// rotated by the orientation. The returned vector will be normalized.
+    pub fn forward(self) -> Vector3 {
+        self * Vector3::forward()
+    }
+
+    /// Gets the back direction for the orientation.
+    ///
+    /// The back direction for the orientation is the global back vector (positive z axis) as
+    /// rotated by the orientation. The returned vector will be normalized.
+    pub fn back(self) -> Vector3 {
+        self * Vector3::back()
+    }
 }
 
 impl Default for Orientation {
