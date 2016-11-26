@@ -12,17 +12,17 @@ pub mod vector;
 #[cfg(test)]
 mod test;
 
-pub use point::Point;
-pub use vector::{Vector2, Vector3};
-pub use matrix::{Matrix3, Matrix4};
 pub use color::Color;
+pub use matrix::{Matrix3, Matrix4};
 pub use orientation::Orientation;
-
+pub use point::Point;
 pub use std::f32::consts::PI;
+pub use vector::{Vector2, Vector3};
 
-pub const TAU: f32 = 2.0 * PI;
+use std::ops::{Rem, Add};
 
 pub const EPSILON: f32 = 1e-6;
+pub const TAU: f32 = 2.0 * PI;
 
 pub trait IsZero {
     fn is_zero(self) -> bool;
@@ -85,5 +85,24 @@ pub trait Lerp {
 impl Lerp for f32 {
     fn lerp(t: f32, from: f32, to: f32) -> f32 {
         from + (to - from) * t
+    }
+}
+
+pub trait Modulo<Rhs = Self> {
+    type Output;
+
+    fn modulo(self, divisor: Rhs) -> Self::Output;
+}
+
+impl<T> Modulo for T
+    where
+    T: Copy,
+    T: Rem<Output=T>,
+    T: Add<Output=T>,
+{
+    type Output = T;
+
+    fn modulo(self, divisor: T) -> T {
+        ((self % divisor) + divisor) % divisor
     }
 }
