@@ -20,6 +20,8 @@ pub use orientation::Orientation;
 
 pub use std::f32::consts::PI;
 
+pub const TAU: f32 = 2.0 * PI;
+
 pub const EPSILON: f32 = 1e-6;
 
 pub trait IsZero {
