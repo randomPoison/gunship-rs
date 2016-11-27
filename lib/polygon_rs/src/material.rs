@@ -18,6 +18,54 @@
 //! want both red and blue objects in our scene. Materials allow us to write one shader that takes
 //! the color as a property. Then we can make two materials, both using the same shader but one set
 //! to show red and the other set to show blue.
+//!
+//! # Writing Materials
+//!
+//! > NOTE: This information is incomplete, and will likely not be for a long time. It's meant
+//! > more as reference information about the current material syntax than as a proper tutorial.
+//!
+//! ## Programs
+//!
+//! TODO: How do you specify vertex and frag shaders. What are their inputs and outputs?
+//!
+//! ## Vertex attributes
+//!
+//! TODO: What are the input and output vertex attributes?
+//!
+//! ## Built-In Uniforms and Attributes
+//!
+//! Polygon injects a number of uniforms and vertex attributes into your materials automatically
+//! in order to handle things like transforms and lighting. The following are the uniforms
+//! currently injected by the OpenGL renderer:
+//!
+//! Transforms:
+//!
+//! - `model_transform: Matrix4` - The transform converting points in model space to world space.
+//! - `normal_transform: Matrix3` - The transform converting normals in model space to world space.
+//! - `view_transform: Matrix4` - The transform converting points in world space to view space.
+//! - `view_normal_transform: Matrix3` - The transform converting normals in world space to view space.
+//! - `model_view_transform: Matrix4` - The transform converting points in model space to view space.
+//! - `projection_transform: Matrix4` - The transform converting points in view space to projection space.
+//! - `model_view_project: Matrix4` - The transform converting points in model space to projection space.
+//!
+//! Lighting:
+//!
+//! - `global_ambient: Color` - The ambient light given as a color.
+//! - `camera_position: Point` - The position of the camera in world space. In view space the
+//!   camera is at `(0.0, 0.0, 0.0)`.
+//! - `light_position: Point` - The position of the current light in world space.
+//! - `light_position_view: Point` - The position of the current light in view space.
+//! - `light_strength: f32` - The strength of the current light.
+//! - `light_color: Color` - The color of the current light.
+//! - `light_type: u32` - An integer constant specifying the type of the current light: 0 means
+//!   point light, 1 means directional light. All light-related uniforms will be present
+//!   regardless of the light type, but uniforms not used for the current light type will not be
+//!   set, so reading them will yield some kind of garbage.
+//! - `light_radius: f32` - The radius of the current light (only for point lights).
+//! - `light_direction: Vector3` - The normalized direction in world space of the current light (only
+//!   for directional lights).
+//! - `light_direction_view` - The normalized direction in view space of the current light (only
+//!   for directional lights).
 
 use math::*;
 use shader::Shader;
