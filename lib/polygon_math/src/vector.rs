@@ -127,14 +127,23 @@ impl Vector3 {
         self.x * self.x + self.y * self.y + self.z * self.z
     }
 
-    // Safely reinterprets a slice of Vector3s to a slice of f32s. This is a cheap operation and
-    // does not copy any data.
+    /// Safely reinterprets a slice of Vector3s to a slice of f32s. This is a cheap operation and
+    /// does not copy any data.
     pub fn as_ref(vectors: &[Vector3]) -> &[f32] {
         unsafe {
             ::std::slice::from_raw_parts(
                 vectors.as_ptr() as *const f32,
                 vectors.len() * 3)
         }
+    }
+
+    /// Converts the `Vector3` into a 3 element array.
+    ///
+    /// In the returned array, the `x` coordinate is at index 0, the `y` coordinate is at index 1,
+    /// and the `z` coordinate is at index 2.
+    pub fn into_array(self) -> [f32; 3] {
+        let Vector3 { x, y, z } = self;
+        [x, y, z]
     }
 
     // pub fn cross(&self, rhs: Vector3) -> Vector3 {

@@ -1,5 +1,5 @@
 use anchor::AnchorId;
-use math::Color;
+use math::{Color, Vector3};
 
 #[derive(Clone, Debug)]
 pub struct Light {
@@ -12,9 +12,16 @@ pub struct Light {
 impl Light {
     pub fn point(radius: f32, strength: f32, color: Color) -> Light {
         Light {
-            data: LightData::Point(PointLight {
-                radius: radius,
-            }),
+            data: LightData::Point { radius: radius },
+            color: color,
+            strength: strength,
+            anchor: None,
+        }
+    }
+
+    pub fn directional(direction: Vector3, strength: f32, color: Color) -> Light {
+        Light {
+            data: LightData::Directional { direction: direction.normalized() },
             color: color,
             strength: strength,
             anchor: None,
@@ -32,12 +39,8 @@ impl Light {
 
 #[derive(Clone, Copy, Debug)]
 pub enum LightData {
-    Point(PointLight),
-}
-
-#[derive(Clone, Copy, Debug)]
-pub struct PointLight {
-    pub radius: f32,
+    Point { radius: f32 },
+    Directional { direction: Vector3 },
 }
 
 /// Identifies a light that has been registered with the renderer.

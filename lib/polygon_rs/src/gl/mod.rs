@@ -258,24 +258,39 @@ impl GlRender {
             .blend(SourceFactor::One, DestFactor::One);
 
             for light in self.lights.values() {
-                // Send the light's position in view space.
-                let light_anchor = match light.anchor() {
-                    Some(anchor_id) => self.anchors.get(&anchor_id).expect("No such anchor exists"),
-                    None => panic!("Cannot render light if it's not attached to an anchor"),
-                };
-                draw_builder.uniform("light_position", *light_anchor.position().as_array());
-
-                let light_position_view = light_anchor.position() * view_transform;
-                draw_builder.uniform("light_position_view", *light_position_view.as_array());
-
                 // Send common light data.
                 draw_builder.uniform::<[f32; 4]>("light_color", light.color.into());
                 draw_builder.uniform("light_strength", light.strength);
 
                 // Send data specific to the current type of light.
                 match light.data {
-                    LightData::Point(PointLight { radius }) => {
+                    LightData::Point { radius } => {
+                        draw_builder.uniform("light_type", 0);
+
+                        // Get the light's anchor.
+                        let light_anchor = match light.anchor() {
+                            Some(anchor_id) => self.anchors.get(&anchor_id).expect("No such anchor exists"),
+                            None => panic!("Cannot render light if it's not attached to an anchor"),
+                        };
+
+                        // Send the light's position in world space.
+                        draw_builder.uniform("light_position", *light_anchor.position().as_array());
+
+                        // Send the light's position in view space.
+                        let light_position_view = light_anchor.position() * view_transform;
+                        draw_builder.uniform("light_position_view", *light_position_view.as_array());
+
+                        // Send the point light's radius.
                         draw_builder.uniform("light_radius", radius);
+                    },
+
+                    LightData::Directional { direction } => {
+                        draw_builder.uniform("light_type", 1);
+
+                        draw_builder.uniform("light_direction", direction.into_array());
+
+                        let direction_view = direction * view_transform;
+                        draw_builder.uniform("light_direction_view", direction_view.into_array());
                     },
                 }
 
@@ -384,20 +399,22 @@ impl Renderer for GlRender {
         static BUILT_IN_UNIFORMS: &'static str = r#"
             uniform mat4 model_transform;
             uniform mat3 normal_transform;
-            uniform mat3 view_normal_transform;
             uniform mat4 view_transform;
+            uniform mat3 view_normal_transform;
             uniform mat4 model_view_transform;
             uniform mat4 projection_transform;
             uniform mat4 model_view_projection;
 
             uniform vec4 global_ambient;
             uniform vec4 camera_position;
-            uniform vec4 camera_position_view;
             uniform vec4 light_position;
             uniform vec4 light_position_view;
             uniform float light_strength;
-            uniform float light_radius;
             uniform vec4 light_color;
+            uniform int light_type;
+            uniform float light_radius;
+            uniform vec3 light_direction;
+            uniform vec3 light_direction_view;
         "#;
 
         // Generate the GLSL source for the vertex shader.

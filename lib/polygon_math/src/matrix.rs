@@ -249,11 +249,27 @@ impl Mul<Matrix4> for Point {
     type Output = Point;
 
     fn mul(self, rhs: Matrix4) -> Point {
+        let Point { x, y, z, w } = self;
+
         Point {
-            x: rhs[0][0] * self.x + rhs[0][1] * self.y + rhs[0][2] * self.z + rhs[0][3] * self.w,
-            y: rhs[1][0] * self.x + rhs[1][1] * self.y + rhs[1][2] * self.z + rhs[1][3] * self.w,
-            z: rhs[2][0] * self.x + rhs[2][1] * self.y + rhs[2][2] * self.z + rhs[2][3] * self.w,
-            w: rhs[3][0] * self.x + rhs[3][1] * self.y + rhs[3][2] * self.z + rhs[3][3] * self.w,
+            x: rhs[0][0] * x + rhs[0][1] * y + rhs[0][2] * z + rhs[0][3] * w,
+            y: rhs[1][0] * x + rhs[1][1] * y + rhs[1][2] * z + rhs[1][3] * w,
+            z: rhs[2][0] * x + rhs[2][1] * y + rhs[2][2] * z + rhs[2][3] * w,
+            w: rhs[3][0] * x + rhs[3][1] * y + rhs[3][2] * z + rhs[3][3] * w,
+        }
+    }
+}
+
+impl Mul<Matrix4> for Vector3 {
+    type Output = Vector3;
+
+    fn mul(self, rhs: Matrix4) -> Vector3 {
+        let Vector3 { x, y, z } = self;
+
+        Vector3 {
+            x: rhs[0][0] * x + rhs[0][1] * y + rhs[0][2] * z,
+            y: rhs[1][0] * x + rhs[1][1] * y + rhs[1][2] * z,
+            z: rhs[2][0] * x + rhs[2][1] * y + rhs[2][2] * z,
         }
     }
 }
@@ -423,11 +439,13 @@ impl Mul<Matrix3> for Point {
     type Output = Point;
 
     fn mul(self, rhs: Matrix3) -> Point {
+        let Point { x, y, z, w } = self;
+
         Point {
-            x: rhs[0][0] * self.x + rhs[0][1] * self.y + rhs[0][2] * self.z,
-            y: rhs[1][0] * self.x + rhs[1][1] * self.y + rhs[1][2] * self.z,
-            z: rhs[2][0] * self.x + rhs[2][1] * self.y + rhs[2][2] * self.z,
-            w: self.w,
+            x: rhs[0][0] * x + rhs[0][1] * y + rhs[0][2] * z,
+            y: rhs[1][0] * x + rhs[1][1] * y + rhs[1][2] * z,
+            z: rhs[2][0] * x + rhs[2][1] * y + rhs[2][2] * z,
+            w: w,
         }
     }
 }
