@@ -496,6 +496,12 @@ impl<'a> DrawBuilder<'a> {
             UniformValue::f32x4((x, y, z, w)) => unsafe {
                 gl::uniform_f32x4(location, x, y, z, w);
             },
+            UniformValue::i32(value) => unsafe {
+                gl::uniform_i32x1(location, value);
+            },
+            UniformValue::u32(value) => unsafe {
+                gl::uniform_u32x1(location, value);
+            },
             UniformValue::Matrix(ref matrix) => match matrix.data.len() {
                 16 => unsafe {
                     gl::uniform_matrix_f32x4v(
@@ -545,6 +551,8 @@ pub enum UniformValue<'a> {
     f32x2((f32, f32)),
     f32x3((f32, f32, f32)),
     f32x4((f32, f32, f32, f32)),
+    i32(i32),
+    u32(u32),
     Matrix(GlMatrix<'a>),
     Texture(&'a Texture2d),
 }
@@ -594,6 +602,18 @@ impl<'a> From<[f32; 3]> for UniformValue<'a> {
 impl<'a> From<[f32; 4]> for UniformValue<'a> {
     fn from(value: [f32; 4]) -> UniformValue<'a> {
         UniformValue::f32x4((value[0], value[1], value[2], value[3]))
+    }
+}
+
+impl<'a> From<i32> for UniformValue<'a> {
+    fn from(from: i32) -> UniformValue<'a> {
+        UniformValue::i32(from)
+    }
+}
+
+impl<'a> From<u32> for UniformValue<'a> {
+    fn from(from: u32) -> UniformValue<'a> {
+        UniformValue::u32(from)
     }
 }
 
