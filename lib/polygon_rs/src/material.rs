@@ -57,8 +57,8 @@
 //! - `light_position_view: Point` - The position of the current light in view space.
 //! - `light_strength: f32` - The strength of the current light.
 //! - `light_color: Color` - The color of the current light.
-//! - `light_type: u32` - An integer constant specifying the type of the current light: 0 means
-//!   point light, 1 means directional light. All light-related uniforms will be present
+//! - `light_type: u32` - An integer constant specifying the type of the current light: 0 means no
+//!   light, 1 means point light, 2 means directional light. All light-related uniforms will be present
 //!   regardless of the light type, but uniforms not used for the current light type will not be
 //!   set, so reading them will yield some kind of garbage.
 //! - `light_radius: f32` - The radius of the current light (only for point lights).

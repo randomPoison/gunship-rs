@@ -24,7 +24,7 @@ use std::str;
 use stopwatch::Stopwatch;
 use texture::*;
 
-static DEFAULT_SHADER_BYTES: &'static [u8] = include_bytes!("../../resources/materials/diffuse_flat.material");
+static DEFAULT_SHADER_BYTES: &'static [u8] = include_bytes!("../../resources/materials/texture_diffuse_lit.material");
 
 #[derive(Debug)]
 pub struct GlRender {
@@ -243,8 +243,7 @@ impl GlRender {
             let _stopwatch = Stopwatch::new("Draw (no lights)");
 
             draw_builder
-            .uniform("light_position", *Point::origin().as_array())
-            .uniform("light_strength", 0.0)
+            .uniform("light_type", 0)
             .draw();
         }
 
@@ -265,7 +264,7 @@ impl GlRender {
                 // Send data specific to the current type of light.
                 match light.data {
                     LightData::Point { radius } => {
-                        draw_builder.uniform("light_type", 0);
+                        draw_builder.uniform("light_type", 1);
 
                         // Get the light's anchor.
                         let light_anchor = match light.anchor() {
@@ -285,7 +284,7 @@ impl GlRender {
                     },
 
                     LightData::Directional { direction } => {
-                        draw_builder.uniform("light_type", 1);
+                        draw_builder.uniform("light_type", 2);
 
                         draw_builder.uniform("light_direction", direction.into_array());
 
