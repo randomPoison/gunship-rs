@@ -68,7 +68,7 @@ fn main() {
         // Rotate the mesh slightly.
         {
             let anchor = renderer.get_anchor_mut(mesh_anchor_id).unwrap();
-            anchor.set_orientation(Quaternion::from_eulers(0.0, 2.0, 0.0).repeat(t / 2.0));
+            anchor.set_orientation(Orientation::from_eulers(0.0, 2.0, 0.0) * (t / 2.0));
         }
 
         // Orbit the light around the mesh.

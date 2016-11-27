@@ -44,17 +44,16 @@ fn main() {
     camera_anchor.set_position(Point::new(0.0, 0.0, 2.0));
     let camera_anchor_id = renderer.register_anchor(camera_anchor);
 
-    // Create the light and an anchor for it.
-    let light = Light::directional(Vector3::new(1.0, -1.0, -1.0), 0.25, Color::rgb(1.0, 0.0, 1.0));
-    renderer.register_light(light);
-
     let mut camera = Camera::default();
     camera.set_anchor(camera_anchor_id);
     renderer.register_camera(camera);
 
     'outer: loop {
         while let Some(message) = window.next_message() {
-            if let Message::Close = message { break 'outer; }
+            match message {
+                Message::Close => break 'outer,
+                _ => {},
+            }
         }
 
         // Render the mesh.
