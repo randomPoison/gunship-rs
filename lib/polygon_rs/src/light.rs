@@ -1,7 +1,7 @@
 use anchor::AnchorId;
 use math::{Color, Vector3};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct Light {
     pub data: LightData,
     pub color: Color,

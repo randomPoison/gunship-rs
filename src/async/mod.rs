@@ -6,6 +6,7 @@
 pub mod camera;
 pub mod collections;
 pub mod engine;
+pub mod light;
 pub mod mesh_renderer;
 pub mod prelude;
 pub mod resource;

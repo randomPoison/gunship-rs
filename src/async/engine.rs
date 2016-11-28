@@ -7,6 +7,7 @@ use async::transform::{TransformInnerHandle, TransformGraph};
 use bootstrap::window::{Message, Window};
 use cell_extras::{AtomicInitCell, InitCell};
 use input::{self, Input, ScanCode};
+use light::LightInner;
 use polygon::{GpuMesh, Renderer, RendererBuilder};
 use polygon::anchor::Anchor;
 use polygon::camera::{Camera as RenderCamera, CameraId};
@@ -112,6 +113,7 @@ impl EngineBuilder {
             mesh_map: HashMap::new(),
 
             scene_graph: TransformGraph::new(),
+            lights: Vec::new(),
             camera: None,
             behaviors: Vec::new(),
             input: Input::new(),
@@ -146,6 +148,7 @@ pub struct Engine {
     mesh_map: HashMap<MeshId, GpuMesh>,
 
     scene_graph: TransformGraph,
+    lights: Vec<LightInner>,
     camera: Option<(Box<CameraData>, CameraId)>,
     behaviors: Vec<Box<FnMut() + Send>>,
     input: Input,
@@ -196,6 +199,7 @@ pub fn window<F, T>(func: F) -> T
 pub enum EngineMessage {
     Anchor(TransformInnerHandle),
     Camera(Box<CameraData>, TransformInnerHandle),
+    Light(LightInner),
     Material(MaterialId, ::polygon::material::MaterialSource),
     Mesh(MeshId, ::polygon::geometry::mesh::Mesh),
     MeshInstance(Box<MeshRendererData>, TransformInnerHandle),
@@ -300,6 +304,17 @@ fn main_loop(mut engine: Box<Engine>) {
 
                         engine.camera = Some((camera_data, camera_id));
                     },
+                    EngineMessage::Light(light_inner) => {
+                        {
+                            let &(ref id, ref light) = &*light_inner;
+                            let light = light.borrow().clone();
+
+                            let light_id = engine.renderer.register_light(light);
+                            id.init(light_id);
+                        }
+
+                        engine.lights.push(light_inner);
+                    }
                     EngineMessage::Material(_material_id, material_source) => {
                         let material = engine.renderer.build_material(material_source).expect("TODO: Handle material compilation failure");
                         let _gpu_material = engine.renderer.register_material(material);
@@ -366,6 +381,12 @@ fn main_loop(mut engine: Box<Engine>) {
                 render_camera.set_far(camera_data.far());
             }
 
+            // Update lights.
+            for light in &engine.lights {
+                let &(ref id, ref data) = &**light;
+                let light = engine.renderer.get_light_mut(*id.borrow()).expect("Renderer has no such light");
+                *light = data.borrow().clone();
+            }
         }
 
         // Draw.
