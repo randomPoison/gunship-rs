@@ -341,7 +341,13 @@ fn main_loop(mut engine: Box<Engine>) {
                             gpu_mesh,
                             engine.renderer.default_material(),
                         );
-                        mesh_instance.material_mut().set_color("surface_color", ::math::Color::rgb(1.0, 0.0, 0.0)); // HACK HACK HACK
+
+                        // HACK HACK HACK ---------------------------------------------------------
+                        mesh_instance.material_mut().set_color("surface_color", ::math::Color::rgb(1.0, 0.0, 0.0));
+                        mesh_instance.material_mut().set_color("surface_specular", ::math::Color::rgb(1.0, 1.0, 1.0));
+                        mesh_instance.material_mut().set_f32("surface_shininess", 4.0);
+                        // HACK HACK HACK ---------------------------------------------------------
+
                         mesh_instance.set_anchor(anchor_id);
 
                         let _ = engine.renderer.register_mesh_instance(mesh_instance);

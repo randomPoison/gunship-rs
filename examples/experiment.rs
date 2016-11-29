@@ -1,11 +1,12 @@
 #[macro_use]
 extern crate gunship;
 
-use gunship::async::*;
-use gunship::async::camera::Camera;
-use gunship::async::engine::EngineBuilder;
-use gunship::async::mesh_renderer::MeshRenderer;
-use gunship::async::transform::Transform;
+use gunship::*;
+use gunship::camera::Camera;
+use gunship::engine::EngineBuilder;
+use gunship::light::DirectionalLight;
+use gunship::mesh_renderer::MeshRenderer;
+use gunship::transform::Transform;
 use gunship::math::*;
 
 fn main() {
@@ -29,26 +30,22 @@ fn setup_scene() {
     let async_mesh = resource::load_mesh("lib/polygon_rs/resources/meshes/epps_head.obj");
     let async_material = resource::load_material("lib/polygon_rs/resources/materials/diffuse_flat.material");
 
-    // // EXAMPLE: `Async<T>` lifetime parameter.
-    // let async_mesh = {
-    //     let path = String::from("lib/polygon_rs/resources/meshes/epps_head.obj");
-    //     resource::load_mesh(&*path)
-    // };
-
     // Await the operations, suspending this fiber until they complete.
     let mesh = async_mesh.await().unwrap();
     let _material = async_material.await().unwrap();
 
-    let mesh_transform = Transform::new();
+    let mut mesh_transform = Transform::new();
     let _mesh_renderer = MeshRenderer::new(&mesh, &mesh_transform);
 
-    let camera_transform = Transform::new();
+    let mut camera_transform = Transform::new();
     camera_transform.set_position(Point::new(0.0, 0.0, 10.0));
-    let camera = Camera::new(&camera_transform);
+    let camera = Camera::new(&camera_transform); // TODO: Don't drop the camera, it needs to stay in scope.
+
+    let light = DirectionalLight::new(Vector3::new(1.0, -1.0, -1.0), Color::rgb(1.0, 1.0, 1.0), 0.25);
 
     let mut time: f32 = 0.0;
     engine::run_each_frame(move || {
-        time += 1.0 / 60.0 * 2.0 * PI / 5.0;
+        time += time::delta_f32() * TAU / 10.0;
         let new_pos = Point::new(
             time.cos() * 3.0,
             time.sin() * 3.0,
@@ -58,7 +55,7 @@ fn setup_scene() {
     });
 
     engine::run_each_frame(move || {
-        time += 1.0 / 60.0 * 2.0 * PI;
+        time += time::delta_f32() * TAU / 3.0;
         let new_pos = Point::new(
             0.0,
             0.0,

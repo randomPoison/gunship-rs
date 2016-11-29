@@ -21,14 +21,16 @@ program frag {
 
     // Handle calculation specific to the current light type.
     if (light_type == 0) {
-
+        // NOTE: We don't calculate diffuse or specular if there is not light.
     } else if (light_type == 1) {
+        // Point light.
         vec3 light_offset = (light_position_view - @vertex.view_position).xyz;
         float dist = length(light_offset);
         l = normalize(light_offset);
         attenuation = pow(clamp(1.0 - (dist / light_radius), 0, 1), 2.0);
     } else if (light_type == 2) {
-        l = -light_direction;
+        // Directional light.
+        l = -light_direction_view;
         attenuation = 1;
     }
 

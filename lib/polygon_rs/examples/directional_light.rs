@@ -28,12 +28,9 @@ fn main() {
     anchor.set_position(Point::new(0.0, 0.0, 0.0));
     let mesh_anchor_id = renderer.register_anchor(anchor);
 
-    let material_source = MaterialSource::from_file("resources/materials/diffuse_lit.material").unwrap();
-    let material = renderer.build_material(material_source).unwrap();
-
     // Create a mesh instance, attach it to the anchor, and register it with the renderer.
-    let mut mesh_instance = MeshInstance::new(gpu_mesh, material);
-    mesh_instance.material_mut().set_color("surface_color", Color::rgb(1.0, 1.0, 1.0));
+    let mut mesh_instance = MeshInstance::new(gpu_mesh, renderer.default_material());
+    mesh_instance.material_mut().set_color("surface_color", Color::rgb(1.0, 0.0, 0.0));
     mesh_instance.material_mut().set_color("surface_specular", Color::rgb(1.0, 1.0, 1.0));
     mesh_instance.material_mut().set_f32("surface_shininess", 4.0);
     mesh_instance.set_anchor(mesh_anchor_id);
@@ -45,7 +42,7 @@ fn main() {
     let camera_anchor_id = renderer.register_anchor(camera_anchor);
 
     // Create the light and an anchor for it.
-    let light = Light::directional(Vector3::new(1.0, -1.0, -1.0), 0.25, Color::rgb(1.0, 0.0, 1.0));
+    let light = Light::directional(Vector3::new(1.0, -1.0, -1.0), 0.25, Color::rgb(1.0, 1.0, 1.0));
     renderer.register_light(light);
 
     let mut camera = Camera::default();
