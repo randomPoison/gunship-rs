@@ -27,29 +27,35 @@ fn main() {
 /// 4. Create transform in scene and assign it the camera.
 fn setup_scene() {
     // Start both async operations but don't await either, allowing both to run concurrently.
-    let async_mesh = resource::load_mesh("lib/polygon_rs/resources/meshes/epps_head.obj");
-    let async_material = resource::load_material("lib/polygon_rs/resources/materials/diffuse_flat.material");
-
-    // Await the operations, suspending this fiber until they complete.
-    let mesh = async_mesh.await().unwrap();
-    let _material = async_material.await().unwrap();
-
-    let mut mesh_transform = Transform::new();
-    let _mesh_renderer = MeshRenderer::new(&mesh, &mesh_transform);
-
-    let mut camera_transform = Transform::new();
-    camera_transform.set_position(Point::new(0.0, 0.0, 10.0));
-    let camera = Camera::new(&camera_transform); // TODO: Don't drop the camera, it needs to stay in scope.
+    let mesh = resource::load_mesh("lib/polygon_rs/resources/meshes/epps_head.obj").await().unwrap();
 
     DirectionalLight::new(Vector3::new(1.0, -1.0, -1.0), Color::rgb(1.0, 1.0, 1.0), 0.25).forget();
 
-    engine::run_each_frame(move || {
-        time += time::delta_f32() * TAU / 3.0;
-        let new_pos = Point::new(
-            0.0,
-            0.0,
-            10.0 + time.cos() * 2.0,
-        );
-        camera_transform.set_position(new_pos);
-    });
+    let mut camera_transform = Transform::new();
+    camera_transform.set_position(Point::new(0.0, 0.0, 50.0));
+    let camera = Camera::new(&camera_transform); // TODO: Don't drop the camera, it needs to stay in scope.
+
+    // -10 --- 10
+    //   X X X X -10
+    //   X X X X  |
+    //   X X X X  |
+    //   X X X X  10
+    const NUM_ROWS: usize = 4;
+    const SQUARE_SIZE: f32 = 20.0;
+
+    fn coord(pos: usize) -> f32 {
+        -(SQUARE_SIZE / 2.0) + (SQUARE_SIZE / NUM_ROWS as f32) * pos as f32
+    }
+
+    for row in 0..NUM_ROWS {
+        for col in 0..NUM_ROWS {
+            let mut mesh_transform = Transform::new();
+            mesh_transform.set_position(Point::new(
+                coord(col),
+                coord(row),
+                0.0,
+            ));
+            let _mesh_renderer = MeshRenderer::new(&mesh, &mesh_transform);
+        }
+    }
 }

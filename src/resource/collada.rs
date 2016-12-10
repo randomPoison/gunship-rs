@@ -15,8 +15,6 @@ pub use self::collada::{
     UriFragment,
     VisualScene
 };
-use std::path::Path;
-use super::{MeshNode, ResourceManager};
 
 #[derive(Debug)]
 pub enum Error {
@@ -94,16 +92,16 @@ pub fn load_resources<T: Into<String>>(source: T) -> Result<Mesh> {
     // Load all meshes from the document and add them to the resource manager.
     if let Some(library_geometries) = collada_data.library_geometries {
         for geometry in library_geometries.geometry {
-            // Retrieve the id for the geometry.
-            // TODO: Generate an id for the geometry if it doesn't already have one.
-            let id = match geometry.id {
-                None => {
-                    println!("WARNING: COLLADA file contained a <geometry> element with no \"id\" attribute");
-                    println!("WARNING: This is unsupported because there is no way to reference that geometry to instantiate it");
-                    continue;
-                },
-                Some(id) => id,
-            };
+            // // Retrieve the id for the geometry.
+            // // TODO: Generate an id for the geometry if it doesn't already have one.
+            // let id = match geometry.id {
+            //     None => {
+            //         println!("WARNING: COLLADA file contained a <geometry> element with no \"id\" attribute");
+            //         println!("WARNING: This is unsupported because there is no way to reference that geometry to instantiate it");
+            //         continue;
+            //     },
+            //     Some(id) => id,
+            // };
 
             let mesh = match geometry.geometric_element {
                 GeometricElement::Mesh(ref mesh) => try!(collada_mesh_to_mesh(mesh)),
@@ -112,39 +110,8 @@ pub fn load_resources<T: Into<String>>(source: T) -> Result<Mesh> {
 
             // TODO: Actually finish parsing all the other data from the file.
             return Ok(mesh);
-            // resource_manager.add_mesh(id, mesh); // TODO: Cache resources?
         }
     }
-
-    // Load all multi-part meshes from the scene and add them to the resource manager.
-    if let Some(library_visual_scenes) = collada_data.library_visual_scenes {
-        for visual_scene in library_visual_scenes.visual_scene {
-            // Retrieve the id for the mesh hierarchy.
-            // TODO: Generate an id for the scene if it doesn't already have one.
-            let id = match visual_scene.id {
-                None => {
-                    println!(
-                        "WARNING: COLLADA file contained a <visual_scene> with no \"id\" attribute");
-                    println!("WARNING: This is unsupported because there is no way to reference that scene to instantiate it");
-                    continue;
-                },
-                Some(id) => id,
-            };
-
-            let mut mesh_node = MeshNode::new();
-
-            // Create all of the children and then create the root node.
-            for node in visual_scene.node {
-                let child = try!(convert_to_mesh_node(node));
-                mesh_node.children.push(child);
-            }
-
-            // Add to resource manager.
-            // resource_manager.add_mesh_node(id, mesh_node); // TODO: Cache resources.
-        }
-    }
-
-    // TODO: Load other resources from the document, such as animation data.
 
     unimplemented!();
 }
@@ -288,27 +255,6 @@ fn collada_mesh_to_mesh(mesh: &collada::Mesh) -> Result<Mesh> {
     .set_indices(&*indices)
     .build()
     .map_err(|err| Error::BuildMeshError(err))
-}
-
-fn convert_to_mesh_node(from_node: collada::Node) -> Result<MeshNode> {
-    let mut mesh_node = MeshNode::new();
-
-    for geometry_instance in from_node.geometry_instances {
-        let mesh_id = match geometry_instance.url {
-            AnyUri::Local(UriFragment(mesh_id)) => mesh_id,
-            AnyUri::External(uri) => return Err(Error::NonLocalUri(uri)),
-        };
-
-        mesh_node.mesh_ids.push(mesh_id);
-    }
-
-    // Create children.
-    for node in from_node.nodes {
-        let child = try!(convert_to_mesh_node(node));
-        mesh_node.children.push(child);
-    }
-
-    Ok(mesh_node)
 }
 
 struct IndexMapper<'a> {

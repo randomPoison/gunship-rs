@@ -3,6 +3,7 @@ use cell_extras::atomic_ref_cell::AtomicRefCell;
 use engine::{self, EngineMessage};
 use math::*;
 use polygon::light::*;
+use std::mem;
 use std::sync::Arc;
 
 // TODO: This shouldn't be fully public, only public within the crate.
@@ -22,6 +23,10 @@ impl DirectionalLight {
             data: data,
         }
     }
+
+    pub fn forget(self) {
+        mem::forget(self);
+    }
 }
 
 #[derive(Debug)]
@@ -37,5 +42,9 @@ impl PointLight {
         PointLight {
             data: data,
         }
+    }
+
+    pub fn forget(self) {
+        mem::forget(self);
     }
 }

@@ -1,6 +1,6 @@
-use async::engine::{self, EngineMessage};
-use async::resource::{Mesh, MeshId};
-use async::transform::Transform;
+use engine::{self, EngineMessage};
+use resource::{Mesh, MeshId};
+use transform::Transform;
 use std::marker::PhantomData;
 
 #[derive(Debug)]

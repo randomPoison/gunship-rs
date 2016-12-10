@@ -1,9 +1,8 @@
-use async::*;
-use async::camera::CameraData;
-use async::mesh_renderer::MeshRendererData;
-use async::resource::{MaterialId, MeshId};
-use async::scheduler::WorkId;
-use async::transform::{TransformInnerHandle, TransformGraph};
+use camera::CameraData;
+use mesh_renderer::MeshRendererData;
+use resource::{MaterialId, MeshId};
+use scheduler::{self, WorkId};
+use transform::{TransformInnerHandle, TransformGraph};
 use bootstrap::window::{Message, Window};
 use cell_extras::{AtomicInitCell, InitCell};
 use input::{self, Input, ScanCode};
