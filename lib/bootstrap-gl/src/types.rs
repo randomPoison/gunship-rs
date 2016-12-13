@@ -635,3 +635,9 @@ pub enum WindingOrder {
     Clockwise = 0x0900,
     CounterClockwise = 0x0901,
 }
+
+impl Default for WindingOrder {
+    fn default() -> WindingOrder {
+        WindingOrder::CounterClockwise
+    }
+}
