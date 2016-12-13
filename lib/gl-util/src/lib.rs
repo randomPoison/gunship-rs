@@ -61,7 +61,7 @@ impl VertexBuffer {
 
         let mut buffer_name = BufferName::null();
         unsafe {
-            let _guard = ::context::ContextGuard::new(&context);
+            let _guard = ::context::ContextGuard::new(context);
             gl::gen_buffers(1, &mut buffer_name);
         }
 
@@ -83,7 +83,7 @@ impl VertexBuffer {
         let byte_count = data.len() * mem::size_of::<f32>();
 
         unsafe {
-            let _guard = ::context::ContextGuard::new(&self.context);
+            let _guard = ::context::ContextGuard::new(self.context);
             gl::bind_buffer(BufferTarget::Array, self.buffer_name);
             gl::buffer_data(
                 BufferTarget::Array,
@@ -116,7 +116,7 @@ impl VertexBuffer {
 impl Drop for VertexBuffer {
     fn drop(&mut self) {
         unsafe {
-            let _guard = ::context::ContextGuard::new(&self.context);
+            let _guard = ::context::ContextGuard::new(self.context);
             gl::delete_buffers(1, &mut self.buffer_name);
         }
     }
@@ -149,7 +149,7 @@ impl IndexBuffer {
         let context = context.inner();
         let mut buffer_name = BufferName::null();
         unsafe {
-            let _guard = ::context::ContextGuard::new(&context);
+            let _guard = ::context::ContextGuard::new(context);
             gl::gen_buffers(1, &mut buffer_name);
         }
 
@@ -169,7 +169,7 @@ impl IndexBuffer {
         let byte_count = data.len() * mem::size_of::<u32>();
 
         unsafe {
-            let _guard = ::context::ContextGuard::new(&self.context);
+            let _guard = ::context::ContextGuard::new(self.context);
             gl::bind_buffer(BufferTarget::ElementArray, self.buffer_name);
             gl::buffer_data(
                 BufferTarget::ElementArray,
@@ -184,7 +184,7 @@ impl IndexBuffer {
 impl Drop for IndexBuffer {
     fn drop(&mut self) {
         unsafe {
-            let _guard = ::context::ContextGuard::new(&self.context);
+            let _guard = ::context::ContextGuard::new(self.context);
             gl::delete_buffers(1, &mut self.buffer_name);
         }
     }
@@ -207,18 +207,16 @@ pub struct DrawBuilder<'a> {
     // TODO: This is dumb and isn't necessary, get rid of it.
     active_texture: Cell<i32>,
 
-    pub(crate) context: gl::Context,
+    context: &'a mut Context,
 }
 
 impl<'a> DrawBuilder<'a> {
-    pub fn new(context: &Context, vertex_buffer: &'a VertexBuffer, draw_mode: DrawMode) -> DrawBuilder<'a> {
-        let context = context.inner();
-
-        assert!(context == vertex_buffer.context, "Specified vertex buffer does not match the specified context");
+    pub fn new(context: &'a mut Context, vertex_buffer: &'a VertexBuffer, draw_mode: DrawMode) -> DrawBuilder<'a> {
+        assert!(context.inner() == vertex_buffer.context, "Specified vertex buffer does not match the specified context");
 
         let mut vertex_array_name = VertexArrayName::null();
         unsafe {
-            let _guard = ::context::ContextGuard::new(&context);
+            let _guard = ::context::ContextGuard::new(context.inner());
             gl::gen_vertex_arrays(1, &mut vertex_array_name);
         }
 
@@ -243,7 +241,7 @@ impl<'a> DrawBuilder<'a> {
 
     pub fn index_buffer(&mut self, index_buffer: &'a IndexBuffer) -> &mut DrawBuilder<'a> {
         assert!(
-            self.context == index_buffer.context,
+            self.context.inner() == index_buffer.context,
             "Specified index buffer's context does not match draw builder's context");
         self.index_buffer = Some(index_buffer);
         self
@@ -306,7 +304,7 @@ impl<'a> DrawBuilder<'a> {
         };
 
         unsafe {
-            let _guard = ::context::ContextGuard::new(&self.context);
+            let _guard = ::context::ContextGuard::new(self.context.inner());
             gl::bind_buffer(BufferTarget::Array, self.vertex_buffer.buffer_name);
             gl::bind_vertex_array(self.vertex_array_name);
 
@@ -352,7 +350,7 @@ impl<'a> DrawBuilder<'a> {
         };
 
         unsafe {
-            let _guard = ::context::ContextGuard::new(&self.context);
+            let _guard = ::context::ContextGuard::new(self.context.inner());
             gl::bind_buffer(BufferTarget::Array, self.vertex_buffer.buffer_name);
             gl::bind_vertex_array(self.vertex_array_name);
 
@@ -405,7 +403,7 @@ impl<'a> DrawBuilder<'a> {
 
     pub fn draw(&self) {
         unsafe {
-            let _guard = ::context::ContextGuard::new(&self.context);
+            let _guard = ::context::ContextGuard::new(self.context.inner());
 
             gl::enable(ServerCapability::FramebufferSrgb);
 
@@ -481,7 +479,7 @@ impl<'a> DrawBuilder<'a> {
     }
 
     fn apply(&self, uniform: &UniformValue, location: UniformLocation) {
-        let _guard = ::context::ContextGuard::new(&self.context);
+        let _guard = ::context::ContextGuard::new(self.context.inner());
 
         match *uniform {
             UniformValue::f32(value) => unsafe {
@@ -537,7 +535,7 @@ impl<'a> DrawBuilder<'a> {
 impl<'a> Drop for DrawBuilder<'a> {
     fn drop(&mut self) {
         unsafe {
-            let _guard = ::context::ContextGuard::new(&self.context);
+            let _guard = ::context::ContextGuard::new(self.context.inner());
             gl::delete_vertex_arrays(1, &mut self.vertex_array_name);
         }
     }

@@ -17,7 +17,7 @@ impl Shader {
     pub fn new<T: AsRef<str>>(context: &Context, source: T, shader_type: ShaderType) -> Result<Shader, ShaderError> {
         let context = context.inner();
 
-        let _context = ::context::ContextGuard::new(&context);
+        let _context = ::context::ContextGuard::new(context);
 
         // Create the shader object.
         let shader_object = unsafe { gl::create_shader(shader_type) };
@@ -54,7 +54,7 @@ impl Shader {
 
 impl Drop for Shader {
     fn drop(&mut self) {
-        let _context = ::context::ContextGuard::new(&self.context);
+        let _context = ::context::ContextGuard::new(self.context);
         unsafe { gl::delete_shader(self.shader_object); }
     }
 }
@@ -138,7 +138,7 @@ impl Program {
     pub fn new(context: &Context, shaders: &[Shader]) -> Result<Program, ProgramError> {
         let context = context.inner();
 
-        let _guard = ::context::ContextGuard::new(&context);
+        let _guard = ::context::ContextGuard::new(context);
 
         // Create shader program.
         let program = Program {
@@ -176,7 +176,7 @@ impl Program {
 
     /// Gets a vertex attribute location from the program.
     pub fn get_attrib(&self, name: &str) -> Option<AttributeLocation> {
-        let _guard = ::context::ContextGuard::new(&self.context);
+        let _guard = ::context::ContextGuard::new(self.context);
 
         let mut null_terminated = String::from(name);
         null_terminated.push('\0');
@@ -192,7 +192,7 @@ impl Program {
     }
 
     pub(crate) fn get_uniform_location(&self, name: &str) -> Option<UniformLocation> {
-        let _guard = ::context::ContextGuard::new(&self.context);
+        let _guard = ::context::ContextGuard::new(self.context);
 
         let mut null_terminated = String::from(name);
         null_terminated.push('\0');
@@ -216,7 +216,7 @@ impl Program {
 
 impl Drop for Program {
     fn drop(&mut self) {
-        let _guard = ::context::ContextGuard::new(&self.context);
+        let _guard = ::context::ContextGuard::new(self.context);
         unsafe { gl::delete_program(self.inner()); }
     }
 }

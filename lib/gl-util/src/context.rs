@@ -1,19 +1,13 @@
 use bootstrap::window::Window;
-use gl::{
-    self,
-    ClearBufferMask,
-    DebugSeverity,
-    DebugSource,
-    DebugType,
-    ServerCapability,
-    StringName,
-};
+use gl;
+use gl::*;
 use std::ffi::CStr;
-use std::marker::PhantomData;
 use std::ptr;
 
 #[derive(Debug)]
-pub struct Context(gl::Context);
+pub struct Context {
+    inner: gl::Context,
+}
 
 impl Context {
     /// Creates a new rendering context for the specified window.
@@ -57,7 +51,7 @@ impl Context {
                 .ok_or(Error::UnableToCreateRenderContext)?;
 
             {
-                let _guard = ::context::ContextGuard::new(&context);
+                let _guard = ::context::ContextGuard::new(context);
 
                 gl::enable(ServerCapability::DebugOutput);
                 gl::debug_message_callback(Some(debug_callback), ptr::null_mut());
@@ -78,37 +72,34 @@ impl Context {
                 gl::gen_vertex_arrays::load();
             }
 
-            Ok(Context(context))
+            Ok(Context {
+                inner: context,
+            })
         }
     }
 
     /// TODO: Take clear mask (and values) as parameters.
     pub fn clear(&self) {
-        let _guard = ::context::ContextGuard::new(&self.0);
+        let _guard = ::context::ContextGuard::new(self.inner);
         unsafe { gl::clear(ClearBufferMask::Color | ClearBufferMask::Depth); }
     }
 
     pub fn swap_buffers(&self) {
-        let _guard = ::context::ContextGuard::new(&self.0);
-        unsafe { gl::platform::swap_buffers(self.0); }
+        let _guard = ::context::ContextGuard::new(self.inner);
+        unsafe { gl::platform::swap_buffers(self.inner); }
     }
 
-    /// Returns the underlying opengl context.
-    ///
-    /// This is used internally in conjunction with `ContextGuard` to ensure that any use of the
-    /// OpenGL api is correctly done with the correct context and that objects from different
-    /// contexts are not used together.
     pub(crate) fn inner(&self) -> gl::Context {
-        self.0
+        self.inner
     }
 }
 
 impl Drop for Context {
     fn drop(&mut self) {
         unsafe {
-            gl::make_current(self.0);
+            gl::make_current(self.inner);
             gl::debug_message_callback(None, ptr::null_mut());
-            gl::destroy_context(self.0)
+            gl::destroy_context(self.inner)
         }
     }
 }
@@ -128,24 +119,18 @@ pub enum Error {
 }
 
 #[derive(Debug)]
-pub(crate) struct ContextGuard<'a> {
-    old: gl::Context,
-    _phantom: PhantomData<&'a gl::Context>,
-}
+pub(crate) struct ContextGuard(gl::Context);
 
-impl<'a> ContextGuard<'a> {
-    pub fn new(context: &gl::Context) -> ContextGuard {
-        let old = unsafe { gl::make_current(*context) };
-        ContextGuard {
-            old: old,
-            _phantom: PhantomData,
-        }
+impl ContextGuard {
+    pub fn new(context: gl::Context) -> ContextGuard {
+        let old = unsafe { gl::make_current(context) };
+        ContextGuard(old)
     }
 }
 
-impl<'a> Drop for ContextGuard<'a> {
+impl Drop for ContextGuard {
     fn drop(&mut self) {
         // TODO: Assert that the context is still current.
-        unsafe { gl::make_current(self.old); }
+        unsafe { gl::make_current(self.0); }
     }
 }
