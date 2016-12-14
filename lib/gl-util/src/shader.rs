@@ -130,7 +130,7 @@ enum ShaderCompileStatus {
 pub struct Program {
     program_object: ProgramObject,
 
-    context: ::gl::Context,
+    pub(crate) context: ::gl::Context,
 }
 
 impl Program {

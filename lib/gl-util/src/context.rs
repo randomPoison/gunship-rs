@@ -7,6 +7,19 @@ use std::ptr;
 #[derive(Debug)]
 pub struct Context {
     inner: gl::Context,
+
+    server_srgb_enabled: bool,
+    server_cull_enabled: bool,
+    server_depth_test_enabled: bool,
+    server_blend_enabled: bool,
+
+    front_polygon_mode: PolygonMode,
+    back_polygon_mode: PolygonMode,
+    program: Option<ProgramObject>,
+    cull_mode: Face,
+    winding_order: WindingOrder,
+    depth_test: Comparison,
+    blend: (SourceFactor, DestFactor),
 }
 
 impl Context {
@@ -70,10 +83,24 @@ impl Context {
                 // Load a bunch of proc pointers for funsies.
                 gl::get_attrib_location::load();
                 gl::gen_vertex_arrays::load();
+                gl::enable(ServerCapability::FramebufferSrgb);
+                gl::enable(ServerCapability::Blend);
             }
 
             Ok(Context {
                 inner: context,
+
+                server_srgb_enabled: true,
+                server_cull_enabled: false,
+                server_depth_test_enabled: false,
+                server_blend_enabled: true,
+                front_polygon_mode: PolygonMode::default(),
+                back_polygon_mode: PolygonMode::default(),
+                program: None,
+                cull_mode: Face::default(),
+                winding_order: WindingOrder::default(),
+                depth_test: Comparison::Less,
+                blend: Default::default(),
             })
         }
     }
@@ -91,6 +118,73 @@ impl Context {
 
     pub(crate) fn inner(&self) -> gl::Context {
         self.inner
+    }
+
+    pub(crate) fn polygon_mode(&mut self, mode: PolygonMode) {
+        if mode != self.front_polygon_mode || mode != self.back_polygon_mode {
+            unsafe { gl::polygon_mode(Face::FrontAndBack, mode); }
+            self.front_polygon_mode = mode;
+            self.back_polygon_mode = mode;
+        }
+    }
+
+    pub(crate) fn use_program(&mut self, program: Option<ProgramObject>) {
+        if program != self.program {
+            match program {
+                Some(program) => unsafe { gl::use_program(program); },
+                None => unsafe { gl::use_program(ProgramObject::null()); },
+            }
+
+            self.program = program;
+        }
+    }
+
+    pub(crate) fn enable_server_cull(&mut self, enabled: bool) {
+        if enabled != self.server_cull_enabled {
+            match enabled {
+                true => unsafe { gl::enable(ServerCapability::CullFace); },
+                false => unsafe { gl::disable(ServerCapability::CullFace); },
+            }
+            self.server_cull_enabled = enabled;
+        }
+    }
+
+    pub(crate) fn enable_server_depth_test(&mut self, enabled: bool) {
+        if enabled != self.server_depth_test_enabled {
+            match enabled {
+                true => unsafe { gl::enable(ServerCapability::DepthTest); },
+                false => unsafe { gl::disable(ServerCapability::DepthTest); },
+            }
+            self.server_depth_test_enabled = enabled;
+        }
+    }
+
+    pub(crate) fn cull_mode(&mut self, face: Face) {
+        if self.cull_mode != face {
+            unsafe { gl::cull_face(face); }
+            self.cull_mode = face;
+        }
+    }
+
+    pub(crate) fn winding_order(&mut self, winding_order: WindingOrder) {
+        if self.winding_order != winding_order {
+            unsafe { gl::front_face(winding_order); }
+            self.winding_order = winding_order;
+        }
+    }
+
+    pub(crate) fn depth_test(&mut self, comparison: Comparison) {
+        if comparison != self.depth_test {
+            unsafe { gl::depth_func(comparison); }
+            self.depth_test = comparison;
+        }
+    }
+
+    pub(crate) fn blend(&mut self, source_factor: SourceFactor, dest_factor: DestFactor) {
+        if (source_factor, dest_factor) != self.blend {
+            unsafe { gl::blend_func(source_factor, dest_factor); }
+            self.blend = (source_factor, dest_factor);
+        }
     }
 }
 

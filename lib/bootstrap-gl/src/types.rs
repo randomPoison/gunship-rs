@@ -199,6 +199,10 @@ pub enum DestFactor {
     OneMinusDestAlpha = 0x0305,
 }
 
+impl Default for DestFactor {
+    fn default() -> DestFactor { DestFactor::Zero }
+}
+
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum DrawMode {
@@ -232,6 +236,10 @@ pub enum Face {
     Front = 0x0404,
     Back = 0x0405,
     FrontAndBack = 0x0408,
+}
+
+impl Default for Face {
+    fn default() -> Face { Face::Back }
 }
 
 #[repr(u32)]
@@ -275,6 +283,12 @@ pub enum PolygonMode {
     Point = 0x1B00,
     Line = 0x1B01,
     Fill = 0x1B02,
+}
+
+impl Default for PolygonMode {
+    fn default() -> PolygonMode {
+        PolygonMode::Fill
+    }
 }
 
 #[repr(C)]
@@ -390,6 +404,10 @@ pub enum SourceFactor {
     DestColor = 0x0306,
     OneMinusDestColor = 0x0307,
     SourceAlphaSaturate = 0x0308,
+}
+
+impl Default for SourceFactor {
+    fn default() -> SourceFactor { SourceFactor::One }
 }
 
 #[repr(u32)]

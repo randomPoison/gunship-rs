@@ -191,6 +191,7 @@ impl Drop for IndexBuffer {
 }
 
 /// A configuration object for specifying all of the various configurable options for a draw call.
+// TODO: Change `DrawBuidler` to cull backfaces by default.
 pub struct DrawBuilder<'a> {
     vertex_array_name: VertexArrayName,
     vertex_buffer: &'a VertexBuffer,
@@ -200,8 +201,8 @@ pub struct DrawBuilder<'a> {
     program: Option<&'a Program>,
     cull: Option<Face>,
     depth_test: Option<Comparison>,
-    winding_order: Option<WindingOrder>,
-    blend: Option<(SourceFactor, DestFactor)>,
+    winding_order: WindingOrder,
+    blend: (SourceFactor, DestFactor),
     uniforms: HashMap<UniformLocation, UniformValue<'a>>,
 
     // TODO: This is dumb and isn't necessary, get rid of it.
@@ -229,8 +230,8 @@ impl<'a> DrawBuilder<'a> {
             program: None,
             cull: None,
             depth_test: None,
-            winding_order: None,
-            blend: None,
+            winding_order: WindingOrder::default(),
+            blend: Default::default(),
             uniforms: HashMap::new(),
 
             active_texture: Cell::new(0),
@@ -242,7 +243,8 @@ impl<'a> DrawBuilder<'a> {
     pub fn index_buffer(&mut self, index_buffer: &'a IndexBuffer) -> &mut DrawBuilder<'a> {
         assert!(
             self.context.inner() == index_buffer.context,
-            "Specified index buffer's context does not match draw builder's context");
+            "Specified index buffer's context does not match draw builder's context"
+        );
         self.index_buffer = Some(index_buffer);
         self
     }
@@ -253,9 +255,10 @@ impl<'a> DrawBuilder<'a> {
     }
 
     pub fn program(&mut self, program: &'a Program) -> &mut DrawBuilder<'a> {
-        // assert!(
-        //     self.context == program.context,
-        //     "Specified program's context does not match draw builder's context");
+        assert!(
+            self.context.inner() == program.context,
+            "Specified program's context does not match draw builder's context"
+        );
         self.program = Some(program);
         self
     }
@@ -271,7 +274,7 @@ impl<'a> DrawBuilder<'a> {
     }
 
     pub fn winding(&mut self, winding_order: WindingOrder) -> &mut DrawBuilder<'a> {
-        self.winding_order = Some(winding_order);
+        self.winding_order = winding_order;
         self
     }
 
@@ -280,11 +283,7 @@ impl<'a> DrawBuilder<'a> {
         source_factor: SourceFactor,
         dest_factor: DestFactor
     ) -> &mut DrawBuilder<'a> {
-        if source_factor == SourceFactor::One && dest_factor == DestFactor::Zero {
-            self.blend = None;
-        } else {
-            self.blend = Some((source_factor, dest_factor));
-        }
+        self.blend = (source_factor, dest_factor);
         self
     }
 
@@ -390,6 +389,8 @@ impl<'a> DrawBuilder<'a> {
 
         let program =
             self.program.expect("Cannot set a uniform without a shader program");
+
+        // TODO: This checking is bad? Or maybe not? I don't remember.
         let uniform_location = match program.get_uniform_location(name) {
             Some(location) => location,
             None => return self,
@@ -401,41 +402,36 @@ impl<'a> DrawBuilder<'a> {
         self
     }
 
-    pub fn draw(&self) {
+    pub fn draw(&mut self) {
+        let _guard = ::context::ContextGuard::new(self.context.inner());
+
+        self.context.polygon_mode(self.polygon_mode.unwrap_or_default());
+        self.context.use_program(self.program.map(Program::inner));
+
+        if let Some(face) = self.cull {
+            self.context.enable_server_cull(true);
+            self.context.cull_mode(face);
+            self.context.winding_order(self.winding_order);
+        } else {
+            self.context.enable_server_cull(false);
+        }
+
+        if let Some(depth_test) = self.depth_test {
+            self.context.enable_server_depth_test(true);
+            self.context.depth_test(depth_test);
+        } else {
+            self.context.enable_server_depth_test(false);
+        }
+
+        let (source_factor, dest_factor) = self.blend;
+        self.context.blend(source_factor, dest_factor);
+
         unsafe {
-            let _guard = ::context::ContextGuard::new(self.context.inner());
-
-            gl::enable(ServerCapability::FramebufferSrgb);
-
+            // TODO: Do a better job tracking VAO and VBO state? I don't know how that would be
+            // accomplished, but I don't honestly undertand VAOs so maybe I should figure that out
+            // first.
             gl::bind_vertex_array(self.vertex_array_name);
             gl::bind_buffer(BufferTarget::Array, self.vertex_buffer.buffer_name);
-
-            if let Some(polygon_mode) = self.polygon_mode {
-                gl::polygon_mode(Face::FrontAndBack, polygon_mode);
-            }
-
-            if let Some(program) = self.program {
-                gl::use_program(program.inner());
-            }
-
-            if let Some(face) = self.cull {
-                gl::enable(ServerCapability::CullFace);
-                gl::cull_face(face);
-
-                if let Some(winding_order) = self.winding_order {
-                    gl::front_face(winding_order);
-                }
-            }
-
-            if let Some(depth_test) = self.depth_test {
-                gl::enable(ServerCapability::DepthTest);
-                gl::depth_func(depth_test);
-            }
-
-            if let Some((source_factor, dest_factor)) = self.blend {
-                gl::enable(ServerCapability::Blend);
-                gl::blend_func(source_factor, dest_factor);
-            }
 
             // Apply uniforms.
             for (&location, uniform) in &self.uniforms {
@@ -456,25 +452,8 @@ impl<'a> DrawBuilder<'a> {
                     self.vertex_buffer.element_len as i32);
             }
 
-            // Reset all values even if they weren't used so that we don't need to branch twice on
-            // each option.
-
-            // Reset all used textures.
-            for texture in 0..self.active_texture.get() {
-                texture::set_active_texture(texture as u32);
-                gl::bind_texture(TextureBindTarget::Texture2d, TextureObject::null());
-            }
-            self.active_texture.set(0);
-
-            gl::front_face(WindingOrder::CounterClockwise);
-            gl::disable(ServerCapability::Blend);
-            gl::disable(ServerCapability::DepthTest);
-            gl::disable(ServerCapability::CullFace);
-            gl::polygon_mode(Face::FrontAndBack, PolygonMode::Fill);
-            gl::use_program(ProgramObject::null());
             gl::bind_buffer(BufferTarget::ElementArray, BufferName::null());
             gl::bind_buffer(BufferTarget::Array, BufferName::null());
-            gl::bind_vertex_array(VertexArrayName::null());
         }
     }
 
@@ -534,10 +513,8 @@ impl<'a> DrawBuilder<'a> {
 
 impl<'a> Drop for DrawBuilder<'a> {
     fn drop(&mut self) {
-        unsafe {
-            let _guard = ::context::ContextGuard::new(self.context.inner());
-            gl::delete_vertex_arrays(1, &mut self.vertex_array_name);
-        }
+        let _guard = ::context::ContextGuard::new(self.context.inner());
+        unsafe { gl::delete_vertex_arrays(1, &mut self.vertex_array_name); }
     }
 }
 
