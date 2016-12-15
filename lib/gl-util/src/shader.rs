@@ -15,7 +15,7 @@ pub struct Shader {
 
 impl Shader {
     pub fn new<T: AsRef<str>>(context: &Context, source: T, shader_type: ShaderType) -> Result<Shader, ShaderError> {
-        let context = context.inner();
+        let context = context.raw();
 
         let _context = ::context::ContextGuard::new(context);
 
@@ -136,7 +136,7 @@ pub struct Program {
 impl Program {
     /// Creates a program with the provided shaders.
     pub fn new(context: &Context, shaders: &[Shader]) -> Result<Program, ProgramError> {
-        let context = context.inner();
+        let context = context.raw();
 
         let _guard = ::context::ContextGuard::new(context);
 

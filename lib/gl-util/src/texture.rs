@@ -26,7 +26,7 @@ impl Texture2d {
         height: usize,
         data: &[T],
     ) -> Result<Texture2d, Error> {
-        let context = context.inner();
+        let context = context.raw();
         let _guard = ::context::ContextGuard::new(context);
 
         let expected_pixels = width * height * data_format.elements() / T::ELEMENTS;
@@ -81,7 +81,7 @@ impl Texture2d {
         Texture2d {
             texture_object: TextureObject::null(),
 
-            context: context.inner(),
+            context: context.raw(),
         }
     }
 

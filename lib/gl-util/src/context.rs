@@ -1,25 +1,15 @@
 use bootstrap::window::Window;
 use gl;
 use gl::*;
+use std::cell::RefCell;
 use std::ffi::CStr;
 use std::ptr;
+use std::rc::Rc;
 
 #[derive(Debug)]
 pub struct Context {
-    inner: gl::Context,
-
-    server_srgb_enabled: bool,
-    server_cull_enabled: bool,
-    server_depth_test_enabled: bool,
-    server_blend_enabled: bool,
-
-    front_polygon_mode: PolygonMode,
-    back_polygon_mode: PolygonMode,
-    program: Option<ProgramObject>,
-    cull_mode: Face,
-    winding_order: WindingOrder,
-    depth_test: Comparison,
-    blend: (SourceFactor, DestFactor),
+    raw: gl::Context,
+    inner: Rc<RefCell<ContextInner>>,
 }
 
 impl Context {
@@ -87,13 +77,15 @@ impl Context {
                 gl::enable(ServerCapability::Blend);
             }
 
-            Ok(Context {
-                inner: context,
+            let inner = Rc::new(RefCell::new(ContextInner {
+                raw: context,
 
                 server_srgb_enabled: true,
                 server_cull_enabled: false,
                 server_depth_test_enabled: false,
                 server_blend_enabled: true,
+
+                bound_vertex_array: None,
                 front_polygon_mode: PolygonMode::default(),
                 back_polygon_mode: PolygonMode::default(),
                 program: None,
@@ -101,23 +93,71 @@ impl Context {
                 winding_order: WindingOrder::default(),
                 depth_test: Comparison::Less,
                 blend: Default::default(),
+            }));
+
+            Ok(Context {
+                raw: context,
+                inner: inner,
             })
         }
     }
 
     /// TODO: Take clear mask (and values) as parameters.
     pub fn clear(&self) {
-        let _guard = ::context::ContextGuard::new(self.inner);
+        let _guard = ::context::ContextGuard::new(self.raw);
         unsafe { gl::clear(ClearBufferMask::Color | ClearBufferMask::Depth); }
     }
 
     pub fn swap_buffers(&self) {
-        let _guard = ::context::ContextGuard::new(self.inner);
-        unsafe { gl::platform::swap_buffers(self.inner); }
+        let _guard = ::context::ContextGuard::new(self.raw);
+        unsafe { gl::platform::swap_buffers(self.raw); }
     }
 
-    pub(crate) fn inner(&self) -> gl::Context {
-        self.inner
+    pub(crate) fn raw(&self) -> gl::Context {
+        self.raw
+    }
+
+    pub(crate) fn inner(&self) -> Rc<RefCell<ContextInner>> {
+        self.inner.clone()
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct ContextInner {
+    raw: gl::Context,
+
+    server_srgb_enabled: bool,
+    server_cull_enabled: bool,
+    server_depth_test_enabled: bool,
+    server_blend_enabled: bool,
+
+    bound_vertex_array: Option<VertexArrayName>,
+    front_polygon_mode: PolygonMode,
+    back_polygon_mode: PolygonMode,
+    program: Option<ProgramObject>,
+    cull_mode: Face,
+    winding_order: WindingOrder,
+    depth_test: Comparison,
+    blend: (SourceFactor, DestFactor),
+}
+
+impl ContextInner {
+    pub(crate) fn raw(&self) -> gl::Context {
+        self.raw
+    }
+
+    pub(crate) fn bind_vertex_array(&mut self, vertex_array_name: VertexArrayName) {
+        if Some(vertex_array_name) != self.bound_vertex_array {
+            unsafe { gl::bind_vertex_array(vertex_array_name); }
+            self.bound_vertex_array = Some(vertex_array_name);
+        }
+    }
+
+    pub(crate) fn unbind_vertex_array(&mut self, vertex_array_name: VertexArrayName) {
+        if Some(vertex_array_name) == self.bound_vertex_array {
+            unsafe { gl::bind_vertex_array(VertexArrayName::null()); }
+            self.bound_vertex_array = None;
+        }
     }
 
     pub(crate) fn polygon_mode(&mut self, mode: PolygonMode) {
@@ -191,9 +231,9 @@ impl Context {
 impl Drop for Context {
     fn drop(&mut self) {
         unsafe {
-            gl::make_current(self.inner);
+            gl::make_current(self.raw);
             gl::debug_message_callback(None, ptr::null_mut());
-            gl::destroy_context(self.inner)
+            gl::destroy_context(self.raw)
         }
     }
 }
