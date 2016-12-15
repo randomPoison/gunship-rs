@@ -5,16 +5,16 @@ authors = ["David LeGare <excaliburhissheath@gmail.com>"]
 build = "build.rs"
 
 [dependencies]
+cell-extras = { git = "https://github.com/excaliburHisSheath/cell-extras" }
+
+[target.'cfg(target_os = "windows")'.dependencies]
 winapi = "*"
 user32-sys = "*"
 kernel32-sys = "*"
 winmm-sys = "*"
 gdi32-sys = "0.2"
-# xinput-sys = "*"
 
-# Begin macos dependencies.
-# TODO: Somehow make these dependencies only when compiling for macos. This
-# requires RFC 1361 to be implemented: https://github.com/rust-lang/rfcs/pull/1361
+[target.'cfg(target_os = "macos")'.dependencies]
 objc = "0.2"
 cocoa = "0.3"
 core-graphics = "0.3"

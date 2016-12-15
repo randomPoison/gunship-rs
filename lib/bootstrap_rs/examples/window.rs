@@ -3,9 +3,9 @@ extern crate bootstrap_rs as bootstrap;
 use bootstrap::window::*;
 
 fn main() {
-    let mut window = Window::new("Bootstrap Window");
+    let mut window = Window::new("Bootstrap Window").unwrap();
 
-    for message in &mut window {
+    for message in window.message_pump() {
         println!("message: {:?}", message);
         if let Message::Close = message {
             break;

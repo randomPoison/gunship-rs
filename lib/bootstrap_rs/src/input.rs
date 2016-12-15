@@ -1,8 +1,5 @@
 pub use platform::input::{set_cursor_visibility, set_cursor_bounds, clear_cursor_bounds};
 
-#[cfg(target_os="macos")]
-pub use macos::input::{set_cursor_visibility, set_cursor_bounds, clear_cursor_bounds};
-
 #[repr(u32)]
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 pub enum ScanCode {

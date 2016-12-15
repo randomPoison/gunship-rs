@@ -1,48 +1,47 @@
 #![allow(non_snake_case)]
 
-use macos::cocoa::appkit::*;
-use macos::cocoa::foundation::*;
-use macos::cocoa::base::{nil};
+use platform::cocoa::appkit::*;
+use platform::cocoa::foundation::*;
+use platform::cocoa::base::{nil};
 use objc::declare::*;
 use objc::runtime::*;
+use std::collections::VecDeque;
 use std::os::raw::c_void;
 use window::Message;
-use self::window_map::WindowInner;
+
+#[derive(Debug, Hash, Clone, Copy, PartialEq, Eq)]
+pub struct ObjcObject(*mut Object);
+
+unsafe impl Send for ObjcObject {}
 
 mod window_map {
-    use std::collections::{ HashMap, VecDeque };
+    use cell_extras::AtomicInitCell;
+    use std::collections::{HashMap, VecDeque};
     use std::sync::{Mutex, Once, ONCE_INIT};
-    use objc::runtime::*;
+    use super::ObjcObject;
     use window::Message;
 
-    static mut WINDOW_MAP: Option<*const Mutex<WindowMap>> = None;
+    static WINDOW_MAP: AtomicInitCell<Mutex<WindowMap>> = AtomicInitCell::new();
     static WINDOW_MAP_INIT: Once = ONCE_INIT;
 
-    pub type WindowMap = HashMap<*mut Object, WindowInner>;
+    pub type WindowMap = HashMap<ObjcObject, VecDeque<Message>>;
 
     pub fn with<F, T>(func: F) -> T
         where F: FnOnce(&mut WindowMap) -> T
     {
-        unsafe {
-            // Initialize the map once.
-            WINDOW_MAP_INIT.call_once(|| {
-                let boxed = Box::new(Mutex::new(HashMap::new()));
-                WINDOW_MAP = Some(Box::into_raw(boxed));
-            });
+        // Initialize the map once.
+        WINDOW_MAP_INIT.call_once(|| {
+            WINDOW_MAP.init(Mutex::new(HashMap::new()));
+        });
 
-            // Lock the mutex and invoke `func` with the `WindowMap`.
-            let mutex = WINDOW_MAP.expect("Window map was `None`, initialization must have failed");
-            let mut guard = (&*mutex).lock().expect("Window mutex was poisoned");
-            func(&mut *guard)
-        }
-    }
-
-    #[derive(Debug, Default)]
-    pub struct WindowInner {
-        pub messages: VecDeque<Message>
+        // Lock the mutex and invoke `func` with the `WindowMap`.
+        let mutex = WINDOW_MAP.borrow();
+        let mut guard = mutex.lock().expect("Window mutex was poisoned ☠");
+        func(&mut *guard)
     }
 }
 
+#[derive(Debug)]
 pub struct Window {
     app: *mut Object,
     _window: *mut Object,
@@ -103,13 +102,14 @@ impl Window {
 
         // Initialize the window map if necessary and add the window to it.
         window_map::with(|window_map| {
-            window_map.insert(window.app, WindowInner::default())
+            window_map.insert(ObjcObject(window.app), VecDeque::default())
         });
 
         window
     }
 
     pub fn close(&self) {
+        unimplemented!();
         // unsafe { self.window.performClose_(nil); }
     }
 
@@ -119,12 +119,12 @@ impl Window {
     }
 
     /// Waits for the next window message, blocking if none is pending.
-    pub fn wait_for_message(&mut self) -> Option<Message> {
+    pub fn wait_message(&mut self) -> Option<Message> {
         loop {
             // First check if there are any pending messages in the window map.
             let pending_message = window_map::with(|window_map| {
-                let window_inner = window_map.get_mut(&self.app).expect("Unable to find window in window map");
-                window_inner.messages.pop_front()
+                let messages = window_map.get_mut(&ObjcObject(self.app)).expect("Unable to find window in window map");
+                messages.pop_front()
             });
 
             if let Some(message) = pending_message {
@@ -171,6 +171,10 @@ impl Window {
     pub fn get_rect(&self) -> (i32, i32, i32, i32) {
         (0, 0, 1, 1)
     }
+
+    pub fn inner(&self) -> WindowInner {
+        WindowInner(self.app)
+    }
 }
 
 impl<'a> IntoIterator for &'a mut Window {
@@ -182,18 +186,75 @@ impl<'a> IntoIterator for &'a mut Window {
     }
 }
 
+pub struct WindowInner(*mut Object);
+
+impl WindowInner {
+    pub fn wait_message(&mut self) -> Option<Message> {
+        loop {
+            // First check if there are any pending messages in the window map.
+            let pending_message = window_map::with(|window_map| {
+                let messages = window_map.get_mut(&ObjcObject(self.0)).expect("Unable to find window in window map");
+                messages.pop_front()
+            });
+
+            if let Some(message) = pending_message {
+                return Some(message);
+            }
+
+            unsafe {
+                // TODO: Create autorelease blocks?
+
+                let NSDate = Class::get("NSDate").unwrap();
+                let distant_future = msg_send![NSDate, distantFuture];
+
+                //let NSApplication = Class::get("NSApplication").unwrap();
+                //let event: *mut Object = msg_send![
+                //    super(self.0, NSApplication),
+                //    nextEventMatchingMask: 0xffffffff //NSAnyEventMask,
+                //    untilDate: distant_future
+                //    inMode: NSDefaultRunLoopMode
+                //    dequeue: YES
+                //];
+
+                // HACK: For some reason the above doesn't work. I don't know why, but we should fix it.
+                let imp = get_next_message_imp();
+
+                let event = imp(
+                    self.0,
+                    sel!(nextEventMatchingMask:untilDate:inMode:dequeue:),
+                    0xffffffff, //NSAnyEventMask,
+                    distant_future,
+                    NSDefaultRunLoopMode,
+                    YES,
+                );
+
+                msg_send![self.0, sendEvent:event];
+                msg_send![self.0, updateWindows];
+
+                if let Some(event) = map_event(event) {
+                    return Some(event);
+                }
+            }
+        }
+    }
+
+    pub fn pump_forever(&mut self) {
+
+    }
+}
+
 pub struct WindowMessages<'a>(&'a mut Window);
 
 impl<'a> Iterator for WindowMessages<'a> {
     type Item = Message;
 
     fn next(&mut self) -> Option<Message> {
-        self.0.wait_for_message()
+        self.0.wait_message()
     }
 }
 
 fn map_event(event: *mut Object) -> Option<Message> {
-    use macos::cocoa::appkit::NSEventType::*;
+    use platform::cocoa::appkit::NSEventType::*;
     use window::Message::*;
     use input::ScanCode;
 
@@ -252,8 +313,8 @@ extern fn run(
 
 extern fn window_will_close(app: &mut Object, _sel: Sel, _notification: *mut Object) {
     window_map::with(|window_map| {
-        let message_queue = window_map.get_mut(&(app as *mut _)).expect("No window existed in window map");
-        message_queue.messages.push_back(Message::Close);
+        let message_queue = window_map.get_mut(&ObjcObject(app as *mut _)).expect("No window existed in window map");
+        message_queue.push_back(Message::Close);
     });
 }
 
