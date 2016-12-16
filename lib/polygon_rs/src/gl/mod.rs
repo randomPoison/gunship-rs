@@ -19,7 +19,6 @@ use self::gl_util::texture::{
     TextureInternalFormat,
 };
 use shader::Shader;
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::str;
 use stopwatch::Stopwatch;
@@ -29,7 +28,7 @@ static DEFAULT_SHADER_BYTES: &'static [u8] = include_bytes!("../../resources/mat
 
 #[derive(Debug)]
 pub struct GlRender {
-    context: RefCell<Context>,
+    context: Context,
 
     materials: HashMap<MaterialId, Material>,
     meshes: HashMap<GpuMesh, MeshData>,
@@ -59,7 +58,7 @@ impl GlRender {
         let context = Context::from_window(window)?;
 
         let mut renderer = GlRender {
-            context: RefCell::new(context),
+            context: context,
 
             materials: HashMap::new(),
             meshes: HashMap::new(),
@@ -125,12 +124,10 @@ impl Drop for GlRender {
 impl Renderer for GlRender {
     fn draw(&mut self) {
         let _stopwatch = Stopwatch::new("GLRender::draw()");
-        let mut context = self.context.borrow_mut();
-        let context = &mut *context;
 
         {
             let _stopwatch = Stopwatch::new("Clearing buffer");
-            context.clear();
+            self.context.clear();
         }
 
         // TODO: Support rendering multiple cameras.
@@ -156,7 +153,7 @@ impl Renderer for GlRender {
 
                 let _stopwatch = Stopwatch::new("Drawing mesh");
 
-                let default_texture = GlTexture2d::empty(context);
+                let default_texture = GlTexture2d::empty(&self.context);
 
                 // Calculate the various transforms needed for rendering.
                 let view_transform = camera_anchor.view_matrix();
@@ -183,7 +180,7 @@ impl Renderer for GlRender {
 
                     // Set the shader to use.
                     let mut draw_builder = DrawBuilder::new(
-                        context,
+                        &self.context,
                         &mesh_data.vertex_array,
                         DrawMode::Triangles,
                     );
@@ -353,7 +350,7 @@ impl Renderer for GlRender {
 
         {
             let _stopwatch = Stopwatch::new("Swap buffers");
-            context.swap_buffers();
+            self.context.swap_buffers();
         }
     }
 
@@ -363,8 +360,6 @@ impl Renderer for GlRender {
 
     fn build_material(&mut self, source: MaterialSource) -> Result<Material, BuildMaterialError> {
         use polygon_material::material_source::PropertyType;
-
-        let mut context = self.context.borrow_mut();
 
         // COMPILE SHADER SOURCE
         // =====================
@@ -475,7 +470,7 @@ impl Renderer for GlRender {
                 uniform_declarations,
                 replaced_source);
 
-            GlShader::new(&mut *context, replaced_source, ShaderType::Vertex).map_err(|err| BuildMaterialError)?
+            GlShader::new(&self.context, replaced_source, ShaderType::Vertex).map_err(|err| BuildMaterialError)?
         };
 
         // Generate the GLSL source for the fragment shader.
@@ -524,10 +519,10 @@ impl Renderer for GlRender {
                 uniform_declarations,
                 replaced_source);
 
-            GlShader::new(&mut *context, replaced_source, ShaderType::Fragment).map_err(|err| BuildMaterialError)?
+            GlShader::new(&self.context, replaced_source, ShaderType::Fragment).map_err(|err| BuildMaterialError)?
         };
 
-        let program = Program::new(&mut *context, &[vert_shader, frag_shader]).map_err(|err| BuildMaterialError)?;
+        let program = Program::new(&self.context, &[vert_shader, frag_shader]).map_err(|err| BuildMaterialError)?;
 
         let program_id = self.shader_counter.next();
         self.programs.insert(program_id, program);
@@ -565,8 +560,7 @@ impl Renderer for GlRender {
 
     fn register_mesh(&mut self, mesh: &Mesh) -> GpuMesh {
         // Generate array buffer.
-        let mut context = self.context.borrow_mut();
-        let mut vertex_buffer = VertexBuffer::new(&mut *context);
+        let mut vertex_buffer = VertexBuffer::new(&self.context);
         vertex_buffer.set_data_f32(mesh.vertex_data());
 
         // Configure vertex attributes.
@@ -600,13 +594,13 @@ impl Renderer for GlRender {
                 });
         }
 
-        let mut index_buffer = IndexBuffer::new(&mut *context);
+        let mut index_buffer = IndexBuffer::new(&self.context);
         index_buffer.set_data_u32(mesh.indices());
 
         let mesh_id = self.mesh_counter.next();
 
         let vertex_array = VertexArray::with_index_buffer(
-            &mut *context,
+            &self.context,
             vertex_buffer,
             index_buffer,
         );
@@ -632,13 +626,11 @@ impl Renderer for GlRender {
             DataFormat::Bgra => (TextureFormat::Bgra, TextureInternalFormat::Rgba),
         };
 
-        let mut context = self.context.borrow_mut();
-
         // Create the Texture2d from the texture data.
         let texture_result = match texture.data() {
             &TextureData::f32(ref data) => {
                 GlTexture2d::new(
-                    &mut *context,
+                    &self.context,
                     format,
                     internal_format,
                     texture.width(),
@@ -647,7 +639,7 @@ impl Renderer for GlRender {
             },
             &TextureData::u8(ref data) => {
                 GlTexture2d::new(
-                    &mut *context,
+                    &self.context,
                     format,
                     internal_format,
                     texture.width(),
@@ -656,7 +648,7 @@ impl Renderer for GlRender {
             },
             &TextureData::u8x3(ref data) => {
                 GlTexture2d::new(
-                    &mut *context,
+                    &self.context,
                     format,
                     internal_format,
                     texture.width(),
@@ -665,7 +657,7 @@ impl Renderer for GlRender {
             },
             &TextureData::u8x4(ref data) => {
                 GlTexture2d::new(
-                    &mut *context,
+                    &self.context,
                     format,
                     internal_format,
                     texture.width(),
