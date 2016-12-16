@@ -103,8 +103,6 @@ impl Context {
 
         // If the budget was exceeded, then log record and its child hierarchy.
         if let Some(budget) = record.budget {
-            assert!(record.duration().as_secs() == 0, "TODO: Support durations greater than 1 second");
-
             if record.duration() > budget {
                 // TODO: What's a better way for stopwatch to handle logging? We don't want to
                 // print to stdout, but we don't necessarily know what logging method a client
@@ -200,8 +198,13 @@ pub struct PrettyDuration(pub Duration);
 
 impl Debug for PrettyDuration {
     fn fmt(&self, formatter: &mut Formatter) -> Result<(), fmt::Error> {
+        let secs = self.0.as_secs();
         let millis = (self.0.subsec_nanos() / 1_000_000) % 1_000;
         let micros = (self.0.subsec_nanos() / 1_000) % 1_000;
-        write!(formatter, "{}ms {}μs", millis, micros)
+        if secs > 0 {
+            write!(formatter, "{}s {}ms {}μs", secs, millis, micros)
+        } else {
+            write!(formatter, "{}ms {}μs", millis, micros)
+        }
     }
 }
