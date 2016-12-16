@@ -17,7 +17,7 @@ fn main() {
 
     // Create the OpenGL context. `Context::new()` will attempt to find a default render target,
     // in this case it will use the window we just opened.
-    let context = Context::from_window(&window).unwrap();
+    let mut context = Context::from_window(&window).unwrap();
 
     // Create a vertex buffer to store the vertices of the triangle. We provide it with data and
     // specify the layout of that data.
@@ -29,12 +29,15 @@ fn main() {
             elements: 3,
             offset: 0,
             stride: 0,
-        });
+        },
+    );
+
+    let vertex_array = VertexArray::new(&mut context, vertex_buffer);
 
     // `DrawBuilder` is used to specify all of the various configuration options when drawing. In
     // this case we're using `vertex_buffer` in triangles mode, and we're sending its "position"
     // attribute to attribute location 0, which is the default for `glPosition`.
-    let mut draw_builder = DrawBuilder::new(&context, &vertex_buffer, DrawMode::Triangles);
+    let mut draw_builder = DrawBuilder::new(&mut context, &vertex_array, DrawMode::Triangles);
     draw_builder.map_attrib_location("position", AttributeLocation::from_index(0));
 
     'outer: loop {

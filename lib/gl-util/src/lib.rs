@@ -274,7 +274,7 @@ pub struct DrawBuilder<'a> {
 }
 
 impl<'a> DrawBuilder<'a> {
-    pub fn new(context: &'a mut Context, vertex_array: &'a VertexArray, draw_mode: DrawMode) -> DrawBuilder<'a> {
+    pub fn new(context: &Context, vertex_array: &'a VertexArray, draw_mode: DrawMode) -> DrawBuilder<'a> {
         // TODO: Make sure `vertex_array` comes from the right context.
 
         DrawBuilder {
@@ -348,9 +348,9 @@ impl<'a> DrawBuilder<'a> {
         };
 
         unsafe {
-            let _guard = ::context::ContextGuard::new(self.context.borrow().raw());
-            gl::bind_buffer(BufferTarget::Array, self.vertex_array.vertex_buffer.buffer_name);
-            gl::bind_vertex_array(self.vertex_array.vertex_array_name);
+            let mut context = self.context.borrow_mut();
+            let _guard = ::context::ContextGuard::new(context.raw());
+            context.bind_vertex_array(self.vertex_array.vertex_array_name);
 
             gl::enable_vertex_attrib_array(attrib_location);
             gl::vertex_attrib_pointer(
@@ -360,9 +360,6 @@ impl<'a> DrawBuilder<'a> {
                 False,
                 (layout.stride * mem::size_of::<f32>()) as i32, // TODO: Correctly handle non-f32
                 layout.offset * mem::size_of::<f32>());         // attrib data types.
-
-            gl::bind_vertex_array(VertexArrayName::null());
-            gl::bind_buffer(BufferTarget::Array, BufferName::null());
         }
 
         self
@@ -394,9 +391,9 @@ impl<'a> DrawBuilder<'a> {
         };
 
         unsafe {
+            let mut context = self.context.borrow_mut();
             let _guard = ::context::ContextGuard::new(self.context.borrow().raw());
-            gl::bind_buffer(BufferTarget::Array, self.vertex_array.vertex_buffer.buffer_name);
-            gl::bind_vertex_array(self.vertex_array.vertex_array_name);
+            context.bind_vertex_array(self.vertex_array.vertex_array_name);
 
             gl::enable_vertex_attrib_array(attrib);
             gl::vertex_attrib_pointer(
@@ -406,9 +403,6 @@ impl<'a> DrawBuilder<'a> {
                 False,
                 (layout.stride * mem::size_of::<f32>()) as i32,
                 layout.offset * mem::size_of::<f32>());
-
-            gl::bind_vertex_array(VertexArrayName::null());
-            gl::bind_buffer(BufferTarget::Array, BufferName::null());
         }
 
         self
@@ -495,9 +489,6 @@ impl<'a> DrawBuilder<'a> {
                     0,
                     self.vertex_array.vertex_buffer.element_len as i32);
             }
-
-            gl::bind_buffer(BufferTarget::ElementArray, BufferName::null());
-            gl::bind_buffer(BufferTarget::Array, BufferName::null());
         }
     }
 
