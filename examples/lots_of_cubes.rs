@@ -32,8 +32,9 @@ fn setup_scene() {
     DirectionalLight::new(Vector3::new(1.0, -1.0, -1.0), Color::rgb(1.0, 1.0, 1.0), 0.25).forget();
 
     let mut camera_transform = Transform::new();
-    camera_transform.set_position(Point::new(0.0, 0.0, 50.0));
-    let camera = Camera::new(&camera_transform); // TODO: Don't drop the camera, it needs to stay in scope.
+    camera_transform.set_position(Point::new(0.0, 0.0, 35.0));
+    Camera::new(&camera_transform).forget(); // TODO: Don't drop the camera, it needs to stay in scope.
+    camera_transform.forget();
 
     // -10 --- 10
     //   X X X X -10
@@ -55,7 +56,8 @@ fn setup_scene() {
                 coord(row),
                 0.0,
             ));
-            let _mesh_renderer = MeshRenderer::new(&mesh, &mesh_transform);
+            MeshRenderer::new(&mesh, &mesh_transform).forget();
+            mesh_transform.forget();
         }
     }
 }

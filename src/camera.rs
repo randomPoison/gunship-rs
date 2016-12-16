@@ -3,6 +3,7 @@ use transform::Transform;
 use std::f32::consts::PI;
 use std::fmt::{self, Debug, Formatter};
 use std::marker::PhantomData;
+use std::mem;
 use std::ops::{Deref, DerefMut};
 use std::ptr::Unique;
 
@@ -26,6 +27,10 @@ impl Camera {
             data: unsafe { Unique::new(ptr) },
             _phantom: PhantomData,
         }
+    }
+
+    pub fn forget(self) {
+        mem::forget(self);
     }
 }
 

@@ -6,6 +6,7 @@ use engine::{self, EngineMessage};
 use collections::atomic_array::AtomicArray;
 use cell_extras::atomic_ref_cell::*;
 use std::fmt::{self, Debug, Formatter};
+use std::mem;
 use std::ptr;
 use std::sync::Arc;
 use math::*;
@@ -131,6 +132,10 @@ impl Transform {
     /// rotated by the transform's orientation. The returned vector will be normalized.
     pub fn back(&self) -> Vector3 {
         self.orientation().back()
+    }
+
+    pub fn forget(self) {
+        mem::forget(self)
     }
 
     // TODO: This shouldn't be public, it's only needed by engine internals.
