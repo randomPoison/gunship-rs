@@ -6,6 +6,7 @@ use polygon::*;
 use polygon::anchor::*;
 use polygon::camera::*;
 use polygon::light::*;
+use polygon::material::*;
 use polygon::math::*;
 use polygon::mesh_instance::*;
 
@@ -31,12 +32,17 @@ fn main() {
     anchor.set_position(Point::new(0.0, 0.0, 0.0));
     let mesh_anchor_id = renderer.register_anchor(anchor);
 
+    let material_source =
+        MaterialSource::from_file("resources/materials/texture_diffuse_lit.material").unwrap();
+    let mut material = renderer.build_material(material_source).unwrap();
+    material.set_color("surface_color", Color::rgb(1.0, 1.0, 1.0));
+    material.set_f32("surface_shininess", 4.0);
+    material.set_texture("surface_diffuse", gpu_texture);
+
     // Create a mesh instance, attach it to the anchor, and register it with the renderer.
     let mut mesh_instance = MeshInstance::new(gpu_mesh, renderer.default_material());
     mesh_instance.set_anchor(mesh_anchor_id);
-    mesh_instance.material_mut().set_color("surface_color", Color::rgb(1.0, 1.0, 1.0));
-    mesh_instance.material_mut().set_f32("surface_shininess", 4.0);
-    mesh_instance.material_mut().set_texture("surface_diffuse", gpu_texture);
+    mesh_instance.set_material(material);
     renderer.register_mesh_instance(mesh_instance);
 
     // Create a camera and an anchor for it.

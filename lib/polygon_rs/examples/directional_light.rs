@@ -7,7 +7,6 @@ use polygon::anchor::*;
 use polygon::camera::*;
 use polygon::light::*;
 use polygon::math::*;
-use polygon::material::*;
 use polygon::mesh_instance::*;
 
 pub mod utils;

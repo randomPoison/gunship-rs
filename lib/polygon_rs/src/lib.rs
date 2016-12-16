@@ -28,6 +28,7 @@ use camera::*;
 use geometry::mesh::Mesh;
 use light::*;
 use material::*;
+use math::Color;
 use mesh_instance::*;
 use texture::*;
 
@@ -94,6 +95,8 @@ pub trait Renderer: 'static + Send {
 
     /// Gets a mutable reference to a registered light.
     fn get_light_mut(&mut self, light_id: LightId) -> Option<&mut Light>;
+
+    fn set_ambient_light(&mut self, color: Color);
 }
 
 /// A helper struct for selecting and initializing the most suitable renderer for the client's
