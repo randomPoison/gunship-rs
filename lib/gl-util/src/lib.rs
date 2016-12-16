@@ -17,7 +17,7 @@ use context::{Context, ContextInner};
 use gl::*;
 use shader::Program;
 use std::mem;
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 use texture::Texture2d;
@@ -201,7 +201,7 @@ pub struct VertexArray {
 }
 
 impl VertexArray {
-    pub fn new(context: &mut Context, vertex_buffer: VertexBuffer) -> VertexArray {
+    pub fn new(context: &Context, vertex_buffer: VertexBuffer) -> VertexArray {
         let mut vertex_array_name = VertexArrayName::null();
         let context_inner = context.inner();
         unsafe {
@@ -222,7 +222,7 @@ impl VertexArray {
         }
     }
 
-    pub fn with_index_buffer(context: &mut Context, vertex_buffer: VertexBuffer, index_buffer: IndexBuffer) -> VertexArray {
+    pub fn with_index_buffer(context: &Context, vertex_buffer: VertexBuffer, index_buffer: IndexBuffer) -> VertexArray {
         let mut vertex_array_name = VertexArrayName::null();
         let context_inner = context.inner();
         unsafe {
@@ -267,9 +267,6 @@ pub struct DrawBuilder<'a> {
     blend: (SourceFactor, DestFactor),
     uniforms: HashMap<UniformLocation, UniformValue<'a>>,
 
-    // TODO: This is dumb and isn't necessary, get rid of it.
-    active_texture: Cell<i32>,
-
     context: Rc<RefCell<ContextInner>>,
 }
 
@@ -287,8 +284,6 @@ impl<'a> DrawBuilder<'a> {
             winding_order: WindingOrder::default(),
             blend: Default::default(),
             uniforms: HashMap::new(),
-
-            active_texture: Cell::new(0),
 
             context: context.inner(),
         }
@@ -392,7 +387,7 @@ impl<'a> DrawBuilder<'a> {
 
         unsafe {
             let mut context = self.context.borrow_mut();
-            let _guard = ::context::ContextGuard::new(self.context.borrow().raw());
+            let _guard = ::context::ContextGuard::new(context.raw());
             context.bind_vertex_array(self.vertex_array.vertex_array_name);
 
             gl::enable_vertex_attrib_array(attrib);
@@ -466,9 +461,10 @@ impl<'a> DrawBuilder<'a> {
         let (source_factor, dest_factor) = self.blend;
         context.blend(source_factor, dest_factor);
 
+        let mut active_texture = 0;
         // Apply uniforms.
         for (&location, uniform) in &self.uniforms {
-            self.apply(uniform, location);
+            self.apply(uniform, location, &mut active_texture);
         }
 
         unsafe {
@@ -492,7 +488,7 @@ impl<'a> DrawBuilder<'a> {
         }
     }
 
-    fn apply(&self, uniform: &UniformValue, location: UniformLocation) {
+    fn apply(&self, uniform: &UniformValue, location: UniformLocation, active_texture: &mut i32) {
         match *uniform {
             UniformValue::f32(value) => unsafe {
                 gl::uniform_f32x1(location, value);
@@ -530,15 +526,13 @@ impl<'a> DrawBuilder<'a> {
                 _ => panic!("Unsupported matrix data length: {}", matrix.data.len()),
             },
             UniformValue::Texture(texture) => {
-                let active_texture = self.active_texture.get();
-
                 unsafe {
-                    texture::set_active_texture(active_texture as u32);
+                    texture::set_active_texture(*active_texture as u32);
                     gl::bind_texture(TextureBindTarget::Texture2d, texture.inner());
-                    gl::uniform_i32x1(location, active_texture);
+                    gl::uniform_i32x1(location, *active_texture);
                 }
 
-                self.active_texture.set(active_texture + 1);
+                *active_texture += 1;
             }
         }
     }

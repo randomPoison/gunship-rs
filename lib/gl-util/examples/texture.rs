@@ -81,11 +81,13 @@ fn main() {
             stride: 5,
         });
 
+    let vertex_array = VertexArray::new(&context, vertex_buffer);
+
     // Parse the bitmap and setup the texture.
     let bitmap = Bitmap::from_bytes(TEXTURE_DATA).unwrap();
     let data = match bitmap.data() {
         &BitmapData::Bgr(ref data) => &**data,
-        _ => unimplemented!(),
+        _ => panic!("Nuh uh, that file is a bitmap"),
     };
 
     let texture = Texture2d::new(
@@ -97,7 +99,7 @@ fn main() {
         data)
         .unwrap();
 
-    let mut draw_builder = DrawBuilder::new(&context, &vertex_buffer, DrawMode::Triangles);
+    let mut draw_builder = DrawBuilder::new(&context, &vertex_array, DrawMode::Triangles);
     draw_builder
         .program(&program)
         .map_attrib_name("position", "position")

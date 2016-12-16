@@ -32,7 +32,8 @@ fn main() {
         },
     );
 
-    let vertex_array = VertexArray::new(&mut context, vertex_buffer);
+    // Create the vertex array object, which groups all buffers for a mesh into a single object.
+    let vertex_array = VertexArray::new(&context, vertex_buffer);
 
     // `DrawBuilder` is used to specify all of the various configuration options when drawing. In
     // this case we're using `vertex_buffer` in triangles mode, and we're sending its "position"
