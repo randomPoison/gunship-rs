@@ -23,9 +23,9 @@ extern crate hash;
 extern crate lazy_static;
 extern crate parse_obj as obj;
 extern crate polygon;
-extern crate stopwatch;
 
 pub extern crate polygon_math as math;
+pub extern crate stopwatch;
 
 #[macro_use]
 pub mod macros;

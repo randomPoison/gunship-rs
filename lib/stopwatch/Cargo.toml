@@ -7,4 +7,10 @@ authors = ["David LeGare <excaliburhissheath@gmail.com>"]
 [dependencies]
 bootstrap_rs = { path = "../bootstrap_rs" }
 fiber = { path = "../fiber" }
-lazy_static = "0.1.*"
+cell-extras = { git = "https://github.com/excaliburHisSheath/cell-extras" }
+serde = "0.8"
+serde_derive = "0.8"
+serde_json = "0.8"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+kernel32-sys = "0.2.2"

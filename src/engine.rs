@@ -12,13 +12,15 @@ use polygon::anchor::Anchor;
 use polygon::camera::{Camera as RenderCamera, CameraId};
 use polygon::mesh_instance::MeshInstance;
 use std::collections::HashMap;
+use std::fs::File;
+use std::io::Write;
 use std::mem;
 use std::ptr::{self, Unique};
 use std::sync::{Arc, Barrier};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::time::{Duration, Instant};
 use std::thread;
-use stopwatch::Stopwatch;
+use stopwatch::{self, Stopwatch};
 
 #[derive(Debug)]
 pub struct EngineBuilder {
@@ -129,6 +131,11 @@ impl EngineBuilder {
         func();
 
         wait_for_quit();
+
+        // Time to shut down the engine.
+        let events_string = stopwatch::write_events_to_string();
+        let mut out_file = File::create("stopwatch.json").unwrap();
+        out_file.write_all(events_string.as_bytes()).unwrap();
     }
 
     pub fn max_workers(&mut self, workers: usize) -> &mut EngineBuilder {
@@ -236,7 +243,6 @@ fn main_loop(mut engine: Box<Engine>) {
     let mut last_frame_time = Instant::now();
 
     'main: loop {
-        // Timing scope for main loop.
         {
             let _stopwatch = Stopwatch::with_budget("main loop", target_frame_time);
 
@@ -273,6 +279,7 @@ fn main_loop(mut engine: Box<Engine>) {
                     async.await();
                 }
             } else {
+                let _s = Stopwatch::new("no game behaviors");
                 // There are no per-frame behaviors. We suspend the main loop fiber anyway to give
                 // other work some time on the thread. Generally this case only matters when debugging
                 // with a single thread.
@@ -392,10 +399,10 @@ fn main_loop(mut engine: Box<Engine>) {
                 let light = engine.renderer.get_light_mut(*id.borrow()).expect("Renderer has no such light");
                 *light = data.borrow().clone();
             }
-        }
 
-        // Draw.
-        engine.renderer.draw();
+            // Draw.
+            engine.renderer.draw();
+        }
 
         // If we've already missed our target frame time then we want to immediately start the
         // next frame. Also, the remaining time calculations will overflow so we don't want to
