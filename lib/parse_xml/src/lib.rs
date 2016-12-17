@@ -2,7 +2,7 @@
 // we should remove the unstable dependency.
 #![feature(unicode)]
 
-extern crate rustc_unicode;
+extern crate std_unicode;
 extern crate unicode_segmentation;
 
 #[cfg(test)]
@@ -13,7 +13,7 @@ pub mod dom;
 use std::io::prelude::*;
 use std::fs::File;
 use unicode_segmentation::{UnicodeSegmentation, GraphemeIndices};
-use rustc_unicode::str::UnicodeStr;
+use std_unicode::str::UnicodeStr;
 
 use Event::*;
 use XMLElement::*;
