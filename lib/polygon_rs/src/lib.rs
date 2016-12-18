@@ -1,5 +1,3 @@
-#![feature(item_like_imports)]
-
 extern crate bootstrap_rs as bootstrap;
 extern crate parse_bmp;
 extern crate polygon_material;
