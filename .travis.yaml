@@ -1,0 +1,18 @@
+language: rust
+os:
+  - macos
+  - linux
+rust:
+  - stable
+  - beta
+  - nightly
+script:
+  - cd lib/bootstrap_rs
+  - cargo build
+  - cargo build --example window
+matrix:
+  allow_failures:
+    - os: linux
+    - rust:
+      - stable
+      - beta
