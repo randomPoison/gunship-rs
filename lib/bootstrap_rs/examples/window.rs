@@ -3,14 +3,12 @@ extern crate bootstrap_rs as bootstrap;
 use bootstrap::window::*;
 
 fn main() {
-    let mut window = Window::new("bootstrap - window example");
+    let mut window = Window::new("Bootstrap Window").unwrap();
 
-    'outer: loop {
-        while let Some(message) = window.next_message() {
-            match message {
-                Message::Close => break 'outer,
-                _ => {},
-            }
+    for message in window.message_pump() {
+        println!("message: {:?}", message);
+        if let Message::Close = message {
+            break;
         }
     }
 }

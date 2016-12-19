@@ -8,7 +8,6 @@ extern crate winmm;
 
 pub mod window;
 pub mod input;
-pub mod time;
 pub mod file;
 
 pub trait ToCU16Str {
