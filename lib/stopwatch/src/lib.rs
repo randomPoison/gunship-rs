@@ -3,35 +3,116 @@
 #![feature(proc_macro)]
 
 #[macro_use]
+extern crate lazy_static;
+#[macro_use]
 extern crate serde_derive;
 extern crate serde_json;
 
 extern crate bootstrap_rs as bootstrap;
-extern crate cell_extras;
 extern crate fiber;
 
-use cell_extras::AtomicInitCell;
 use fiber::FiberId;
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::fmt::{self, Debug, Formatter};
-use std::sync::{Mutex, Once, ONCE_INIT};
+use std::mem;
+use std::sync::Mutex;
 use std::time::Duration;
 
 #[cfg(target_os="windows")]
 #[path="windows.rs"]
 pub mod platform;
 
-static EVENTS: AtomicInitCell<Mutex<Vec<Event>>> = AtomicInitCell::new();
-static EVENTS_INIT: Once = ONCE_INIT;
+thread_local! {
+    static CONTEXT: RefCell<Context> = RefCell::new(Context::new());
+}
+
+lazy_static! {
+    static ref CONTEXT_MAP: Mutex<HashMap<FiberId, Context>> = Mutex::new(HashMap::with_capacity(1024));
+    static ref EVENTS: Mutex<Vec<Event>> = Mutex::new(Vec::new());
+}
 
 /// Swaps the currently tracked execution context with the specified context.
-pub fn switch_context(_old: FiberId, _new: FiberId) {
-    // TODO: Can we track context switches with the event system?
+pub fn switch_context(old: FiberId, new: FiberId) {
+    with_context(|stack| {
+        let timestamp = platform::timestamp();
+
+        // If there are stopwatches on the stack then we need to end the flow event.
+        if stack.len() > 0 {
+            push_event(Event {
+                name: stack[0].name,
+                cat: String::new(),
+                ph: "f",
+                id: fiber::current().unwrap().primitive_id(),
+                ts: timestamp,
+                tid: platform::thread_id(),
+                pid: 0,
+                bp: "e",
+            });
+        }
+
+        // Push an end event for each of the time slices.
+        for stopwatch in stack.iter().rev() {
+            push_event(Event {
+                name: stopwatch.name,
+                cat: String::new(),
+                ph: "E",
+                id: fiber::current().unwrap().primitive_id(),
+                ts: timestamp,
+                tid: platform::thread_id(),
+                pid: 0,
+                bp: "e",
+            });
+        }
+    });
+
+    let mut context_map = CONTEXT_MAP.lock().expect("Unable to acquire lock on context map");
+
+    let new_context = context_map.remove(&new).unwrap_or(Context::new());
+    let old_context = with_context(move |context| {
+        let mut new_context = new_context;
+        mem::swap(context, &mut new_context);
+        new_context
+    });
+
+    context_map.insert(old, old_context);
+
+    with_context(|stack| {
+        let timestamp = platform::timestamp();
+
+        // Push an end event for each of the time slices.
+        for stopwatch in stack.iter() {
+            push_event(Event {
+                name: stopwatch.name,
+                cat: String::new(),
+                ph: "B",
+                id: fiber::current().unwrap().primitive_id(),
+                ts: timestamp,
+                tid: platform::thread_id(),
+                pid: 0,
+                bp: "e",
+            });
+        }
+
+        // If there are stopwatches on the stack then we need to end the flow event.
+        if stack.len() > 0 {
+            push_event(Event {
+                name: stack[0].name,
+                cat: String::new(),
+                ph: "s",
+                id: fiber::current().unwrap().primitive_id(),
+                ts: timestamp,
+                tid: platform::thread_id(),
+                pid: 0,
+                bp: "e",
+            });
+        }
+    });
 }
 
 /// Writes the events history to a string.
 pub fn write_events_to_string() -> String {
-    let mutex = EVENTS.borrow();
-    let events = mutex.lock().expect("Events mutex got poisoned");
+    let events = EVENTS.lock().expect("Events mutex got poisoned");
     serde_json::to_string(&*events).unwrap()
 }
 
@@ -41,23 +122,34 @@ pub struct Stopwatch {
 
 impl Stopwatch {
     pub fn new(name: &'static str) -> Stopwatch {
-        // TODO: Maybe we shouldn't lazily init the stopwatch system. It's probably better to
-        // explicitly init it at startup.
-        EVENTS_INIT.call_once(|| {
-            EVENTS.init(Mutex::new(Vec::new()));
-        });
-
-        let event = Event {
+        push_event(Event {
             name: name,
             cat: String::new(),
-            ph: "b",
+            ph: "B",
             id: fiber::current().unwrap().primitive_id(),
             ts: platform::timestamp(),
             tid: platform::thread_id(),
             pid: 0, // TODO: Do we care about tracking process ID?
-        };
+            bp: "e",
+        });
 
-        push_event(event);
+        with_context(|stack| {
+            // The first event on the stack also needs a flow event.
+            if stack.len() == 0 {
+                push_event(Event {
+                    name: name,
+                    cat: String::new(),
+                    ph: "s",
+                    id: fiber::current().unwrap().primitive_id(),
+                    ts: platform::timestamp(),
+                    tid: platform::thread_id(),
+                    pid: 0,
+                    bp: "e",
+                })
+            }
+
+            stack.push(StopwatchData { name: name });
+        });
 
         Stopwatch {
             name: name,
@@ -72,17 +164,34 @@ impl Stopwatch {
 
 impl Drop for Stopwatch {
     fn drop(&mut self) {
-        let event = Event {
+        with_context(|stack| {
+            let stopwatch = stack.pop().expect("No stopwatch popped, stack is corrupted");
+            assert_eq!(self.name, stopwatch.name, "Stack got corrupted I guess");
+
+            if stack.len() == 0 {
+                push_event(Event {
+                    name: self.name,
+                    cat: String::new(),
+                    ph: "f",
+                    id: fiber::current().unwrap().primitive_id(),
+                    ts: platform::timestamp(),
+                    tid: platform::thread_id(),
+                    pid: 0,
+                    bp: "e",
+                });
+            }
+        });
+
+        push_event(Event {
             name: self.name,
             cat: String::new(),
-            ph: "e",
+            ph: "E",
             id: fiber::current().unwrap().primitive_id(),
             ts: platform::timestamp(),
             tid: platform::thread_id(),
             pid: 0, // TODO: Do we care about tracking process ID?
-        };
-
-        push_event(event);
+            bp: "e",
+        });
     }
 }
 
@@ -107,12 +216,29 @@ struct Event {
     tid: usize,
 
     id: isize,
+
+    bp: &'static str,
 }
 
 fn push_event(event: Event) {
-    let mutex = EVENTS.borrow();
-    let mut events = mutex.lock().expect("Events mutex got poisoned");
+    let mut events = EVENTS.lock().expect("Events mutex got poisoned");
     events.push(event);
+}
+
+#[derive(Debug, Clone, Copy)]
+struct StopwatchData {
+    name: &'static str,
+}
+
+type Context = Vec<StopwatchData>;
+
+fn with_context<F, T>(func: F) -> T
+    where F: FnOnce(&mut Context) -> T
+{
+    CONTEXT.with(move |context_cell| {
+        let mut context = context_cell.borrow_mut();
+        func(&mut *context)
+    })
 }
 
 pub struct PrettyDuration(pub Duration);

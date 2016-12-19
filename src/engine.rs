@@ -240,7 +240,7 @@ fn main_loop(mut engine: Box<Engine>) {
 
     let engine = &mut *engine;
 
-    let mut last_frame_time = Instant::now();
+    let mut frame_start = Instant::now();
 
     'main: loop {
         {
@@ -404,30 +404,12 @@ fn main_loop(mut engine: Box<Engine>) {
             engine.renderer.draw();
         }
 
-        // If we've already missed our target frame time then we want to immediately start the
-        // next frame. Also, the remaining time calculations will overflow so we don't want to
-        // run the below code.
-        let elapsed_time = last_frame_time.elapsed();
-        if elapsed_time < target_frame_time {
-            // Sleep the thread while there's more than a millisecond left.
-            let mut remaining_time_ms = target_frame_time - elapsed_time;
-            while remaining_time_ms > Duration::from_millis(1) {
-                thread::sleep(remaining_time_ms);
-
-                let elapsed_time = last_frame_time.elapsed();
-                if elapsed_time > target_frame_time {
-                    break;
-                } else {
-                    remaining_time_ms = target_frame_time - elapsed_time;
-                }
-            }
-
-            // When there's less than a millisecond left the system scheduler isn't accurate enough to
-            // awake it at the right time and it's possible to sleep too long. To avoid that we simply
-            // busy loop until it's time for the next frame.
-            while last_frame_time.elapsed() < target_frame_time {}
+        // Determine the next frame's start time, even if we blew the frame time.
+        while frame_start < Instant::now() {
+            frame_start += target_frame_time;
         }
 
-        last_frame_time = Instant::now();
+        // Now wait until we've returned to the frame cadence before beginning the next frame.
+        while Instant::now() < frame_start {}
     }
 }
