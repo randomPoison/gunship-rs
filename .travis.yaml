@@ -10,6 +10,7 @@ script:
   - cd lib/bootstrap_rs
   - cargo build
   - cargo build --example window
+
 matrix:
   allow_failures:
     - os: linux
