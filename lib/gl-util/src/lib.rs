@@ -7,19 +7,18 @@
 //! someone much less OpenGL experience.
 
 #![feature(associated_consts)]
-#![feature(item_like_imports)]
 #![feature(pub_restricted)]
-#![feature(question_mark)]
 
 extern crate bootstrap_rs as bootstrap;
 extern crate bootstrap_gl as gl;
 
-use context::Context;
+use context::{Context, ContextInner};
 use gl::*;
 use shader::Program;
 use std::mem;
-use std::cell::Cell;
+use std::cell::RefCell;
 use std::collections::HashMap;
+use std::rc::Rc;
 use texture::Texture2d;
 
 pub use gl::{
@@ -58,11 +57,11 @@ pub struct VertexBuffer {
 impl VertexBuffer {
     /// Creates a new `VertexBuffer` object.
     pub fn new(context: &Context) -> VertexBuffer {
-        let context = context.inner();
+        let context = context.raw();
 
         let mut buffer_name = BufferName::null();
         unsafe {
-            let _guard = ::context::ContextGuard::new(&context);
+            let _guard = ::context::ContextGuard::new(context);
             gl::gen_buffers(1, &mut buffer_name);
         }
 
@@ -84,7 +83,7 @@ impl VertexBuffer {
         let byte_count = data.len() * mem::size_of::<f32>();
 
         unsafe {
-            let _guard = ::context::ContextGuard::new(&self.context);
+            let _guard = ::context::ContextGuard::new(self.context);
             gl::bind_buffer(BufferTarget::Array, self.buffer_name);
             gl::buffer_data(
                 BufferTarget::Array,
@@ -117,7 +116,7 @@ impl VertexBuffer {
 impl Drop for VertexBuffer {
     fn drop(&mut self) {
         unsafe {
-            let _guard = ::context::ContextGuard::new(&self.context);
+            let _guard = ::context::ContextGuard::new(self.context);
             gl::delete_buffers(1, &mut self.buffer_name);
         }
     }
@@ -147,10 +146,10 @@ pub struct IndexBuffer {
 impl IndexBuffer {
     /// Creates a new index buffer.
     pub fn new(context: &Context) -> IndexBuffer {
-        let context = context.inner();
+        let context = context.raw();
         let mut buffer_name = BufferName::null();
         unsafe {
-            let _guard = ::context::ContextGuard::new(&context);
+            let _guard = ::context::ContextGuard::new(context);
             gl::gen_buffers(1, &mut buffer_name);
         }
 
@@ -170,7 +169,7 @@ impl IndexBuffer {
         let byte_count = data.len() * mem::size_of::<u32>();
 
         unsafe {
-            let _guard = ::context::ContextGuard::new(&self.context);
+            let _guard = ::context::ContextGuard::new(self.context);
             gl::bind_buffer(BufferTarget::ElementArray, self.buffer_name);
             gl::buffer_data(
                 BufferTarget::ElementArray,
@@ -185,69 +184,108 @@ impl IndexBuffer {
 impl Drop for IndexBuffer {
     fn drop(&mut self) {
         unsafe {
-            let _guard = ::context::ContextGuard::new(&self.context);
+            let _guard = ::context::ContextGuard::new(self.context);
             gl::delete_buffers(1, &mut self.buffer_name);
         }
     }
 }
 
-/// A configuration object for specifying all of the various configurable options for a draw call.
-pub struct DrawBuilder<'a> {
+#[derive(Debug)]
+pub struct VertexArray {
     vertex_array_name: VertexArrayName,
-    vertex_buffer: &'a VertexBuffer,
+    vertex_buffer: VertexBuffer,
+    index_buffer: Option<IndexBuffer>,
+
+    context: Rc<RefCell<ContextInner>>,
+}
+
+impl VertexArray {
+    pub fn new(context: &Context, vertex_buffer: VertexBuffer) -> VertexArray {
+        let mut vertex_array_name = VertexArrayName::null();
+        let context_inner = context.inner();
+        unsafe {
+            let mut context = context_inner.borrow_mut();
+            let _guard = ::context::ContextGuard::new(context.raw());
+            gl::gen_vertex_arrays(1, &mut vertex_array_name);
+
+            context.bind_vertex_array(vertex_array_name);
+            gl::bind_buffer(BufferTarget::Array, vertex_buffer.buffer_name);
+        }
+
+        VertexArray {
+            vertex_array_name: vertex_array_name,
+            vertex_buffer: vertex_buffer,
+            index_buffer: None,
+
+            context: context_inner,
+        }
+    }
+
+    pub fn with_index_buffer(context: &Context, vertex_buffer: VertexBuffer, index_buffer: IndexBuffer) -> VertexArray {
+        let mut vertex_array_name = VertexArrayName::null();
+        let context_inner = context.inner();
+        unsafe {
+            let mut context = context_inner.borrow_mut();
+            let _guard = ::context::ContextGuard::new(context.raw());
+            gl::gen_vertex_arrays(1, &mut vertex_array_name);
+
+            context.bind_vertex_array(vertex_array_name);
+            gl::bind_buffer(BufferTarget::Array, vertex_buffer.buffer_name);
+            gl::bind_buffer(BufferTarget::ElementArray, index_buffer.buffer_name);
+        }
+
+        VertexArray {
+            vertex_array_name: vertex_array_name,
+            vertex_buffer: vertex_buffer,
+            index_buffer: Some(index_buffer),
+
+            context: context_inner,
+        }
+    }
+}
+
+impl Drop for VertexArray {
+    fn drop(&mut self) {
+        let mut context = self.context.borrow_mut();
+        let _guard = ::context::ContextGuard::new(context.raw());
+        unsafe { gl::delete_vertex_arrays(1, &mut self.vertex_array_name); }
+        context.unbind_vertex_array(self.vertex_array_name);
+    }
+}
+
+/// A configuration object for specifying all of the various configurable options for a draw call.
+// TODO: Change `DrawBuidler` to cull backfaces by default.
+pub struct DrawBuilder<'a> {
+    vertex_array: &'a VertexArray,
     draw_mode: DrawMode,
-    index_buffer: Option<&'a IndexBuffer>,
     polygon_mode: Option<PolygonMode>,
     program: Option<&'a Program>,
     cull: Option<Face>,
     depth_test: Option<Comparison>,
-    winding_order: Option<WindingOrder>,
-    blend: Option<(SourceFactor, DestFactor)>,
+    winding_order: WindingOrder,
+    blend: (SourceFactor, DestFactor),
     uniforms: HashMap<UniformLocation, UniformValue<'a>>,
 
-    // TODO: This is dumb and isn't necessary, get rid of it.
-    active_texture: Cell<i32>,
-
-    pub(crate) context: gl::Context,
+    context: Rc<RefCell<ContextInner>>,
 }
 
 impl<'a> DrawBuilder<'a> {
-    pub fn new(context: &Context, vertex_buffer: &'a VertexBuffer, draw_mode: DrawMode) -> DrawBuilder<'a> {
-        let context = context.inner();
-
-        assert!(context == vertex_buffer.context, "Specified vertex buffer does not match the specified context");
-
-        let mut vertex_array_name = VertexArrayName::null();
-        unsafe {
-            let _guard = ::context::ContextGuard::new(&context);
-            gl::gen_vertex_arrays(1, &mut vertex_array_name);
-        }
+    pub fn new(context: &Context, vertex_array: &'a VertexArray, draw_mode: DrawMode) -> DrawBuilder<'a> {
+        // TODO: Make sure `vertex_array` comes from the right context.
 
         DrawBuilder {
-            vertex_array_name: vertex_array_name,
-            vertex_buffer: vertex_buffer,
+            vertex_array: vertex_array,
             draw_mode: draw_mode,
-            index_buffer: None,
             polygon_mode: None,
             program: None,
             cull: None,
             depth_test: None,
-            winding_order: None,
-            blend: None,
+            winding_order: WindingOrder::default(),
+            blend: Default::default(),
             uniforms: HashMap::new(),
 
-            active_texture: Cell::new(0),
-
-            context: context,
+            context: context.inner(),
         }
-    }
-
-    pub fn index_buffer(&mut self, index_buffer: &'a IndexBuffer) -> &mut DrawBuilder<'a> {
-        assert!(
-            self.context == index_buffer.context,
-            "Specified index buffer's context does not match draw builder's context");
-        self.index_buffer = Some(index_buffer);
-        self
     }
 
     pub fn polygon_mode(&mut self, polygon_mode: PolygonMode) -> &mut DrawBuilder<'a> {
@@ -256,9 +294,10 @@ impl<'a> DrawBuilder<'a> {
     }
 
     pub fn program(&mut self, program: &'a Program) -> &mut DrawBuilder<'a> {
-        // assert!(
-        //     self.context == program.context,
-        //     "Specified program's context does not match draw builder's context");
+        assert!(
+            self.context.borrow().raw() == program.context,
+            "Specified program's context does not match draw builder's context"
+        );
         self.program = Some(program);
         self
     }
@@ -274,7 +313,7 @@ impl<'a> DrawBuilder<'a> {
     }
 
     pub fn winding(&mut self, winding_order: WindingOrder) -> &mut DrawBuilder<'a> {
-        self.winding_order = Some(winding_order);
+        self.winding_order = winding_order;
         self
     }
 
@@ -283,11 +322,7 @@ impl<'a> DrawBuilder<'a> {
         source_factor: SourceFactor,
         dest_factor: DestFactor
     ) -> &mut DrawBuilder<'a> {
-        if source_factor == SourceFactor::One && dest_factor == DestFactor::Zero {
-            self.blend = None;
-        } else {
-            self.blend = Some((source_factor, dest_factor));
-        }
+        self.blend = (source_factor, dest_factor);
         self
     }
 
@@ -301,15 +336,15 @@ impl<'a> DrawBuilder<'a> {
         buffer_attrib_name: &str,
         attrib_location: AttributeLocation
     ) -> &mut DrawBuilder<'a> {
-        let layout = match self.vertex_buffer.attribs.get(buffer_attrib_name) {
+        let layout = match self.vertex_array.vertex_buffer.attribs.get(buffer_attrib_name) {
             Some(&attrib_data) => attrib_data,
             None => panic!("Vertex buffer has no attribute \"{}\"", buffer_attrib_name),
         };
 
         unsafe {
-            let _guard = ::context::ContextGuard::new(&self.context);
-            gl::bind_buffer(BufferTarget::Array, self.vertex_buffer.buffer_name);
-            gl::bind_vertex_array(self.vertex_array_name);
+            let mut context = self.context.borrow_mut();
+            let _guard = ::context::ContextGuard::new(context.raw());
+            context.bind_vertex_array(self.vertex_array.vertex_array_name);
 
             gl::enable_vertex_attrib_array(attrib_location);
             gl::vertex_attrib_pointer(
@@ -319,9 +354,6 @@ impl<'a> DrawBuilder<'a> {
                 False,
                 (layout.stride * mem::size_of::<f32>()) as i32, // TODO: Correctly handle non-f32
                 layout.offset * mem::size_of::<f32>());         // attrib data types.
-
-            gl::bind_vertex_array(VertexArrayName::null());
-            gl::bind_buffer(BufferTarget::Array, BufferName::null());
         }
 
         self
@@ -347,15 +379,15 @@ impl<'a> DrawBuilder<'a> {
             Some(attrib) => attrib,
             None => return self,
         };
-        let layout = match self.vertex_buffer.attribs.get(buffer_attrib_name) {
+        let layout = match self.vertex_array.vertex_buffer.attribs.get(buffer_attrib_name) {
             Some(&attrib_data) => attrib_data,
             None => return self,
         };
 
         unsafe {
-            let _guard = ::context::ContextGuard::new(&self.context);
-            gl::bind_buffer(BufferTarget::Array, self.vertex_buffer.buffer_name);
-            gl::bind_vertex_array(self.vertex_array_name);
+            let mut context = self.context.borrow_mut();
+            let _guard = ::context::ContextGuard::new(context.raw());
+            context.bind_vertex_array(self.vertex_array.vertex_array_name);
 
             gl::enable_vertex_attrib_array(attrib);
             gl::vertex_attrib_pointer(
@@ -365,9 +397,6 @@ impl<'a> DrawBuilder<'a> {
                 False,
                 (layout.stride * mem::size_of::<f32>()) as i32,
                 layout.offset * mem::size_of::<f32>());
-
-            gl::bind_vertex_array(VertexArrayName::null());
-            gl::bind_buffer(BufferTarget::Array, BufferName::null());
         }
 
         self
@@ -393,6 +422,8 @@ impl<'a> DrawBuilder<'a> {
 
         let program =
             self.program.expect("Cannot set a uniform without a shader program");
+
+        // TODO: This checking is bad? Or maybe not? I don't remember.
         let uniform_location = match program.get_uniform_location(name) {
             Some(location) => location,
             None => return self,
@@ -404,49 +435,44 @@ impl<'a> DrawBuilder<'a> {
         self
     }
 
-    pub fn draw(&self) {
+    pub fn draw(&mut self) {
+        let mut context = self.context.borrow_mut();
+        let _guard = ::context::ContextGuard::new(context.raw());
+
+        context.polygon_mode(self.polygon_mode.unwrap_or_default());
+        context.use_program(self.program.map(Program::inner));
+
+        if let Some(face) = self.cull {
+            context.enable_server_cull(true);
+            context.cull_mode(face);
+            context.winding_order(self.winding_order);
+        } else {
+            context.enable_server_cull(false);
+        }
+
+        if let Some(depth_test) = self.depth_test {
+            context.enable_server_depth_test(true);
+            context.depth_test(depth_test);
+        } else {
+            context.enable_server_depth_test(false);
+        }
+
+        let (source_factor, dest_factor) = self.blend;
+        context.blend(source_factor, dest_factor);
+
+        let mut active_texture = 0;
+        // Apply uniforms.
+        for (&location, uniform) in &self.uniforms {
+            self.apply(uniform, location, &mut active_texture);
+        }
+
         unsafe {
-            let _guard = ::context::ContextGuard::new(&self.context);
+            // TODO: Do a better job tracking VAO and VBO state? I don't know how that would be
+            // accomplished, but I don't honestly undertand VAOs so maybe I should figure that out
+            // first.
+            context.bind_vertex_array(self.vertex_array.vertex_array_name);
 
-            gl::enable(ServerCapability::FramebufferSrgb);
-
-            gl::bind_vertex_array(self.vertex_array_name);
-            gl::bind_buffer(BufferTarget::Array, self.vertex_buffer.buffer_name);
-
-            if let Some(polygon_mode) = self.polygon_mode {
-                gl::polygon_mode(Face::FrontAndBack, polygon_mode);
-            }
-
-            if let Some(program) = self.program {
-                gl::use_program(program.inner());
-            }
-
-            if let Some(face) = self.cull {
-                gl::enable(ServerCapability::CullFace);
-                gl::cull_face(face);
-
-                if let Some(winding_order) = self.winding_order {
-                    gl::front_face(winding_order);
-                }
-            }
-
-            if let Some(depth_test) = self.depth_test {
-                gl::enable(ServerCapability::DepthTest);
-                gl::depth_func(depth_test);
-            }
-
-            if let Some((source_factor, dest_factor)) = self.blend {
-                gl::enable(ServerCapability::Blend);
-                gl::blend_func(source_factor, dest_factor);
-            }
-
-            // Apply uniforms.
-            for (&location, uniform) in &self.uniforms {
-                self.apply(uniform, location);
-            }
-
-            if let Some(indices) = self.index_buffer {
-                gl::bind_buffer(BufferTarget::ElementArray, indices.buffer_name);
+            if let Some(indices) = self.vertex_array.index_buffer.as_ref() {
                 gl::draw_elements(
                     self.draw_mode,
                     indices.len as i32,
@@ -456,34 +482,12 @@ impl<'a> DrawBuilder<'a> {
                 gl::draw_arrays(
                     self.draw_mode,
                     0,
-                    self.vertex_buffer.element_len as i32);
+                    self.vertex_array.vertex_buffer.element_len as i32);
             }
-
-            // Reset all values even if they weren't used so that we don't need to branch twice on
-            // each option.
-
-            // Reset all used textures.
-            for texture in 0..self.active_texture.get() {
-                texture::set_active_texture(texture as u32);
-                gl::bind_texture(TextureBindTarget::Texture2d, TextureObject::null());
-            }
-            self.active_texture.set(0);
-
-            gl::front_face(WindingOrder::CounterClockwise);
-            gl::disable(ServerCapability::Blend);
-            gl::disable(ServerCapability::DepthTest);
-            gl::disable(ServerCapability::CullFace);
-            gl::polygon_mode(Face::FrontAndBack, PolygonMode::Fill);
-            gl::use_program(ProgramObject::null());
-            gl::bind_buffer(BufferTarget::ElementArray, BufferName::null());
-            gl::bind_buffer(BufferTarget::Array, BufferName::null());
-            gl::bind_vertex_array(VertexArrayName::null());
         }
     }
 
-    fn apply(&self, uniform: &UniformValue, location: UniformLocation) {
-        let _guard = ::context::ContextGuard::new(&self.context);
-
+    fn apply(&self, uniform: &UniformValue, location: UniformLocation, active_texture: &mut i32) {
         match *uniform {
             UniformValue::f32(value) => unsafe {
                 gl::uniform_f32x1(location, value);
@@ -496,6 +500,12 @@ impl<'a> DrawBuilder<'a> {
             },
             UniformValue::f32x4((x, y, z, w)) => unsafe {
                 gl::uniform_f32x4(location, x, y, z, w);
+            },
+            UniformValue::i32(value) => unsafe {
+                gl::uniform_i32x1(location, value);
+            },
+            UniformValue::u32(value) => unsafe {
+                gl::uniform_u32x1(location, value);
             },
             UniformValue::Matrix(ref matrix) => match matrix.data.len() {
                 16 => unsafe {
@@ -515,25 +525,14 @@ impl<'a> DrawBuilder<'a> {
                 _ => panic!("Unsupported matrix data length: {}", matrix.data.len()),
             },
             UniformValue::Texture(texture) => {
-                let active_texture = self.active_texture.get();
-
                 unsafe {
-                    texture::set_active_texture(active_texture as u32);
+                    texture::set_active_texture(*active_texture as u32);
                     gl::bind_texture(TextureBindTarget::Texture2d, texture.inner());
-                    gl::uniform_i32x1(location, active_texture);
+                    gl::uniform_i32x1(location, *active_texture);
                 }
 
-                self.active_texture.set(active_texture + 1);
+                *active_texture += 1;
             }
-        }
-    }
-}
-
-impl<'a> Drop for DrawBuilder<'a> {
-    fn drop(&mut self) {
-        unsafe {
-            let _guard = ::context::ContextGuard::new(&self.context);
-            gl::delete_vertex_arrays(1, &mut self.vertex_array_name);
         }
     }
 }
@@ -546,6 +545,8 @@ pub enum UniformValue<'a> {
     f32x2((f32, f32)),
     f32x3((f32, f32, f32)),
     f32x4((f32, f32, f32, f32)),
+    i32(i32),
+    u32(u32),
     Matrix(GlMatrix<'a>),
     Texture(&'a Texture2d),
 }
@@ -595,6 +596,18 @@ impl<'a> From<[f32; 3]> for UniformValue<'a> {
 impl<'a> From<[f32; 4]> for UniformValue<'a> {
     fn from(value: [f32; 4]) -> UniformValue<'a> {
         UniformValue::f32x4((value[0], value[1], value[2], value[3]))
+    }
+}
+
+impl<'a> From<i32> for UniformValue<'a> {
+    fn from(from: i32) -> UniformValue<'a> {
+        UniformValue::i32(from)
+    }
+}
+
+impl<'a> From<u32> for UniformValue<'a> {
+    fn from(from: u32) -> UniformValue<'a> {
+        UniformValue::u32(from)
     }
 }
 

@@ -1,47 +1,40 @@
 [package]
 
 name = "gunship"
-version = "0.0.4"
+version = "0.1.0"
 authors = ["David LeGare <excaliburhissheath@gmail.com>"]
-
-[lib]
-name = "gunship"
 
 [features]
 timing = []
-hotloading = []
 no-draw = []
 
 [dependencies]
-bootstrap_rs    = { path = "lib/bootstrap_rs" }
+bootstrap_rs = { path = "lib/bootstrap_rs" }
 bootstrap_audio = { path = "lib/bootstrap_audio" }
-hash            = { path = "lib/hash" }
-parse_collada   = { path = "lib/parse_collada" }
-polygon         = { path = "lib/polygon_rs" }
-polygon_math    = { path = "lib/polygon_math" }
-stopwatch       = { path = "lib/stopwatch" }
+cell-extras = { git = "https://github.com/excaliburHisSheath/cell-extras" }
+fiber = { version = "0.1", path = "lib/fiber" }
+hash = { path = "lib/hash" }
+lazy_static = "0.2.1"
+parse_collada = { path = "lib/parse_collada" }
+parse-obj = { version = "0.1", path = "lib/parse-obj" }
+polygon = { path = "lib/polygon_rs" }
+polygon_math = { path = "lib/polygon_math" }
+stopwatch = { path = "lib/stopwatch" }
 
 [dev_dependencies]
 rand = "*"
 
-# [profile.dev]
-# opt-level = 1
+[profile.dev]
+panic = "abort"
 
 [profile.release]
-# lto = true
-debug = true
+panic = "abort"
+
+[profile.test ]
+panic = "abort"
 
 [profile.bench]
-lto = true
+panic = "abort"
 
-# [[example]]
-# name = "create_destroy"
-# path = "examples/benchmarks/create_destroy.rs"
-#
-# [[example]]
-# name = "circle_movement"
-# path = "examples/benchmarks/circle_movement.rs"
-#
-# [[example]]
-# name = "circle_collision"
-# path = "examples/benchmarks/circle_collision.rs"
+[profile.doc]
+panic = "abort"

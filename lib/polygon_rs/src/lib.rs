@@ -1,9 +1,7 @@
-#![feature(item_like_imports)]
-#![feature(question_mark)]
-
 extern crate bootstrap_rs as bootstrap;
 extern crate parse_bmp;
 extern crate polygon_material;
+extern crate stopwatch;
 
 pub extern crate polygon_math as math;
 
@@ -28,6 +26,7 @@ use camera::*;
 use geometry::mesh::Mesh;
 use light::*;
 use material::*;
+use math::Color;
 use mesh_instance::*;
 use texture::*;
 
@@ -45,7 +44,7 @@ pub trait Renderer: 'static + Send {
     fn default_material(&self) -> Material;
 
     /// Parses a material source file and generates a material from it.
-    fn build_material(&mut self, source: MaterialSource) -> Result<Material, ()>;
+    fn build_material(&mut self, source: MaterialSource) -> Result<Material, BuildMaterialError>;
 
     /// Registers a material to be used as a shared material.
     fn register_material(&mut self, material: Material) -> MaterialId;
@@ -94,6 +93,8 @@ pub trait Renderer: 'static + Send {
 
     /// Gets a mutable reference to a registered light.
     fn get_light_mut(&mut self, light_id: LightId) -> Option<&mut Light>;
+
+    fn set_ambient_light(&mut self, color: Color);
 }
 
 /// A helper struct for selecting and initializing the most suitable renderer for the client's
@@ -134,3 +135,6 @@ trait Counter {
     /// Returns the next valid ID value, updating the internal counter in the process.
     fn next(&mut self) -> Self;
 }
+
+#[derive(Debug)]
+pub struct BuildMaterialError;

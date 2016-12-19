@@ -51,6 +51,9 @@ fn main() {
     camera.set_anchor(camera_anchor_id);
     renderer.register_camera(camera);
 
+    // Set ambient color to pure white so we don't need to worry about lighting.
+    renderer.set_ambient_light(Color::rgb(1.0, 1.0, 1.0));
+
     'outer: loop {
         while let Some(message) = window.next_message() {
             match message {
@@ -63,7 +66,7 @@ fn main() {
         {
             let anchor = renderer.get_anchor_mut(anchor_id).unwrap();
             let orientation = anchor.orientation();
-            anchor.set_orientation(orientation * Quaternion::from_eulers(0.0, 0.0, 0.0005));
+            anchor.set_orientation(orientation + Orientation::from_eulers(0.0, 0.0, 0.0005));
         }
 
         // Render the mesh.

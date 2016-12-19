@@ -1,252 +1,34 @@
-use std::thread;
+use camera::CameraData;
+use mesh_renderer::MeshRendererData;
+use resource::{MaterialId, MeshId};
+use scheduler::{self, WorkId};
+use transform::{TransformInnerHandle, TransformGraph};
+use bootstrap::window::{Message, Window};
+use cell_extras::{AtomicInitCell, InitCell};
+use input::{self, Input, ScanCode};
+use light::LightInner;
+use polygon::{GpuMesh, Renderer, RendererBuilder};
+use polygon::anchor::Anchor;
+use polygon::camera::{Camera as RenderCamera, CameraId};
+use polygon::mesh_instance::MeshInstance;
 use std::collections::HashMap;
-use std::intrinsics::type_name;
+use std::fs::File;
+use std::io::Write;
 use std::mem;
-use std::ptr;
-use std::time::Duration;
+use std::ptr::{self, Unique};
+use std::sync::{Arc, Barrier};
+use std::sync::mpsc::{self, Receiver, Sender};
+use std::time::{Duration, Instant};
+use std::thread;
+use stopwatch::{self, Stopwatch};
 
-use bootstrap::input::ScanCode;
-use bootstrap::window::Window;
-use bootstrap::window::Message::*;
-use bootstrap::time::Timer;
-use bs_audio;
-use polygon::{Renderer, RendererBuilder};
-use singleton::Singleton;
-use stopwatch::{Collector, Stopwatch};
-
-use scene::*;
-use resource::ResourceManager;
-use ecs::*;
-use component::*;
-use debug_draw::DebugDraw;
-
-pub const TARGET_FRAME_TIME_SECONDS: f32 = 1.0 / 60.0;
-pub const TARGET_FRAME_TIME_MS: f32 = TARGET_FRAME_TIME_SECONDS * 1000.0;
-
-static mut INSTANCE: *mut Engine = ptr::null_mut();
-
-pub struct Engine {
-    renderer: Box<Renderer>,
-    window: Window,
-    resource_manager: Box<ResourceManager>,
-
-    systems: HashMap<SystemId, Box<System>>,
-    debug_systems: HashMap<SystemId, Box<System>>,
-
-    // TODO: Replace explicit update ordering with something more automatic (e.g. dependency hierarchy).
-    audio_update: Box<System>,
-    alarm_update: Box<System>,
-    collision_update: Box<System>,
-
-    scene: Scene,
-
-    debug_draw: DebugDraw,
-
-    close: bool,
-    debug_pause: bool,
-}
-
-impl Engine {
-    /// Starts the engine's main loop, blocking until the game shuts down.
-    ///
-    /// This function starts the engine's internal update loop which handles the details of
-    /// processing input from the OS, invoking game code, and rendering each frame. This function
-    /// blocks until the engine recieves a message to being the shutdown process, at which point it
-    /// will end the update loop and perform any necessary shutdown and cleanup procedures. Once
-    /// those have completed this function will return.
-    ///
-    /// Panics if the engine hasn't been created yet.
-    pub fn start() {
-        let instance = unsafe {
-            debug_assert!(!INSTANCE.is_null(), "Cannot retrieve Engine instance because none exists");
-            &mut *INSTANCE
-        };
-
-        // Run main loop.
-        instance.main_loop();
-
-        // Perform cleanup.
-        unsafe { Engine::destroy_instance(); }
-    }
-
-    /// Retrieves a reference to current scene.
-    ///
-    /// Panics if the engine hasn't been created yet.
-    pub fn scene<'a>() -> &'a Scene {
-        let instance = Engine::instance();
-        &instance.scene
-    }
-
-    /// Retrieves a reference to the resource manager.
-    ///
-    /// TODO: The resource manager should probably be a singleton too since it's already setup to
-    /// be used through shared references.
-    pub fn resource_manager<'a>() -> &'a ResourceManager {
-        let instance = Engine::instance();
-        &*instance.resource_manager
-    }
-
-    pub fn window() -> &'static Window {
-        &Engine::instance().window
-    }
-
-    fn main_loop(&mut self) {
-        println!("starting main loop");
-
-        let timer = Timer::new();
-        let mut collector = Collector::new().unwrap();
-
-        loop {
-            let _stopwatch = Stopwatch::new("loop");
-
-            let start_time = timer.now();
-
-            self.update();
-            self.draw();
-
-            if self.close {
-                println!("shutting down engine");
-                break;
-            }
-
-            if !cfg!(feature="timing") && timer.elapsed_ms(start_time) > TARGET_FRAME_TIME_MS {
-                println!(
-                    "WARNING: Missed frame time. Frame time: {}ms, target frame time: {}ms",
-                    timer.elapsed_ms(start_time),
-                    TARGET_FRAME_TIME_MS);
-            }
-
-            // Wait for target frame time.
-            let mut remaining_time_ms = TARGET_FRAME_TIME_MS - timer.elapsed_ms(start_time);
-            while remaining_time_ms > 1.0 {
-                thread::sleep(Duration::from_millis(remaining_time_ms as u64));
-                remaining_time_ms = TARGET_FRAME_TIME_MS - timer.elapsed_ms(start_time);
-            }
-
-            while remaining_time_ms > 0.0 {
-                remaining_time_ms = TARGET_FRAME_TIME_MS - timer.elapsed_ms(start_time);
-            }
-
-            // TODO: Don't flip buffers until end of frame time?
-        };
-
-        collector.flush_to_file("stopwatch.csv");
-
-        println!("exiting main loop");
-    }
-
-    fn update(&mut self) {
-        let _stopwatch = Stopwatch::new("update");
-
-        let scene = &mut self.scene;
-
-        scene.input.clear();
-        loop {
-            let message = self.window.next_message(); // TODO: Make this an iterator to simplify this loop.
-            match message {
-                Some(message) => {
-                    match message {
-                        Activate => (),
-                        Close => self.close = true,
-                        Destroy => (),
-                        Paint => (),
-
-                        // Handle inputs.
-                        KeyDown(_)
-                      | KeyUp(_)
-                      | MouseMove(_, _)
-                      | MousePos(_, _)
-                      | MouseButtonPressed(_)
-                      | MouseButtonReleased(_)
-                      | MouseWheel(_) => scene.input.push_input(message),
-                    }
-                },
-                None => break
-            }
-        }
-
-        // TODO: More efficient handling of debug pause (i.e. something that doesn't have any
-        // overhead when doing a release build).
-        if !self.debug_pause || scene.input.key_pressed(ScanCode::F11) {
-            self.debug_draw.clear_buffer();
-
-            self.alarm_update.update(scene, TARGET_FRAME_TIME_SECONDS);
-
-            // Update systems.
-            for (_, system) in self.systems.iter_mut() {
-                system.update(scene, TARGET_FRAME_TIME_SECONDS);
-            }
-
-            // Update component managers.
-            scene.update_managers();
-        }
-
-        // Update debug systems always forever.
-        for (_, system) in self.debug_systems.iter_mut() {
-            system.update(scene, TARGET_FRAME_TIME_SECONDS);
-        }
-
-        // NOTE: Transform update used to go here.
-
-        if !self.debug_pause || scene.input.key_pressed(ScanCode::F11) {
-            self.collision_update.update(scene, TARGET_FRAME_TIME_SECONDS);
-            self.audio_update.update(scene, TARGET_FRAME_TIME_SECONDS);
-        }
-
-        if scene.input.key_pressed(ScanCode::F9) {
-            self.debug_pause = !self.debug_pause;
-        }
-
-        if scene.input.key_pressed(ScanCode::F11) {
-            self.debug_pause = true;
-        }
-    }
-
-    #[cfg(not(feature="no-draw"))]
-    fn draw(&mut self) {
-        let _stopwatch = Stopwatch::new("draw");
-
-        self.renderer.draw();
-    }
-
-    #[cfg(feature="no-draw")]
-    fn draw(&mut self) {}
-}
-
-unsafe impl Singleton for Engine {
-    /// Creates the instance of the singleton.
-    fn set_instance(engine: Engine) {
-        println!("setting instance");
-        assert!(unsafe { INSTANCE.is_null() }, "Cannot create more than one Engine instance");
-        let boxed_engine = Box::new(engine);
-        unsafe {
-            INSTANCE = Box::into_raw(boxed_engine);
-        }
-        println!("done setting instance");
-    }
-
-    /// Retrieves an immutable reference to the singleton instance.
-    ///
-    /// This function is unsafe because there is no way of know
-    fn instance() -> &'static Self {
-        unsafe {
-            debug_assert!(!INSTANCE.is_null(), "Cannot retrieve Engine instance because none exists");
-            &*INSTANCE
-        }
-    }
-
-    /// Destroys the instance of the singleton.
-    unsafe fn destroy_instance() {
-        let ptr = mem::replace(&mut INSTANCE, ptr::null_mut());
-        Box::from_raw(ptr);
-    }
-}
-
+#[derive(Debug)]
 pub struct EngineBuilder {
-    systems: HashMap<SystemId, Box<System>>,
-    debug_systems: HashMap<SystemId, Box<System>>,
-    managers: ManagerMap,
+    max_workers: usize,
 }
+
+static INSTANCE: AtomicInitCell<Unique<Engine>> = AtomicInitCell::new();
+static MAIN_LOOP: AtomicInitCell<WorkId> = AtomicInitCell::new();
 
 /// A builder for configuring the components and systems registered with the game engine.
 ///
@@ -256,113 +38,378 @@ pub struct EngineBuilder {
 impl EngineBuilder {
     /// Creates a new `EngineBuilder` object.
     pub fn new() -> EngineBuilder {
-        let mut builder = EngineBuilder {
-            systems: HashMap::new(),
-            debug_systems: HashMap::new(),
-            managers: ManagerMap::new(),
-        };
-
-        // Register internal component managers.
-        builder.register_component::<Transform>();
-        builder.register_component::<Camera>();
-        builder.register_component::<Light>();
-        builder.register_component::<Mesh>();
-        builder.register_component::<AudioSource>();
-        builder.register_component::<AlarmId>();
-        builder.register_component::<Collider>();
-
-        builder
+        EngineBuilder {
+            max_workers: 1,
+        }
     }
 
     /// Consumes the builder and creates the `Engine` instance.
     ///
+    /// `func` is invoked once the engine has been setup, so `func` should kick off all game
+    /// functionality.
+    ///
     /// No `Engine` object is returned because this method instantiates the engine singleton.
-    pub fn build(self) {
+    pub fn build<F>(self, func: F)
+        where F: FnOnce()
+    {
+        let window = {
+            let mut window = unsafe { mem::uninitialized() };
+            let mut out = unsafe { Unique::new(&mut window as *mut _) };
 
-        let engine = {
-            let window = Window::new("gunship game");
-            let mut renderer = RendererBuilder::new().build();
-            let debug_draw = DebugDraw::new(&mut *renderer);
+            let barrier = Arc::new(Barrier::new(2));
+            let barrier_clone = barrier.clone();
 
-            let resource_manager = Box::new(ResourceManager::new());
+            thread::spawn(move || {
+                let mut window = Window::new("gunship game").unwrap();
 
-            let audio_source = match bs_audio::init() {
-                Ok(audio_source) => audio_source,
-                Err(error) => {
-                    // TODO: Rather than panicking, create a null audio system and keep running.
-                    panic!("Error while initialzing audio subsystem: {}", error)
-                },
-            };
+                let mut message_pump = window.message_pump();
 
-            Engine {
-                window: window,
-                renderer: renderer,
-                resource_manager: resource_manager,
+                // write data out to `window` without dropping the old (uninitialized) value.
+                unsafe { ptr::write(out.get_mut(), window); }
 
-                systems: self.systems,
-                debug_systems: self.debug_systems,
+                // Sync with
+                barrier_clone.wait();
 
-                audio_update: Box::new(AudioSystem),
-                alarm_update: Box::new(alarm_update),
-                collision_update: Box::new(CollisionSystem::new()),
+                // We're done using the barrier, drop it so that the `Arc` can deallocate once
+                // the other thread has receieved the Window.
+                mem::drop(barrier_clone);
 
-                scene: Scene::new(audio_source, self.managers),
+                message_pump.run();
+            });
 
-                debug_draw: debug_draw,
+            // Wait until window thread finishe creating the window.
+            barrier.wait();
 
-                close: false,
-                debug_pause: false,
-            }
+            window
         };
 
-        println!("made the engine, woo");
+        let renderer = RendererBuilder::new(&window).build();
+        let (sender, receiever) = mpsc::channel();
 
-        Engine::set_instance(engine);
+        // Init aysnc subsystem.
+        scheduler::init_thread();
+
+        // Spawn our worker threads.
+        if self.max_workers > 0 {
+            for _ in 0..self.max_workers - 1 {
+                let sender = sender.clone();
+                thread::spawn(move || {
+                    // Initialize thread-local renderer message channel.
+                    RENDER_MESSAGE_CHANNEL.with(move |channel| { channel.init(sender); });
+
+                    // Initialize worker thread to support fibers and wait for work to be available.
+                    scheduler::run_wait_fiber();
+                });
+            }
+        }
+
+        // Set the current thread's channel.
+        RENDER_MESSAGE_CHANNEL.with(move |channel| { channel.init(sender); });
+
+        let mut engine = Box::new(Engine {
+            window: window,
+            renderer: renderer,
+            channel: receiever,
+
+            mesh_map: HashMap::new(),
+
+            scene_graph: TransformGraph::new(),
+            lights: Vec::new(),
+            camera: None,
+            behaviors: Vec::new(),
+            input: Input::new(),
+
+            debug_pause: false,
+        });
+
+        INSTANCE.init(unsafe { Unique::new(&mut *engine) });
+
+        let main_loop = scheduler::start(move || { main_loop(engine); });
+
+        MAIN_LOOP.init(main_loop.work_id());
+
+        func();
+
+        wait_for_quit();
+
+        // Time to shut down the engine.
+        let events_string = stopwatch::write_events_to_string();
+        let mut out_file = File::create("stopwatch.json").unwrap();
+        out_file.write_all(events_string.as_bytes()).unwrap();
     }
 
-    /// Registers the manager for the specified component type.
-    ///
-    /// Defers internally to `register_manager()`.
-    pub fn register_component<T: Component>(&mut self) {
-        T::Manager::register(self);
+    pub fn max_workers(&mut self, workers: usize) -> &mut EngineBuilder {
+        assert!(workers > 0, "There must be at least one worker for the engine to run");
+        self.max_workers = workers;
+        self
     }
+}
 
-    /// Registers the specified manager with the engine.
-    ///
-    /// Defers internally to `ComponentManager::register()`.
+pub struct Engine {
+    window: Window,
 
-    pub fn register_manager<T: ComponentManager>(&mut self, manager: T) {
-        let manager_id = ManagerId::of::<T>();
-        assert!(
-            !self.managers.contains_key(&manager_id),
-            "Manager {} with ID {:?} already registered", unsafe { type_name::<T>() }, &manager_id);
+    renderer: Box<Renderer>,
+    channel: Receiver<EngineMessage>,
 
-        // Box the manager as a trait object to construct the data and vtable pointers.
-        let boxed_manager = Box::new(manager);
+    mesh_map: HashMap<MeshId, GpuMesh>,
 
-        // Add the manager to the type map and the component id to the component map.
-        self.managers.insert(manager_id, boxed_manager);
+    scene_graph: TransformGraph,
+    lights: Vec<LightInner>,
+    camera: Option<(Box<CameraData>, CameraId)>,
+    behaviors: Vec<Box<FnMut() + Send>>,
+    input: Input,
+
+    debug_pause: bool,
+}
+
+impl Drop for Engine {
+    fn drop(&mut self) {
+        // TODO: Clear instance?
     }
+}
 
-    /// Registers the system with the engine.
-    pub fn register_system<T: System>(&mut self, system: T) {
-        let system_id = SystemId::of::<T>();
+// `Engine` does handles synchronization internally, so it's meant be shared between threads.
+unsafe impl Send for Engine {}
+unsafe impl Sync for Engine {}
 
-        assert!(
-            !self.systems.contains_key(&system_id),
-            "System {} with ID {:?} already registered", unsafe { type_name::<T>() }, &system_id);
+thread_local! {
+    // TODO: We don't want this to be completely public, only pub(crate), but `thread_local`
+    // doesn't support pub(crate) syntax.
+    pub static RENDER_MESSAGE_CHANNEL: InitCell<Sender<EngineMessage>> = InitCell::new();
+}
 
-        self.systems.insert(system_id, Box::new(system));
-    }
+// TODO: This shouln't be public, it's for engine-internal use.
+pub fn scene_graph<F, T>(func: F) -> T
+    where F: FnOnce(&TransformGraph) -> T
+{
+    let engine = INSTANCE.borrow();
+    unsafe { func(&(***engine).scene_graph) }
+}
 
-    /// Registers the debug system with the engine.
-    pub fn register_debug_system<T: System>(&mut self, system: T) {
-        let system_id = SystemId::of::<T>();
+// TODO: This shouln't be public, it's for engine-internal use.
+pub fn input<F, T>(func: F) -> T
+    where F: FnOnce(&Input) -> T
+{
+    let engine = INSTANCE.borrow();
+    unsafe { func(&(***engine).input) }
+}
 
-        assert!(
-            !self.debug_systems.contains_key(&system_id),
-            "System {} with ID {:?} already registered", unsafe { type_name::<T>() }, &system_id);
+// TODO: This shouln't be public, it's for engine-internal use.
+pub fn window<F, T>(func: F) -> T
+    where F: FnOnce(&Window) -> T
+{
+    let engine = INSTANCE.borrow();
+    unsafe { func(&(***engine).window) }
+}
 
-        self.debug_systems.insert(system_id, Box::new(system));
+pub enum EngineMessage {
+    Anchor(TransformInnerHandle),
+    Camera(Box<CameraData>, TransformInnerHandle),
+    Light(LightInner),
+    Material(MaterialId, ::polygon::material::MaterialSource),
+    Mesh(MeshId, ::polygon::geometry::mesh::Mesh),
+    MeshInstance(Box<MeshRendererData>, TransformInnerHandle),
+    Behavior(Box<FnMut() + Send>),
+}
+
+pub fn send_message(message: EngineMessage) {
+    RENDER_MESSAGE_CHANNEL.with(move |channel| {
+        channel
+            .send(message)
+            .expect("Unable to send render resource message");
+    });
+}
+
+pub fn run_each_frame<F>(func: F)
+    where
+    F: 'static,
+    F: FnMut(),
+    F: Send,
+{
+    send_message(EngineMessage::Behavior(Box::new(func)));
+}
+
+/// Suspends the calling worker until the engine main loop has finished.
+pub fn wait_for_quit() {
+    MAIN_LOOP.borrow().await();
+}
+
+fn main_loop(mut engine: Box<Engine>) {
+    // TODO: This should be a constant, but we can't create constant `Duration` objects right now.
+    let target_frame_time = Duration::new(0, 1_000_000_000 / 60);
+
+    let engine = &mut *engine;
+
+    let mut frame_start = Instant::now();
+
+    'main: loop {
+        {
+            let _stopwatch = Stopwatch::with_budget("main loop", target_frame_time);
+
+            // Process any pending window messages.
+            engine.input.clear();
+            for message in &mut engine.window {
+                // TODO: Process input messages.
+                match message {
+                    Message::Close => break 'main,
+                    Message::Activate => {}, // We don't handle window focus currently.
+                    _ => engine.input.push_input(message),
+                }
+            }
+
+            if input::key_pressed(ScanCode::F10) {
+                engine.debug_pause = !engine.debug_pause;
+            }
+
+            let debug_step = input::key_pressed(ScanCode::F11);
+
+            // Kick off all game behaviors and wait for them to complete.
+            if engine.behaviors.len() > 0 && (!engine.debug_pause || debug_step) {
+                let _stopwatch = Stopwatch::new("game behaviors");
+                let mut pending = Vec::with_capacity(engine.behaviors.len());
+
+                // Start all behaviors...
+                for behavior in engine.behaviors.iter_mut() {
+                    let async = scheduler::start(&mut **behavior);
+                    pending.push(async);
+                }
+
+                // ... then wait for each of them to finish.
+                for async in pending {
+                    async.await();
+                }
+            } else {
+                let _s = Stopwatch::new("no game behaviors");
+                // There are no per-frame behaviors. We suspend the main loop fiber anyway to give
+                // other work some time on the thread. Generally this case only matters when debugging
+                // with a single thread.
+                scheduler::suspend();
+            }
+
+            // Before drawing, process any pending render messages. These will be resources that were
+            // loaded but need to be registered with the renderer before the next draw.
+            while let Ok(message) = engine.channel.try_recv() {
+                match message {
+                    EngineMessage::Anchor(transform_inner) => {
+                        let anchor = Anchor::new();
+                        let anchor_id = engine.renderer.register_anchor(anchor);
+
+                        transform_inner.set_anchor(anchor_id);
+                    },
+                    EngineMessage::Camera(camera_data, transform_inner) => {
+                        assert!(engine.camera.is_none(), "Can't add camera, one is already registered");
+
+                        let anchor_id = match transform_inner.anchor() {
+                            Some(anchor) => anchor,
+                            None => unimplemented!(), // TODO: Create the anchor.
+                        };
+
+                        let mut camera = RenderCamera::default();
+                        camera.set_anchor(anchor_id);
+                        let camera_id = engine.renderer.register_camera(camera);
+
+                        engine.camera = Some((camera_data, camera_id));
+                    },
+                    EngineMessage::Light(light_inner) => {
+                        {
+                            let &(ref id, ref light) = &*light_inner;
+                            let light = light.borrow().clone();
+
+                            let light_id = engine.renderer.register_light(light);
+                            id.init(light_id);
+                        }
+
+                        engine.lights.push(light_inner);
+                    }
+                    EngineMessage::Material(_material_id, material_source) => {
+                        let material = engine.renderer.build_material(material_source).expect("TODO: Handle material compilation failure");
+                        let _gpu_material = engine.renderer.register_material(material);
+
+                        // TODO: Create an association between `material_id` and `material_source`.
+                    },
+                    EngineMessage::Mesh(mesh_id, mesh_data) => {
+                        let gpu_mesh = engine.renderer.register_mesh(&mesh_data);
+                        let last = engine.mesh_map.insert(mesh_id, gpu_mesh);
+                        assert!(last.is_none(), "Duplicate mesh_id found: {:?}", mesh_id);
+                    },
+                    EngineMessage::MeshInstance(mesh_renderer_data, transform_inner) => {
+                        let anchor_id = match transform_inner.anchor() {
+                            Some(anchor) => anchor,
+                            None => unimplemented!(), // TODO: Create the anchor.
+                        };
+
+                        let gpu_mesh = *engine
+                            .mesh_map
+                            .get(&mesh_renderer_data.mesh_id())
+                            .expect("No gpu mesh found for mesh id");
+
+                        let mut mesh_instance = MeshInstance::new(
+                            gpu_mesh,
+                            engine.renderer.default_material(),
+                        );
+
+                        // HACK HACK HACK ---------------------------------------------------------
+                        mesh_instance.material_mut().set_color("surface_color", ::math::Color::rgb(1.0, 0.0, 0.0));
+                        mesh_instance.material_mut().set_color("surface_specular", ::math::Color::rgb(1.0, 1.0, 1.0));
+                        mesh_instance.material_mut().set_f32("surface_shininess", 4.0);
+                        // HACK HACK HACK ---------------------------------------------------------
+
+                        mesh_instance.set_anchor(anchor_id);
+
+                        let _ = engine.renderer.register_mesh_instance(mesh_instance);
+                    }
+                    EngineMessage::Behavior(func) => {
+                        engine.behaviors.push(func);
+                    }
+                }
+            }
+
+            // Update renderer's anchors with flattened scene graph.
+            for node in engine.scene_graph.roots() {
+                let node = node.borrow();
+
+                // TODO: Do something like pre-sorting so we only try to update out of
+                // date nodes.
+                if let Some(anchor_id) = node.anchor() {
+                    // Send position/rotation/scale to renderer anchor.
+                    let anchor = engine.renderer
+                        .get_anchor_mut(anchor_id)
+                        .expect("Node had anchor id but render did not have specified anchor");
+                    anchor.set_position(node.position);
+                    anchor.set_orientation(node.orientation);
+                    anchor.set_scale(node.scale);
+                }
+            }
+
+            // Update the camera.
+            if let Some((ref camera_data, ref camera_id)) = engine.camera {
+                let render_camera = engine.renderer
+                    .get_camera_mut(*camera_id)
+                    .expect("Camera didn't exist for camera id");
+
+                render_camera.set_fov(camera_data.fov());
+                render_camera.set_aspect(camera_data.aspect());
+                render_camera.set_near(camera_data.near());
+                render_camera.set_far(camera_data.far());
+            }
+
+            // Update lights.
+            for light in &engine.lights {
+                let &(ref id, ref data) = &**light;
+                let light = engine.renderer.get_light_mut(*id.borrow()).expect("Renderer has no such light");
+                *light = data.borrow().clone();
+            }
+
+            // Draw.
+            engine.renderer.draw();
+        }
+
+        // Determine the next frame's start time, even if we blew the frame time.
+        while frame_start < Instant::now() {
+            frame_start += target_frame_time;
+        }
+
+        // Now wait until we've returned to the frame cadence before beginning the next frame.
+        while Instant::now() < frame_start {}
     }
 }

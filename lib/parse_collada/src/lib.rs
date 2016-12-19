@@ -48,6 +48,14 @@ impl Collada {
             }
         }
     }
+
+    pub fn parse<T: Into<String>>(source: T) -> Result<Collada> {
+        let xml = xml::Parser::from_string(source.into());
+        let mut parser = ColladaParser {
+            events: xml.parse()
+        };
+        parser.parse()
+    }
 }
 
 // TODO: Include line number and column??????????????

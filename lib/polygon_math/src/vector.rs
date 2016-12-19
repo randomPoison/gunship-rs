@@ -1,10 +1,11 @@
 use {IsZero, Dot, Lerp, Point};
-use std::ops::{Mul, MulAssign, Div, DivAssign, Neg, Add, AddAssign, Sub, SubAssign, Index, IndexMut};
+use std::ops::*;
+use std::fmt::{self, Debug, Formatter};
 
 // VECTOR 3
 // ================================================================================================
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq)]
 #[repr(C)]
 pub struct Vector3 {
     pub x: f32,
@@ -21,12 +22,28 @@ impl Vector3 {
         }
     }
 
+    pub fn from_vector2(from: Vector2, z: f32) -> Vector3 {
+        Vector3 {
+            x: from.x,
+            y: from.y,
+            z: z,
+        }
+    }
+
     pub fn zero() -> Vector3 {
         Vector3::new(0.0, 0.0, 0.0)
     }
 
     pub fn one() -> Vector3 {
         Vector3::new(1.0, 1.0, 1.0)
+    }
+
+    pub fn right() -> Vector3 {
+        Vector3::new(1.0, 0.0, 0.0)
+    }
+
+    pub fn left() -> Vector3 {
+        Vector3::new(-1.0, 0.0, 0.0)
     }
 
     pub fn up() -> Vector3 {
@@ -41,12 +58,31 @@ impl Vector3 {
         Vector3::new(0.0, 0.0, -1.0)
     }
 
+    pub fn back() -> Vector3 {
+        Vector3::new(0.0, 0.0, 1.0)
+    }
+
     pub fn cross(first: Vector3, second: Vector3) -> Vector3 {
         Vector3 {
             x: first.y * second.z - first.z * second.y,
             y: first.z * second.x - first.x * second.z,
             z: first.x * second.y - first.y * second.x,
         }
+    }
+
+    pub fn set_x(mut self, x: f32) -> Vector3 {
+        self.x = x;
+        self
+    }
+
+    pub fn set_y(mut self, y: f32) -> Vector3 {
+        self.y = y;
+        self
+    }
+
+    pub fn set_z(mut self, z: f32) -> Vector3 {
+        self.z = z;
+        self
     }
 
     /// Normalizes the vector, returning the old length.
@@ -91,14 +127,23 @@ impl Vector3 {
         self.x * self.x + self.y * self.y + self.z * self.z
     }
 
-    // Safely reinterprets a slice of Vector3s to a slice of f32s. This is a cheap operation and
-    // does not copy any data.
+    /// Safely reinterprets a slice of Vector3s to a slice of f32s. This is a cheap operation and
+    /// does not copy any data.
     pub fn as_ref(vectors: &[Vector3]) -> &[f32] {
         unsafe {
             ::std::slice::from_raw_parts(
                 vectors.as_ptr() as *const f32,
                 vectors.len() * 3)
         }
+    }
+
+    /// Converts the `Vector3` into a 3 element array.
+    ///
+    /// In the returned array, the `x` coordinate is at index 0, the `y` coordinate is at index 1,
+    /// and the `z` coordinate is at index 2.
+    pub fn into_array(self) -> [f32; 3] {
+        let Vector3 { x, y, z } = self;
+        [x, y, z]
     }
 
     // pub fn cross(&self, rhs: Vector3) -> Vector3 {
@@ -115,6 +160,23 @@ impl Default for Vector3 {
             x: 0.0,
             y: 0.0,
             z: 0.0,
+        }
+    }
+}
+
+impl Debug for Vector3 {
+    fn fmt(&self, fmt: &mut Formatter) -> Result<(), fmt::Error> {
+        if let Some(precision) = fmt.precision() {
+            write!(
+                fmt,
+                "Vector3 {{ x: {:+.3$}, y: {:+.3$}, z: {:+.3$} }}",
+                self.x,
+                self.y,
+                self.z,
+                precision,
+            )
+        } else {
+            write!(fmt, "Vector3 {{ x: {}, y: {}, z: {} }}", self.x, self.y, self.z)
         }
     }
 }
@@ -367,6 +429,22 @@ impl Vector2 {
             x: x,
             y: y,
         }
+    }
+
+    pub fn right() -> Vector2 {
+        Vector2::new(1.0, 0.0)
+    }
+
+    pub fn left() -> Vector2 {
+        Vector2::new(-1.0, 0.0)
+    }
+
+    pub fn up() -> Vector2 {
+        Vector2::new(0.0, 1.0)
+    }
+
+    pub fn down() -> Vector2 {
+        Vector2::new(0.0, -1.0)
     }
 
     pub fn as_ref(vectors: &[Vector2]) -> &[f32] {

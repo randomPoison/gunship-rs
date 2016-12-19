@@ -138,7 +138,20 @@ pub fn handle_raw_input(messages: &mut VecDeque<Message>, lParam: LPARAM) {
             messages.push_back(MouseButtonReleased(4));
         }
         if button_flags & RI_MOUSE_WHEEL != 0 {
-            messages.push_back(MouseWheel(raw_mouse.usButtonData as i32))
+            // NOTE: Mouse wheel handling is a bit of a nightmare. The raw input docs don't
+            // specify anything meaningful about the data in `usButtonData`, but in practice it
+            // seems to behave the same as the data for `WM_MOUSEWHEEL`, so that's how we interpret
+            // it. The relevant docs are here: https://msdn.microsoft.com/en-us/library/windows/desktop/ms645617.aspx
+
+            // `usButtonData` is a u16, but if it represents a mouse wheel movement it's *actually*
+            // signed, so we need to transmute it to treat it as signed.
+            let scroll: i16 = unsafe { mem::transmute(raw_mouse.usButtonData) };
+
+            // The high order 16 bits provides the distance the wheel was rotated in multiples of
+            // `WHEEL_DELTA`, so we divide by `WHEEL_DELTA` to get the value we want.
+            let scroll = scroll as i32 / WHEEL_DELTA as i32;
+
+            messages.push_back(MouseWheel(scroll))
         }
     }
 }

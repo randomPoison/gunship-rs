@@ -21,8 +21,8 @@ impl MaterialSource {
         MaterialSource::from_str(&*contents)
     }
 
-    pub fn from_str(source: &str) -> Result<MaterialSource, Error> {
-        let mut parser = Parser::new(source);
+    pub fn from_str<T: AsRef<str>>(source: T) -> Result<MaterialSource, Error> {
+        let mut parser = Parser::new(source.as_ref());
         parser.parse().map_err(|error| error.into())
     }
 }

@@ -1,182 +1,257 @@
+#![feature(const_fn)]
+#![feature(drop_types_in_const)]
+#![feature(proc_macro)]
+
+#[macro_use]
+extern crate lazy_static;
+#[macro_use]
+extern crate serde_derive;
+extern crate serde_json;
+
 extern crate bootstrap_rs as bootstrap;
+extern crate fiber;
 
-use std::cmp::Ordering;
+use fiber::FiberId;
+use std::cell::RefCell;
 use std::collections::HashMap;
-// use std::fs::OpenOptions;
-// use std::io::Write;
-use std::ptr;
+use std::fmt::{self, Debug, Formatter};
+use std::mem;
+use std::sync::Mutex;
+use std::time::Duration;
 
-use bootstrap::time::{Timer, TimeMark};
+#[cfg(target_os="windows")]
+#[path="windows.rs"]
+pub mod platform;
 
-pub mod null;
-
-/// A global access point for collecting logs. This allows client code to create stopwatches
-/// anywhere without having to pass the Collector around.
-static mut COLLECTOR: *mut Collector = 0 as *mut Collector;
-
-pub struct Collector {
-    nodes:      Vec<StackNode>,
-    call_stack: Vec<usize>,
+thread_local! {
+    static CONTEXT: RefCell<Context> = RefCell::new(Context::new());
 }
 
-impl Collector {
-    pub fn new() -> Result<Box<Collector>, ()> {
-        unsafe {
-            if !COLLECTOR.is_null() {
-                return Err(());
-            }
-        }
-
-        let mut boxed = Box::new(Collector {
-            nodes:      Vec::new(),
-            call_stack: Vec::new(),
-        });
-
-        unsafe {
-            COLLECTOR = &mut *boxed;
-        }
-
-        Ok(boxed)
-    }
-
-    pub fn flush_to_file(&mut self, _file_name: &str) {
-        // TODO: Actually write to a file.
-        // let mut file = OpenOptions::new()
-        //     .create(true)
-        //     .write(true)
-        //     .open(file_name).unwrap();
-        // for log in self.logs.drain(0..) {
-        //     writeln!(file, "{}", log).unwrap();
-        // }
-
-        // For now we're going to just print to the console.
-        self.print_node(&self.nodes[0], 0);
-    }
-
-    fn print_node<'a>(&'a self, node: &'a StackNode, depth: usize) {
-        for _ in 0..depth {
-            print!("    ");
-        }
-
-        let mut sorted_data = node.data.clone();
-        sorted_data.sort_by(|lhs, rhs| {
-            if lhs < rhs {
-                Ordering::Less
-            } else {
-                Ordering::Greater
-            }
-        });
-        let median = sorted_data[sorted_data.len() / 2];
-        println!("{}: median {:.6}ms", node.name, median);
-
-        for (_, child_index) in &node.children {
-            self.print_node(&self.nodes[*child_index], depth + 1);
-        }
-    }
+lazy_static! {
+    static ref CONTEXT_MAP: Mutex<HashMap<FiberId, Context>> = Mutex::new(HashMap::with_capacity(1024));
+    static ref EVENTS: Mutex<Vec<Event>> = Mutex::new(Vec::new());
 }
 
-impl Drop for Collector {
-    fn drop(&mut self) {
-        unsafe { COLLECTOR = ptr::null_mut(); }
-    }
+/// Swaps the currently tracked execution context with the specified context.
+pub fn switch_context(old: FiberId, new: FiberId) {
+    with_context(|stack| {
+        let timestamp = platform::timestamp();
+
+        // If there are stopwatches on the stack then we need to end the flow event.
+        if stack.len() > 0 {
+            push_event(Event {
+                name: stack[0].name,
+                cat: String::new(),
+                ph: "f",
+                id: fiber::current().unwrap().primitive_id(),
+                ts: timestamp,
+                tid: platform::thread_id(),
+                pid: 0,
+                bp: "e",
+            });
+        }
+
+        // Push an end event for each of the time slices.
+        for stopwatch in stack.iter().rev() {
+            push_event(Event {
+                name: stopwatch.name,
+                cat: String::new(),
+                ph: "E",
+                id: fiber::current().unwrap().primitive_id(),
+                ts: timestamp,
+                tid: platform::thread_id(),
+                pid: 0,
+                bp: "e",
+            });
+        }
+    });
+
+    let mut context_map = CONTEXT_MAP.lock().expect("Unable to acquire lock on context map");
+
+    let new_context = context_map.remove(&new).unwrap_or(Context::new());
+    let old_context = with_context(move |context| {
+        let mut new_context = new_context;
+        mem::swap(context, &mut new_context);
+        new_context
+    });
+
+    context_map.insert(old, old_context);
+
+    with_context(|stack| {
+        let timestamp = platform::timestamp();
+
+        // Push an end event for each of the time slices.
+        for stopwatch in stack.iter() {
+            push_event(Event {
+                name: stopwatch.name,
+                cat: String::new(),
+                ph: "B",
+                id: fiber::current().unwrap().primitive_id(),
+                ts: timestamp,
+                tid: platform::thread_id(),
+                pid: 0,
+                bp: "e",
+            });
+        }
+
+        // If there are stopwatches on the stack then we need to end the flow event.
+        if stack.len() > 0 {
+            push_event(Event {
+                name: stack[0].name,
+                cat: String::new(),
+                ph: "s",
+                id: fiber::current().unwrap().primitive_id(),
+                ts: timestamp,
+                tid: platform::thread_id(),
+                pid: 0,
+                bp: "e",
+            });
+        }
+    });
+}
+
+/// Writes the events history to a string.
+pub fn write_events_to_string() -> String {
+    let events = EVENTS.lock().expect("Events mutex got poisoned");
+    serde_json::to_string(&*events).unwrap()
 }
 
 pub struct Stopwatch {
-    timer:      Timer,
-    start_time: TimeMark,
-    name:       &'static str,
+    name: &'static str,
 }
 
 impl Stopwatch {
     pub fn new(name: &'static str) -> Stopwatch {
-        assert!(unsafe { !COLLECTOR.is_null() }, "Cannot create a stopwatch until a Collector has been made.");
+        push_event(Event {
+            name: name,
+            cat: String::new(),
+            ph: "B",
+            id: fiber::current().unwrap().primitive_id(),
+            ts: platform::timestamp(),
+            tid: platform::thread_id(),
+            pid: 0, // TODO: Do we care about tracking process ID?
+            bp: "e",
+        });
 
-        push_call_stack(name);
+        with_context(|stack| {
+            // The first event on the stack also needs a flow event.
+            if stack.len() == 0 {
+                push_event(Event {
+                    name: name,
+                    cat: String::new(),
+                    ph: "s",
+                    id: fiber::current().unwrap().primitive_id(),
+                    ts: platform::timestamp(),
+                    tid: platform::thread_id(),
+                    pid: 0,
+                    bp: "e",
+                })
+            }
 
-        let timer = Timer::new();
-        let start_time = timer.now();
+            stack.push(StopwatchData { name: name });
+        });
+
         Stopwatch {
-            timer: timer,
-            start_time: start_time,
             name: name,
         }
+    }
+
+    pub fn with_budget(name: &'static str, _budget: Duration) -> Stopwatch {
+        // TODO: We should actually do something with the budget, right?
+        Stopwatch::new(name)
     }
 }
 
 impl Drop for Stopwatch {
     fn drop(&mut self) {
-        let elapsed = self.timer.elapsed_ms(self.start_time);
-        pop_call_stack(self.name, elapsed);
-    }
-}
+        with_context(|stack| {
+            let stopwatch = stack.pop().expect("No stopwatch popped, stack is corrupted");
+            assert_eq!(self.name, stopwatch.name, "Stack got corrupted I guess");
 
-fn push_call_stack(name: &'static str) {
-    unsafe {
-        debug_assert!(!COLLECTOR.is_null(), "Cannot push call stack without a collector instance.");
-
-        let collector = &mut *COLLECTOR;
-        // Get the index of the node that's going to be the new top node.
-        let top_index = match collector.call_stack.last() {
-            Some(top_index) => {
-                // TODO: Sucks that we have to re-borrow the top node a bunch of times to convince
-                // the borrow checker we're in the clear, maybe revisit this once non-lexical
-                // borrows drop.
-                let has_child = {
-                    let top_node = &mut collector.nodes[*top_index];
-                    top_node.children.contains_key(name)
-                };
-                if !has_child {
-                    // We need to add a new child node to the top node.
-                    let new_child = StackNode::new(name);
-                    let child_index = collector.nodes.len();
-                    collector.nodes.push(new_child);
-                    let mut top_node = &mut collector.nodes[*top_index];
-                    top_node.children.insert(name, child_index);
-                }
-
-                let top_node = &mut collector.nodes[*top_index];
-                *top_node.children.get(name).unwrap()
-            },
-            None => {
-                // Create new stack node if there are none, otherwise the first node is the root.
-                if collector.nodes.len() == 0 {
-                    let node = StackNode::new(name);
-                    collector.nodes.push(node);
-                }
-                0
+            if stack.len() == 0 {
+                push_event(Event {
+                    name: self.name,
+                    cat: String::new(),
+                    ph: "f",
+                    id: fiber::current().unwrap().primitive_id(),
+                    ts: platform::timestamp(),
+                    tid: platform::thread_id(),
+                    pid: 0,
+                    bp: "e",
+                });
             }
-        };
-        collector.call_stack.push(top_index);
+        });
+
+        push_event(Event {
+            name: self.name,
+            cat: String::new(),
+            ph: "E",
+            id: fiber::current().unwrap().primitive_id(),
+            ts: platform::timestamp(),
+            tid: platform::thread_id(),
+            pid: 0, // TODO: Do we care about tracking process ID?
+            bp: "e",
+        });
     }
 }
 
-fn pop_call_stack<'a>(name: &'static str, duration: f32) {
-    unsafe {
-        debug_assert!(!COLLECTOR.is_null(), "Cannot pop call stack without a collector instance.");
+#[derive(Debug, Serialize)]
+struct Event {
+    /// Human-readable name for the event.
+    name: &'static str,
 
-        let collector = &mut *COLLECTOR;
-        let node_index = match collector.call_stack.pop() {
-            Some(index) => index,
-            None => panic!("Tried to pop with node name {} but stack is empty", name),
-        };
-        let node = &mut collector.nodes[node_index];
-        debug_assert_eq!(name, node.name);
-        node.data.push(duration);
-    }
+    /// Event category.
+    cat: String,
+
+    /// Event phase (i.e. the event type).
+    ph: &'static str,
+
+    /// Timestamp in microseconds.
+    ts: i64,
+
+    /// Process ID for the event.
+    pid: usize,
+
+    /// Thread ID for the event.
+    tid: usize,
+
+    id: isize,
+
+    bp: &'static str,
 }
 
-struct StackNode {
-    name:     &'static str,
-    children: HashMap<&'static str, usize>,
-    data:     Vec<f32>,
+fn push_event(event: Event) {
+    let mut events = EVENTS.lock().expect("Events mutex got poisoned");
+    events.push(event);
 }
 
-impl StackNode {
-    fn new(name: &'static str) -> StackNode {
-        StackNode {
-            name:     name,
-            children: HashMap::new(),
-            data:     Vec::new(),
+#[derive(Debug, Clone, Copy)]
+struct StopwatchData {
+    name: &'static str,
+}
+
+type Context = Vec<StopwatchData>;
+
+fn with_context<F, T>(func: F) -> T
+    where F: FnOnce(&mut Context) -> T
+{
+    CONTEXT.with(move |context_cell| {
+        let mut context = context_cell.borrow_mut();
+        func(&mut *context)
+    })
+}
+
+pub struct PrettyDuration(pub Duration);
+
+impl Debug for PrettyDuration {
+    fn fmt(&self, formatter: &mut Formatter) -> Result<(), fmt::Error> {
+        let secs = self.0.as_secs();
+        let millis = (self.0.subsec_nanos() / 1_000_000) % 1_000;
+        let micros = (self.0.subsec_nanos() / 1_000) % 1_000;
+        if secs > 0 {
+            write!(formatter, "{}s {}ms {}μs", secs, millis, micros)
+        } else {
+            write!(formatter, "{}ms {}μs", millis, micros)
         }
     }
 }

@@ -27,6 +27,8 @@ fn main() {
     let mut index_buffer = IndexBuffer::new(&context);
     index_buffer.set_data_u32(&*raw_indices);
 
+    let vertex_array = VertexArray::with_index_buffer(&context, vertex_buffer, index_buffer);
+
     'outer: loop {
         while let Some(message) = window.next_message() {
             match message {
@@ -36,8 +38,7 @@ fn main() {
         }
 
         context.clear();
-        DrawBuilder::new(&context, &vertex_buffer, DrawMode::Triangles)
-            .index_buffer(&index_buffer)
+        DrawBuilder::new(&context, &vertex_array, DrawMode::Triangles)
             .map_attrib_location("position", AttributeLocation::from_index(0))
             .polygon_mode(PolygonMode::Line)
             .draw();

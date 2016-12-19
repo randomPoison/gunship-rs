@@ -98,9 +98,10 @@ fn main() {
     let mut index_buffer = IndexBuffer::new(&context);
     index_buffer.set_data_u32(&*indices);
 
-    let mut draw_builder = DrawBuilder::new(&context, &vertex_buffer, DrawMode::Triangles);
+    let vertex_array = VertexArray::with_index_buffer(&context, vertex_buffer, index_buffer);
+
+    let mut draw_builder = DrawBuilder::new(&context, &vertex_array, DrawMode::Triangles);
     draw_builder
-        .index_buffer(&index_buffer)
         .program(&program)
         .map_attrib_name("position", "position")
         .map_attrib_name("normal", "normal_in")

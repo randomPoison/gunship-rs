@@ -47,6 +47,14 @@ impl Window {
     }
 }
 
+impl<'a> Iterator for &'a mut Window {
+    type Item = Message;
+
+    fn next(&mut self) -> Option<Message> {
+        self.next_message()
+    }
+}
+
 #[derive(Debug)]
 pub enum CreateWindowError {
 }

@@ -4,35 +4,49 @@ property surface_shininess: f32;
 
 program frag {
     vec4 ambient = global_ambient * surface_color;
+    vec4 diffuse = vec4(0, 0, 0, 1);
+    vec4 specular = vec4(0, 0, 0, 1);
 
-    vec3 light_offset = (light_position_view - @vertex.view_position).xyz;
-    float dist = length(light_offset);
-
+    // Vertex normal in view space.
     vec3 n = normalize(@vertex.view_normal);
-    vec3 l = normalize(light_offset);
+
+    // Direction from vertex to light in view space.
+    vec3 l;
+
+    // Direction from vertex to camera in view space.
     vec3 v = normalize(-@vertex.view_position.xyz);
 
-    // Calculate diffuse color.
-    float l_dot_n = dot(l, n);
-    float attenuation = pow(clamp(1.0 - (dist / light_radius), 0, 1), 2.0);
-    vec4 diffuse =
-        max(l_dot_n, 0) *
-        surface_color *
-        light_color *
-        attenuation *
-        light_strength;
+    // Distance-based attenuation of the light. Doesn't apply for directional lights.
+    float attenuation;
 
-    // Calculate specular color.
-    // Specular defaults to black for
-    vec4 specular = vec4(0.0, 0.0, 0.0, 1.0);
-    if (l_dot_n > 0) {
-        vec3 r = normalize(reflect(-l, n));
-        float r_dot_v = clamp(dot(r, v), 0.0, 1.0);
-        specular =
-            surface_specular *
-            pow(r_dot_v, surface_shininess) *
-            attenuation *
-            light_strength;
+    // Handle calculation specific to the current light type.
+    if (light_type == 0) {
+        // NOTE: We don't calculate diffuse or specular if there is not light.
+    } else if (light_type == 1) {
+        // Point light.
+        vec3 light_offset = (light_position_view - @vertex.view_position).xyz;
+        float dist = length(light_offset);
+        l = normalize(light_offset);
+        attenuation = pow(clamp(1.0 - (dist / light_radius), 0, 1), 2.0);
+    } else if (light_type == 2) {
+        // Directional light.
+        l = -light_direction_view;
+        attenuation = 1;
+    }
+
+    if (light_type != 0) {
+        // Calculate diffuse color.
+        float l_dot_n = dot(l, n);
+        diffuse = max(l_dot_n, 0) * surface_color * light_color * attenuation * light_strength;
+
+        // Calculate specular color.
+        // Specular defaults to black for
+        if (l_dot_n > 0) {
+            vec3 r = normalize(reflect(-l, n));
+            float r_dot_v = clamp(dot(r, v), 0.0, 1.0);
+            float shine = pow(r_dot_v, surface_shininess);
+            specular = surface_specular * shine * attenuation * light_strength;
+        }
     }
 
     @color = ambient + diffuse + specular;

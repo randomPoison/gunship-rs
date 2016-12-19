@@ -50,6 +50,29 @@ impl Camera
     pub fn set_anchor(&mut self, anchor_id: AnchorId) {
         self.anchor = Some(anchor_id);
     }
+
+    pub fn set_fov(&mut self, fov: f32) {
+        debug_assert!(fov > 0.0, "Field of view must be non-negative: {}", fov);
+        debug_assert!(fov < PI * 2.0, "Field of view must be less than 180 degrees: {}", fov);
+        self.fov = fov;
+    }
+
+    pub fn set_aspect(&mut self, aspect: f32) {
+        debug_assert!(aspect > 0.0, "Aspect ratio must be non-negative: {}", aspect);
+        self.aspect = aspect;
+    }
+
+    pub fn set_near(&mut self, near: f32) {
+        debug_assert!(near > 0.0, "Near plane distance must be non-negative: {}", near);
+        debug_assert!(near < self.far, "Near plane distance must be less than far plane distance, near: {}, far: {}", near, self.far);
+        self.near = near;
+    }
+
+    pub fn set_far(&mut self, far: f32) {
+        debug_assert!(far > 0.0, "Far plane distance must be non-negative: {}", far);
+        debug_assert!(far > self.near, "Far plane distance must be greater than near plane distance, near: {}, far: {}", self.near, far);
+        self.far = far;
+    }
 }
 
 impl Default for Camera {
