@@ -7,7 +7,6 @@
 //! someone much less OpenGL experience.
 
 #![feature(associated_consts)]
-#![feature(item_like_imports)]
 #![feature(pub_restricted)]
 
 extern crate bootstrap_rs as bootstrap;

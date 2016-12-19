@@ -6,6 +6,7 @@ use gunship::camera::Camera;
 use gunship::engine::EngineBuilder;
 use gunship::light::DirectionalLight;
 use gunship::mesh_renderer::MeshRenderer;
+use gunship::stopwatch::Stopwatch;
 use gunship::transform::Transform;
 use gunship::math::*;
 
@@ -45,6 +46,8 @@ fn setup_scene() {
 
     let mut time: f32 = 0.0;
     engine::run_each_frame(move || {
+        let _s = Stopwatch::new("Move mesh");
+
         time += time::delta_f32() * TAU / 10.0;
         let new_pos = Point::new(
             time.cos() * 3.0,
@@ -55,6 +58,8 @@ fn setup_scene() {
     });
 
     engine::run_each_frame(move || {
+        let _s = Stopwatch::new("Move camera");
+
         time += time::delta_f32() * TAU / 3.0;
         let new_pos = Point::new(
             0.0,
