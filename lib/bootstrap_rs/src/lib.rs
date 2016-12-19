@@ -9,6 +9,8 @@
 
 extern crate cell_extras;
 
+// This `extern_crate` should be within the macos platform module, but `macro_use` only works at
+// the root of the crate.
 #[cfg(target_os = "macos")]
 #[macro_use]
 extern crate objc;
@@ -27,4 +29,3 @@ pub mod platform;
 
 pub mod window;
 pub mod input;
-pub mod time;
