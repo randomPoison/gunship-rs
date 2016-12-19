@@ -1,6 +1,5 @@
 language: rust
-os:
-  - macos
+os: macos
 rust:
   - stable
   - beta
@@ -11,6 +10,5 @@ script:
   - cargo build --example window
 matrix:
   allow_failures:
-    - rust:
-      - stable
-      - beta
+    - rust: stable
+    - rust: beta
