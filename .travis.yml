@@ -14,4 +14,3 @@ matrix:
   allow_failures:
     - rust: stable
     - rust: beta
-    - os: linux
