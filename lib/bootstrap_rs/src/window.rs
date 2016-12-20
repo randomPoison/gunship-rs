@@ -93,6 +93,7 @@ pub enum Message {
     ///
     /// These coordinates are relative to the window, with the upper-left corner
     /// of the window being (0, 0).
+    // TODO: Change the origin to be the lower-left corner instead.
     MousePos(i32, i32),
 
     /// Message signaling a mouse button has been pressed.

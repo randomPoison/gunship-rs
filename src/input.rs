@@ -65,7 +65,6 @@ impl Input {
                 if !self.key_down(key) {
                     self.keys_pressed.insert(key);
                 }
-
                 self.keys_down.insert(key);
             },
             KeyUp(key) => {
