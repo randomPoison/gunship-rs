@@ -1,5 +1,7 @@
 language: rust
-os: osx
+os:
+  - osx
+  - linux
 rust:
   - stable
   - beta
@@ -12,3 +14,4 @@ matrix:
   allow_failures:
     - rust: stable
     - rust: beta
+    - os: linux

@@ -20,6 +20,5 @@ cocoa = { git = "https://github.com/excaliburHisSheath/cocoa-rs" }
 core-graphics = "0.3"
 core-foundation = "0.2"
 
-# [dependencies.x11]
-# version = "*"
-# features = ["glx", "xlib"]
+[target.'cfg(target_os = "linux")'.dependencies]
+x11 = { version = "2.11", features = ["glx", "xlib"] }
