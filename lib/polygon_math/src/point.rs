@@ -86,6 +86,11 @@ impl Point {
         unsafe { mem::transmute(self) }
     }
 
+    pub fn as_slice_of_arrays(points: &[Point]) -> &[[f32; 4]] {
+        let ptr = points.as_ptr() as *const _;
+        unsafe { slice::from_raw_parts(ptr, points.len()) }
+    }
+
     pub fn as_ref(points: &[Point]) -> &[f32] {
         let ptr = points.as_ptr() as *const _;
         let len = points.len() * 4;

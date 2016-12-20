@@ -489,22 +489,34 @@ impl<'a> DrawBuilder<'a> {
 
     fn apply(&self, uniform: &UniformValue, location: UniformLocation, active_texture: &mut i32) {
         match *uniform {
-            UniformValue::f32(value) => unsafe {
+            UniformValue::F32(value) => unsafe {
                 gl::uniform_f32x1(location, value);
             },
-            UniformValue::f32x2((x, y)) => unsafe {
+            UniformValue::F32x2((x, y)) => unsafe {
                 gl::uniform_f32x2(location, x, y);
             },
-            UniformValue::f32x3((x, y, z)) => unsafe {
+            UniformValue::F32x3((x, y, z)) => unsafe {
                 gl::uniform_f32x3(location, x, y, z);
             },
-            UniformValue::f32x4((x, y, z, w)) => unsafe {
+            UniformValue::F32x4((x, y, z, w)) => unsafe {
                 gl::uniform_f32x4(location, x, y, z, w);
             },
-            UniformValue::i32(value) => unsafe {
+            UniformValue::F32x1v(value) => unsafe {
+                gl::uniform_f32x1v(location, value.len() as i32, value.as_ptr());
+            },
+            UniformValue::F32x3v(value) => unsafe {
+                gl::uniform_f32x3v(location, value.len() as i32, value.as_ptr() as *const _);
+            },
+            UniformValue::F32x4v(value) => unsafe {
+                gl::uniform_f32x4v(location, value.len() as i32, value.as_ptr() as *const _);
+            },
+            UniformValue::I32(value) => unsafe {
                 gl::uniform_i32x1(location, value);
             },
-            UniformValue::u32(value) => unsafe {
+            UniformValue::I32x1v(value) => unsafe {
+                gl::uniform_i32x1v(location, value.len() as i32, value.as_ptr());
+            },
+            UniformValue::U32(value) => unsafe {
                 gl::uniform_u32x1(location, value);
             },
             UniformValue::Matrix(ref matrix) => match matrix.data.len() {
@@ -539,75 +551,102 @@ impl<'a> DrawBuilder<'a> {
 
 /// Represents a value for a uniform variable in a shader program.
 #[derive(Debug)]
-#[allow(bad_style)]
 pub enum UniformValue<'a> {
-    f32(f32),
-    f32x2((f32, f32)),
-    f32x3((f32, f32, f32)),
-    f32x4((f32, f32, f32, f32)),
-    i32(i32),
-    u32(u32),
+    F32(f32),
+    F32x2((f32, f32)),
+    F32x3((f32, f32, f32)),
+    F32x4((f32, f32, f32, f32)),
+    F32x1v(&'a [f32]),
+    F32x3v(&'a [[f32; 3]]),
+    F32x4v(&'a [[f32; 4]]),
+    I32(i32),
+    I32x1v(&'a [i32]),
+    U32(u32),
     Matrix(GlMatrix<'a>),
     Texture(&'a Texture2d),
 }
 
 impl<'a> From<f32> for UniformValue<'a> {
     fn from(value: f32) -> UniformValue<'a> {
-        UniformValue::f32(value)
+        UniformValue::F32(value)
     }
 }
 
 impl<'a> From<(f32, f32)> for UniformValue<'a> {
     fn from(value: (f32, f32)) -> UniformValue<'a> {
-        UniformValue::f32x2(value)
+        UniformValue::F32x2(value)
     }
 }
 
 impl<'a> From<(f32, f32, f32)> for UniformValue<'a> {
     fn from(value: (f32, f32, f32)) -> UniformValue<'a> {
-        UniformValue::f32x3(value)
+        UniformValue::F32x3(value)
     }
 }
 
 impl<'a> From<(f32, f32, f32, f32)> for UniformValue<'a> {
     fn from(value: (f32, f32, f32, f32)) -> UniformValue<'a> {
-        UniformValue::f32x4(value)
+        UniformValue::F32x4(value)
     }
 }
 
 impl<'a> From<[f32; 1]> for UniformValue<'a> {
     fn from(value: [f32; 1]) -> UniformValue<'a> {
-        UniformValue::f32(value[0])
+        UniformValue::F32(value[0])
     }
 }
 
 impl<'a> From<[f32; 2]> for UniformValue<'a> {
     fn from(value: [f32; 2]) -> UniformValue<'a> {
-        UniformValue::f32x2((value[0], value[1]))
+        UniformValue::F32x2((value[0], value[1]))
     }
 }
 
 impl<'a> From<[f32; 3]> for UniformValue<'a> {
     fn from(value: [f32; 3]) -> UniformValue<'a> {
-        UniformValue::f32x3((value[0], value[1], value[2]))
+        UniformValue::F32x3((value[0], value[1], value[2]))
     }
 }
 
 impl<'a> From<[f32; 4]> for UniformValue<'a> {
     fn from(value: [f32; 4]) -> UniformValue<'a> {
-        UniformValue::f32x4((value[0], value[1], value[2], value[3]))
+        UniformValue::F32x4((value[0], value[1], value[2], value[3]))
+    }
+}
+
+impl<'a> From<&'a [f32]> for UniformValue<'a> {
+    fn from(value: &'a [f32]) -> UniformValue<'a> {
+        UniformValue::F32x1v(value)
+    }
+}
+
+impl<'a> From<&'a [[f32; 3]]> for UniformValue<'a> {
+    fn from(value: &'a [[f32; 3]]) -> UniformValue<'a> {
+        UniformValue::F32x3v(value)
+    }
+}
+
+impl<'a> From<&'a [[f32; 4]]> for UniformValue<'a> {
+    fn from(value: &'a [[f32; 4]]) -> UniformValue<'a> {
+        UniformValue::F32x4v(value)
     }
 }
 
 impl<'a> From<i32> for UniformValue<'a> {
     fn from(from: i32) -> UniformValue<'a> {
-        UniformValue::i32(from)
+        UniformValue::I32(from)
+    }
+}
+
+impl<'a> From<&'a [i32]> for UniformValue<'a> {
+    fn from(from: &'a [i32]) -> UniformValue<'a> {
+        UniformValue::I32x1v(from)
     }
 }
 
 impl<'a> From<u32> for UniformValue<'a> {
     fn from(from: u32) -> UniformValue<'a> {
-        UniformValue::u32(from)
+        UniformValue::U32(from)
     }
 }
 

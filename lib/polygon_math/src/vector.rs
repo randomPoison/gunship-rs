@@ -1,6 +1,7 @@
 use {IsZero, Dot, Lerp, Point};
 use std::ops::*;
 use std::fmt::{self, Debug, Formatter};
+use std::slice;
 
 // VECTOR 3
 // ================================================================================================
@@ -135,6 +136,11 @@ impl Vector3 {
                 vectors.as_ptr() as *const f32,
                 vectors.len() * 3)
         }
+    }
+
+    pub fn as_slice_of_arrays(vecs: &[Vector3]) -> &[[f32; 3]] {
+        let ptr = vecs.as_ptr() as *const _;
+        unsafe { slice::from_raw_parts(ptr, vecs.len()) }
     }
 
     /// Converts the `Vector3` into a 3 element array.

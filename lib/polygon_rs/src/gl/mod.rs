@@ -125,11 +125,6 @@ impl Renderer for GlRender {
     fn draw(&mut self) {
         let _stopwatch = Stopwatch::new("GLRender::draw()");
 
-        {
-            let _stopwatch = Stopwatch::new("Clearing buffer");
-            self.context.clear();
-        }
-
         // TODO: Support rendering multiple cameras.
         // TODO: Should we warn if there are no cameras?
         if let Some(camera) = self.cameras.values().next() {
@@ -169,6 +164,17 @@ impl Renderer for GlRender {
                 };
 
                 let material = mesh_instance.material();
+
+                // The data for the light uniforms must be declared before `draw_builder` so they
+                // can outlive it, since they are borrowed when the uniforms are set.
+                let mut light_type = [0i32; 8];
+                let mut light_strength = [0.0f32; 8];
+                let mut light_color = [Color::rgb(0.0, 0.0, 0.0); 8];
+                let mut light_position = [Point::origin(); 8];
+                let mut light_position_view = [Point::origin(); 8];
+                let mut light_radius = [0.0f32; 8];
+                let mut light_direction = [Vector3::zero(); 8];
+                let mut light_direction_view = [Vector3::zero(); 8];
 
                 let mut draw_builder = {
                     let _stopwatch = Stopwatch::new("Initialize DrawBuilder");
@@ -285,65 +291,56 @@ impl Renderer for GlRender {
                     }
                 }
 
-                // Render first light without blending so it overrides any objects behind it.
-                // We also render it with light strength 0 so it only renders ambient color.
-                {
-                    let _stopwatch = Stopwatch::new("Draw (no lights)");
-
-                    draw_builder
-                    .uniform("light_type", 0)
-                    .draw();
-                }
-
                 // Render the rest of the lights with blending on the the depth check set to
                 // less than or equal.
                 {
-                    let _stopwatch = Stopwatch::new("Draw with lights");
+                    let _stopwatch = Stopwatch::new("Setup lights");
 
-                    draw_builder
-                    .depth_test(Comparison::LessThanOrEqual)
-                    .blend(SourceFactor::One, DestFactor::One);
+                    // TODO: Support having more than 8 lights active at a time. Maybe pick the 8
+                    // most relevant lights? Or simply support more lights at once in the shader.
+                    for (index, light) in self.lights.values().take(8).enumerate() {
+                        // Setup common light data.
+                        light_color[index] = light.color;
+                        light_strength[index] = light.strength;
 
-                    for light in self.lights.values() {
-                        // Send common light data.
-                        draw_builder.uniform::<[f32; 4]>("light_color", light.color.into());
-                        draw_builder.uniform("light_strength", light.strength);
-
-                        // Send data specific to the current type of light.
+                        // Setup data specific to the current type of light.
                         match light.data {
                             LightData::Point { radius } => {
-                                draw_builder.uniform("light_type", 1);
-
                                 // Get the light's anchor.
                                 let light_anchor = match light.anchor() {
                                     Some(anchor_id) => self.anchors.get(&anchor_id).expect("No such anchor exists"),
-                                    None => panic!("Cannot render light if it's not attached to an anchor"),
+                                    None => panic!("Cannot render point light if it's not attached to an anchor"),
                                 };
 
-                                // Send the light's position in world space.
-                                draw_builder.uniform("light_position", *light_anchor.position().as_array());
-
-                                // Send the light's position in view space.
-                                let light_position_view = light_anchor.position() * view_transform;
-                                draw_builder.uniform("light_position_view", *light_position_view.as_array());
-
-                                // Send the point light's radius.
-                                draw_builder.uniform("light_radius", radius);
+                                light_type[index] = 1;
+                                light_position[index] = light_anchor.position();
+                                light_position_view[index] = light_anchor.position() * view_transform;
+                                light_radius[index] = radius;
                             },
 
                             LightData::Directional { direction } => {
-                                draw_builder.uniform("light_type", 2);
-
-                                draw_builder.uniform("light_direction", direction.into_array());
-
-                                let direction_view = direction * view_transform;
-                                draw_builder.uniform("light_direction_view", direction_view.into_array());
+                                light_type[index] = 2;
+                                light_direction[index] = direction;
+                                light_direction_view[index] = direction * view_transform;
                             },
                         }
-
-                        // Draw the current light.
-                        draw_builder.draw();
                     }
+
+                    draw_builder.uniform("light_type", &light_type[..]);
+                    draw_builder.uniform("light_strength", &light_strength[..]);
+                    draw_builder.uniform("light_color", Color::as_slice_of_arrays(&light_color));
+                    draw_builder.uniform("light_position", Point::as_slice_of_arrays(&light_position));
+                    draw_builder.uniform("light_position_view", Point::as_slice_of_arrays(&light_position_view));
+                    draw_builder.uniform("light_radius", &light_radius[..]);
+                    draw_builder.uniform("light_direction", Vector3::as_slice_of_arrays(&light_direction));
+                    draw_builder.uniform("light_direction_view", Vector3::as_slice_of_arrays(&light_direction_view));
+                }
+
+                {
+                    let _s = Stopwatch::new("Draw mesh");
+
+                    // Draw the current light.
+                    draw_builder.draw();
                 }
             }
         }
@@ -351,6 +348,11 @@ impl Renderer for GlRender {
         {
             let _stopwatch = Stopwatch::new("Swap buffers");
             self.context.swap_buffers();
+        }
+
+        {
+            let _stopwatch = Stopwatch::new("Clearing buffer");
+            self.context.clear();
         }
     }
 
@@ -398,14 +400,15 @@ impl Renderer for GlRender {
 
             uniform vec4 global_ambient;
             uniform vec4 camera_position;
-            uniform vec4 light_position;
-            uniform vec4 light_position_view;
-            uniform float light_strength;
-            uniform vec4 light_color;
-            uniform int light_type;
-            uniform float light_radius;
-            uniform vec3 light_direction;
-            uniform vec3 light_direction_view;
+
+            uniform int light_type[8];
+            uniform vec4 light_position[8];
+            uniform vec4 light_position_view[8];
+            uniform float light_strength[8];
+            uniform vec4 light_color[8];
+            uniform float light_radius[8];
+            uniform vec3 light_direction[8];
+            uniform vec3 light_direction_view[8];
         "#;
 
         // Generate the GLSL source for the vertex shader.
