@@ -9,6 +9,7 @@ use std::io::prelude::*;
 use std::path::Path;
 use std::string::FromUtf8Error;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use stopwatch::Stopwatch;
 
 pub mod collada;
 
@@ -22,6 +23,7 @@ pub fn load_file_bytes<'a, P>(path: P) -> Async<'a, Result<Vec<u8>, io::Error>>
     P: AsRef<Path> + Send,
 {
     scheduler::start(move || {
+        let _s = Stopwatch::new("Load file bytes");
         let mut file = File::open(path)?;
 
         let mut bytes = if let Ok(metadata) = file.metadata() {
@@ -43,6 +45,7 @@ pub fn load_file_text<'a, P>(path: P) -> Async<'a, Result<String, LoadTextError>
     P: AsRef<Path> + Send,
 {
     scheduler::start(move || {
+        let _s = Stopwatch::new("Load file text");
         let bytes = load_file_bytes(path).await()?;
         let result = String::from_utf8(bytes).map_err(|utf8_err| utf8_err.into());
         result
@@ -77,6 +80,7 @@ pub fn load_mesh<'a, P>(path: P) -> Async<'a, Result<Mesh, LoadMeshError>>
     P: AsRef<Path> + Send + Into<String>
 {
     scheduler::start(move || {
+        let _s = Stopwatch::new("Load mesh");
         let extension: Option<String> = path.as_ref().extension().map(|ext| ext.to_string_lossy().into_owned());
 
         // Load mesh source and parse mesh data based on file type.
@@ -197,6 +201,7 @@ pub fn load_material<'a, P>(path: P) -> Async<'a, Result<Material, LoadMaterialE
     P: AsRef<Path> + Send
 {
     scheduler::start(move || {
+        let _s = Stopwatch::new("Load material");
         // Load and parse material data.
         let text = load_file_text(path).await()?;
         let material_source = ::polygon::material::MaterialSource::from_str(text)?;

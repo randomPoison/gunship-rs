@@ -52,6 +52,8 @@ impl EngineBuilder {
     pub fn build<F>(self, func: F)
         where F: FnOnce()
     {
+        let _s = Stopwatch::new("Build engine");
+
         let window = {
             let mut window = unsafe { mem::uninitialized() };
             let mut out = unsafe { Unique::new(&mut window as *mut _) };
@@ -124,11 +126,14 @@ impl EngineBuilder {
 
         INSTANCE.init(unsafe { Unique::new(&mut *engine) });
 
+        {
+            let _s = Stopwatch::new("Scene setup");
+            func();
+        }
+
         let main_loop = scheduler::start(move || { main_loop(engine); });
 
         MAIN_LOOP.init(main_loop.work_id());
-
-        func();
 
         wait_for_quit();
 
@@ -247,13 +252,16 @@ fn main_loop(mut engine: Box<Engine>) {
             let _stopwatch = Stopwatch::with_budget("main loop", target_frame_time);
 
             // Process any pending window messages.
-            engine.input.clear();
-            for message in &mut engine.window {
-                // TODO: Process input messages.
-                match message {
-                    Message::Close => break 'main,
-                    Message::Activate => {}, // We don't handle window focus currently.
-                    _ => engine.input.push_input(message),
+            {
+                let _s = Stopwatch::new("Process window messages");
+                engine.input.clear();
+                for message in &mut engine.window {
+                    // TODO: Process input messages.
+                    match message {
+                        Message::Close => break 'main,
+                        Message::Activate => {}, // We don't handle window focus currently.
+                        _ => engine.input.push_input(message),
+                    }
                 }
             }
 
@@ -286,103 +294,119 @@ fn main_loop(mut engine: Box<Engine>) {
                 scheduler::suspend();
             }
 
-            // Before drawing, process any pending render messages. These will be resources that were
+            // Before drawing, process any pending resource messages. These will be resources that were
             // loaded but need to be registered with the renderer before the next draw.
-            while let Ok(message) = engine.channel.try_recv() {
-                match message {
-                    EngineMessage::Anchor(transform_inner) => {
-                        let anchor = Anchor::new();
-                        let anchor_id = engine.renderer.register_anchor(anchor);
+            {
+                let _s = Stopwatch::new("Process resource messages");
+                while let Ok(message) = engine.channel.try_recv() {
+                    match message {
+                        EngineMessage::Anchor(transform_inner) => {
+                            let _s = Stopwatch::new("Anchor message");
+                            let anchor = Anchor::new();
+                            let anchor_id = engine.renderer.register_anchor(anchor);
 
-                        transform_inner.set_anchor(anchor_id);
-                    },
-                    EngineMessage::Camera(camera_data, transform_inner) => {
-                        assert!(engine.camera.is_none(), "Can't add camera, one is already registered");
+                            transform_inner.set_anchor(anchor_id);
+                        },
+                        EngineMessage::Camera(camera_data, transform_inner) => {
+                            let _s = Stopwatch::new("Camera message");
+                            assert!(engine.camera.is_none(), "Can't add camera, one is already registered");
 
-                        let anchor_id = match transform_inner.anchor() {
-                            Some(anchor) => anchor,
-                            None => unimplemented!(), // TODO: Create the anchor.
-                        };
+                            let anchor_id = match transform_inner.anchor() {
+                                Some(anchor) => anchor,
+                                None => unimplemented!(), // TODO: Create the anchor.
+                            };
 
-                        let mut camera = RenderCamera::default();
-                        camera.set_anchor(anchor_id);
-                        let camera_id = engine.renderer.register_camera(camera);
+                            let mut camera = RenderCamera::default();
+                            camera.set_anchor(anchor_id);
+                            let camera_id = engine.renderer.register_camera(camera);
 
-                        engine.camera = Some((camera_data, camera_id));
-                    },
-                    EngineMessage::Light(light_inner) => {
-                        {
-                            let &(ref id, ref light) = &*light_inner;
-                            let light = light.borrow().clone();
+                            engine.camera = Some((camera_data, camera_id));
+                        },
+                        EngineMessage::Light(light_inner) => {
+                            let _s = Stopwatch::new("Light message");
+                            {
+                                let &(ref id, ref light) = &*light_inner;
+                                let light = light.borrow().clone();
 
-                            let light_id = engine.renderer.register_light(light);
-                            id.init(light_id);
+                                let light_id = engine.renderer.register_light(light);
+                                id.init(light_id);
+                            }
+
+                            engine.lights.push(light_inner);
                         }
+                        EngineMessage::Material(_material_id, material_source) => {
+                            let _s = Stopwatch::new("Material message");
+                            let material = engine.renderer.build_material(material_source).expect("TODO: Handle material compilation failure");
+                            let _gpu_material = engine.renderer.register_material(material);
 
-                        engine.lights.push(light_inner);
-                    }
-                    EngineMessage::Material(_material_id, material_source) => {
-                        let material = engine.renderer.build_material(material_source).expect("TODO: Handle material compilation failure");
-                        let _gpu_material = engine.renderer.register_material(material);
+                            // TODO: Create an association between `material_id` and `material_source`.
+                        },
+                        EngineMessage::Mesh(mesh_id, mesh_data) => {
+                            let _s = Stopwatch::new("Mesh message");
+                            let gpu_mesh = engine.renderer.register_mesh(&mesh_data);
+                            let last = engine.mesh_map.insert(mesh_id, gpu_mesh);
+                            assert!(last.is_none(), "Duplicate mesh_id found: {:?}", mesh_id);
+                        },
+                        EngineMessage::MeshInstance(mesh_renderer_data, transform_inner) => {
+                            let _s = Stopwatch::new("Mesh instance message");
+                            let anchor_id = match transform_inner.anchor() {
+                                Some(anchor) => anchor,
+                                None => unimplemented!(), // TODO: Create the anchor.
+                            };
 
-                        // TODO: Create an association between `material_id` and `material_source`.
-                    },
-                    EngineMessage::Mesh(mesh_id, mesh_data) => {
-                        let gpu_mesh = engine.renderer.register_mesh(&mesh_data);
-                        let last = engine.mesh_map.insert(mesh_id, gpu_mesh);
-                        assert!(last.is_none(), "Duplicate mesh_id found: {:?}", mesh_id);
-                    },
-                    EngineMessage::MeshInstance(mesh_renderer_data, transform_inner) => {
-                        let anchor_id = match transform_inner.anchor() {
-                            Some(anchor) => anchor,
-                            None => unimplemented!(), // TODO: Create the anchor.
-                        };
-
-                        let gpu_mesh = *engine
+                            let gpu_mesh = *engine
                             .mesh_map
                             .get(&mesh_renderer_data.mesh_id())
                             .expect("No gpu mesh found for mesh id");
 
-                        let mut mesh_instance = MeshInstance::new(
-                            gpu_mesh,
-                            engine.renderer.default_material(),
-                        );
+                            let mut mesh_instance = MeshInstance::new(
+                                gpu_mesh,
+                                engine.renderer.default_material(),
+                            );
 
-                        // HACK HACK HACK ---------------------------------------------------------
-                        mesh_instance.material_mut().set_color("surface_color", ::math::Color::rgb(1.0, 0.0, 0.0));
-                        mesh_instance.material_mut().set_color("surface_specular", ::math::Color::rgb(1.0, 1.0, 1.0));
-                        mesh_instance.material_mut().set_f32("surface_shininess", 4.0);
-                        // HACK HACK HACK ---------------------------------------------------------
+                            // HACK HACK HACK ---------------------------------------------------------
+                            mesh_instance.material_mut().set_color("surface_color", ::math::Color::rgb(1.0, 0.0, 0.0));
+                            mesh_instance.material_mut().set_color("surface_specular", ::math::Color::rgb(1.0, 1.0, 1.0));
+                            mesh_instance.material_mut().set_f32("surface_shininess", 4.0);
+                            // HACK HACK HACK ---------------------------------------------------------
 
-                        mesh_instance.set_anchor(anchor_id);
+                            mesh_instance.set_anchor(anchor_id);
 
-                        let _ = engine.renderer.register_mesh_instance(mesh_instance);
-                    }
-                    EngineMessage::Behavior(func) => {
-                        engine.behaviors.push(func);
+                            let _ = engine.renderer.register_mesh_instance(mesh_instance);
+                        }
+                        EngineMessage::Behavior(func) => {
+                            let _s = Stopwatch::new("Behavior message");
+                            engine.behaviors.push(func);
+                        }
                     }
                 }
             }
 
             // Update renderer's anchors with flattened scene graph.
-            for node in engine.scene_graph.roots() {
-                let node = node.borrow();
+            {
+                let _s = Stopwatch::new("Update renderer anchors");
 
-                // TODO: Do something like pre-sorting so we only try to update out of
-                // date nodes.
-                if let Some(anchor_id) = node.anchor() {
-                    // Send position/rotation/scale to renderer anchor.
-                    let anchor = engine.renderer
+                for node in engine.scene_graph.roots() {
+                    let node = node.borrow();
+
+                    // TODO: Do something like pre-sorting so we only try to update out of
+                    // date nodes.
+                    if let Some(anchor_id) = node.anchor() {
+                        // Send position/rotation/scale to renderer anchor.
+                        let anchor = engine.renderer
                         .get_anchor_mut(anchor_id)
                         .expect("Node had anchor id but render did not have specified anchor");
-                    anchor.set_position(node.position);
-                    anchor.set_orientation(node.orientation);
-                    anchor.set_scale(node.scale);
+                        anchor.set_position(node.position);
+                        anchor.set_orientation(node.orientation);
+                        anchor.set_scale(node.scale);
+                    }
                 }
             }
 
             // Update the camera.
             if let Some((ref camera_data, ref camera_id)) = engine.camera {
+                let _s = Stopwatch::new("Update renderer camera");
+
                 let render_camera = engine.renderer
                     .get_camera_mut(*camera_id)
                     .expect("Camera didn't exist for camera id");
@@ -394,10 +418,14 @@ fn main_loop(mut engine: Box<Engine>) {
             }
 
             // Update lights.
-            for light in &engine.lights {
-                let &(ref id, ref data) = &**light;
-                let light = engine.renderer.get_light_mut(*id.borrow()).expect("Renderer has no such light");
-                *light = data.borrow().clone();
+            {
+                let _s = Stopwatch::new("Update renderer lights");
+
+                for light in &engine.lights {
+                    let &(ref id, ref data) = &**light;
+                    let light = engine.renderer.get_light_mut(*id.borrow()).expect("Renderer has no such light");
+                    *light = data.borrow().clone();
+                }
             }
 
             // Draw.
