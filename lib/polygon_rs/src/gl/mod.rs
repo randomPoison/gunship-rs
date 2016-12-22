@@ -176,27 +176,22 @@ impl Renderer for GlRender {
                 let mut light_direction = [Vector3::zero(); 8];
                 let mut light_direction_view = [Vector3::zero(); 8];
 
-                let mut draw_builder = {
-                    let _stopwatch = Stopwatch::new("Initialize DrawBuilder");
+                let program = self
+                    .programs
+                    .get(material.shader())
+                    .expect("Material is using a shader that does not exist");
 
-                    let program = self
-                        .programs
-                        .get(material.shader())
-                        .expect("Material is using a shader that does not exist");
+                // Set the shader to use.
+                let mut draw_builder = DrawBuilder::new(
+                    &self.context,
+                    &mesh_data.vertex_array,
+                    DrawMode::Triangles,
+                );
 
-                    // Set the shader to use.
-                    let mut draw_builder = DrawBuilder::new(
-                        &self.context,
-                        &mesh_data.vertex_array,
-                        DrawMode::Triangles,
-                    );
-                    draw_builder
-                    .program(program)
-                    .cull(Face::Back)
-                    .depth_test(Comparison::Less);
-
-                    draw_builder
-                };
+                draw_builder
+                .program(program)
+                .cull(Face::Back)
+                .depth_test(Comparison::Less);
 
                 // Set uniform transforms.
                 {
