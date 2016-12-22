@@ -193,12 +193,7 @@ impl Renderer for GlRender {
                     draw_builder
                     .program(program)
                     .cull(Face::Back)
-                    .depth_test(Comparison::Less)
-
-                    // Associate vertex attributes with shader program variables.
-                    .map_attrib_name("position", "vertex_position")
-                    .map_attrib_name("normal", "vertex_normal")
-                    .map_attrib_name("texcoord", "vertex_uv0");
+                    .depth_test(Comparison::Less);
 
                     draw_builder
                 };
@@ -291,8 +286,7 @@ impl Renderer for GlRender {
                     }
                 }
 
-                // Render the rest of the lights with blending on the the depth check set to
-                // less than or equal.
+                // Render all lights in a single pass by sending 8 lights at once in arrays.
                 {
                     let _stopwatch = Stopwatch::new("Setup lights");
 
@@ -339,7 +333,6 @@ impl Renderer for GlRender {
                 {
                     let _s = Stopwatch::new("Draw mesh");
 
-                    // Draw the current light.
                     draw_builder.draw();
                 }
             }
@@ -447,15 +440,15 @@ impl Renderer for GlRender {
                 .replace("@vertex.view_position", "_vertex_view_position_")
                 .replace("@vertex.view_normal", "_vertex_view_normal_");
             let replaced_source = format!(r#"
-                    #version 150
+                    #version 330 core
 
                     {}
 
                     {}
 
-                    in vec4 vertex_position;
-                    in vec3 vertex_normal;
-                    in vec2 vertex_uv0;
+                    layout(location = 0) in vec4 vertex_position;
+                    layout(location = 1) in vec3 vertex_normal;
+                    layout(location = 2) in vec2 vertex_uv0;
 
                     out vec4 _vertex_position_;
                     out vec3 _vertex_normal_;
@@ -498,7 +491,7 @@ impl Renderer for GlRender {
                 .replace("@vertex.view_position", "_vertex_view_position_")
                 .replace("@vertex.view_normal", "_vertex_view_normal_");
             let replaced_source = format!(r#"
-                    #version 150
+                    #version 330 core
 
                     {}
 
@@ -562,51 +555,26 @@ impl Renderer for GlRender {
     }
 
     fn register_mesh(&mut self, mesh: &Mesh) -> GpuMesh {
-        // Generate array buffer.
-        let mut vertex_buffer = VertexBuffer::new(&self.context);
-        vertex_buffer.set_data_f32(mesh.vertex_data());
-
         // Configure vertex attributes.
         let position = mesh.position();
-        vertex_buffer.set_attrib_f32(
-            "position",
-            AttribLayout {
-                elements: position.elements,
-                stride: position.stride,
-                offset: position.offset,
-            });
-
-        if let Some(normal) = mesh.normal() {
-            vertex_buffer.set_attrib_f32(
-                "normal",
-                AttribLayout {
-                    elements: normal.elements,
-                    stride: normal.stride,
-                    offset: normal.offset
-                });
-        }
-
-        // TODO: Support multiple texcoords.
-        if let Some(texcoord) = mesh.texcoord().first() {
-            vertex_buffer.set_attrib_f32(
-                "texcoord",
-                AttribLayout {
-                    elements: texcoord.elements,
-                    stride: texcoord.stride,
-                    offset: texcoord.offset,
-                });
-        }
-
-        let mut index_buffer = IndexBuffer::new(&self.context);
-        index_buffer.set_data_u32(mesh.indices());
 
         let mesh_id = self.mesh_counter.next();
 
-        let vertex_array = VertexArray::with_index_buffer(
+        let mut vertex_array = VertexArray::with_index_buffer(
             &self.context,
-            vertex_buffer,
-            index_buffer,
+            mesh.vertex_data(),
+            mesh.indices(),
         );
+        vertex_array.set_attrib(AttributeLocation::from_index(0), position.into());
+
+        if let Some(normal) = mesh.normal() {
+            vertex_array.set_attrib(AttributeLocation::from_index(1), normal.into());
+        }
+
+        // TODO: Support multiple texcoords.
+        if let Some(texcoord) = mesh.texcoord().first().cloned() {
+            vertex_array.set_attrib(AttributeLocation::from_index(2), texcoord.into());
+        }
 
         self.meshes.insert(
             mesh_id,
@@ -772,4 +740,14 @@ struct MeshData {
     normal_attribute: Option<VertexAttribute>,
     uv_attribute: Option<VertexAttribute>,
     element_count: usize,
+}
+
+impl Into<AttribLayout> for VertexAttribute {
+    fn into(self) -> AttribLayout {
+        AttribLayout {
+            elements: self.elements,
+            offset: self.offset,
+            stride: self.stride,
+        }
+    }
 }
