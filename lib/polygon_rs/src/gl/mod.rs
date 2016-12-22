@@ -135,6 +135,8 @@ impl Renderer for GlRender {
                 None => unimplemented!(),
             };
 
+            let mut has_setup_lights = false;
+
             for mesh_instance in self.mesh_instances.values() {
                 let anchor = match mesh_instance.anchor() {
                     Some(anchor_id) => self.anchors.get(anchor_id).expect("No such anchor exists"),
@@ -282,7 +284,11 @@ impl Renderer for GlRender {
                 }
 
                 // Render all lights in a single pass by sending 8 lights at once in arrays.
-                {
+                // All light-related uniforms will stay the same for all draws for a given camera,
+                // so we only specify them for the first draw and leave them the same after that.
+                if !has_setup_lights {
+                    has_setup_lights = true;
+
                     let _stopwatch = Stopwatch::new("Setup lights");
 
                     // TODO: Support having more than 8 lights active at a time. Maybe pick the 8
