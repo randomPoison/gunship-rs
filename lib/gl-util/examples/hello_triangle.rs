@@ -19,27 +19,17 @@ fn main() {
     // in this case it will use the window we just opened.
     let mut context = Context::from_window(&window).unwrap();
 
-    // Create a vertex buffer to store the vertices of the triangle. We provide it with data and
-    // specify the layout of that data.
-    let mut vertex_buffer = VertexBuffer::new(&context);
-    vertex_buffer.set_data_f32(&VERTEX_POSITIONS[..]);
-    vertex_buffer.set_attrib_f32(
-        "position",
-        AttribLayout {
-            elements: 3,
-            offset: 0,
-            stride: 0,
-        },
-    );
-
     // Create the vertex array object, which groups all buffers for a mesh into a single object.
-    let vertex_array = VertexArray::new(&context, vertex_buffer);
+    let mut vertex_array = VertexArray::new(&context, &VERTEX_POSITIONS[..]);
+    vertex_array.set_attrib(
+        AttributeLocation::from_index(0),
+        AttribLayout { elements: 3, offset: 0, stride: 0 },
+    );
 
     // `DrawBuilder` is used to specify all of the various configuration options when drawing. In
     // this case we're using `vertex_buffer` in triangles mode, and we're sending its "position"
     // attribute to attribute location 0, which is the default for `glPosition`.
     let mut draw_builder = DrawBuilder::new(&mut context, &vertex_array, DrawMode::Triangles);
-    draw_builder.map_attrib_location("position", AttributeLocation::from_index(0));
 
     'outer: loop {
         while let Some(message) = window.next_message() {

@@ -41,205 +41,154 @@ pub mod texture;
 #[path="windows\\mod.rs"]
 pub mod platform;
 
-/// Represents a buffer of vertex data and the layout of that data.
-///
-/// Wraps a vertex buffer object and vertex array object into one struct.
-#[derive(Debug)]
-pub struct VertexBuffer {
-    buffer_name: BufferName,
-    len: usize,
-    element_len: usize,
-    attribs: HashMap<String, AttribLayout>,
-
-    pub(crate) context: gl::Context,
-}
-
-impl VertexBuffer {
-    /// Creates a new `VertexBuffer` object.
-    pub fn new(context: &Context) -> VertexBuffer {
-        let context = context.raw();
-
-        let mut buffer_name = BufferName::null();
-        unsafe {
-            let _guard = ::context::ContextGuard::new(context);
-            gl::gen_buffers(1, &mut buffer_name);
-        }
-
-        VertexBuffer {
-            buffer_name: buffer_name,
-            len: 0,
-            element_len: 0,
-            attribs: HashMap::new(),
-
-            context: context,
-        }
-    }
-
-    /// Fills the buffer with the contents of the data slice.
-    pub fn set_data_f32(&mut self, data: &[f32]) {
-        self.len = data.len();
-
-        let data_ptr = data.as_ptr() as *const ();
-        let byte_count = data.len() * mem::size_of::<f32>();
-
-        unsafe {
-            let _guard = ::context::ContextGuard::new(self.context);
-            gl::bind_buffer(BufferTarget::Array, self.buffer_name);
-            gl::buffer_data(
-                BufferTarget::Array,
-                byte_count as isize,
-                data_ptr,
-                BufferUsage::StaticDraw);
-            gl::bind_buffer(BufferTarget::Array, BufferName::null());
-        }
-    }
-
-    /// Specifies how the data for a particular vertex attribute is laid out in the buffer.
-    ///
-    /// `layout` specifies the layout of the vertex attributes. `AttribLayout` includes the three
-    /// values that are needed to fully describe the attribute: The offset, the number of elements
-    /// in the attrib, and the stride between elements.
-    ///
-    /// TODO: Include more details about how to describe the layout of attrib data.
-    pub fn set_attrib_f32<T: Into<String>>(
-        &mut self,
-        attrib: T,
-        layout: AttribLayout,
-    ) {
-        // Calculate the number of elements based on the attribute.
-        // TODO: Verify that each attrib has the same element length.
-        self.element_len = (self.len - layout.offset) / layout.elements + layout.stride;
-        self.attribs.insert(attrib.into(), layout);
-    }
-}
-
-impl Drop for VertexBuffer {
-    fn drop(&mut self) {
-        unsafe {
-            let _guard = ::context::ContextGuard::new(self.context);
-            gl::delete_buffers(1, &mut self.buffer_name);
-        }
-    }
-}
-
 /// Describes the layout of vertex data in a `VertexBuffer`.
 ///
-/// See [`VertexBuffer::set_attrib_f32()`][VertexBuffer::set_attrib_f32] for more information.
+/// See [`VertexArray::map_attrib_location()`][VertexArray::map_attrib_location] for more information.
 ///
-/// [VertexBuffer::set_attrib_f32]: TODO: Figure out link.
+/// [VertexArray::map_attrib_location]: TODO: Figure out link.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct AttribLayout {
+    /// The number of primitive elements per vertex.
+    ///
+    /// For example, a 3D vector with x, y, and z coordinates has 3 elements. This may not be
+    /// larger than 4.
     pub elements: usize,
+
+    /// The distance, in elements, between instances of the vertex attribute.
+    ///
+    /// Generally this will either be the total number of elements in a vertex, indicating that
+    /// vertex attribs are interleaved in the buffer, or 0, indicating that attribs are tightly
+    /// packed within the buffer.
     pub stride: usize,
+
+    /// The offset, in elements, from the start of the buffer where the attrib first appears.
     pub offset: usize,
-}
-
-/// Represents a buffer of index data used to index into a `VertexBuffer` when drawing.
-#[derive(Debug)]
-pub struct IndexBuffer {
-    buffer_name: BufferName,
-    len: usize,
-
-    pub(crate) context: gl::Context,
-}
-
-impl IndexBuffer {
-    /// Creates a new index buffer.
-    pub fn new(context: &Context) -> IndexBuffer {
-        let context = context.raw();
-        let mut buffer_name = BufferName::null();
-        unsafe {
-            let _guard = ::context::ContextGuard::new(context);
-            gl::gen_buffers(1, &mut buffer_name);
-        }
-
-        IndexBuffer {
-            buffer_name: buffer_name,
-            len: 0,
-
-            context: context,
-        }
-    }
-
-    /// Fills the index buffer with the provided data.
-    pub fn set_data_u32(&mut self, data: &[u32]) {
-        self.len = data.len();
-
-        let data_ptr = data.as_ptr() as *const ();
-        let byte_count = data.len() * mem::size_of::<u32>();
-
-        unsafe {
-            let _guard = ::context::ContextGuard::new(self.context);
-            gl::bind_buffer(BufferTarget::ElementArray, self.buffer_name);
-            gl::buffer_data(
-                BufferTarget::ElementArray,
-                byte_count as isize,
-                data_ptr,
-                BufferUsage::StaticDraw);
-            gl::bind_buffer(BufferTarget::ElementArray, BufferName::null());
-        }
-    }
-}
-
-impl Drop for IndexBuffer {
-    fn drop(&mut self) {
-        unsafe {
-            let _guard = ::context::ContextGuard::new(self.context);
-            gl::delete_buffers(1, &mut self.buffer_name);
-        }
-    }
 }
 
 #[derive(Debug)]
 pub struct VertexArray {
     vertex_array_name: VertexArrayName,
-    vertex_buffer: VertexBuffer,
+    vertex_buffer_name: BufferName,
     index_buffer: Option<IndexBuffer>,
+
+    /// The number of primitive elments in the buffer.
+    ///
+    /// Does not reflect the number of vertices in the buffer.
+    vertex_primitive_len: usize,
+
+    /// The total number of primitive elements per vertex.
+    ///
+    /// Used to can determine how many vertices are in the buffer.
+    elements_per_vertex: usize,
 
     context: Rc<RefCell<ContextInner>>,
 }
 
 impl VertexArray {
-    pub fn new(context: &Context, vertex_buffer: VertexBuffer) -> VertexArray {
-        let mut vertex_array_name = VertexArrayName::null();
+    /// Creates a new VAO and vertex buffer, filling the buffer with the provided data.
+    // TODO: Is this operation fallible? If so it should return a `Result<T>`.
+    pub fn new(context: &Context, vertex_data: &[f32]) -> VertexArray {
         let context_inner = context.inner();
+
+        let data_ptr = vertex_data.as_ptr() as *const ();
+        let byte_count = vertex_data.len() * mem::size_of::<f32>();
+
+        let mut vertex_buffer_name = BufferName::null();
+        let mut vertex_array_name = VertexArrayName::null();
         unsafe {
             let mut context = context_inner.borrow_mut();
             let _guard = ::context::ContextGuard::new(context.raw());
-            gl::gen_vertex_arrays(1, &mut vertex_array_name);
 
+            // Create the VAO and VBO.
+            gl::gen_vertex_arrays(1, &mut vertex_array_name);
+            gl::gen_buffers(1, &mut vertex_buffer_name);
+
+            // Bind the VAO to the context, then bind the buffer to the VAO.
             context.bind_vertex_array(vertex_array_name);
-            gl::bind_buffer(BufferTarget::Array, vertex_buffer.buffer_name);
+            gl::bind_buffer(BufferTarget::Array, vertex_buffer_name);
+
+            // Fill the VBO with data.
+            gl::buffer_data(
+                BufferTarget::Array,
+                byte_count as isize,
+                data_ptr,
+                BufferUsage::StaticDraw,
+            );
         }
 
         VertexArray {
             vertex_array_name: vertex_array_name,
-            vertex_buffer: vertex_buffer,
+            vertex_buffer_name: vertex_buffer_name,
             index_buffer: None,
+
+            vertex_primitive_len: vertex_data.len(),
+            elements_per_vertex: 0,
 
             context: context_inner,
         }
     }
 
-    pub fn with_index_buffer(context: &Context, vertex_buffer: VertexBuffer, index_buffer: IndexBuffer) -> VertexArray {
-        let mut vertex_array_name = VertexArrayName::null();
-        let context_inner = context.inner();
-        unsafe {
-            let mut context = context_inner.borrow_mut();
-            let _guard = ::context::ContextGuard::new(context.raw());
-            gl::gen_vertex_arrays(1, &mut vertex_array_name);
+    /// Creates a new VAO with the provided vertex and index data.
+    pub fn with_index_buffer(context: &Context, vertex_data: &[f32], index_data: &[u32]) -> VertexArray {
+        let mut vertex_array = VertexArray::new(context, vertex_data);
 
-            context.bind_vertex_array(vertex_array_name);
-            gl::bind_buffer(BufferTarget::Array, vertex_buffer.buffer_name);
-            gl::bind_buffer(BufferTarget::ElementArray, index_buffer.buffer_name);
+        let data_ptr = index_data.as_ptr() as *const ();
+        let byte_count = index_data.len() * mem::size_of::<u32>();
+
+        let mut index_buffer_name = BufferName::null();
+        unsafe {
+            let context = vertex_array.context.borrow_mut();
+            let _guard = ::context::ContextGuard::new(context.raw());
+
+            gl::gen_buffers(1, &mut index_buffer_name);
+            gl::bind_buffer(BufferTarget::ElementArray, index_buffer_name);
+            gl::buffer_data(
+                BufferTarget::ElementArray,
+                byte_count as isize,
+                data_ptr,
+                BufferUsage::StaticDraw,
+            );
         }
 
-        VertexArray {
-            vertex_array_name: vertex_array_name,
-            vertex_buffer: vertex_buffer,
-            index_buffer: Some(index_buffer),
+        vertex_array.index_buffer = Some(IndexBuffer {
+            name: index_buffer_name,
+            primitive_len: index_data.len(),
+        });
 
-            context: context_inner,
+        vertex_array
+    }
+
+    /// Declares a vetex attribute within the vertex buffer.
+    pub fn set_attrib(
+        &mut self,
+        attrib_location: AttributeLocation,
+        layout: AttribLayout,
+    ) {
+        assert!(
+            layout.elements <= 4,
+            "Layout elements must not be more than 4 (was actually {})",
+            layout.elements,
+        );
+        // TODO: Verify validity of layout?
+        // TODO: Verify that `attrib_location` is valid? How would we even do that?
+
+        // Update the total number of elements per vertex.
+        self.elements_per_vertex += layout.elements;
+
+        unsafe {
+            let mut context = self.context.borrow_mut();
+            let _guard = ::context::ContextGuard::new(context.raw());
+            context.bind_vertex_array(self.vertex_array_name);
+
+            gl::enable_vertex_attrib_array(attrib_location);
+            gl::vertex_attrib_pointer(
+                attrib_location,
+                layout.elements as i32,
+                GlType::Float,
+                False,
+                (layout.stride * mem::size_of::<f32>()) as i32, // TODO: Correctly handle non-f32
+                layout.offset * mem::size_of::<f32>(), // attrib data types.
+            );
         }
     }
 }
@@ -248,9 +197,25 @@ impl Drop for VertexArray {
     fn drop(&mut self) {
         let mut context = self.context.borrow_mut();
         let _guard = ::context::ContextGuard::new(context.raw());
-        unsafe { gl::delete_vertex_arrays(1, &mut self.vertex_array_name); }
+        let buffers = &mut [self.vertex_buffer_name, self.index_buffer.clone().map_or(BufferName::null(), |buf| buf.name)];
+        unsafe {
+            gl::delete_vertex_arrays(1, &mut self.vertex_array_name);
+            gl::delete_buffers(2, buffers.as_ptr());
+        }
         context.unbind_vertex_array(self.vertex_array_name);
     }
+}
+
+/// Represents a buffer of index data used to index into a `VertexBuffer` when drawing.
+#[derive(Debug, Clone, Copy)]
+struct IndexBuffer {
+    name: BufferName,
+
+    /// The number of indices in the index buffer.
+    ///
+    /// This does not reflect number of primitive shapes described by the index buffer, e.g. an
+    /// index length of 3 may only describe a single triangle.
+    primitive_len: usize,
 }
 
 /// A configuration object for specifying all of the various configurable options for a draw call.
@@ -323,82 +288,6 @@ impl<'a> DrawBuilder<'a> {
         dest_factor: DestFactor
     ) -> &mut DrawBuilder<'a> {
         self.blend = (source_factor, dest_factor);
-        self
-    }
-
-    /// Maps a vertex attribute to an attribute location for the current program.
-    ///
-    /// # Panics
-    ///
-    /// - If the the vertex buffer does not have an attribute named `buffer_attrib_name`.
-    pub fn map_attrib_location(
-        &mut self,
-        buffer_attrib_name: &str,
-        attrib_location: AttributeLocation
-    ) -> &mut DrawBuilder<'a> {
-        let layout = match self.vertex_array.vertex_buffer.attribs.get(buffer_attrib_name) {
-            Some(&attrib_data) => attrib_data,
-            None => panic!("Vertex buffer has no attribute \"{}\"", buffer_attrib_name),
-        };
-
-        unsafe {
-            let mut context = self.context.borrow_mut();
-            let _guard = ::context::ContextGuard::new(context.raw());
-            context.bind_vertex_array(self.vertex_array.vertex_array_name);
-
-            gl::enable_vertex_attrib_array(attrib_location);
-            gl::vertex_attrib_pointer(
-                attrib_location,
-                layout.elements as i32,
-                GlType::Float,
-                False,
-                (layout.stride * mem::size_of::<f32>()) as i32, // TODO: Correctly handle non-f32
-                layout.offset * mem::size_of::<f32>());         // attrib data types.
-        }
-
-        self
-    }
-
-    /// Maps a vertex attribute to a variable name in the shader program.
-    ///
-    /// `map_attrib_name()` will silently ignore a program that does not have an input variable
-    /// named `program_attrib_name` or a vertex buffer that does not have an attribute named
-    /// `buffer_attrib_name`, so it is always safe to speculatively map vertex attributes
-    /// even when the shader program may not use that attribute.
-    ///
-    /// # Panics
-    ///
-    /// - If the program has not been set using `program()`.
-    pub fn map_attrib_name(
-        &mut self,
-        buffer_attrib_name: &str,
-        program_attrib_name: &str
-    ) -> &mut DrawBuilder<'a> {
-        let program = self.program.expect("Cannot map attribs without a shader program");
-        let attrib = match program.get_attrib(program_attrib_name) {
-            Some(attrib) => attrib,
-            None => return self,
-        };
-        let layout = match self.vertex_array.vertex_buffer.attribs.get(buffer_attrib_name) {
-            Some(&attrib_data) => attrib_data,
-            None => return self,
-        };
-
-        unsafe {
-            let mut context = self.context.borrow_mut();
-            let _guard = ::context::ContextGuard::new(context.raw());
-            context.bind_vertex_array(self.vertex_array.vertex_array_name);
-
-            gl::enable_vertex_attrib_array(attrib);
-            gl::vertex_attrib_pointer(
-                attrib,
-                layout.elements as i32,
-                GlType::Float,
-                False,
-                (layout.stride * mem::size_of::<f32>()) as i32,
-                layout.offset * mem::size_of::<f32>());
-        }
-
         self
     }
 
@@ -475,14 +364,17 @@ impl<'a> DrawBuilder<'a> {
             if let Some(indices) = self.vertex_array.index_buffer.as_ref() {
                 gl::draw_elements(
                     self.draw_mode,
-                    indices.len as i32,
+                    indices.primitive_len as i32,
                     IndexType::UnsignedInt,
-                    0);
+                    0,
+                );
             } else {
+                let vertex_len = self.vertex_array.vertex_primitive_len / self.vertex_array.elements_per_vertex;
                 gl::draw_arrays(
                     self.draw_mode,
                     0,
-                    self.vertex_array.vertex_buffer.element_len as i32);
+                    vertex_len as i32,
+                );
             }
         }
     }
