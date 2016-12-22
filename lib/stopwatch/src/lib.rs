@@ -37,31 +37,15 @@ pub fn switch_context(old: FiberId, new: FiberId) {
     with_context(|stack| {
         let timestamp = platform::timestamp();
 
-        // If there are stopwatches on the stack then we need to end the flow event.
-        if stack.len() > 0 {
-            push_event(Event {
-                name: stack[0].name,
-                cat: String::new(),
-                ph: "f",
-                id: fiber::current().map(FiberId::primitive_id),
-                ts: timestamp,
-                tid: platform::thread_id(),
-                pid: 0,
-                bp: "e",
-            });
-        }
-
         // Push an end event for each of the time slices.
         for stopwatch in stack.iter().rev() {
             push_event(Event {
                 name: stopwatch.name,
                 cat: String::new(),
                 ph: "E",
-                id: fiber::current().map(FiberId::primitive_id),
                 ts: timestamp,
                 tid: platform::thread_id(),
                 pid: 0,
-                bp: "e",
             });
         }
     });
@@ -86,25 +70,9 @@ pub fn switch_context(old: FiberId, new: FiberId) {
                 name: stopwatch.name,
                 cat: String::new(),
                 ph: "B",
-                id: fiber::current().map(FiberId::primitive_id),
                 ts: timestamp,
                 tid: platform::thread_id(),
                 pid: 0,
-                bp: "e",
-            });
-        }
-
-        // If there are stopwatches on the stack then we need to end the flow event.
-        if stack.len() > 0 {
-            push_event(Event {
-                name: stack[0].name,
-                cat: String::new(),
-                ph: "s",
-                id: fiber::current().map(FiberId::primitive_id),
-                ts: timestamp,
-                tid: platform::thread_id(),
-                pid: 0,
-                bp: "e",
             });
         }
     });
@@ -126,28 +94,12 @@ impl Stopwatch {
             name: name,
             cat: String::new(),
             ph: "B",
-            id: fiber::current().map(FiberId::primitive_id),
             ts: platform::timestamp(),
             tid: platform::thread_id(),
             pid: 0, // TODO: Do we care about tracking process ID?
-            bp: "e",
         });
 
         with_context(|stack| {
-            // The first event on the stack also needs a flow event.
-            if stack.len() == 0 {
-                push_event(Event {
-                    name: name,
-                    cat: String::new(),
-                    ph: "s",
-                    id: fiber::current().map(FiberId::primitive_id),
-                    ts: platform::timestamp(),
-                    tid: platform::thread_id(),
-                    pid: 0,
-                    bp: "e",
-                })
-            }
-
             stack.push(StopwatchData { name: name });
         });
 
@@ -167,30 +119,15 @@ impl Drop for Stopwatch {
         with_context(|stack| {
             let stopwatch = stack.pop().expect("No stopwatch popped, stack is corrupted");
             assert_eq!(self.name, stopwatch.name, "Stack got corrupted I guess");
-
-            if stack.len() == 0 {
-                push_event(Event {
-                    name: self.name,
-                    cat: String::new(),
-                    ph: "f",
-                    id: fiber::current().map(FiberId::primitive_id),
-                    ts: platform::timestamp(),
-                    tid: platform::thread_id(),
-                    pid: 0,
-                    bp: "e",
-                });
-            }
         });
 
         push_event(Event {
             name: self.name,
             cat: String::new(),
             ph: "E",
-            id: fiber::current().map(FiberId::primitive_id),
             ts: platform::timestamp(),
             tid: platform::thread_id(),
             pid: 0, // TODO: Do we care about tracking process ID?
-            bp: "e",
         });
     }
 }
@@ -214,10 +151,6 @@ struct Event {
 
     /// Thread ID for the event.
     tid: usize,
-
-    id: Option<isize>,
-
-    bp: &'static str,
 }
 
 fn push_event(event: Event) {
