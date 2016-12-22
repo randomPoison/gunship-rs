@@ -15,12 +15,12 @@
 #![feature(const_fn)]
 #![allow(bad_style)]
 
-#[cfg(target_os="windows")]
-#[path="windows\\mod.rs"]
+#[cfg(target_os = "windows")]
+#[path="windows.rs"]
 pub mod platform;
 
 #[cfg(target_os = "linux")]
-#[path="linux/mod.rs"]
+#[path="linux.rs"]
 pub mod platform;
 
 pub mod types;

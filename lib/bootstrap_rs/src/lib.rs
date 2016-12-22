@@ -4,9 +4,6 @@
 // The scheduler puts a `Condvar` and `Mutex` into some statics.
 #![feature(drop_types_in_const)]
 
-// TODO: Get rid of this nonsense. There are stable ways of handling utf16.
-#![cfg_attr(target_os = "windows", feature(str_utf16))]
-
 extern crate cell_extras;
 
 // This `extern_crate` should be within the macos platform module, but `macro_use` only works at
