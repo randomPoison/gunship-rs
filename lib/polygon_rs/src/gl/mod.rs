@@ -126,8 +126,6 @@ impl GlRender {
 
         let mesh_data = self.meshes.get(mesh_instance.mesh()).expect("Mesh data does not exist for mesh id");
 
-        let _stopwatch = Stopwatch::new("Drawing mesh");
-
         let default_texture = GlTexture2d::empty(&self.context);
 
         // Calculate the various transforms needed for rendering.
