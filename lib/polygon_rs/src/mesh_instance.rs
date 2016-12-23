@@ -9,26 +9,35 @@
 
 use {GpuMesh};
 use anchor::AnchorId;
-use material::Material;
+use material::*;
 
 /// Represents an instance of a mesh in the scene.
+///
+/// By default a mesh instance will not be attached to an anchor, and will not be rendered in
+/// the scene until one is set with `set_anchor()` and the mesh instance is registered with
+/// the renderer using `Renderer::register_mesh_instance()`.
 #[derive(Debug)]
 pub struct MeshInstance {
     mesh: GpuMesh,
-    material: Material,
+    material: MaterialType,
     anchor: Option<AnchorId>
 }
 
 impl MeshInstance {
-    /// Creates a new mesh instance for the specified mesh.
-    ///
-    /// By default a mesh instance will not be attached to an anchor, and will not be rendered in
-    /// the scene until one is set with `set_anchor()` and the mesh instance is registered with
-    /// the renderer using `Renderer::register_mesh_instance()`.
-    pub fn new(mesh: GpuMesh, material: Material) -> MeshInstance {
+    /// Creates a new mesh instance sharing the specified material.
+    pub fn with_shared_material(mesh: GpuMesh, material: MaterialId) -> MeshInstance {
         MeshInstance {
             mesh: mesh,
-            material: material,
+            material: MaterialType::Shared(material),
+            anchor: None,
+        }
+    }
+
+    /// Creates a new mesh instance with its own material.
+    pub fn with_owned_material(mesh: GpuMesh, material: Material) -> MeshInstance {
+        MeshInstance {
+            mesh: mesh,
+            material: MaterialType::Owned(material),
             anchor: None,
         }
     }
@@ -43,19 +52,33 @@ impl MeshInstance {
         &self.mesh
     }
 
-    /// Sets the material used by the mesh instance.
-    pub fn set_material(&mut self, material: Material) {
-        self.material = material;
-    }
-
-    /// Gets a reference to the material used by the mesh instance.
-    pub fn material(&self) -> &Material {
+    /// Gets a reference to either the shared material ID or the owned material.
+    pub fn material_type(&self) -> &MaterialType {
         &self.material
     }
 
-    /// Gets a mutable reference to the material used by the mesh instance.
-    pub fn material_mut(&mut self) -> &mut Material {
-        &mut self.material
+    /// Gets the shared material ID if the mesh instance is using a shared material.
+    pub fn shared_material(&self) -> Option<MaterialId> {
+        match self.material {
+            MaterialType::Shared(id) => Some(id),
+            _ => None,
+        }
+    }
+
+    /// Gets a reference to the material used by the mesh instance if it owns its material.
+    pub fn material(&self) -> Option<&Material> {
+        match self.material {
+            MaterialType::Owned(ref material) => Some(material),
+            _ => None,
+        }
+    }
+
+    /// Gets a mutable reference to the material used by the mesh instance if it owns its material.
+    pub fn material_mut(&mut self) -> Option<&mut Material> {
+        match self.material {
+            MaterialType::Owned(ref mut material) => Some(material),
+            _ => None,
+        }
     }
 
     /// Attaches the mesh instance to the specified anchor.
@@ -64,8 +87,8 @@ impl MeshInstance {
     }
 
     /// Gets a reference to the anchor this instance is attached to.
-    pub fn anchor(&self) -> Option<&AnchorId> {
-        self.anchor.as_ref()
+    pub fn anchor(&self) -> Option<AnchorId> {
+        self.anchor
     }
 }
 

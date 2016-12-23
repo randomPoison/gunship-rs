@@ -41,36 +41,36 @@ fn main() {
     // Load the material for each of the meshes.
     let left_material_source =
         MaterialSource::from_file("resources/materials/diffuse_flat.material").unwrap();
-    let left_material = renderer.build_material(left_material_source).unwrap();
+    let mut left_material = renderer.build_material(left_material_source).unwrap();
+    left_material.set_color("surface_color", Color::rgb(1.0, 1.0, 0.0));
 
     let middle_material_source =
         MaterialSource::from_file("resources/materials/diffuse_lit.material").unwrap();
-    let middle_material = renderer.build_material(middle_material_source).unwrap();
+    let mut middle_material = renderer.build_material(middle_material_source).unwrap();
+    middle_material.set_color("surface_color", Color::rgb(0.0, 1.0, 1.0));
+    middle_material.set_color("specular_color", Color::rgb(1.0, 1.0, 1.0));
+    middle_material.set_f32("surface_shininess", 4.0);
 
     let right_material_source =
         MaterialSource::from_file("resources/materials/texture_diffuse_lit.material").unwrap();
-    let right_material = renderer.build_material(right_material_source).unwrap();
+    let mut right_material = renderer.build_material(right_material_source).unwrap();
+    right_material.set_texture("surface_diffuse", gpu_texture);
+    right_material.set_color("surface_color", Color::rgb(1.0, 1.0, 1.0));
+    right_material.set_color("specular_color", Color::rgb(0.2, 0.2, 0.2));
+    right_material.set_f32("surface_shininess", 3.0);
 
     // Create a mesh instance for each of the meshes, attach it to the anchor, and register it
     // with the renderer.
-    let mut left_mesh_instance = MeshInstance::new(gpu_mesh, left_material);
+    let mut left_mesh_instance = MeshInstance::with_owned_material(gpu_mesh, left_material);
     left_mesh_instance.set_anchor(left_anchor_id);
-    left_mesh_instance.material_mut().set_color("surface_color", Color::rgb(1.0, 1.0, 0.0));
     let left_instance_id = renderer.register_mesh_instance(left_mesh_instance);
 
-    let mut middle_mesh_instance = MeshInstance::new(gpu_mesh, middle_material);
+    let mut middle_mesh_instance = MeshInstance::with_owned_material(gpu_mesh, middle_material);
     middle_mesh_instance.set_anchor(middle_anchor_id);
-    middle_mesh_instance.material_mut().set_color("surface_color", Color::rgb(0.0, 1.0, 1.0));
-    middle_mesh_instance.material_mut().set_color("specular_color", Color::rgb(1.0, 1.0, 1.0));
-    middle_mesh_instance.material_mut().set_f32("surface_shininess", 4.0);
     renderer.register_mesh_instance(middle_mesh_instance);
 
-    let mut right_mesh_instance = MeshInstance::new(gpu_mesh, right_material);
+    let mut right_mesh_instance = MeshInstance::with_owned_material(gpu_mesh, right_material);
     right_mesh_instance.set_anchor(right_anchor_id);
-    right_mesh_instance.material_mut().set_texture("surface_diffuse", gpu_texture);
-    right_mesh_instance.material_mut().set_color("surface_color", Color::rgb(1.0, 1.0, 1.0));
-    right_mesh_instance.material_mut().set_color("specular_color", Color::rgb(0.2, 0.2, 0.2));
-    right_mesh_instance.material_mut().set_f32("surface_shininess", 3.0);
     renderer.register_mesh_instance(right_mesh_instance);
 
     // Create a camera and an anchor for it.
@@ -107,6 +107,7 @@ fn main() {
             let mesh_instance = renderer.get_mesh_instance_mut(left_instance_id).unwrap();
             mesh_instance
                 .material_mut()
+                .unwrap()
                 .set_color("surface_color", color);
         }
 

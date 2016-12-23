@@ -47,7 +47,7 @@ pub trait Renderer: 'static + Send {
     fn build_material(&mut self, source: MaterialSource) -> Result<Material, BuildMaterialError>;
 
     /// Registers a material to be used as a shared material.
-    fn register_material(&mut self, material: Material) -> MaterialId;
+    fn register_shared_material(&mut self, material: Material) -> MaterialId;
 
     /// Gets a registered material.
     fn get_material(&self, material_id: MaterialId) -> Option<&Material>;

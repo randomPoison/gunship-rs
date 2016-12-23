@@ -30,7 +30,7 @@ static DEFAULT_SHADER_BYTES: &'static [u8] = include_bytes!("../../resources/mat
 pub struct GlRender {
     context: Context,
 
-    materials: HashMap<MaterialId, Material>,
+    shared_materials: HashMap<MaterialId, Material>,
     meshes: HashMap<GpuMesh, MeshData>,
     textures: HashMap<GpuTexture, GlTexture2d>,
     mesh_instances: HashMap<MeshInstanceId, MeshInstance>,
@@ -38,6 +38,9 @@ pub struct GlRender {
     cameras: HashMap<CameraId, Camera>,
     lights: HashMap<LightId, Light>,
     programs: HashMap<Shader, Program>,
+
+    mesh_instances_with_shared_materials: HashMap<MaterialId, Vec<MeshInstanceId>>,
+    mesh_instances_with_owned_material: Vec<MeshInstanceId>,
 
     material_counter: MaterialId,
     mesh_counter: GpuMesh,
@@ -60,7 +63,7 @@ impl GlRender {
         let mut renderer = GlRender {
             context: context,
 
-            materials: HashMap::new(),
+            shared_materials: HashMap::new(),
             meshes: HashMap::new(),
             textures: HashMap::new(),
             mesh_instances: HashMap::new(),
@@ -68,6 +71,9 @@ impl GlRender {
             cameras: HashMap::new(),
             lights: HashMap::new(),
             programs: HashMap::new(),
+
+            mesh_instances_with_shared_materials: HashMap::new(),
+            mesh_instances_with_owned_material: Vec::new(),
 
             material_counter: MaterialId::initial(),
             mesh_counter: GpuMesh::initial(),
@@ -98,6 +104,217 @@ impl GlRender {
 
         Ok(renderer)
     }
+
+    fn render_mesh_instance(
+        &self,
+        mesh_instance: &MeshInstance,
+        material: &Material,
+        camera: &Camera,
+        camera_anchor: &Anchor,
+        has_setup_lights: &mut bool,
+        has_setup_material: &mut bool,
+    ) {
+        let _s = Stopwatch::new("Rendering mesh instance");
+
+        let anchor = match mesh_instance.anchor() {
+            Some(anchor_id) => self.anchors.get(&anchor_id).expect("No such anchor exists"),
+            None => return,
+        };
+
+        let model_transform = anchor.matrix();
+        let normal_transform = anchor.normal_matrix();
+
+        let mesh_data = self.meshes.get(mesh_instance.mesh()).expect("Mesh data does not exist for mesh id");
+
+        let _stopwatch = Stopwatch::new("Drawing mesh");
+
+        let default_texture = GlTexture2d::empty(&self.context);
+
+        // Calculate the various transforms needed for rendering.
+        let view_transform = camera_anchor.view_matrix();
+        let model_view_transform = view_transform * model_transform;
+        let projection_transform = camera.projection_matrix();
+        let model_view_projection = projection_transform * model_view_transform;
+
+        let view_normal_transform = {
+            let inverse_model = normal_transform.transpose();
+            let inverse_view = camera_anchor.inverse_view_matrix().into();
+            let inverse_model_view = inverse_model * inverse_view;
+            inverse_model_view.transpose()
+        };
+
+        // The data for the light uniforms must be declared before `draw_builder` so they
+        // can outlive it, since they are borrowed when the uniforms are set.
+        let mut light_type = [0i32; 8];
+        let mut light_strength = [0.0f32; 8];
+        let mut light_color = [Color::rgb(0.0, 0.0, 0.0); 8];
+        let mut light_position = [Point::origin(); 8];
+        let mut light_position_view = [Point::origin(); 8];
+        let mut light_radius = [0.0f32; 8];
+        let mut light_direction = [Vector3::zero(); 8];
+        let mut light_direction_view = [Vector3::zero(); 8];
+
+        let program = self
+            .programs
+            .get(material.shader())
+            .expect("Material is using a shader that does not exist");
+
+        // Set the shader to use.
+        let mut draw_builder = DrawBuilder::new(
+            &self.context,
+            &mesh_data.vertex_array,
+            DrawMode::Triangles,
+        );
+
+        draw_builder
+        .program(program)
+        .cull(Face::Back)
+        .depth_test(Comparison::Less);
+
+        // Set uniform transforms.
+        {
+            let _stopwatch = Stopwatch::new("Transform uniforms");
+
+            draw_builder
+            .uniform(
+                "model_transform",
+                GlMatrix {
+                    data: model_transform.raw_data(),
+                    transpose: true,
+                },
+            )
+            .uniform(
+                "normal_transform",
+                GlMatrix {
+                    data: normal_transform.raw_data(),
+                    transpose: true,
+                },
+            )
+            .uniform(
+                "view_normal_transform",
+                GlMatrix {
+                    data: view_normal_transform.raw_data(),
+                    transpose: true,
+                },
+            )
+            .uniform(
+                "view_transform",
+                GlMatrix {
+                    data: view_transform.raw_data(),
+                    transpose: true,
+                },
+            )
+            .uniform(
+                "model_view_transform",
+                GlMatrix {
+                    data: model_view_transform.raw_data(),
+                    transpose: true,
+                },
+            )
+            .uniform(
+                "projection_transform",
+                GlMatrix {
+                    data: projection_transform.raw_data(),
+                    transpose: true,
+                },
+            )
+            .uniform(
+                "model_view_projection",
+                GlMatrix {
+                    data: model_view_projection.raw_data(),
+                    transpose: true,
+                },
+            );
+        }
+
+        // Apply material attributes.
+        if !*has_setup_material {
+            let _stopwatch = Stopwatch::new("Material uniforms");
+
+            *has_setup_material = true;
+
+            // Set uniform colors.
+            draw_builder.uniform::<[f32; 4]>("global_ambient", self.ambient_color.into());
+
+            // Other uniforms.
+            draw_builder.uniform("camera_position", *camera_anchor.position().as_array());
+
+            for (name, property) in material.properties() {
+                match *property {
+                    MaterialProperty::Color(ref color) => {
+                        draw_builder.uniform::<[f32; 4]>(name, color.into());
+                    },
+                    MaterialProperty::f32(value) => {
+                        draw_builder.uniform(name, value);
+                    },
+                    MaterialProperty::Vector3(value) => {
+                        draw_builder.uniform::<[f32; 3]>(name, value.into());
+                    },
+                    MaterialProperty::Texture(ref texture) => {
+                        let gl_texture =
+                        self.textures
+                        .get(texture)
+                        .unwrap_or(&default_texture);
+                        draw_builder.uniform(name, gl_texture);
+                    },
+                }
+            }
+        }
+
+        // Render all lights in a single pass by sending 8 lights at once in arrays.
+        // All light-related uniforms will stay the same for all draws for a given camera,
+        // so we only specify them for the first draw and leave them the same after that.
+        if !*has_setup_lights {
+            *has_setup_lights = true;
+
+            let _stopwatch = Stopwatch::new("Setup lights");
+
+            // TODO: Support having more than 8 lights active at a time. Maybe pick the 8
+            // most relevant lights? Or simply support more lights at once in the shader.
+            for (index, light) in self.lights.values().take(8).enumerate() {
+                // Setup common light data.
+                light_color[index] = light.color;
+                light_strength[index] = light.strength;
+
+                // Setup data specific to the current type of light.
+                match light.data {
+                    LightData::Point { radius } => {
+                        // Get the light's anchor.
+                        let light_anchor = match light.anchor() {
+                            Some(anchor_id) => self.anchors.get(&anchor_id).expect("No such anchor exists"),
+                            None => panic!("Cannot render point light if it's not attached to an anchor"),
+                        };
+
+                        light_type[index] = 1;
+                        light_position[index] = light_anchor.position();
+                        light_position_view[index] = light_anchor.position() * view_transform;
+                        light_radius[index] = radius;
+                    },
+
+                    LightData::Directional { direction } => {
+                        light_type[index] = 2;
+                        light_direction[index] = direction;
+                        light_direction_view[index] = direction * view_transform;
+                    },
+                }
+            }
+
+            draw_builder.uniform("light_type", &light_type[..]);
+            draw_builder.uniform("light_strength", &light_strength[..]);
+            draw_builder.uniform("light_color", Color::as_slice_of_arrays(&light_color));
+            draw_builder.uniform("light_position", Point::as_slice_of_arrays(&light_position));
+            draw_builder.uniform("light_position_view", Point::as_slice_of_arrays(&light_position_view));
+            draw_builder.uniform("light_radius", &light_radius[..]);
+            draw_builder.uniform("light_direction", Vector3::as_slice_of_arrays(&light_direction));
+            draw_builder.uniform("light_direction_view", Vector3::as_slice_of_arrays(&light_direction_view));
+        }
+
+        {
+            let _s = Stopwatch::new("Draw mesh");
+
+            draw_builder.draw();
+        }
+    }
 }
 
 impl Drop for GlRender {
@@ -110,7 +327,7 @@ impl Drop for GlRender {
         // the context gets dropped first, then the resources get dropped, and they can't be
         // deleted once the context is gone. If we could get them to silently do nothing when
         // dropped if the context has already been dropped, then we'd get faster shutdown.
-        self.materials.clear();
+        self.shared_materials.clear();
         self.meshes.clear();
         self.textures.clear();
         self.mesh_instances.clear();
@@ -131,211 +348,44 @@ impl Renderer for GlRender {
             let _stopwatch = Stopwatch::new("Rendering camera");
 
             let camera_anchor = match camera.anchor() {
-                Some(ref anchor_id) => self.anchors.get(anchor_id).expect("no such anchor exists"),
+                Some(ref anchor_id) => self.anchors.get(anchor_id).expect("No such anchor exists"),
                 None => unimplemented!(),
             };
 
             let mut has_setup_lights = false;
 
-            for mesh_instance in self.mesh_instances.values() {
-                let anchor = match mesh_instance.anchor() {
-                    Some(anchor_id) => self.anchors.get(anchor_id).expect("No such anchor exists"),
-                    None => continue,
-                };
+            // Render shared materials first.
+            for (material_id, mesh_instances) in &self.mesh_instances_with_shared_materials {
+                let _s = Stopwatch::new("Rendering shared material");
 
-                let model_transform = anchor.matrix();
-                let normal_transform = anchor.normal_matrix();
+                let material = self.shared_materials.get(material_id).expect("No such material exists");
+                let mut has_setup_material = false;
 
-                let mesh_data = self.meshes.get(mesh_instance.mesh()).expect("Mesh data does not exist for mesh id");
-
-                let _stopwatch = Stopwatch::new("Drawing mesh");
-
-                let default_texture = GlTexture2d::empty(&self.context);
-
-                // Calculate the various transforms needed for rendering.
-                let view_transform = camera_anchor.view_matrix();
-                let model_view_transform = view_transform * model_transform;
-                let projection_transform = camera.projection_matrix();
-                let model_view_projection = projection_transform * model_view_transform;
-
-                let view_normal_transform = {
-                    let inverse_model = normal_transform.transpose();
-                    let inverse_view = camera_anchor.inverse_view_matrix().into();
-                    let inverse_model_view = inverse_model * inverse_view;
-                    inverse_model_view.transpose()
-                };
-
-                let material = mesh_instance.material();
-
-                // The data for the light uniforms must be declared before `draw_builder` so they
-                // can outlive it, since they are borrowed when the uniforms are set.
-                let mut light_type = [0i32; 8];
-                let mut light_strength = [0.0f32; 8];
-                let mut light_color = [Color::rgb(0.0, 0.0, 0.0); 8];
-                let mut light_position = [Point::origin(); 8];
-                let mut light_position_view = [Point::origin(); 8];
-                let mut light_radius = [0.0f32; 8];
-                let mut light_direction = [Vector3::zero(); 8];
-                let mut light_direction_view = [Vector3::zero(); 8];
-
-                let program = self
-                    .programs
-                    .get(material.shader())
-                    .expect("Material is using a shader that does not exist");
-
-                // Set the shader to use.
-                let mut draw_builder = DrawBuilder::new(
-                    &self.context,
-                    &mesh_data.vertex_array,
-                    DrawMode::Triangles,
-                );
-
-                draw_builder
-                .program(program)
-                .cull(Face::Back)
-                .depth_test(Comparison::Less);
-
-                // Set uniform transforms.
-                {
-                    let _stopwatch = Stopwatch::new("Transform uniforms");
-
-                    draw_builder
-                    .uniform(
-                        "model_transform",
-                        GlMatrix {
-                            data: model_transform.raw_data(),
-                            transpose: true,
-                        },
-                    )
-                    .uniform(
-                        "normal_transform",
-                        GlMatrix {
-                            data: normal_transform.raw_data(),
-                            transpose: true,
-                        },
-                    )
-                    .uniform(
-                        "view_normal_transform",
-                        GlMatrix {
-                            data: view_normal_transform.raw_data(),
-                            transpose: true,
-                        },
-                    )
-                    .uniform(
-                        "view_transform",
-                        GlMatrix {
-                            data: view_transform.raw_data(),
-                            transpose: true,
-                        },
-                    )
-                    .uniform(
-                        "model_view_transform",
-                        GlMatrix {
-                            data: model_view_transform.raw_data(),
-                            transpose: true,
-                        },
-                    )
-                    .uniform(
-                        "projection_transform",
-                        GlMatrix {
-                            data: projection_transform.raw_data(),
-                            transpose: true,
-                        },
-                    )
-                    .uniform(
-                        "model_view_projection",
-                        GlMatrix {
-                            data: model_view_projection.raw_data(),
-                            transpose: true,
-                        },
+                for mesh_instance_id in mesh_instances {
+                    let mesh_instance = self.mesh_instances.get(mesh_instance_id).expect("No such mesh instance");
+                    self.render_mesh_instance(
+                        mesh_instance,
+                        material,
+                        camera,
+                        camera_anchor,
+                        &mut has_setup_lights,
+                        &mut has_setup_material,
                     );
                 }
+            }
 
-                // Apply material attributes.
-                {
-                    let _stopwatch = Stopwatch::new("Material uniforms");
-
-                    // Set uniform colors.
-                    draw_builder.uniform::<[f32; 4]>("global_ambient", self.ambient_color.into());
-
-                    // Other uniforms.
-                    draw_builder.uniform("camera_position", *camera_anchor.position().as_array());
-
-                    for (name, property) in material.properties() {
-                        match *property {
-                            MaterialProperty::Color(ref color) => {
-                                draw_builder.uniform::<[f32; 4]>(name, color.into());
-                            },
-                            MaterialProperty::f32(value) => {
-                                draw_builder.uniform(name, value);
-                            },
-                            MaterialProperty::Vector3(value) => {
-                                draw_builder.uniform::<[f32; 3]>(name, value.into());
-                            },
-                            MaterialProperty::Texture(ref texture) => {
-                                let gl_texture =
-                                self.textures
-                                .get(texture)
-                                .unwrap_or(&default_texture);
-                                draw_builder.uniform(name, gl_texture);
-                            },
-                        }
-                    }
-                }
-
-                // Render all lights in a single pass by sending 8 lights at once in arrays.
-                // All light-related uniforms will stay the same for all draws for a given camera,
-                // so we only specify them for the first draw and leave them the same after that.
-                if !has_setup_lights {
-                    has_setup_lights = true;
-
-                    let _stopwatch = Stopwatch::new("Setup lights");
-
-                    // TODO: Support having more than 8 lights active at a time. Maybe pick the 8
-                    // most relevant lights? Or simply support more lights at once in the shader.
-                    for (index, light) in self.lights.values().take(8).enumerate() {
-                        // Setup common light data.
-                        light_color[index] = light.color;
-                        light_strength[index] = light.strength;
-
-                        // Setup data specific to the current type of light.
-                        match light.data {
-                            LightData::Point { radius } => {
-                                // Get the light's anchor.
-                                let light_anchor = match light.anchor() {
-                                    Some(anchor_id) => self.anchors.get(&anchor_id).expect("No such anchor exists"),
-                                    None => panic!("Cannot render point light if it's not attached to an anchor"),
-                                };
-
-                                light_type[index] = 1;
-                                light_position[index] = light_anchor.position();
-                                light_position_view[index] = light_anchor.position() * view_transform;
-                                light_radius[index] = radius;
-                            },
-
-                            LightData::Directional { direction } => {
-                                light_type[index] = 2;
-                                light_direction[index] = direction;
-                                light_direction_view[index] = direction * view_transform;
-                            },
-                        }
-                    }
-
-                    draw_builder.uniform("light_type", &light_type[..]);
-                    draw_builder.uniform("light_strength", &light_strength[..]);
-                    draw_builder.uniform("light_color", Color::as_slice_of_arrays(&light_color));
-                    draw_builder.uniform("light_position", Point::as_slice_of_arrays(&light_position));
-                    draw_builder.uniform("light_position_view", Point::as_slice_of_arrays(&light_position_view));
-                    draw_builder.uniform("light_radius", &light_radius[..]);
-                    draw_builder.uniform("light_direction", Vector3::as_slice_of_arrays(&light_direction));
-                    draw_builder.uniform("light_direction_view", Vector3::as_slice_of_arrays(&light_direction_view));
-                }
-
-                {
-                    let _s = Stopwatch::new("Draw mesh");
-
-                    draw_builder.draw();
-                }
+            // Render meshes with unique materials.
+            for mesh_instance_id in &self.mesh_instances_with_owned_material {
+                let mesh_instance = self.mesh_instances.get(mesh_instance_id).expect("No such mesh instance");
+                let material = mesh_instance.material().expect("Mesh instance was in wrong bucket (was in the owned material bucket, had shared material)");
+                self.render_mesh_instance(
+                    mesh_instance,
+                    material,
+                    camera,
+                    camera_anchor,
+                    &mut false,
+                    &mut false,
+                );
             }
         }
 
@@ -542,17 +592,20 @@ impl Renderer for GlRender {
         Ok(material)
     }
 
-    fn register_material(&mut self, material: Material) -> MaterialId {
+    fn register_shared_material(&mut self, material: Material) -> MaterialId {
         let material_id = self.material_counter.next();
 
-        let old = self.materials.insert(material_id, material);
+        let old = self.shared_materials.insert(material_id, material);
         assert!(old.is_none());
+
+        // Ensure there's a bucket for the shared material's mesh instances.
+        self.mesh_instances_with_shared_materials.entry(material_id).or_insert(Vec::new());
 
         material_id
     }
 
     fn get_material(&self, material_id: MaterialId) -> Option<&Material> {
-        self.materials.get(&material_id)
+        self.shared_materials.get(&material_id)
     }
 
     fn register_mesh(&mut self, mesh: &Mesh) -> GpuMesh {
@@ -650,6 +703,12 @@ impl Renderer for GlRender {
 
     fn register_mesh_instance(&mut self, mesh_instance: MeshInstance) -> MeshInstanceId {
         let mesh_instance_id = self.mesh_instance_counter.next();
+
+        // Add the mesh instance to the right bucket based on its material type.
+        match mesh_instance.material_type() {
+            &MaterialType::Shared(id) => self.mesh_instances_with_shared_materials.get_mut(&id).unwrap().push(mesh_instance_id),
+            &MaterialType::Owned(_) => self.mesh_instances_with_owned_material.push(mesh_instance_id),
+        }
 
         let old = self.mesh_instances.insert(mesh_instance_id, mesh_instance);
         assert!(old.is_none());
