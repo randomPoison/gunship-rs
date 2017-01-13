@@ -90,31 +90,27 @@ impl VertexArray {
     pub fn new(context: &Context, vertex_data: &[f32]) -> VertexArray {
         let context_inner = context.inner();
 
-        let data_ptr = vertex_data.as_ptr() as *const ();
-        let byte_count = vertex_data.len() * mem::size_of::<f32>();
-
-        let mut vertex_buffer_name = BufferName::null();
-        let mut vertex_array_name = VertexArrayName::null();
-        unsafe {
+        let (vertex_buffer_name, vertex_array_name) = unsafe {
             let mut context = context_inner.borrow_mut();
             let _guard = ::context::ContextGuard::new(context.raw());
 
             // Create the VAO and VBO.
-            gl::gen_vertex_arrays(1, &mut vertex_array_name);
-            gl::gen_buffers(1, &mut vertex_buffer_name);
+            let vertex_array = gl::gen_vertex_array().expect("Failed to create vertex array object");
+            let buffer_name = gl::gen_buffer().expect("Failed to create buffer object");
 
             // Bind the VAO to the context, then bind the buffer to the VAO.
-            context.bind_vertex_array(vertex_array_name);
-            gl::bind_buffer(BufferTarget::Array, vertex_buffer_name);
+            context.bind_vertex_array(vertex_array);
+            gl::bind_buffer(BufferTarget::Array, buffer_name);
 
             // Fill the VBO with data.
             gl::buffer_data(
                 BufferTarget::Array,
-                byte_count as isize,
-                data_ptr,
+                vertex_data,
                 BufferUsage::StaticDraw,
             );
-        }
+
+            (buffer_name, vertex_array)
+        };
 
         VertexArray {
             vertex_array_name: vertex_array_name,
@@ -132,23 +128,20 @@ impl VertexArray {
     pub fn with_index_buffer(context: &Context, vertex_data: &[f32], index_data: &[u32]) -> VertexArray {
         let mut vertex_array = VertexArray::new(context, vertex_data);
 
-        let data_ptr = index_data.as_ptr() as *const ();
-        let byte_count = index_data.len() * mem::size_of::<u32>();
-
-        let mut index_buffer_name = BufferName::null();
-        unsafe {
+        let index_buffer_name = unsafe {
             let context = vertex_array.context.borrow_mut();
             let _guard = ::context::ContextGuard::new(context.raw());
 
-            gl::gen_buffers(1, &mut index_buffer_name);
-            gl::bind_buffer(BufferTarget::ElementArray, index_buffer_name);
+            let buffer_name = gl::gen_buffer().expect("Failed to generate buffer object");
+            gl::bind_buffer(BufferTarget::ElementArray, buffer_name);
             gl::buffer_data(
                 BufferTarget::ElementArray,
-                byte_count as isize,
-                data_ptr,
+                index_data,
                 BufferUsage::StaticDraw,
             );
-        }
+
+            buffer_name
+        };
 
         vertex_array.index_buffer = Some(IndexBuffer {
             name: index_buffer_name,
