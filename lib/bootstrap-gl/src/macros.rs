@@ -29,8 +29,9 @@ macro_rules! gl_proc {
 
             pub unsafe fn load() -> Option<ProcType> {
                 if let None = PROC_PTR {
+                    let null_terminated_name = concat!(stringify!($proc_name), "\0");
                     PROC_PTR =
-                        $crate::platform::load_proc(stringify!( $proc_name ))
+                        $crate::platform::load_proc(null_terminated_name)
                         .map(|ptr| ::std::mem::transmute(ptr));
                 }
 

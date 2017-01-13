@@ -5,7 +5,6 @@ extern crate user32;
 extern crate kernel32;
 
 use std::{mem, ptr};
-use std::ffi::{CString, CStr};
 
 use self::winapi::*;
 
@@ -53,16 +52,22 @@ pub unsafe fn destroy_context(context: Context) {
 }
 
 pub unsafe fn load_proc(proc_name: &str) -> Option<extern "system" fn()> {
-    let string = CString::new(proc_name).unwrap();
-    let mut ptr = opengl32::wglGetProcAddress(string.as_ptr());
+    let string = proc_name.as_bytes();
+    debug_assert!(
+        string[string.len() - 1] == 0,
+        "Proc name \"{}\" is not null terminated",
+        proc_name,
+    );
+
+    let mut ptr = opengl32::wglGetProcAddress(string.as_ptr() as *const _);
 
     if ptr.is_null() {
-        println!("wglGetProcAddress returned null for {}, trying opengl32.dll", proc_name);
-
         let module = kernel32::LoadLibraryA(b"opengl32.dll\0".as_ptr() as *const _);
+
+        // TODO: What do we want to do in this case? Probably just return `None`, right?
         assert!(!module.is_null(), "Failed to load opengl32.dll");
 
-        ptr = kernel32::GetProcAddress(module, string.as_ptr());
+        ptr = kernel32::GetProcAddress(module, string.as_ptr() as *const _);
     }
 
     if ptr.is_null() {
