@@ -1,5 +1,3 @@
-#![feature(question_mark)]
-
 use std::convert::AsRef;
 use std::fs::File;
 use std::io;

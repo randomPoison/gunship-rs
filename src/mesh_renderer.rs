@@ -1,7 +1,8 @@
-use async::engine::{self, EngineMessage};
-use async::resource::{Mesh, MeshId};
-use async::transform::Transform;
+use engine::{self, EngineMessage};
+use resource::{Mesh, MeshId};
+use transform::Transform;
 use std::marker::PhantomData;
+use std::mem;
 
 #[derive(Debug)]
 pub struct MeshRenderer {
@@ -23,6 +24,10 @@ impl MeshRenderer {
             data: ptr,
             _phantom: PhantomData,
         }
+    }
+
+    pub fn forget(self) {
+        mem::forget(self);
     }
 }
 

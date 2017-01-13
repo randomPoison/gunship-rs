@@ -15,8 +15,8 @@ use parse_bmp::{
 static VERT_SOURCE: &'static str = r#"
 #version 330 core
 
-in vec4 position;
-in vec2 uv;
+layout(location = 0) in vec4 position;
+layout(location = 1) in vec2 uv;
 
 out vec2 frag_uv;
 
@@ -63,29 +63,21 @@ fn main() {
     let frag_shader = Shader::new(&context, FRAG_SOURCE, ShaderType::Fragment).unwrap();
     let program = Program::new(&context, &[vert_shader, frag_shader]).unwrap();
 
-    // Create the vertex buffer and set the vertex attribs.
-    let mut vertex_buffer = VertexBuffer::new(&context);
-    vertex_buffer.set_data_f32(&VERTEX_DATA[..]);
-    vertex_buffer.set_attrib_f32(
-        "position",
-        AttribLayout {
-            elements: 3,
-            offset: 0,
-            stride: 5,
-        });
-    vertex_buffer.set_attrib_f32(
-        "uv",
-        AttribLayout {
-            elements: 2,
-            offset: 3,
-            stride: 5,
-        });
+    let mut vertex_array = VertexArray::new(&context, &VERTEX_DATA[..]);
+    vertex_array.set_attrib(
+        AttributeLocation::from_index(0),
+        AttribLayout { elements: 3, offset: 0, stride: 5 },
+    );
+    vertex_array.set_attrib(
+        AttributeLocation::from_index(1),
+        AttribLayout { elements: 2, offset: 3, stride: 5 },
+    );
 
     // Parse the bitmap and setup the texture.
     let bitmap = Bitmap::from_bytes(TEXTURE_DATA).unwrap();
     let data = match bitmap.data() {
         &BitmapData::Bgr(ref data) => &**data,
-        _ => unimplemented!(),
+        _ => panic!("Nuh uh, that file is a bitmap"),
     };
 
     let texture = Texture2d::new(
@@ -97,11 +89,9 @@ fn main() {
         data)
         .unwrap();
 
-    let mut draw_builder = DrawBuilder::new(&context, &vertex_buffer, DrawMode::Triangles);
+    let mut draw_builder = DrawBuilder::new(&context, &vertex_array, DrawMode::Triangles);
     draw_builder
         .program(&program)
-        .map_attrib_name("position", "position")
-        .map_attrib_name("uv", "uv")
         .uniform("sampler", &texture)
         .winding(WindingOrder::Clockwise);
 

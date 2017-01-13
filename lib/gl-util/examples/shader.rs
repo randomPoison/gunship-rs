@@ -13,8 +13,9 @@ static VERT_SOURCE: &'static str = r#"
 
 uniform mat4 model_transform;
 
-in vec4 position;
-in vec3 normal_in;
+layout(location = 0) in vec4 position;
+layout(location = 1) in vec3 normal_in;
+
 out vec3 normal;
 
 void main() {
@@ -51,7 +52,6 @@ fn main() {
 
     // Iterate over each of the faces in the mesh.
     for (positions, normals) in obj.position_indices().iter().zip(obj.normal_indices().iter()) {
-
         // Iterate over each of the vertices in the face to combine the position and normal into
         // a single vertex.
         for (position_index, normal_index) in positions.iter().zip(normals.iter()) {
@@ -76,34 +76,19 @@ fn main() {
     let frag_shader = Shader::new(&context, FRAG_SOURCE, ShaderType::Fragment).unwrap();
     let program = Program::new(&context, &[vert_shader, frag_shader]).unwrap();
 
-    // Create the vertex buffer and set the vertex attribs.
-    let mut vertex_buffer = VertexBuffer::new(&context);
-    vertex_buffer.set_data_f32(&*vertex_data);
-    vertex_buffer.set_attrib_f32(
-        "position",
-        AttribLayout {
-            elements: 4,
-            stride: 7,
-            offset: 0,
-        });
-    vertex_buffer.set_attrib_f32(
-        "normal",
-        AttribLayout {
-            elements: 3,
-            stride: 7,
-            offset: 4,
-        });
+    let mut vertex_array = VertexArray::with_index_buffer(&context, &*vertex_data, &*indices);
+    vertex_array.set_attrib(
+        AttributeLocation::from_index(0),
+        AttribLayout { elements: 4, stride: 7, offset: 0 },
+    );
+    vertex_array.set_attrib(
+        AttributeLocation::from_index(1),
+        AttribLayout { elements: 3, stride: 7, offset: 4 },
+    );
 
-    // Create the index buffer.
-    let mut index_buffer = IndexBuffer::new(&context);
-    index_buffer.set_data_u32(&*indices);
-
-    let mut draw_builder = DrawBuilder::new(&context, &vertex_buffer, DrawMode::Triangles);
+    let mut draw_builder = DrawBuilder::new(&context, &vertex_array, DrawMode::Triangles);
     draw_builder
-        .index_buffer(&index_buffer)
         .program(&program)
-        .map_attrib_name("position", "position")
-        .map_attrib_name("normal", "normal_in")
         .uniform("model_transform", GlMatrix {
             data: &MODEL_TRANSFORM,
             transpose: false,

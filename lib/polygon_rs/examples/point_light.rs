@@ -33,7 +33,7 @@ fn main() {
 
     // Create a mesh instance, attach it to the anchor, and register it with the renderer.
     let mut mesh_instance = MeshInstance::new(gpu_mesh, material);
-    mesh_instance.material_mut().set_color("surface_color", Color::rgb(1.0, 1.0, 1.0));
+    mesh_instance.material_mut().set_color("surface_color", Color::rgb(1.0, 0.0, 1.0));
     mesh_instance.material_mut().set_color("surface_specular", Color::rgb(1.0, 1.0, 1.0));
     mesh_instance.material_mut().set_f32("surface_shininess", 4.0);
     mesh_instance.set_anchor(mesh_anchor_id);
@@ -49,7 +49,7 @@ fn main() {
     light_anchor.set_position(Point::new(1.0, 1.0, 3.0));
     light_anchor.set_scale(Vector3::new(0.01, 0.01, 0.01));
     let light_anchor_id = renderer.register_anchor(light_anchor);
-    let mut light = Light::point(1.0, 1.0, Color::rgb(1.0, 0.0, 1.0));
+    let mut light = Light::point(1.0, 1.0, Color::rgb(1.0, 1.0, 1.0));
     light.set_anchor(light_anchor_id);
     renderer.register_light(light);
 

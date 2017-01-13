@@ -1,13 +1,18 @@
-use async::engine::{self, EngineMessage};
-use async::transform::Transform;
+use engine::{self, EngineMessage};
+use transform::Transform;
 use std::f32::consts::PI;
+use std::fmt::{self, Debug, Formatter};
 use std::marker::PhantomData;
+use std::mem;
 use std::ops::{Deref, DerefMut};
+use std::ptr::Unique;
 
-#[derive(Debug)]
 pub struct Camera {
-    data: *mut CameraData,
-    _phantom: PhantomData<CameraData>,
+    data: Unique<CameraData>,
+
+    // Pretend `Camera` owns a raw pointer to default implementation for `Sync`.
+    // TODO: Remove this once negative trait bounds are stabilized.
+    _phantom: PhantomData<*mut ()>,
 }
 
 impl Camera {
@@ -19,20 +24,39 @@ impl Camera {
         engine::send_message(EngineMessage::Camera(camera_data, transform.inner()));
 
         Camera {
-            data: ptr,
+            data: unsafe { Unique::new(ptr) },
             _phantom: PhantomData,
         }
+    }
+
+    pub fn forget(self) {
+        mem::forget(self);
+    }
+}
+
+unsafe impl Send for Camera {}
+
+impl Debug for Camera {
+    fn fmt(&self, fmt: &mut Formatter) -> Result<(), fmt::Error> {
+        let data = unsafe { self.data.get() };
+
+        fmt.debug_struct("Camera")
+            .field("fov", &data.fov)
+            .field("aspect", &data.aspect)
+            .field("near", &data.near)
+            .field("far", &data.far)
+            .finish()
     }
 }
 
 impl Deref for Camera {
     type Target = CameraData;
 
-    fn deref(&self) -> &CameraData { unsafe { &*self.data } }
+    fn deref(&self) -> &CameraData { unsafe { self.data.get() } }
 }
 
 impl DerefMut for Camera {
-    fn deref_mut(&mut self) -> &mut CameraData { unsafe { &mut *self.data } }
+    fn deref_mut(&mut self) -> &mut CameraData { unsafe { self.data.get_mut() } }
 }
 
 #[derive(Debug)]

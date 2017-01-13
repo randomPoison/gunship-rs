@@ -11,7 +11,7 @@ use vector::Vector3;
 /// Points are represented as cartesian coordinates with an `x`, `y`, and `z` position, as well as
 /// a `w` homogeneous coordinate for the purposes of linear algebra calculations.
 #[repr(C)]
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct Point {
     pub x: f32,
     pub y: f32,
@@ -84,6 +84,11 @@ impl Point {
 
     pub fn as_array(&self) -> &[f32; 4] {
         unsafe { mem::transmute(self) }
+    }
+
+    pub fn as_slice_of_arrays(points: &[Point]) -> &[[f32; 4]] {
+        let ptr = points.as_ptr() as *const _;
+        unsafe { slice::from_raw_parts(ptr, points.len()) }
     }
 
     pub fn as_ref(points: &[Point]) -> &[f32] {

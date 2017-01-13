@@ -21,9 +21,10 @@ use self::gl_util::texture::{
 use shader::Shader;
 use std::collections::HashMap;
 use std::str;
+use stopwatch::Stopwatch;
 use texture::*;
 
-static DEFAULT_SHADER_BYTES: &'static [u8] = include_bytes!("../../resources/materials/texture_diffuse_lit.material");
+static DEFAULT_SHADER_BYTES: &'static [u8] = include_bytes!("../../resources/materials/diffuse_lit.material");
 
 #[derive(Debug)]
 pub struct GlRender {
@@ -46,6 +47,8 @@ pub struct GlRender {
     camera_counter: CameraId,
     light_counter: LightId,
     shader_counter: Shader,
+
+    ambient_color: Color,
 
     default_material: Material,
 }
@@ -75,6 +78,8 @@ impl GlRender {
             light_counter: LightId::initial(),
             shader_counter: Shader::initial(),
 
+            ambient_color: Color::rgb(0.01, 0.01, 0.01),
+
             // Use temporary value and replace it later.
             default_material: Material::new(Shader::initial()),
         };
@@ -93,170 +98,18 @@ impl GlRender {
 
         Ok(renderer)
     }
-
-    fn draw_mesh(
-        &self,
-        mesh_data: &MeshData,
-        material: &Material,
-        model_transform: Matrix4,
-        normal_transform: Matrix3,
-        camera: &Camera,
-        camera_anchor: &Anchor,
-    ) {
-        let default_texture = GlTexture2d::empty(&self.context);
-
-        // Calculate the various transforms needed for rendering.
-        let view_transform = camera_anchor.view_matrix();
-        let model_view_transform = view_transform * model_transform;
-        let projection_transform = camera.projection_matrix();
-        let model_view_projection = projection_transform * model_view_transform;
-
-        let view_normal_transform = {
-            let inverse_model = normal_transform.transpose();
-            let inverse_view = camera_anchor.inverse_view_matrix().into();
-            let inverse_model_view = inverse_model * inverse_view;
-            inverse_model_view.transpose()
-        };
-
-        let program = self
-            .programs
-            .get(material.shader())
-            .expect("Material is using a shader that does not exist");
-
-        // Set the shader to use.
-        let mut draw_builder = DrawBuilder::new(
-            &self.context,
-            &mesh_data.vertex_buffer,
-            DrawMode::Triangles,
-        );
-        draw_builder
-        .index_buffer(&mesh_data.index_buffer)
-        .program(program)
-        .cull(Face::Back)
-        .depth_test(Comparison::Less)
-
-        // Associate vertex attributes with shader program variables.
-        .map_attrib_name("position", "vertex_position")
-        .map_attrib_name("normal", "vertex_normal")
-        .map_attrib_name("texcoord", "vertex_uv0")
-
-        // Set uniform transforms.
-        .uniform(
-            "model_transform",
-            GlMatrix {
-                data: model_transform.raw_data(),
-                transpose: true,
-            })
-        .uniform(
-            "normal_transform",
-            GlMatrix {
-                data: normal_transform.raw_data(),
-                transpose: true,
-            })
-        .uniform(
-            "view_normal_transform",
-            GlMatrix {
-                data: view_normal_transform.raw_data(),
-                transpose: true,
-            })
-        .uniform(
-            "view_transform",
-            GlMatrix {
-                data: view_transform.raw_data(),
-                transpose: true,
-            })
-        .uniform(
-            "model_view_transform",
-            GlMatrix {
-                data: model_view_transform.raw_data(),
-                transpose: true,
-            })
-        .uniform(
-            "projection_transform",
-            GlMatrix {
-                data: projection_transform.raw_data(),
-                transpose: true,
-            })
-        .uniform(
-            "model_view_projection",
-            GlMatrix {
-                data: model_view_projection.raw_data(),
-                transpose: true,
-            })
-
-        // Set uniform colors.
-        .uniform("global_ambient", [0.01, 0.01, 0.01, 1.0])
-
-        // Other uniforms.
-        .uniform("camera_position", *camera_anchor.position().as_array());
-
-        // Apply material attributes.
-        for (name, property) in material.properties() {
-            match *property {
-                MaterialProperty::Color(ref color) => {
-                    draw_builder.uniform::<[f32; 4]>(name, color.into());
-                },
-                MaterialProperty::f32(value) => {
-                    draw_builder.uniform(name, value);
-                },
-                MaterialProperty::Vector3(value) => {
-                    draw_builder.uniform::<[f32; 3]>(name, value.into());
-                },
-                MaterialProperty::Texture(ref texture) => {
-                    let gl_texture =
-                        self.textures
-                        .get(texture)
-                        .unwrap_or(&default_texture);
-                    draw_builder.uniform(name, gl_texture);
-                },
-            }
-        }
-
-        // Render first light without blending so it overrides any objects behind it.
-        // We also render it with light strength 0 so it only renders ambient color.
-        draw_builder
-            .uniform("light_position", *Point::origin().as_array())
-            .uniform("light_strength", 0.0)
-            .draw();
-
-        // Render the rest of the lights with blending on the the depth check set to
-        // less than or equal.
-        draw_builder
-            .depth_test(Comparison::LessThanOrEqual)
-            .blend(SourceFactor::One, DestFactor::One);
-
-        for light in self.lights.values() {
-            // Send the light's position in view space.
-            let light_anchor = match light.anchor() {
-                Some(anchor_id) => self.anchors.get(&anchor_id).expect("No such anchor exists"),
-                None => panic!("Cannot render light if it's not attached to an anchor"),
-            };
-            draw_builder.uniform("light_position", *light_anchor.position().as_array());
-
-            let light_position_view = light_anchor.position() * view_transform;
-            draw_builder.uniform("light_position_view", *light_position_view.as_array());
-
-            // Send common light data.
-            draw_builder.uniform::<[f32; 4]>("light_color", light.color.into());
-            draw_builder.uniform("light_strength", light.strength);
-
-            // Send data specific to the current type of light.
-            match light.data {
-                LightData::Point(PointLight { radius }) => {
-                    draw_builder.uniform("light_radius", radius);
-                },
-            }
-
-            // Draw the current light.
-            draw_builder.draw();
-        }
-    }
 }
 
 impl Drop for GlRender {
     fn drop(&mut self) {
         // Empty all containers to force cleanup of OpenGL primitives before we tear down the
         // GL subsystem.
+        // TODO: Do we have to do this? It would be better if we could tear down the context
+        // without having to cleanup each GL resource, since deleting the context effectively
+        // deletes them all too. I think the problem here comes from the fact that by default
+        // the context gets dropped first, then the resources get dropped, and they can't be
+        // deleted once the context is gone. If we could get them to silently do nothing when
+        // dropped if the context has already been dropped, then we'd get faster shutdown.
         self.materials.clear();
         self.meshes.clear();
         self.textures.clear();
@@ -270,15 +123,19 @@ impl Drop for GlRender {
 
 impl Renderer for GlRender {
     fn draw(&mut self) {
-        self.context.clear();
+        let _stopwatch = Stopwatch::new("GLRender::draw()");
 
         // TODO: Support rendering multiple cameras.
         // TODO: Should we warn if there are no cameras?
         if let Some(camera) = self.cameras.values().next() {
+            let _stopwatch = Stopwatch::new("Rendering camera");
+
             let camera_anchor = match camera.anchor() {
                 Some(ref anchor_id) => self.anchors.get(anchor_id).expect("no such anchor exists"),
                 None => unimplemented!(),
             };
+
+            let mut has_setup_lights = false;
 
             for mesh_instance in self.mesh_instances.values() {
                 let anchor = match mesh_instance.anchor() {
@@ -289,19 +146,208 @@ impl Renderer for GlRender {
                 let model_transform = anchor.matrix();
                 let normal_transform = anchor.normal_matrix();
 
-                let mesh = self.meshes.get(mesh_instance.mesh()).expect("Mesh data does not exist for mesh id");
+                let mesh_data = self.meshes.get(mesh_instance.mesh()).expect("Mesh data does not exist for mesh id");
 
-                self.draw_mesh(
-                    mesh,
-                    &mesh_instance.material(),
-                    model_transform,
-                    normal_transform,
-                    camera,
-                    camera_anchor);
+                let _stopwatch = Stopwatch::new("Drawing mesh");
+
+                let default_texture = GlTexture2d::empty(&self.context);
+
+                // Calculate the various transforms needed for rendering.
+                let view_transform = camera_anchor.view_matrix();
+                let model_view_transform = view_transform * model_transform;
+                let projection_transform = camera.projection_matrix();
+                let model_view_projection = projection_transform * model_view_transform;
+
+                let view_normal_transform = {
+                    let inverse_model = normal_transform.transpose();
+                    let inverse_view = camera_anchor.inverse_view_matrix().into();
+                    let inverse_model_view = inverse_model * inverse_view;
+                    inverse_model_view.transpose()
+                };
+
+                let material = mesh_instance.material();
+
+                // The data for the light uniforms must be declared before `draw_builder` so they
+                // can outlive it, since they are borrowed when the uniforms are set.
+                let mut light_type = [0i32; 8];
+                let mut light_strength = [0.0f32; 8];
+                let mut light_color = [Color::rgb(0.0, 0.0, 0.0); 8];
+                let mut light_position = [Point::origin(); 8];
+                let mut light_position_view = [Point::origin(); 8];
+                let mut light_radius = [0.0f32; 8];
+                let mut light_direction = [Vector3::zero(); 8];
+                let mut light_direction_view = [Vector3::zero(); 8];
+
+                let program = self
+                    .programs
+                    .get(material.shader())
+                    .expect("Material is using a shader that does not exist");
+
+                // Set the shader to use.
+                let mut draw_builder = DrawBuilder::new(
+                    &self.context,
+                    &mesh_data.vertex_array,
+                    DrawMode::Triangles,
+                );
+
+                draw_builder
+                .program(program)
+                .cull(Face::Back)
+                .depth_test(Comparison::Less);
+
+                // Set uniform transforms.
+                {
+                    let _stopwatch = Stopwatch::new("Transform uniforms");
+
+                    draw_builder
+                    .uniform(
+                        "model_transform",
+                        GlMatrix {
+                            data: model_transform.raw_data(),
+                            transpose: true,
+                        },
+                    )
+                    .uniform(
+                        "normal_transform",
+                        GlMatrix {
+                            data: normal_transform.raw_data(),
+                            transpose: true,
+                        },
+                    )
+                    .uniform(
+                        "view_normal_transform",
+                        GlMatrix {
+                            data: view_normal_transform.raw_data(),
+                            transpose: true,
+                        },
+                    )
+                    .uniform(
+                        "view_transform",
+                        GlMatrix {
+                            data: view_transform.raw_data(),
+                            transpose: true,
+                        },
+                    )
+                    .uniform(
+                        "model_view_transform",
+                        GlMatrix {
+                            data: model_view_transform.raw_data(),
+                            transpose: true,
+                        },
+                    )
+                    .uniform(
+                        "projection_transform",
+                        GlMatrix {
+                            data: projection_transform.raw_data(),
+                            transpose: true,
+                        },
+                    )
+                    .uniform(
+                        "model_view_projection",
+                        GlMatrix {
+                            data: model_view_projection.raw_data(),
+                            transpose: true,
+                        },
+                    );
+                }
+
+                // Apply material attributes.
+                {
+                    let _stopwatch = Stopwatch::new("Material uniforms");
+
+                    // Set uniform colors.
+                    draw_builder.uniform::<[f32; 4]>("global_ambient", self.ambient_color.into());
+
+                    // Other uniforms.
+                    draw_builder.uniform("camera_position", *camera_anchor.position().as_array());
+
+                    for (name, property) in material.properties() {
+                        match *property {
+                            MaterialProperty::Color(ref color) => {
+                                draw_builder.uniform::<[f32; 4]>(name, color.into());
+                            },
+                            MaterialProperty::f32(value) => {
+                                draw_builder.uniform(name, value);
+                            },
+                            MaterialProperty::Vector3(value) => {
+                                draw_builder.uniform::<[f32; 3]>(name, value.into());
+                            },
+                            MaterialProperty::Texture(ref texture) => {
+                                let gl_texture =
+                                self.textures
+                                .get(texture)
+                                .unwrap_or(&default_texture);
+                                draw_builder.uniform(name, gl_texture);
+                            },
+                        }
+                    }
+                }
+
+                // Render all lights in a single pass by sending 8 lights at once in arrays.
+                // All light-related uniforms will stay the same for all draws for a given camera,
+                // so we only specify them for the first draw and leave them the same after that.
+                if !has_setup_lights {
+                    has_setup_lights = true;
+
+                    let _stopwatch = Stopwatch::new("Setup lights");
+
+                    // TODO: Support having more than 8 lights active at a time. Maybe pick the 8
+                    // most relevant lights? Or simply support more lights at once in the shader.
+                    for (index, light) in self.lights.values().take(8).enumerate() {
+                        // Setup common light data.
+                        light_color[index] = light.color;
+                        light_strength[index] = light.strength;
+
+                        // Setup data specific to the current type of light.
+                        match light.data {
+                            LightData::Point { radius } => {
+                                // Get the light's anchor.
+                                let light_anchor = match light.anchor() {
+                                    Some(anchor_id) => self.anchors.get(&anchor_id).expect("No such anchor exists"),
+                                    None => panic!("Cannot render point light if it's not attached to an anchor"),
+                                };
+
+                                light_type[index] = 1;
+                                light_position[index] = light_anchor.position();
+                                light_position_view[index] = light_anchor.position() * view_transform;
+                                light_radius[index] = radius;
+                            },
+
+                            LightData::Directional { direction } => {
+                                light_type[index] = 2;
+                                light_direction[index] = direction;
+                                light_direction_view[index] = direction * view_transform;
+                            },
+                        }
+                    }
+
+                    draw_builder.uniform("light_type", &light_type[..]);
+                    draw_builder.uniform("light_strength", &light_strength[..]);
+                    draw_builder.uniform("light_color", Color::as_slice_of_arrays(&light_color));
+                    draw_builder.uniform("light_position", Point::as_slice_of_arrays(&light_position));
+                    draw_builder.uniform("light_position_view", Point::as_slice_of_arrays(&light_position_view));
+                    draw_builder.uniform("light_radius", &light_radius[..]);
+                    draw_builder.uniform("light_direction", Vector3::as_slice_of_arrays(&light_direction));
+                    draw_builder.uniform("light_direction_view", Vector3::as_slice_of_arrays(&light_direction_view));
+                }
+
+                {
+                    let _s = Stopwatch::new("Draw mesh");
+
+                    draw_builder.draw();
+                }
             }
         }
 
-        self.context.swap_buffers();
+        {
+            let _stopwatch = Stopwatch::new("Swap buffers");
+            self.context.swap_buffers();
+        }
+
+        {
+            let _stopwatch = Stopwatch::new("Clearing buffer");
+            self.context.clear();
+        }
     }
 
     fn default_material(&self) -> Material {
@@ -340,20 +386,23 @@ impl Renderer for GlRender {
         static BUILT_IN_UNIFORMS: &'static str = r#"
             uniform mat4 model_transform;
             uniform mat3 normal_transform;
-            uniform mat3 view_normal_transform;
             uniform mat4 view_transform;
+            uniform mat3 view_normal_transform;
             uniform mat4 model_view_transform;
             uniform mat4 projection_transform;
             uniform mat4 model_view_projection;
 
             uniform vec4 global_ambient;
             uniform vec4 camera_position;
-            uniform vec4 camera_position_view;
-            uniform vec4 light_position;
-            uniform vec4 light_position_view;
-            uniform float light_strength;
-            uniform float light_radius;
-            uniform vec4 light_color;
+
+            uniform int light_type[8];
+            uniform vec4 light_position[8];
+            uniform vec4 light_position_view[8];
+            uniform float light_strength[8];
+            uniform vec4 light_color[8];
+            uniform float light_radius[8];
+            uniform vec3 light_direction[8];
+            uniform vec3 light_direction_view[8];
         "#;
 
         // Generate the GLSL source for the vertex shader.
@@ -392,15 +441,15 @@ impl Renderer for GlRender {
                 .replace("@vertex.view_position", "_vertex_view_position_")
                 .replace("@vertex.view_normal", "_vertex_view_normal_");
             let replaced_source = format!(r#"
-                    #version 150
+                    #version 330 core
 
                     {}
 
                     {}
 
-                    in vec4 vertex_position;
-                    in vec3 vertex_normal;
-                    in vec2 vertex_uv0;
+                    layout(location = 0) in vec4 vertex_position;
+                    layout(location = 1) in vec3 vertex_normal;
+                    layout(location = 2) in vec2 vertex_uv0;
 
                     out vec4 _vertex_position_;
                     out vec3 _vertex_normal_;
@@ -443,7 +492,7 @@ impl Renderer for GlRender {
                 .replace("@vertex.view_position", "_vertex_view_position_")
                 .replace("@vertex.view_normal", "_vertex_view_normal_");
             let replaced_source = format!(r#"
-                    #version 150
+                    #version 330 core
 
                     {}
 
@@ -507,55 +556,35 @@ impl Renderer for GlRender {
     }
 
     fn register_mesh(&mut self, mesh: &Mesh) -> GpuMesh {
-        // Generate array buffer.
-        let mut vertex_buffer = VertexBuffer::new(&self.context);
-        vertex_buffer.set_data_f32(mesh.vertex_data());
-
         // Configure vertex attributes.
         let position = mesh.position();
-        vertex_buffer.set_attrib_f32(
-            "position",
-            AttribLayout {
-                elements: position.elements,
-                stride: position.stride,
-                offset: position.offset,
-            });
+
+        let mesh_id = self.mesh_counter.next();
+
+        let mut vertex_array = VertexArray::with_index_buffer(
+            &self.context,
+            mesh.vertex_data(),
+            mesh.indices(),
+        );
+        vertex_array.set_attrib(AttributeLocation::from_index(0), position.into());
 
         if let Some(normal) = mesh.normal() {
-            vertex_buffer.set_attrib_f32(
-                "normal",
-                AttribLayout {
-                    elements: normal.elements,
-                    stride: normal.stride,
-                    offset: normal.offset
-                });
+            vertex_array.set_attrib(AttributeLocation::from_index(1), normal.into());
         }
 
         // TODO: Support multiple texcoords.
-        if let Some(texcoord) = mesh.texcoord().first() {
-            vertex_buffer.set_attrib_f32(
-                "texcoord",
-                AttribLayout {
-                    elements: texcoord.elements,
-                    stride: texcoord.stride,
-                    offset: texcoord.offset,
-                });
+        if let Some(texcoord) = mesh.texcoord().first().cloned() {
+            vertex_array.set_attrib(AttributeLocation::from_index(2), texcoord.into());
         }
-
-        let mut index_buffer = IndexBuffer::new(&self.context);
-        index_buffer.set_data_u32(mesh.indices());
-
-        let mesh_id = self.mesh_counter.next();
 
         self.meshes.insert(
             mesh_id,
             MeshData {
-                vertex_buffer:      vertex_buffer,
-                index_buffer:       index_buffer,
+                vertex_array: vertex_array,
                 position_attribute: mesh.position(),
-                normal_attribute:   mesh.normal(),
-                uv_attribute:       None,
-                element_count:      mesh.indices().len(),
+                normal_attribute: mesh.normal(),
+                uv_attribute: None,
+                element_count: mesh.indices().len(),
             });
 
         mesh_id
@@ -686,6 +715,10 @@ impl Renderer for GlRender {
     fn get_light_mut(&mut self, light_id: LightId) -> Option<&mut Light> {
         self.lights.get_mut(&light_id)
     }
+
+    fn set_ambient_light(&mut self, color: Color) {
+        self.ambient_color = color;
+    }
 }
 
 unsafe impl Send for GlRender {}
@@ -703,10 +736,19 @@ impl From<ContextError> for Error {
 
 #[derive(Debug)]
 struct MeshData {
-    vertex_buffer: VertexBuffer,
-    index_buffer: IndexBuffer,
-    pub position_attribute: VertexAttribute,
-    pub normal_attribute: Option<VertexAttribute>,
-    pub uv_attribute: Option<VertexAttribute>,
+    vertex_array: VertexArray,
+    position_attribute: VertexAttribute,
+    normal_attribute: Option<VertexAttribute>,
+    uv_attribute: Option<VertexAttribute>,
     element_count: usize,
+}
+
+impl Into<AttribLayout> for VertexAttribute {
+    fn into(self) -> AttribLayout {
+        AttribLayout {
+            elements: self.elements,
+            offset: self.offset,
+            stride: self.stride,
+        }
+    }
 }

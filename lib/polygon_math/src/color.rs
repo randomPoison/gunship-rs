@@ -46,6 +46,11 @@ impl Color {
             a: 1.0,
         }
     }
+
+    pub fn as_slice_of_arrays(colors: &[Color]) -> &[[f32; 4]] {
+        let ptr = colors.as_ptr() as *const _;
+        unsafe { slice::from_raw_parts(ptr, colors.len()) }
+    }
 }
 
 impl Default for Color {

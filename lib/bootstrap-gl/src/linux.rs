@@ -14,12 +14,16 @@ pub unsafe fn init(_window: &Window) {
     println!("gl::init() is not implemented on linux");
 }
 
-pub unsafe fn create_context(_window: &Window) -> GLContext {
-    set_proc_loader();
-    //
-    // context
+pub unsafe fn create_context(window: &Window) -> GLContext {
+    let context = unsafe {
+        let context = glx::glXCreateContext(window.display, window.visual_info, ptr::null_mut(), 1);
+        glx::glXMakeCurrent(window.display, window.window, context);
+        context
+    };
 
-    ptr::null_mut()
+    set_proc_loader();
+
+    context
 }
 
 pub unsafe fn set_proc_loader() {

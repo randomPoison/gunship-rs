@@ -28,3 +28,7 @@ My Amplifier XE Results - circle_movement
 stopwatch.csv
 builds/
 My Amplifier XE Results - *
+
+# Gunship reference files
+lib/bootstrap-gl/reference/gl.h
+lib/bootstrap-gl/reference/glext.h

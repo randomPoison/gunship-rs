@@ -1,223 +1,245 @@
-use component::{MeshManager, TransformManager};
-use ecs::Entity;
-use scene::Scene;
-use std::cell::RefCell;
-use std::collections::HashMap;
-use std::fs;
-use std::path::{Path, PathBuf};
-use std::rc::Rc;
-use polygon::{GpuMesh};
-use polygon::geometry::mesh::Mesh;
-use polygon::material::*;
-use wav::Wave;
+use engine::{self, EngineMessage};
+use scheduler::{self, Async};
+use polygon::geometry::mesh::{BuildMeshError, MeshBuilder};
+use polygon::math::Vector2;
+use obj::{self, Obj};
+use std::fs::File;
+use std::io;
+use std::io::prelude::*;
+use std::path::Path;
+use std::string::FromUtf8Error;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use stopwatch::Stopwatch;
 
-pub mod async;
 pub mod collada;
 
-pub struct ResourceManager {
-    // renderer: Rc<Box<Renderer>>,
-    meshes: RefCell<HashMap<String, Mesh>>,
-    gpu_meshes: RefCell<HashMap<String, GpuMesh>>,
-    mesh_nodes: RefCell<HashMap<String, MeshNode>>,
-    _materials: RefCell<HashMap<String, Material>>,
-    audio_clips: RefCell<HashMap<String, Rc<Wave>>>,
+static MESH_ID_COUNTER: AtomicUsize = AtomicUsize::new(1);
+static MATERIAL_ID_COUNTER: AtomicUsize = AtomicUsize::new(1);
 
-    resource_path: RefCell<PathBuf>,
-}
+/// Load all data from the specified file as an array of bytes.
+pub fn load_file_bytes<'a, P>(path: P) -> Async<'a, Result<Vec<u8>, io::Error>>
+    where
+    P: 'a,
+    P: AsRef<Path> + Send,
+{
+    scheduler::start(move || {
+        let _s = Stopwatch::new("Load file bytes");
+        let mut file = File::open(path)?;
 
-impl ResourceManager {
-    pub fn new() -> ResourceManager {
-        ResourceManager {
-            // renderer: renderer,
-            meshes: RefCell::new(HashMap::new()),
-            gpu_meshes: RefCell::new(HashMap::new()),
-            mesh_nodes: RefCell::new(HashMap::new()),
-            _materials: RefCell::new(HashMap::new()),
-            audio_clips: RefCell::new(HashMap::new()),
-
-            resource_path: RefCell::new(PathBuf::new()),
-        }
-    }
-
-    pub fn load_resource_file<P: AsRef<Path>>(&self, path: P) -> Result<(), String> {
-        // let mut full_path = self.resource_path.borrow().clone();
-        // full_path.push(path);
-        // let metadata = match fs::metadata(&full_path) {
-        //     Err(why) => return Err(format!(
-        //         "Unable to read metadata for {}, either it doesn't exist or the user lacks permissions, {}",
-        //         full_path.display(),
-        //         &why)),
-        //     Ok(metadata) => metadata,
-        // };
-        //
-        // if !metadata.is_file() {
-        //     return Err(format!(
-        //         "{} could not be loaded because it is not a file",
-        //         full_path.display()));
-        // }
-        //
-        // collada::load_resources(full_path, self).unwrap(); // TODO: Don't panic?
-        //
-        // Ok(())
-
-        unimplemented!()
-    }
-
-    /// Sets the path to the resources directory.
-    ///
-    /// # Details
-    ///
-    /// The resource manager is configured to look in the specified directory when loading
-    /// resources such as meshes and materials.
-    pub fn set_resource_path<P: AsRef<Path>>(&self, path: P) {
-        let mut resource_path = self.resource_path.borrow_mut();
-        *resource_path = PathBuf::new();
-        resource_path.push(path);
-    }
-
-    pub fn get_gpu_mesh(&self, uri: &str) -> Option<GpuMesh> {
-        // Use cached mesh data if possible.
-        self.get_cached_mesh(uri)
-        .or_else(|| {
-            self.gen_gpu_mesh(uri)
-        })
-    }
-
-    pub fn get_audio_clip(&self, path_text: &str) -> Rc<Wave> {
-        let mut audio_clips = self.audio_clips.borrow_mut();
-
-        if !audio_clips.contains_key(path_text) {
-            let wave = Wave::from_file(path_text).unwrap();
-            audio_clips.insert(path_text.into(), Rc::new(wave));
-        }
-
-        audio_clips.get(path_text).unwrap().clone()
-    }
-
-    pub fn instantiate_model(&self, resource: &str, scene: &Scene) -> Result<Entity, String> {
-        if resource.contains(".") {
-            println!("WARNING: ResourceManager::instantiate_model() doesn't yet support fully qualified URIs, only root assets may be instantiated.");
-            unimplemented!();
-        }
-
-        let mesh_nodes = self.mesh_nodes.borrow();
-        let root = try!(
-            mesh_nodes
-            .get(resource)
-            .ok_or_else(|| format!("No mesh node is identified by the uri {}", resource)));
-
-        self.instantiate_node(scene, root)
-    }
-
-    fn instantiate_node(&self, scene: &Scene, node: &MeshNode) -> Result<Entity, String> {
-        let entity = scene.create_entity();
-        let transform = {
-            let transform_manager = unsafe { scene.get_manager_mut::<TransformManager>() }; // FIXME: No mutable borrows!
-            let transform = transform_manager.assign(entity);
-
-            for mesh_id in &node.mesh_ids {
-                let gpu_mesh = match self.get_gpu_mesh(&*mesh_id) {
-                    Some(gpu_mesh) => gpu_mesh,
-                    None => {
-                        println!("WARNING: Unable to load gpu mesh for uri {}", mesh_id);
-                        continue;
-                    }
-                };
-
-                let mesh_manager = unsafe { scene.get_manager_mut::<MeshManager>() }; // FIXME: No mutable borrows!
-                mesh_manager.give_mesh(entity, gpu_mesh);
-            }
-
-            transform
+        let mut bytes = if let Ok(metadata) = file.metadata() {
+            Vec::with_capacity(metadata.len() as usize)
+        } else {
+            Vec::new()
         };
 
-        // TODO: Apply the node's transform to the entity transform.
+        file.read_to_end(&mut bytes)?;
 
-        // Instantiate each of the children and set the current node as their parent.
-        for node in &node.children {
-            let child = try!(self.instantiate_node(scene, node));
-            transform.add_child(child);
-        }
+        Ok(bytes)
+    })
+}
 
-        Ok(entity)
-    }
+/// Load all data from the specified file as a `String`.
+pub fn load_file_text<'a, P>(path: P) -> Async<'a, Result<String, LoadTextError>>
+    where
+    P: 'a,
+    P: AsRef<Path> + Send,
+{
+    scheduler::start(move || {
+        let _s = Stopwatch::new("Load file text");
+        let bytes = load_file_bytes(path).await()?;
+        let result = String::from_utf8(bytes).map_err(|utf8_err| utf8_err.into());
+        result
+    })
+}
 
-    pub fn get_material<P: AsRef<Path>>(
-        &self,
-        _path: P
-    ) -> Result<&Material, MaterialError> {
-        unimplemented!();
-    }
+#[derive(Debug)]
+pub enum LoadTextError {
+    Io(io::Error),
+    Utf8(FromUtf8Error),
+}
 
-    pub fn add_mesh<U: Into<String> + AsRef<str>>(&self, uri: U, mesh: Mesh) {
-        let mut meshes = self.meshes.borrow_mut();
-
-        if meshes.contains_key(uri.as_ref()) {
-            println!("WARNING: There is already a mesh node with uri {}, it will be overriden in the resource manager by the new node", uri.as_ref());
-        }
-
-        meshes.insert(uri.into(), mesh);
-    }
-
-    pub fn add_mesh_node(&self, uri: String, node: MeshNode) {
-        let mut nodes = self.mesh_nodes.borrow_mut();
-
-        if nodes.contains_key(&uri) {
-            println!("WARNING: There is already a mesh node with uri {}, it will be overriden in the resource manager by the new node", uri);
-        }
-
-        nodes.insert(uri.clone(), node);
-    }
-
-    fn has_cached_mesh(&self, uri: &str) -> bool {
-        self.gpu_meshes.borrow().contains_key(uri)
-    }
-
-    fn get_cached_mesh(&self, uri: &str) -> Option<GpuMesh> {
-        self.gpu_meshes
-        .borrow()
-        .get(uri)
-        .map(|mesh| *mesh)
-    }
-
-    fn gen_gpu_mesh(&self, uri: &str) -> Option<GpuMesh> {
-        // TODO: Don't do this check in release builds.
-        if self.has_cached_mesh(uri) {
-            println!("WARNING: Attempting to create a new mesh for {} when the uri is already in the meshes map", uri);
-        }
-
-        // let meshes = self.meshes.borrow();
-        // let mesh = match meshes.get(uri) {
-        //     Some(mesh) => mesh,
-        //     None => return None,
-        // };
-        //
-        // let gpu_mesh = self.renderer.register_mesh(&mesh);
-        // self.gpu_meshes
-        //     .borrow_mut()
-        //     .insert(uri.into(), gpu_mesh);
-        //
-        // Some(gpu_mesh)
-
-        unimplemented!();
+impl From<io::Error> for LoadTextError {
+    fn from(from: io::Error) -> LoadTextError {
+        LoadTextError::Io(from)
     }
 }
 
-// TODO: Also include the node's local transform.
-#[derive(Debug, Clone)]
-pub struct MeshNode {
-    pub mesh_ids: Vec<String>,
-    pub children: Vec<MeshNode>,
+impl From<FromUtf8Error> for LoadTextError {
+    fn from(from: FromUtf8Error) -> LoadTextError {
+        LoadTextError::Utf8(from)
+    }
 }
 
-impl MeshNode {
-    pub fn new() -> MeshNode {
-        MeshNode {
-            mesh_ids: Vec::new(),
-            children: Vec::new(),
-        }
+/// Loads a mesh from disk.
+///
+/// Loads a mesh data from the specified path and performs any necessary processing to prepare it
+/// to be used in rendering.
+pub fn load_mesh<'a, P>(path: P) -> Async<'a, Result<Mesh, LoadMeshError>>
+    where
+    P: 'a,
+    P: AsRef<Path> + Send + Into<String>
+{
+    scheduler::start(move || {
+        let _s = Stopwatch::new("Load mesh");
+        let extension: Option<String> = path.as_ref().extension().map(|ext| ext.to_string_lossy().into_owned());
+
+        // Load mesh source and parse mesh data based on file type.
+        let mesh_data = match extension {
+            Some(ref ext) if ext == "dae" => {
+                let text = load_file_text(path).await()?;
+                collada::load_resources(text)?
+            },
+            Some(ref ext) if ext == "obj" => {
+                let text = load_file_text(path).await()?;
+
+                // Load mesh file and normalize indices for OpenGL.
+                let obj = Obj::from_str(&*text)?;
+
+                // Gather vertex data so that OpenGL can use them.
+                let mut positions = Vec::new();
+                let mut normals = Vec::new();
+                let mut texcoords = Vec::new();
+
+                // Iterate over each of the faces in the mesh.
+                for face in obj.faces() {
+                    // Iterate over each of the vertices in the face to combine the position and normal into
+                    // a single vertex.
+                    for (position, maybe_tex, maybe_normal) in face {
+                        positions.push(position.into());
+
+                        // NOTE: The w texcoord is provided according to the bitmap spec but we don't need to
+                        // use it here, so we simply ignore it.
+                        if let Some((u, v, _w)) = maybe_tex {
+                            texcoords.push(Vector2::new(u, v));
+                        }
+
+                        if let Some(normal) = maybe_normal {
+                            normals.push(normal.into());
+                        }
+                    }
+                }
+
+                // Create indices list.
+                let indices_count = obj.position_indices().len() as u32 * 3;
+                let indices: Vec<u32> = (0..indices_count).collect();
+
+                MeshBuilder::new()
+                    .set_position_data(&*positions)
+                    .set_normal_data(&*normals)
+                    .set_texcoord_data(&*texcoords)
+                    .set_indices(&*indices)
+                    .build()?
+            },
+            _ => {
+                return Err(LoadMeshError::UnsupportedFileType(path.into()));
+            },
+        };
+
+        // Create handle for mesh data and asynchronously register it with the renderer.
+        let mesh_id = MESH_ID_COUNTER.fetch_add(1, Ordering::Relaxed);
+
+        engine::send_message(EngineMessage::Mesh(mesh_id, mesh_data));
+
+        Ok(Mesh(mesh_id))
+    })
+}
+
+pub type MeshId = usize;
+
+#[derive(Debug)]
+pub struct Mesh(MeshId);
+
+impl Mesh {
+    // TODO: Make this private to the crate.
+    pub fn id(&self) -> MeshId {
+        self.0
+    }
+}
+
+impl Drop for Mesh {
+    fn drop(&mut self) {
+        // TODO: How do we cleanup a mesh?
     }
 }
 
 #[derive(Debug)]
-pub struct MaterialError;
+pub enum LoadMeshError {
+    BuildMeshError(BuildMeshError),
+    LoadTextError(LoadTextError),
+    ParseColladaError(collada::Error),
+    ParseObjError(obj::Error),
+    UnsupportedFileType(String),
+}
+
+impl From<BuildMeshError> for LoadMeshError {
+    fn from(from: BuildMeshError) -> LoadMeshError {
+        LoadMeshError::BuildMeshError(from)
+    }
+}
+
+impl From<LoadTextError> for LoadMeshError {
+    fn from(from: LoadTextError) -> LoadMeshError {
+        LoadMeshError::LoadTextError(from)
+    }
+}
+
+impl From<collada::Error> for LoadMeshError {
+    fn from(from: collada::Error) -> LoadMeshError {
+        LoadMeshError::ParseColladaError(from)
+    }
+}
+
+impl From<obj::Error> for LoadMeshError {
+    fn from(from: obj::Error) -> LoadMeshError {
+        LoadMeshError::ParseObjError(from)
+    }
+}
+
+pub fn load_material<'a, P>(path: P) -> Async<'a, Result<Material, LoadMaterialError>>
+    where
+    P: 'a,
+    P: AsRef<Path> + Send
+{
+    scheduler::start(move || {
+        let _s = Stopwatch::new("Load material");
+        // Load and parse material data.
+        let text = load_file_text(path).await()?;
+        let material_source = ::polygon::material::MaterialSource::from_str(text)?;
+
+        let material_id = MATERIAL_ID_COUNTER.fetch_add(1, Ordering::Relaxed);
+
+        engine::send_message(EngineMessage::Material(material_id, material_source));
+
+        Ok(Material(material_id))
+    })
+}
+
+pub type MaterialId = usize;
+
+#[derive(Debug)]
+pub struct Material(MaterialId);
+
+#[derive(Debug)]
+pub enum LoadMaterialError {
+    LoadTextError(LoadTextError),
+    BuildMaterialError(::polygon::BuildMaterialError),
+    ParseMaterialError(::polygon::material::MaterialSourceError),
+}
+
+impl From<LoadTextError> for LoadMaterialError {
+    fn from(from: LoadTextError) -> LoadMaterialError {
+        LoadMaterialError::LoadTextError(from)
+    }
+}
+
+impl From<::polygon::material::MaterialSourceError> for LoadMaterialError {
+    fn from(from: ::polygon::material::MaterialSourceError) -> LoadMaterialError {
+        LoadMaterialError::ParseMaterialError(from)
+    }
+}
+
+impl From<::polygon::BuildMaterialError> for LoadMaterialError {
+    fn from(from: ::polygon::BuildMaterialError) -> LoadMaterialError {
+        LoadMaterialError::BuildMaterialError(from)
+    }
+}

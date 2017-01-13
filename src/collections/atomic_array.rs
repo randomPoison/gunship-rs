@@ -1,4 +1,4 @@
-use async::collections::alloc::raw_vec::RawVec;
+use collections::alloc::raw_vec::RawVec;
 use std::cell::UnsafeCell;
 use std::ops::{Deref, Index};
 use std::ptr;

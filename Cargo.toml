@@ -1,21 +1,17 @@
 [package]
 
 name = "gunship"
-version = "0.0.4"
+version = "0.1.0"
 authors = ["David LeGare <excaliburhissheath@gmail.com>"]
-
-[lib]
-name = "gunship"
 
 [features]
 timing = []
-hotloading = []
 no-draw = []
 
 [dependencies]
 bootstrap_rs = { path = "lib/bootstrap_rs" }
 bootstrap_audio = { path = "lib/bootstrap_audio" }
-cell-extras = { path = "../../cell-extras" }
+cell-extras = { git = "https://github.com/excaliburHisSheath/cell-extras" }
 fiber = { version = "0.1", path = "lib/fiber" }
 hash = { path = "lib/hash" }
 lazy_static = "0.2.1"
@@ -28,14 +24,17 @@ stopwatch = { path = "lib/stopwatch" }
 [dev_dependencies]
 rand = "*"
 
-# [[example]]
-# name = "create_destroy"
-# path = "examples/benchmarks/create_destroy.rs"
-#
-# [[example]]
-# name = "circle_movement"
-# path = "examples/benchmarks/circle_movement.rs"
-#
-# [[example]]
-# name = "circle_collision"
-# path = "examples/benchmarks/circle_collision.rs"
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
+
+[profile.test ]
+panic = "abort"
+
+[profile.bench]
+panic = "abort"
+
+[profile.doc]
+panic = "abort"

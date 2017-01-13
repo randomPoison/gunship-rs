@@ -26,8 +26,8 @@ impl Texture2d {
         height: usize,
         data: &[T],
     ) -> Result<Texture2d, Error> {
-        let context = context.inner();
-        let _guard = ::context::ContextGuard::new(&context);
+        let context = context.raw();
+        let _guard = ::context::ContextGuard::new(context);
 
         let expected_pixels = width * height * data_format.elements() / T::ELEMENTS;
         assert!(
@@ -81,7 +81,7 @@ impl Texture2d {
         Texture2d {
             texture_object: TextureObject::null(),
 
-            context: context.inner(),
+            context: context.raw(),
         }
     }
 
@@ -93,7 +93,7 @@ impl Texture2d {
 
 impl Drop for Texture2d {
     fn drop(&mut self) {
-        let _guard = ::context::ContextGuard::new(&self.context);
+        let _guard = ::context::ContextGuard::new(self.context);
         unsafe { gl::delete_textures(1, &mut self.inner()); }
     }
 }

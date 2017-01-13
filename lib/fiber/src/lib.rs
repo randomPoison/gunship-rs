@@ -62,6 +62,14 @@ pub mod platform;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct FiberId(PlatformId);
 
+impl FiberId {
+    // HACK: This is used only in stopwatch to serialze the value in JSON. We should probably
+    // support this usecase in a more direct manner.
+    pub fn primitive_id(self) -> isize {
+        self.0 as isize
+    }
+}
+
 // `FiberId` contains a raw pointer (at least on some platforms) so it's not `Send`/`Sync` by
 // default, but it can't actually be used for anything unsafe so we manually confirm that it can
 // be shared and sent between threads.
