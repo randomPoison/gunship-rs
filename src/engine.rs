@@ -10,6 +10,7 @@ use light::LightInner;
 use polygon::{GpuMesh, Renderer, RendererBuilder};
 use polygon::anchor::Anchor;
 use polygon::camera::{Camera as RenderCamera, CameraId};
+use polygon::material::MaterialId as PolygonMaterialId;
 use polygon::mesh_instance::MeshInstance;
 use std::collections::HashMap;
 use std::fs::File;
@@ -20,7 +21,7 @@ use std::sync::{Arc, Barrier};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::time::{Duration, Instant};
 use std::thread;
-use stopwatch::{self, Stopwatch};
+use stopwatch::{self, stats, PrettyDuration, Stopwatch};
 
 #[derive(Debug)]
 pub struct EngineBuilder {
@@ -85,7 +86,16 @@ impl EngineBuilder {
             window
         };
 
-        let renderer = RendererBuilder::new(&window).build();
+        // Setup renderer and default shared material.
+        let mut renderer = RendererBuilder::new(&window).build();
+
+        let mut material = renderer.default_material();
+        material.set_color("surface_color", ::math::Color::rgb(1.0, 0.0, 0.0));
+        material.set_color("surface_specular", ::math::Color::rgb(1.0, 1.0, 1.0));
+        material.set_f32("surface_shininess", 4.0);
+        let default_material_id = renderer.register_shared_material(material);
+
+
         let (sender, receiever) = mpsc::channel();
 
         // Init aysnc subsystem.
@@ -120,6 +130,8 @@ impl EngineBuilder {
             camera: None,
             behaviors: Vec::new(),
             input: Input::new(),
+
+            default_material_id: default_material_id,
 
             debug_pause: false,
         });
@@ -163,6 +175,8 @@ pub struct Engine {
     camera: Option<(Box<CameraData>, CameraId)>,
     behaviors: Vec<Box<FnMut() + Send>>,
     input: Input,
+
+    default_material_id: PolygonMaterialId,
 
     debug_pause: bool,
 }
@@ -245,6 +259,9 @@ fn main_loop(mut engine: Box<Engine>) {
 
     let engine = &mut *engine;
 
+    let mut frame_times = Vec::with_capacity(10_000);
+
+    let start_time = Instant::now();
     let mut frame_start = Instant::now();
 
     'main: loop {
@@ -334,12 +351,13 @@ fn main_loop(mut engine: Box<Engine>) {
 
                             engine.lights.push(light_inner);
                         }
-                        EngineMessage::Material(_material_id, material_source) => {
-                            let _s = Stopwatch::new("Material message");
-                            let material = engine.renderer.build_material(material_source).expect("TODO: Handle material compilation failure");
-                            let _gpu_material = engine.renderer.register_material(material);
-
-                            // TODO: Create an association between `material_id` and `material_source`.
+                        EngineMessage::Material(_material_id, _material_source) => {
+                            // let _s = Stopwatch::new("Material message");
+                            // let material = engine.renderer.build_material(material_source).expect("TODO: Handle material compilation failure");
+                            // let _gpu_material = engine.renderer.register_material(material);
+                            //
+                            // // TODO: Create an association between `material_id` and `material_source`.
+                            unimplemented!();
                         },
                         EngineMessage::Mesh(mesh_id, mesh_data) => {
                             let _s = Stopwatch::new("Mesh message");
@@ -359,16 +377,10 @@ fn main_loop(mut engine: Box<Engine>) {
                             .get(&mesh_renderer_data.mesh_id())
                             .expect("No gpu mesh found for mesh id");
 
-                            let mut mesh_instance = MeshInstance::new(
+                            let mut mesh_instance = MeshInstance::with_shared_material(
                                 gpu_mesh,
-                                engine.renderer.default_material(),
+                                engine.default_material_id,
                             );
-
-                            // HACK HACK HACK ---------------------------------------------------------
-                            mesh_instance.material_mut().set_color("surface_color", ::math::Color::rgb(1.0, 0.0, 0.0));
-                            mesh_instance.material_mut().set_color("surface_specular", ::math::Color::rgb(1.0, 1.0, 1.0));
-                            mesh_instance.material_mut().set_f32("surface_shininess", 4.0);
-                            // HACK HACK HACK ---------------------------------------------------------
 
                             mesh_instance.set_anchor(anchor_id);
 
@@ -432,12 +444,29 @@ fn main_loop(mut engine: Box<Engine>) {
             engine.renderer.draw();
         }
 
-        // Determine the next frame's start time, even if we blew the frame time.
+        frame_times.push(frame_start.elapsed());
+
+        // Determine the next frame's start time, dropping frames if we missed the frame time.
         while frame_start < Instant::now() {
             frame_start += target_frame_time;
         }
 
         // Now wait until we've returned to the frame cadence before beginning the next frame.
-        while Instant::now() < frame_start {}
+        while Instant::now() < frame_start {
+            thread::sleep(Duration::new(0, 0));
+        }
     }
+
+    // Print performance statistics.
+    // ============================================================================================
+    let run_duration = start_time.elapsed();
+    let stats = stats::analyze(&*frame_times, target_frame_time);
+
+    println!("Performance statistics:");
+    println!("  Duration: {} ({} frames)", PrettyDuration(run_duration), frame_times.len());
+    println!("  Min: {}", PrettyDuration(stats.min));
+    println!("  Max: {}", PrettyDuration(stats.max));
+    println!("  Mean: {}", PrettyDuration(stats.mean));
+    println!("  Std: {}", PrettyDuration(stats.std));
+    println!("  Long frames: {} ({:.2}%)", stats.long_frames, stats.long_frame_ratio * 100.0);
 }

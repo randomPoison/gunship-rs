@@ -36,10 +36,13 @@ fn main() {
     let anchor = Anchor::new();
     let anchor_id = renderer.register_anchor(anchor);
 
+    // Setup the material for the mesh.
+    let mut material = renderer.default_material();
+    material.set_color("surface_color", Color::rgb(1.0, 0.0, 0.0));
+
     // Create a mesh instance, attach it to the anchor, and register it.
-    let mut mesh_instance = MeshInstance::new(gpu_mesh, renderer.default_material());
+    let mut mesh_instance = MeshInstance::with_owned_material(gpu_mesh, material);
     mesh_instance.set_anchor(anchor_id);
-    mesh_instance.material_mut().set_color("surface_color", Color::rgb(1.0, 0.0, 0.0));
     renderer.register_mesh_instance(mesh_instance);
 
     // Create a camera and an anchor for it.

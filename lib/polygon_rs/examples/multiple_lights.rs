@@ -36,13 +36,13 @@ fn main() {
     let mesh_anchor_id = renderer.register_anchor(anchor);
 
     let material_source = MaterialSource::from_file("resources/materials/diffuse_lit.material").unwrap();
-    let material = renderer.build_material(material_source).unwrap();
+    let mut material = renderer.build_material(material_source).unwrap();
+    material.set_color("surface_color", Color::rgb(1.0, 1.0, 1.0));
+    material.set_color("surface_specular", Color::rgb(1.0, 1.0, 1.0));
+    material.set_f32("surface_shininess", 4.0);
 
     // Create a mesh instance, attach it to the anchor, and register it with the renderer.
-    let mut mesh_instance = MeshInstance::new(gpu_mesh, material);
-    mesh_instance.material_mut().set_color("surface_color", Color::rgb(1.0, 1.0, 1.0));
-    mesh_instance.material_mut().set_color("surface_specular", Color::rgb(1.0, 1.0, 1.0));
-    mesh_instance.material_mut().set_f32("surface_shininess", 4.0);
+    let mut mesh_instance = MeshInstance::with_owned_material(gpu_mesh, material);
     mesh_instance.set_anchor(mesh_anchor_id);
     renderer.register_mesh_instance(mesh_instance);
 

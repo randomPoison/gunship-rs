@@ -40,9 +40,8 @@ fn main() {
     material.set_texture("surface_diffuse", gpu_texture);
 
     // Create a mesh instance, attach it to the anchor, and register it with the renderer.
-    let mut mesh_instance = MeshInstance::new(gpu_mesh, renderer.default_material());
+    let mut mesh_instance = MeshInstance::with_owned_material(gpu_mesh, material);
     mesh_instance.set_anchor(mesh_anchor_id);
-    mesh_instance.set_material(material);
     renderer.register_mesh_instance(mesh_instance);
 
     // Create a camera and an anchor for it.

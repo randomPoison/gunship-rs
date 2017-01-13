@@ -27,11 +27,13 @@ fn main() {
     anchor.set_position(Point::new(0.0, 0.0, 0.0));
     let mesh_anchor_id = renderer.register_anchor(anchor);
 
+    let mut material = renderer.default_material();
+    material.set_color("surface_color", Color::rgb(1.0, 0.0, 0.0));
+    material.set_color("surface_specular", Color::rgb(1.0, 1.0, 1.0));
+    material.set_f32("surface_shininess", 4.0);
+
     // Create a mesh instance, attach it to the anchor, and register it with the renderer.
-    let mut mesh_instance = MeshInstance::new(gpu_mesh, renderer.default_material());
-    mesh_instance.material_mut().set_color("surface_color", Color::rgb(1.0, 0.0, 0.0));
-    mesh_instance.material_mut().set_color("surface_specular", Color::rgb(1.0, 1.0, 1.0));
-    mesh_instance.material_mut().set_f32("surface_shininess", 4.0);
+    let mut mesh_instance = MeshInstance::with_owned_material(gpu_mesh, material);
     mesh_instance.set_anchor(mesh_anchor_id);
     renderer.register_mesh_instance(mesh_instance);
 

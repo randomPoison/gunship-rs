@@ -14,7 +14,7 @@ extern crate fiber;
 use fiber::FiberId;
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::fmt::{self, Debug, Formatter};
+use std::fmt::{self, Display, Formatter};
 use std::mem;
 use std::sync::Mutex;
 use std::time::Duration;
@@ -22,6 +22,7 @@ use std::time::Duration;
 #[cfg(target_os="windows")]
 #[path="windows.rs"]
 pub mod platform;
+pub mod stats;
 
 thread_local! {
     static CONTEXT: RefCell<Context> = RefCell::new(Context::new());
@@ -176,15 +177,19 @@ fn with_context<F, T>(func: F) -> T
 
 pub struct PrettyDuration(pub Duration);
 
-impl Debug for PrettyDuration {
+impl Display for PrettyDuration {
     fn fmt(&self, formatter: &mut Formatter) -> Result<(), fmt::Error> {
-        let secs = self.0.as_secs();
-        let millis = (self.0.subsec_nanos() / 1_000_000) % 1_000;
+        let mins = self.0.as_secs() / 60;
+        let secs = self.0.as_secs() % 60;
+        let millis = self.0.subsec_nanos() as u64 / 1_000_000;
         let micros = (self.0.subsec_nanos() / 1_000) % 1_000;
-        if secs > 0 {
-            write!(formatter, "{}s {}ms {}μs", secs, millis, micros)
+
+        if mins > 0 {
+            write!(formatter, "{}m {}s {}.{}ms", mins, secs, millis, micros)
+        } else if secs > 0 {
+            write!(formatter, "{}s {}.{}ms", secs, millis, micros)
         } else {
-            write!(formatter, "{}ms {}μs", millis, micros)
+            write!(formatter, "{}.{}ms", millis, micros)
         }
     }
 }

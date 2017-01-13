@@ -171,3 +171,9 @@ pub enum MaterialProperty {
     f32(f32),
     Vector3(Vector3),
 }
+
+#[derive(Debug, Clone)]
+pub enum MaterialType {
+    Shared(MaterialId),
+    Owned(Material),
+}
