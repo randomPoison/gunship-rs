@@ -15,6 +15,9 @@
 #![feature(const_fn)]
 #![allow(bad_style)]
 
+#[macro_use]
+mod macros;
+
 #[cfg(target_os = "windows")]
 #[path="windows.rs"]
 pub mod platform;
@@ -25,49 +28,45 @@ pub mod platform;
 
 pub mod types;
 
+use std::mem;
+
 pub use self::types::*;
 pub use self::platform::*;
 
-/// Macro used for generating bindings to OpenGL procs.
-///
-/// The OpenGL implementation for a computer actually lives in its graphics card. In order to call
-/// the various functions that are part of the OpenGL API we must load pointers to those functions.
-/// This macro generates the necessary boilerplate for loading and stashing those pointers, as well
-/// as handling failure when those pointers fail to load (i.e. panicking).
-///
-/// TODO: Add a variant where the same gl proc can be mapped to multiple rust functions to improve
-/// type safety specification.
-macro_rules! gl_proc {
-    ( $proc_name:ident:
-        $( #[$attr:meta] )* fn $fn_name:ident( $( $arg:ident : $arg_ty:ty ),* ) $( -> $result:ty )* ) => {
-        $( #[$attr] )*
-        pub unsafe fn $fn_name( $( $arg: $arg_ty, )* ) $( -> $result )* {
-            $fn_name::load();
+pub fn buffer_data<T>(target: BufferTarget, data: &[T], usage: BufferUsage) {
+    unsafe {
+        buffer_data_raw(
+            target,
+            (data.len() * mem::size_of::<T>()) as isize,
+            data.as_ptr() as *const _,
+            usage,
+        );
+    }
+}
 
-            match $fn_name::load() {
-                Some(gl_proc) => gl_proc( $( $arg ),* ),
-                None => panic!("Failed to load gl proc for {}", stringify!( $proc_name )),
-            }
-        }
+pub fn gen_buffer() -> Option<BufferName> {
+    let mut buffer_name = BufferName::null();
+    unsafe {
+        gen_buffers(1, &mut buffer_name);
+    }
 
-        pub mod $fn_name {
-            #[allow(unused_imports)]
-            use types::*;
+    if buffer_name.is_null() {
+        None
+    } else {
+        Some(buffer_name)
+    }
+}
 
-            static mut PROC_PTR: Option<ProcType> = None;
+pub fn gen_vertex_array() -> Option<VertexArrayName> {
+    let mut vertex_array_name = VertexArrayName::null();
+    unsafe {
+        gen_vertex_arrays(1, &mut vertex_array_name);
+    }
 
-            pub type ProcType = extern "system" fn( $( $arg_ty, )* ) $( -> $result )*;
-
-            pub unsafe fn load() -> Option<ProcType> {
-                if let None = PROC_PTR {
-                    PROC_PTR =
-                        $crate::platform::load_proc(stringify!( $proc_name ))
-                        .map(|ptr| ::std::mem::transmute(ptr));
-                }
-
-                PROC_PTR
-            }
-        }
+    if vertex_array_name.is_null() {
+        None
+    } else {
+        Some(vertex_array_name)
     }
 }
 
@@ -115,6 +114,12 @@ gl_proc!(glAttachShader:
     /// - `glInvalidOperation` is generated if shader​ is not a shader object.
     /// - `glInvalidOperation` is generated if shader​ is already attached to program​.
     fn attach_shader(program: ProgramObject, shader: ShaderObject));
+
+gl_proc!(glBeginQuery:
+    /// Delimits the start of a query object.
+    ///
+    /// TODO: Add documentation.
+    fn begin_query(query_type: QueryType, query: QueryObject));
 
 gl_proc!(glBindBuffer:
     /// Binds a named buffer object.
@@ -428,7 +433,7 @@ gl_proc!(glBufferData:
     /// - `GL_INVALID_OPERATION` is generated if the reserved buffer object name 0 is bound to target​.
     /// - `GL_OUT_OF_MEMORY` is generated if the GL is unable to create a data store with the
     ///   specified size​.
-    fn buffer_data(target: BufferTarget, size: isize, data: *const (), usage: BufferUsage));
+    fn buffer_data_raw(target: BufferTarget, size: isize, data: *const (), usage: BufferUsage));
 
 gl_proc!(glClear:
     /// Clears buffers to preset values.
@@ -654,6 +659,26 @@ gl_proc!(glDeleteShader:
     /// arguments `shader_object` and `DeleteStatus`.
     fn delete_shader(shader_object: ShaderObject));
 
+gl_proc!(glDeleteQueries:
+    /// Deletes named query objects.
+    ///
+    /// [Official docs](https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glDeleteQueries.xml)
+    ///
+    /// Core since version 1.5
+    ///
+    /// Deletes `count` query objects named by the elements of the array `queries`. After a
+    /// query object is deleted, it has no contents, and its name is free for reuse (for
+    /// example by `gen_queries()`).
+    ///
+    /// `delete_queries` silently ignores 0's and names that do not correspond to existing query
+    /// objects. If one of the query objects to be deleted is currently active, the name becomes
+    /// unused, but the underlying query object is not deleted until it is no longer active.
+    ///
+    /// # Errors
+    ///
+    /// - `GL_INVALID_VALUE` is generated if `count` is negative.
+    fn delete_queries(count: i32, queries: *const QueryObject));
+
 gl_proc!(glDeleteTextures:
     /// Deletes named textures.
     ///
@@ -855,6 +880,12 @@ gl_proc!(glEnable:
     /// `true`.
     fn enable(capability: ServerCapability));
 
+gl_proc!(glEndQuery:
+    /// Delimits the end of a query object.
+    ///
+    /// TODO: Add documentation.
+    fn end_query(query_type: QueryType));
+
 gl_proc!(glEnableVertexAttribArray:
     /// Enables a generic vertex attribute array.
     ///
@@ -874,6 +905,14 @@ gl_proc!(glEnableVertexAttribArray:
     ///   equal to `GL_MAX_VERTEX_ATTRIBS`.
     /// - `GL_INVALID_OPERATION` is generated if no vertex array object is bound.
     fn enable_vertex_attrib_array(attrib: AttributeLocation));
+
+gl_proc!(glFinish:
+    /// TODO: Add documentation.
+    fn finish());
+
+gl_proc!(glFlush:
+    /// TODO: Add documentation.
+    fn flush());
 
 gl_proc!(glFrontFace:
     /// Defines front- and back-facing polygons.
@@ -935,6 +974,24 @@ gl_proc!(glGenTextures:
     /// unless they are first deleted with `delete_textures`.
     fn gen_textures(count: u32, textures: *mut TextureObject));
 
+gl_proc!(glGenQueries:
+    /// Generates query object names.
+    ///
+    /// Returns `count` query object names in `queries`​. There is no guarantee that the names
+    /// form a contiguous set of integers; however, it is guaranteed that none of the returned
+    /// names was in use immediately before the call to `gen_queries()`.
+    ///
+    /// Query object names returned by a call to `gen_queries()` are not returned by subsequent
+    /// calls, unless they are first deleted with `delete_queries()`.
+    ///
+    /// No query objects are associated with the returned query object names until they are first
+    /// used by calling `begin_query()`.
+    ///
+    /// # Errors
+    ///
+    /// - `GL_INVALID_VALUE` is generated if `count` is negative.
+    fn gen_queries(count: i32, queries: *mut QueryObject));
+
 gl_proc!(glGenVertexArrays:
     /// Generates vertex array object names.
     ///
@@ -985,6 +1042,12 @@ gl_proc!(glGetAttribLocation:
     ///
     /// - `GL_INVALID_OPERATION` is generated if `program` has not been successfully linked.
     fn get_attrib_location(program: ProgramObject, name: *const u8) -> i32);
+
+gl_proc!(glGetInteger64v:
+    /// Returns the value for simple state variables.
+    ///
+    /// TODO: Add documentation.
+    fn get_i64v(name: Integer64Name, params: *mut i64));
 
 gl_proc!(glGetIntegerv:
     /// Returns the value for simple state variables.
@@ -1133,6 +1196,30 @@ gl_proc!(glGetProgramiv:
         program: ProgramObject,
         param_type: ProgramParam,
         param_out: *mut i32));
+
+gl_proc!(glGetQueryObjecti64v:
+    /// Returns the parameters of a query object.
+    ///
+    /// [Wiki page](https://www.opengl.org/wiki/GLAPI/glGetQueryObject)
+    ///
+    /// Core since version 3.3
+    ///
+    /// Returns in `params​` a selected parameter of the query object specified by `query`.
+    ///
+    /// TODO: Add documentation.
+    fn get_query_object_i64v(query: QueryObject, result_type: QueryResultType, params: *mut i64));
+
+gl_proc!(glGetQueryObjectui64v:
+    /// Returns the parameters of a query object.
+    ///
+    /// [Wiki page](https://www.opengl.org/wiki/GLAPI/glGetQueryObject)
+    ///
+    /// Core since version 3.3
+    ///
+    /// Returns in `params​` a selected parameter of the query object specified by `query`.
+    ///
+    /// TODO: Add documentation.
+    fn get_query_object_u64v(query: QueryObject, result_type: QueryResultType, params: *mut u64));
 
 gl_proc!(glGetShaderInfoLog:
     /// Returns the information log for a shader object.
@@ -1994,6 +2081,29 @@ gl_proc!(glPolygonMode:
     /// `edge_flag`.
     fn polygon_mode(face: Face, mode: PolygonMode));
 
+gl_proc!(glQueryCounter:
+    /// Records the GL time into a query object after all previous commands have reached the GL
+    /// server.
+    ///
+    /// [Official docs](https://www.opengl.org/sdk/docs/man4/html/glQueryCounter.xhtml)
+    ///
+    /// Core since version 3.3
+    ///
+    /// Causes the GL to record the current time into the query object named `query`. The time
+    /// is recorded after all previous commands on the GL client and server state and the
+    /// framebuffer have been fully realized. When the time is recorded, the query result for
+    /// that object is marked available. `query_counter()` timer queries can be used within a
+    /// `begin_query()` / `end_query()` block where the target is `TimeElapsed` and it does not
+    /// affect the result of that query object.
+    ///
+    /// # Errors
+    ///
+    /// - `GL_INVALID_OPERATION` is generated if `query` is the name of a query object that is
+    ///   already in use within a `begin_query()` / `end_query()` block.
+    /// - `GL_INVALID_VALUE` is generated if `query` is not the name of a query object returned
+    ///   from a previous call to `gen_queries()`.
+    fn query_counter(query: QueryObject, target: QueryCounterTarget));
+
 gl_proc!(glShaderSource:
     /// Replaces the source code in a shader object.
     ///
@@ -2314,7 +2424,12 @@ gl_proc!(glViewport:
     /// - `GL_INVALID_VALUE` is generated if either width or height is negative.
     fn viewport(x: i32, y: i32, width: i32, height: i32));
 
-/*
-glGetError:
-    fn get_error() -> ErrorCode
-*/
+#[cfg(target_os = "windows")]
+pub mod wgl {
+    pub use platform::{
+        create_context_attribs,
+        get_extension_string,
+        get_swap_interval,
+        set_swap_interval,
+    };
+}
