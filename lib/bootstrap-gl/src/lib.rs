@@ -30,8 +30,8 @@ pub mod types;
 
 use std::mem;
 
-pub use self::types::*;
-pub use self::platform::*;
+pub use types::*;
+pub use platform::*;
 
 pub fn buffer_data<T>(target: BufferTarget, data: &[T], usage: BufferUsage) {
     unsafe {
