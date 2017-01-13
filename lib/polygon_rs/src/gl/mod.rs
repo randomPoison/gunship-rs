@@ -58,7 +58,17 @@ pub struct GlRender {
 
 impl GlRender {
     pub fn new(window: &Window) -> Result<GlRender, Error> {
-        let context = Context::from_window(window)?;
+        let _s = Stopwatch::new("Initializing OpenGl renderer");
+
+        let context = {
+            let _s = Stopwatch::new("Creating context");
+            Context::from_window(window)?
+        };
+
+        {
+            let _s = Stopwatch::new("Clearing buffer");
+            context.clear();
+        }
 
         let mut renderer = GlRender {
             context: context,
@@ -340,6 +350,11 @@ impl Renderer for GlRender {
     fn draw(&mut self) {
         let _stopwatch = Stopwatch::new("GLRender::draw()");
 
+        {
+            let _stopwatch = Stopwatch::new("Clearing buffer");
+            self.context.clear();
+        }
+
         // TODO: Support rendering multiple cameras.
         // TODO: Should we warn if there are no cameras?
         if let Some(camera) = self.cameras.values().next() {
@@ -390,11 +405,6 @@ impl Renderer for GlRender {
         {
             let _stopwatch = Stopwatch::new("Swap buffers");
             self.context.swap_buffers();
-        }
-
-        {
-            let _stopwatch = Stopwatch::new("Clearing buffer");
-            self.context.clear();
         }
     }
 

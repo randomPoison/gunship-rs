@@ -1,11 +1,9 @@
 extern crate gunship;
 
-use gunship::*;
+use gunship::engine::EngineBuilder;
 
 fn main() {
-    // Create the engine.
-    EngineBuilder::new().build();
-
-    // Run the main loop.
-    Engine::start();
+    let mut builder = EngineBuilder::new();
+    builder.max_workers(1);
+    builder.build(|| {});
 }
