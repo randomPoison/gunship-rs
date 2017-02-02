@@ -10,21 +10,36 @@ use xml::EventReader;
 use xml::reader::XmlEvent;
 use xml::reader::XmlEvent::*;
 
-static COLLADA_ATTRIBS: &'static [&'static str] = &["version", "xmlns", "base"];
+pub static COLLADA_ATTRIBS: &'static [&'static str] = &["version", "xmlns", "base"];
 
+/// Represents a parsed COLLADA document.
 #[derive(Debug, Clone)]
 pub struct Collada {
     /// The version string for the COLLADA specification used by the document.
+    ///
+    /// Only "1.4.0", "1.4.1", and "1.5.0" are supported currently.
     pub version: String,
 
+    /// The base uri for any relative URIs in the document.
+    ///
+    /// Specified by the `base` attribute on the root `<COLLADA>` element.
     base_uri: Option<AnyUri>,
 }
 
 impl Collada {
+    /// Read a COLLADA document from a string.
+    pub fn from_str(source: &str) -> Result<Collada> {
+        let reader = EventReader::from_str(source);
+        Collada::parse(reader)
+    }
+
     /// Attempts to parse the contents of a COLLADA document.
     pub fn read<R: Read>(reader: R) -> Result<Collada> {
-        let mut reader = EventReader::new(reader);
+        let reader = EventReader::new(reader);
+        Collada::parse(reader)
+    }
 
+    fn parse<R: Read>(mut reader: EventReader<R>) -> Result<Collada> {
         let mut collada = Collada {
             version: String::new(),
             base_uri: None,
@@ -63,13 +78,13 @@ impl Collada {
                     // change this to use `match`, as that keeps better with Rust best practices.
                     if attribute.name.local_name == "version" {
                         if !has_found_version {
-                            collada.version = attribute.name.local_name;
+                            collada.version = attribute.value;
                             has_found_version = true;
                         } else {
                             return Err(Error {
                                 position: reader.position(),
                                 kind: ErrorKind::UnexpectedAttribute {
-                                    element: name.local_name.clone(),
+                                    element: name.local_name,
                                     attribute: "version".to_owned(),
                                     expected: COLLADA_ATTRIBS,
                                     is_duplicate: true,
@@ -85,7 +100,7 @@ impl Collada {
                             return Err(Error {
                                 position: reader.position(),
                                 kind: ErrorKind::UnexpectedAttribute {
-                                    element: name.local_name.clone(),
+                                    element: name.local_name,
                                     attribute: "base".to_owned(),
                                     expected: COLLADA_ATTRIBS,
                                     is_duplicate: true,
@@ -96,7 +111,7 @@ impl Collada {
                         return Err(Error {
                             position: reader.position(),
                             kind: ErrorKind::UnexpectedAttribute {
-                                element: name.local_name.clone(),
+                                element: name.local_name,
                                 attribute: attribute.name.local_name,
                                 expected: COLLADA_ATTRIBS,
                                 is_duplicate: false,
@@ -107,7 +122,13 @@ impl Collada {
 
                 // Verify that all required attributes have been found.
                 if !has_found_version {
-
+                    return Err(Error {
+                        position: reader.position(),
+                        kind: ErrorKind::MissingAttribute {
+                            element: name.local_name,
+                            attribute: "version",
+                        },
+                    })
                 }
             }
             event @ _ => return Err(Error {
@@ -140,7 +161,7 @@ impl Error {
 }
 
 /// The specific error variant.
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum ErrorKind {
     /// An element was missing a required attribute.
     MissingAttribute {
