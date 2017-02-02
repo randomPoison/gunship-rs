@@ -56,6 +56,8 @@ impl Collada {
         // the COLLADA spec is being used, which is how we'll determine our sub-parser.
         match reader.next()? {
             StartElement { name, attributes, namespace: _ } => {
+                // If the element isn't the `<COLLADA>` tag then the document is malformed,
+                // return an error.
                 if name.local_name != "COLLADA" {
                     return Err(Error {
                         position: reader.position(),
@@ -131,11 +133,16 @@ impl Collada {
                     })
                 }
             }
+
+            // Any other event is an error.
             event @ _ => return Err(Error {
                 position: reader.position(),
                 kind: ErrorKind::UnexpectedEvent(event),
             }),
         }
+
+        // TODO: Eat any events until we get to the `</COLLADA>` tag.
+        // TODO: Verify the next event is the `EndDocument` event.
 
         Ok(collada)
     }
@@ -217,5 +224,10 @@ impl From<xml::reader::Error> for Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
+/// A URI in the COLLADA document.
+///
+/// Represents the [`xs:anyURI`][anyURI] XML data type.
+///
+/// [anyURI]: http://www.datypic.com/sc/xsd/t-xsd_anyURI.html
 #[derive(Debug, Clone)]
 pub struct AnyUri(String);

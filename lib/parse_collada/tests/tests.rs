@@ -15,6 +15,22 @@ r#"<?xml version="1.0" encoding="utf-8"?>
 }
 
 #[test]
+fn collada_element_whitespace() {
+    static DOCUMENT: &'static str =
+r#"
+<?xml version="1.0" encoding="utf-8"?>
+
+<COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.4.1">
+
+</COLLADA>
+
+"#;
+
+    let collada = Collada::from_str(DOCUMENT).unwrap();
+    assert_eq!(collada.version, "1.4.1");
+}
+
+#[test]
 fn collada_element_missing_version() {
     static DOCUMENT: &'static str =
 r#"<?xml version="1.0" encoding="utf-8"?>
