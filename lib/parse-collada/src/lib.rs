@@ -238,8 +238,24 @@ impl Collada {
             event @ _ => panic!("Unexpected event: {:?}", event),
         }
 
-        // TODO: Eat any events until we get to the `</COLLADA>` tag.
+        // Eat any events until we get to the `</COLLADA>` tag.
+        // TODO: Actually parse the body of the document.
+        loop {
+            match reader.next()? {
+                EndElement { ref name } if name.local_name == "COLLADA" => { break }
+                _ => {}
+            }
+        }
+
         // TODO: Verify the next event is the `EndDocument` event.
+        match reader.next()? {
+            EndDocument => {}
+
+            // Same logic here as with the starting event. The only thing that can come after the
+            // close tag are comments, white space, and processing instructions, all of which we
+            // ignore. This can change with future versions of xml-rs, though.
+            event @ _ => { panic!("Unexpected event: {:?}", event); }
+        }
 
         Ok(collada)
     }
