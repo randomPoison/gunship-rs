@@ -31,6 +31,30 @@ r#"
 }
 
 #[test]
+fn no_xml_decl() {
+    static DOCUMENT: &'static str =
+r#"<COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.4.1">
+</COLLADA>
+"#;
+
+    let collada = Collada::from_str(DOCUMENT).unwrap();
+    assert_eq!(collada.version, "1.4.1");
+}
+
+#[test]
+fn doctype() {
+    static DOCUMENT: &'static str =
+r#"<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE note SYSTEM "Note.dtd">
+<COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.4.1">
+</COLLADA>
+"#;
+
+    let collada = Collada::from_str(DOCUMENT).unwrap();
+    assert_eq!(collada.version, "1.4.1");
+}
+
+#[test]
 fn collada_element_missing_version() {
     static DOCUMENT: &'static str =
 r#"<?xml version="1.0" encoding="utf-8"?>
