@@ -1,10 +1,61 @@
+//! A library for parsing and processing COLLADA documents.
+//!
+//! [COLLADA][COLLADA] is a COLLAborative Design Activity that defines an XML-based schema to
+//! enable 3D authoring applications to freely exchange digital assets. It supports a vast array of
+//! features used in 3D modeling, animation, and VFX work, and provides and open, non-proprietary
+//! alternative to common formats like [FBX][FBX].
+//!
+//! This provides functionality for parsing a COLLADA document and utilities for processing the
+//! contained data, with the intention of enable direct usage of COLLADA data as well as
+//! interchange of document data into other formats.
+//!
+//! # Quick Start
+//!
+//! The easiest way to parse a COLLADA document is to load it from a file and use
+//! [`Collada::read()`][Collada::read]:
+//!
+//! ```
+//! # #![allow(unused_variables)]
+//! use std::fs::File;
+//! use parse_collada::Collada;
+//!
+//! let file = File::open("resources/blender_cube.dae").unwrap();
+//! let collada = Collada::read(file).unwrap();
+//! ```
+//!
+//! The resulting [`Collada`][Collada] object provides direct access to all data in the document,
+//! directly recreating the logical structure of the document as a Rust type.
+//!
+//! # COLLADA Versions
+//!
+//! Currently there are 3 COLLADA versions supported by this library: `1.4.0`, `1.4.1`, and
+//! `1.5.0`. Older versions are not supported, but may be added if there is reason to do so. This
+//! library attempts to normalize data across versions by "upgrading" all documents to match the
+//! `1.5.0` specification. This removes the need for client code to be aware of the specification
+//! version used by documents it handles. This conversion is done transparently without the need
+//! for user specification.
+//!
+//! # 3rd Party Extensions
+//!
+//! The COLLADA format allows for semi-arbitrary extensions to the standard, allowing applications
+//! to include application-specific data. This extra data is considered "optional", but may allow
+//! applications consuming the COLLADA document to more accurately recreate the scene contained
+//! in the document. This library attempts to directly support common 3rd party extensions,
+//! primarily those for Blender and Maya. In the case that the 3rd party extension is not
+//! directly supported, the underlying XML will be preserved so that the client code can attempt
+//! to still use the data.
+//!
+//! [COLLADA]: https://www.khronos.org/collada/
+//! [FBX]: https://en.wikipedia.org/wiki/FBX
+//! [Collada]: struct.Collada.html
+//! [Collada::read]: struct.Collada.html#method.read
+
 extern crate xml;
 
 pub use xml::common::TextPosition;
 pub use xml::reader::Error as XmlError;
 
 use std::io::Read;
-// use std::str::FromStr;
 use xml::common::Position;
 use xml::EventReader;
 use xml::reader::XmlEvent;
@@ -28,17 +79,62 @@ pub struct Collada {
 
 impl Collada {
     /// Read a COLLADA document from a string.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # #![allow(unused_variables)]
+    /// use parse_collada::Collada;
+    ///
+    /// static DOCUMENT: &'static str = r#"
+    ///     <?xml version="1.0" encoding="utf-8"?>
+    ///     <COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.4.1">
+    ///     </COLLADA>
+    /// "#;
+    ///
+    /// let collada = Collada::from_str(DOCUMENT).unwrap();
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err` if the document is invalid or malformed in some way. For details about
+    /// COLLADA versions, 3rd party extensions, and any other details that could influence how
+    /// a document is parsed see the [crate-level documentation][crate].
+    ///
+    /// [crate]: index.html
     pub fn from_str(source: &str) -> Result<Collada> {
         let reader = EventReader::from_str(source);
         Collada::parse(reader)
     }
 
     /// Attempts to parse the contents of a COLLADA document.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # #![allow(unused_variables)]
+    /// use std::fs::File;
+    /// use parse_collada::Collada;
+    ///
+    /// let file = File::open("resources/blender_cube.dae").unwrap();
+    /// let collada = Collada::read(file).unwrap();
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err` if the document is invalid or malformed in some way. For details about
+    /// COLLADA versions, 3rd party extensions, and any other details that could influence how
+    /// a document is parsed see the [crate-level documentation][crate].
+    ///
+    /// [crate]: index.html
     pub fn read<R: Read>(reader: R) -> Result<Collada> {
         let reader = EventReader::new(reader);
         Collada::parse(reader)
     }
 
+    /// The logic behind parsing the COLLADA document.
+    ///
+    /// `from_str()` and `read()` just create the `xml::EventReader` and then defer to `parse()`.
     fn parse<R: Read>(mut reader: EventReader<R>) -> Result<Collada> {
         let mut collada = Collada {
             version: String::new(),
@@ -222,6 +318,13 @@ impl From<xml::reader::Error> for Error {
     }
 }
 
+/// A specialized result type for COLLADA parsing.
+///
+/// Specializes [`std::result::Result`][std::result::Result] to [`Error`][Error] for the purpose
+/// of simplifying the signature of any falible COLLADA operation.
+///
+/// [std::result::Result]: https://doc.rust-lang.org/std/result/enum.Result.html
+/// [Error]: struct.Error.html
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// A URI in the COLLADA document.
