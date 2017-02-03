@@ -71,6 +71,9 @@ pub struct Collada {
     /// Only "1.4.0", "1.4.1", and "1.5.0" are supported currently.
     pub version: String,
 
+    /// Global metadata about the COLLADA document.
+    pub asset: Asset,
+
     /// The base uri for any relative URIs in the document.
     ///
     /// Specified by the `base` attribute on the root `<COLLADA>` element.
@@ -138,6 +141,7 @@ impl Collada {
     fn parse<R: Read>(mut reader: EventReader<R>) -> Result<Collada> {
         let mut collada = Collada {
             version: String::new(),
+            asset: Asset::default(),
             base_uri: None,
         };
 
@@ -251,7 +255,7 @@ impl Collada {
         match reader.next()? {
             EndDocument => {}
 
-            // Same logic here as with the starting event. The only thing that can come after the
+            // Same logic here as with the starting event. The only things that can come after the
             // close tag are comments, white space, and processing instructions, all of which we
             // ignore. This can change with future versions of xml-rs, though.
             event @ _ => { panic!("Unexpected event: {:?}", event); }
@@ -404,4 +408,14 @@ impl<'a> Display for StringListDisplay<'a> {
 
         Ok(())
     }
+}
+
+/// Asset-management information about an element.
+///
+/// Includes both asset metadata, such as a list of contributors and keywords, as well
+/// as functional information, such as units of distance and the up axis for the asset.
+#[derive(Debug, Clone, Default)]
+pub struct Asset {
+    // /// The list of contributors to this asset.
+    // contributors: Vec<Contributor>,
 }
