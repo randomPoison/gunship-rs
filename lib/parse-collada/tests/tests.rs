@@ -53,5 +53,5 @@ r#"<?xml version="1.0" encoding="utf-8"?>
 
     let error = Collada::from_str(DOCUMENT).unwrap_err();
     assert_eq!(TextPosition { row: 1, column: 0 }, error.position());
-    assert_eq!(&ErrorKind::UnexpectedAttribute { element: "COLLADA".into(), attribute: "foo".into(), expected: COLLADA_ATTRIBS, is_duplicate: false }, error.kind());
+    assert_eq!(&ErrorKind::UnexpectedAttribute { element: "COLLADA".into(), attribute: "foo".into(), expected: COLLADA_ATTRIBS }, error.kind());
 }

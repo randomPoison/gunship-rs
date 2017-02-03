@@ -56,9 +56,9 @@ pub use xml::common::TextPosition;
 pub use xml::reader::Error as XmlError;
 
 use std::io::Read;
+use std::fmt::{self, Display, Formatter};
 use xml::common::Position;
 use xml::EventReader;
-use xml::reader::XmlEvent;
 use xml::reader::XmlEvent::*;
 
 pub static COLLADA_ATTRIBS: &'static [&'static str] = &["version", "xmlns", "base"];
@@ -142,7 +142,9 @@ impl Collada {
         };
 
         // Eat the `StartDocument` event. It has no useful information for our purposes, but it
-        // will always be the first event emitted.
+        // will always be the first event emitted, even if there's no XML declaration at the
+        // beginning of the document. This is defined as part of the xml-rs API as of v0.3.5,
+        // but it's possible this can will change in the future.
         match reader.next()? {
             StartDocument { .. } => {},
             _ => panic!("First event from EventReader wasn't StartDocument"),
@@ -185,7 +187,6 @@ impl Collada {
                                     element: name.local_name,
                                     attribute: "version".to_owned(),
                                     expected: COLLADA_ATTRIBS,
-                                    is_duplicate: true,
                                 },
                             })
                         }
@@ -201,7 +202,6 @@ impl Collada {
                                     element: name.local_name,
                                     attribute: "base".to_owned(),
                                     expected: COLLADA_ATTRIBS,
-                                    is_duplicate: true,
                                 },
                             })
                         }
@@ -212,7 +212,6 @@ impl Collada {
                                 element: name.local_name,
                                 attribute: attribute.name.local_name,
                                 expected: COLLADA_ATTRIBS,
-                                is_duplicate: false,
                             },
                         })
                     }
@@ -230,11 +229,13 @@ impl Collada {
                 }
             }
 
-            // Any other event is an error.
-            event @ _ => return Err(Error {
-                position: reader.position(),
-                kind: ErrorKind::UnexpectedEvent(event),
-            }),
+            // I'm *almost* 100% certain that the only event that can follow the `StartDocument`
+            // event is a `StartElement` event. As of v0.3.5, xml-rs doesn't support
+            // `<!DOCTYPE>` or processing instructions, and it ignores whitespace and comments
+            // (according to how we configure the parser), and those are the only things allowed
+            // between `StartDocument` and the first `StartElement`. If xml-rs changes its
+            // behavior this will need to be updated.
+            event @ _ => panic!("Unexpected event: {:?}", event),
         }
 
         // TODO: Eat any events until we get to the `</COLLADA>` tag.
@@ -248,7 +249,6 @@ impl Collada {
 ///
 /// Contains where in the document the error occurred (i.e. line number and column), and
 /// details about the nature of the error.
-// TODO: Implement Display for Error.
 #[derive(Debug)]
 pub struct Error {
     position: TextPosition,
@@ -261,6 +261,21 @@ impl Error {
 
     /// Gets detailed information about the error.
     pub fn kind(&self) -> &ErrorKind { &self.kind }
+}
+
+impl From<xml::reader::Error> for Error {
+    fn from(from: xml::reader::Error) -> Error {
+        Error {
+            position: from.position(),
+            kind: ErrorKind::XmlError(from),
+        }
+    }
+}
+
+impl Display for Error {
+    fn fmt(&self, formatter: &mut Formatter) -> ::std::result::Result<(), fmt::Error> {
+        write!(formatter, "Error at {}: {}", self.position, self.kind)
+    }
 }
 
 /// The specific error variant.
@@ -285,9 +300,6 @@ pub enum ErrorKind {
 
         /// The set of attributes allowed for this element.
         expected: &'static [&'static str],
-
-        /// Whether the attribute appeared multiple times.
-        is_duplicate: bool,
     },
 
     /// An element had a child element that wasn't allowed.
@@ -302,18 +314,44 @@ pub enum ErrorKind {
         element: String,
     },
 
-    /// Generic error covering any case where less specific information is available.
-    UnexpectedEvent(XmlEvent),
-
     /// The XML in the document was malformed in some way.
     XmlError(XmlError),
 }
 
-impl From<xml::reader::Error> for Error {
-    fn from(from: xml::reader::Error) -> Error {
-        Error {
-            position: from.position(),
-            kind: ErrorKind::XmlError(from),
+impl Display for ErrorKind {
+    fn fmt(&self, formatter: &mut Formatter) -> ::std::result::Result<(), fmt::Error> {
+        match *self {
+            ErrorKind::MissingAttribute { ref element, ref attribute } => {
+                write!(formatter, "<{}> is missing the required attribute \"{}\"", element, attribute)
+            }
+
+            ErrorKind::UnexpectedAttribute { ref element, ref attribute, expected } => {
+                write!(
+                    formatter,
+                    "<{}> had an an attribute \"{}\" that is not allowed, only the following attributes are allowed for <{0}>: {}",
+                    element,
+                    attribute,
+                    StringListDisplay(expected),
+                )
+            }
+
+            ErrorKind::UnexpectedElement { ref parent, ref element, expected } => {
+                write!(
+                    formatter,
+                    "<{}> had a child <{}> which is not allowed, <{0}> may only have the following children: {}",
+                    parent,
+                    element,
+                    StringListDisplay(expected),
+                )
+            }
+
+            ErrorKind::UnexpectedRootElement { ref element } => {
+                write!(formatter, "Document began with <{}> instead of <COLLADA>", element)
+            }
+
+            ErrorKind::XmlError(ref error) => {
+                write!(formatter, "{}", error.msg())
+            }
         }
     }
 }
@@ -334,3 +372,20 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// [anyURI]: http://www.datypic.com/sc/xsd/t-xsd_anyURI.html
 #[derive(Debug, Clone)]
 pub struct AnyUri(String);
+
+/// Helper struct for pretty-printing lists of strings.
+struct StringListDisplay<'a>(&'a [&'a str]);
+
+impl<'a> Display for StringListDisplay<'a> {
+    fn fmt(&self, formatter: &mut Formatter) -> ::std::result::Result<(), fmt::Error> {
+        if self.0.len() > 0 {
+            write!(formatter, "{}", self.0[0])?;
+
+            for string in &self.0[1..] {
+                write!(formatter, ", {}", string)?;
+            }
+        }
+
+        Ok(())
+    }
+}
