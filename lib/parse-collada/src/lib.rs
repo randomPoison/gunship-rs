@@ -35,6 +35,14 @@
 //! version used by documents it handles. This conversion is done transparently without the need
 //! for user specification.
 //!
+//! Where possible this documentation will include notes on how a given element is handled
+//! differently between different COLLADA versions. This is to aid in debugging cases where a
+//! document fails to parse due to version constraints. For example, a document may fail to parse
+//! with an error "<asset> has an unexpected child <author_email>" even though `author_email` *is*
+//! a supported child for `asset`. `author_email` wasn't added until `1.5.0`, though, so a document
+//! using version `1.4.0` or `1.4.1` will fail to parse. Making this version information readily
+//! available reduces the need to sift through the full COLLADA specification when debugging.
+//!
 //! # 3rd Party Extensions
 //!
 //! The COLLADA format allows for semi-arbitrary extensions to the standard, allowing applications
@@ -77,7 +85,7 @@ pub struct Collada {
     /// The base uri for any relative URIs in the document.
     ///
     /// Specified by the `base` attribute on the root `<COLLADA>` element.
-    base_uri: Option<AnyUri>,
+    pub base_uri: Option<AnyUri>,
 }
 
 impl Collada {
@@ -414,8 +422,53 @@ impl<'a> Display for StringListDisplay<'a> {
 ///
 /// Includes both asset metadata, such as a list of contributors and keywords, as well
 /// as functional information, such as units of distance and the up axis for the asset.
+///
+/// # COLLADA Versions
+///
+/// - `coverage` and `extras` were added in COLLADA version `1.5.0`.
+/// - In version `1.4.1` there may be at most 1 contributor, in version `1.5.0` there may be any
+///   number of contributors.
 #[derive(Debug, Clone, Default)]
 pub struct Asset {
-    // /// The list of contributors to this asset.
-    // contributors: Vec<Contributor>,
+    /// The list of contributors who worked on the asset.
+    pub contributors: Vec<Contributor>,
+}
+
+/// Information about a contributor to an asset.
+///
+/// Contributor data is largely free-form text data meant to informally describe either the author
+/// or the author's work on the asset. The exceptions are `author_email`, `author_website`, and
+/// `source_data`, which are strictly formatted data (be it a URI or email address).
+///
+/// # COLLADA Versions
+///
+/// `author_email` and `author_website` were added in COLLADA version `1.5.0`.
+#[derive(Debug, Clone, Default)]
+pub struct Contributor {
+    /// The author's name, if present.
+    pub author: Option<String>,
+
+    /// The author's full email address, if present.
+    // TODO: Should we use some `Email` type? The 1.5.0 COLLADA spec provides an RFC defining the
+    // exact format this data follows (I assume it's just the RFC that defines valid email
+    // addresses).
+    pub author_email: Option<String>,
+
+    /// The URL for the author's website, if present.
+    pub author_website: Option<AnyUri>,
+
+    /// The name of the authoring tool.
+    pub authoring_tool: Option<String>,
+
+    /// Free-form comments from the author.
+    pub comments: Option<String>,
+
+    /// Copyright information about the asset. Does not adhere to a formatting standard.
+    pub copyright: Option<String>,
+
+    /// A URI reference to the source data for the asset.
+    ///
+    /// For example, if the asset based off a file `tank.s3d`, the value might be
+    /// `c:/models/tank.s3d`.
+    pub source_data: Option<AnyUri>,
 }
