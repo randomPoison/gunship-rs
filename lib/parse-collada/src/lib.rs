@@ -158,94 +158,6 @@ impl Collada {
     ///
     /// `from_str()` and `read()` just create the `xml::EventReader` and then defer to `parse()`.
     fn parse<R: Read>(mut reader: EventReader<R>) -> Result<Collada> {
-        fn required_start_element<R: Read>(
-            reader: &mut EventReader<R>,
-            parent: &str,
-            search_names: &'static [&'static str]
-        ) -> Result<(OwnedName, Vec<OwnedAttribute>, Namespace)> {
-            match reader.next()? {
-                StartElement { name, attributes, namespace } => {
-                    if !search_names.contains(&&*name.local_name) {
-                        return Err(Error {
-                            position: reader.position(),
-                            kind: ErrorKind::UnexpectedElement {
-                                element: name.local_name,
-                                parent: parent.into(),
-                                expected: search_names,
-                            },
-                        })
-                    }
-
-                    return Ok((name, attributes, namespace));
-                }
-
-                EndElement { name } => {
-                    return Err(Error {
-                        position: reader.position(),
-                        kind: ErrorKind::MissingElement {
-                            expected: search_names,
-                            parent: name.local_name,
-                        },
-                    })
-                }
-
-                Characters(data) => {
-                    return Err(Error {
-                        position: reader.position(),
-                        kind: ErrorKind::UnexpectedCharacterData {
-                            element: parent.into(),
-                            data: data,
-                        }
-                    })
-                }
-
-                ProcessingInstruction { .. } => { unimplemented!(); }
-
-                event @ _ => { panic!("Unexpected event: {:?}", event); }
-            }
-        }
-
-        fn optional_start_element<R: Read>(
-            reader: &mut EventReader<R>,
-            parent: &str,
-            search_names: &'static [&'static str]
-        ) -> Result<Option<(OwnedName, Vec<OwnedAttribute>, Namespace)>> {
-            match reader.next()? {
-                StartElement { name, attributes, namespace } => {
-                    if !search_names.contains(&&*name.local_name) {
-                        return Err(Error {
-                            position: reader.position(),
-                            kind: ErrorKind::UnexpectedElement {
-                                element: name.local_name,
-                                parent: parent.into(),
-                                expected: search_names,
-                            },
-                        })
-                    }
-
-                    return Ok(Some((name, attributes, namespace)));
-                }
-
-                EndElement { .. } => {
-                    return Ok(None);
-                }
-
-                Characters(data) => {
-                    return Err(Error {
-                        position: reader.position(),
-                        kind: ErrorKind::UnexpectedCharacterData {
-                            element: parent.into(),
-                            data: data,
-                        }
-                    })
-                }
-
-                ProcessingInstruction { .. } => { unimplemented!(); }
-
-                event @ _ => { panic!("Unexpected event: {:?}", event); }
-            }
-        }
-
         let mut collada = Collada {
             version: String::new(),
             asset: Asset::default(),
@@ -355,15 +267,7 @@ impl Collada {
         // whitespace/comments aren't emitted.
         static EXPECTED_ELEMENTS: &'static [&'static str] = &["asset"];
         let (_name, _, _) = required_start_element(&mut reader, "COLLADA", EXPECTED_ELEMENTS)?;
-
-        let mut asset = Asset::default();
-
-        // Parse the children of the `<asset>` tag.
-        static ASSET_CHILDREN: &'static [&'static str] = &["contributor"];
-        while let Some((_name, _, _)) = optional_start_element(&mut reader, "asset", ASSET_CHILDREN)? {
-            let contributor = parse_contributor(&mut reader)?;
-            asset.contributors.push(contributor);
-        }
+        collada.asset = parse_asset(&mut reader)?;
 
         // Eat any events until we get to the `</COLLADA>` tag.
         // TODO: Actually parse the body of the document.
@@ -386,6 +290,107 @@ impl Collada {
 
         Ok(collada)
     }
+}
+
+fn required_start_element<R: Read>(
+    reader: &mut EventReader<R>,
+    parent: &str,
+    search_names: &'static [&'static str]
+) -> Result<(OwnedName, Vec<OwnedAttribute>, Namespace)> {
+    match reader.next()? {
+        StartElement { name, attributes, namespace } => {
+            if !search_names.contains(&&*name.local_name) {
+                return Err(Error {
+                    position: reader.position(),
+                    kind: ErrorKind::UnexpectedElement {
+                        element: name.local_name,
+                        parent: parent.into(),
+                        expected: search_names,
+                    },
+                })
+            }
+
+            return Ok((name, attributes, namespace));
+        }
+
+        EndElement { name } => {
+            return Err(Error {
+                position: reader.position(),
+                kind: ErrorKind::MissingElement {
+                    expected: search_names,
+                    parent: name.local_name,
+                },
+            })
+        }
+
+        Characters(data) => {
+            return Err(Error {
+                position: reader.position(),
+                kind: ErrorKind::UnexpectedCharacterData {
+                    element: parent.into(),
+                    data: data,
+                }
+            })
+        }
+
+        ProcessingInstruction { .. } => { unimplemented!(); }
+
+        event @ _ => { panic!("Unexpected event: {:?}", event); }
+    }
+}
+
+fn optional_start_element<R: Read>(
+    reader: &mut EventReader<R>,
+    parent: &str,
+    search_names: &'static [&'static str]
+) -> Result<Option<(OwnedName, Vec<OwnedAttribute>, Namespace)>> {
+    match reader.next()? {
+        StartElement { name, attributes, namespace } => {
+            if !search_names.contains(&&*name.local_name) {
+                return Err(Error {
+                    position: reader.position(),
+                    kind: ErrorKind::UnexpectedElement {
+                        element: name.local_name,
+                        parent: parent.into(),
+                        expected: search_names,
+                    },
+                })
+            }
+
+            return Ok(Some((name, attributes, namespace)));
+        }
+
+        EndElement { .. } => {
+            return Ok(None);
+        }
+
+        Characters(data) => {
+            return Err(Error {
+                position: reader.position(),
+                kind: ErrorKind::UnexpectedCharacterData {
+                    element: parent.into(),
+                    data: data,
+                }
+            })
+        }
+
+        ProcessingInstruction { .. } => { unimplemented!(); }
+
+        event @ _ => { panic!("Unexpected event: {:?}", event); }
+    }
+}
+
+fn parse_asset<R: Read>(reader: &mut EventReader<R>) -> Result<Asset> {
+    let mut asset = Asset::default();
+
+    // Parse the children of the `<asset>` tag.
+    static ASSET_CHILDREN: &'static [&'static str] = &["contributor"];
+    while let Some((_name, _, _)) = optional_start_element(reader, "asset", ASSET_CHILDREN)? {
+        let contributor = parse_contributor(reader)?;
+        asset.contributors.push(contributor);
+    }
+
+    Ok(asset)
 }
 
 fn parse_contributor<R: Read>(reader: &mut EventReader<R>) -> Result<Contributor> {
@@ -563,7 +568,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// Represents the [`xs:anyURI`][anyURI] XML data type.
 ///
 /// [anyURI]: http://www.datypic.com/sc/xsd/t-xsd_anyURI.html
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AnyUri(String);
 
 /// Helper struct for pretty-printing lists of strings.
@@ -591,7 +596,7 @@ impl<'a> Display for StringListDisplay<'a> {
 /// # COLLADA Versions
 ///
 /// `coverage` and `extras` were added in COLLADA version `1.5.0`.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Asset {
     /// The list of contributors who worked on the asset.
     pub contributors: Vec<Contributor>,
@@ -606,7 +611,7 @@ pub struct Asset {
 /// # COLLADA Versions
 ///
 /// `author_email` and `author_website` were added in COLLADA version `1.5.0`.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Contributor {
     /// The author's name, if present.
     pub author: Option<String>,

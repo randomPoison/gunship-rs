@@ -3,36 +3,6 @@ extern crate parse_collada;
 use parse_collada::*;
 
 #[test]
-fn collada_element() {
-    static DOCUMENT: &'static str = r#"
-    <?xml version="1.0" encoding="utf-8"?>
-    <COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.4.1">
-        <asset />
-    </COLLADA>
-    "#;
-
-    let collada = Collada::from_str(DOCUMENT).unwrap();
-    assert_eq!(collada.version, "1.4.1");
-}
-
-#[test]
-fn collada_element_whitespace() {
-    static DOCUMENT: &'static str = r#"
-    <?xml version="1.0" encoding="utf-8"?>
-
-    <COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.4.1">
-
-        <asset          />
-
-    </COLLADA      >
-
-    "#;
-
-    let collada = Collada::from_str(DOCUMENT).unwrap();
-    assert_eq!(collada.version, "1.4.1");
-}
-
-#[test]
 fn no_xml_decl() {
     static DOCUMENT: &'static str = r#"
     <COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.4.1">
@@ -59,7 +29,37 @@ fn doctype() {
 }
 
 #[test]
-fn collada_element_missing_version() {
+fn extra_whitespace() {
+    static DOCUMENT: &'static str = r#"
+    <?xml version="1.0" encoding="utf-8"?>
+
+    <COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.4.1">
+
+        <asset          />
+
+    </COLLADA      >
+
+    "#;
+
+    let collada = Collada::from_str(DOCUMENT).unwrap();
+    assert_eq!(collada.version, "1.4.1");
+}
+
+#[test]
+fn collada_minimal() {
+    static DOCUMENT: &'static str = r#"
+    <?xml version="1.0" encoding="utf-8"?>
+    <COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.4.1">
+        <asset />
+    </COLLADA>
+    "#;
+
+    let collada = Collada::from_str(DOCUMENT).unwrap();
+    assert_eq!(collada.version, "1.4.1");
+}
+
+#[test]
+fn collada_missing_version() {
     static DOCUMENT: &'static str = r#"
     <?xml version="1.0" encoding="utf-8"?>
     <COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema">
@@ -73,7 +73,7 @@ fn collada_element_missing_version() {
 }
 
 #[test]
-fn collada_element_unexpected_attrib() {
+fn collada_unexpected_attrib() {
     static DOCUMENT: &'static str = r#"
     <?xml version="1.0" encoding="utf-8"?>
     <COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.4.1" foo="bar">
@@ -87,7 +87,7 @@ fn collada_element_unexpected_attrib() {
 }
 
 #[test]
-fn collada_element_missing_asset() {
+fn collada_missing_asset() {
     static DOCUMENT: &'static str = r#"
     <?xml version="1.0" encoding="utf-8"?>
     <COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.4.1" foo="bar">
@@ -97,4 +97,34 @@ fn collada_element_missing_asset() {
     let error = Collada::from_str(DOCUMENT).unwrap_err();
     assert_eq!(TextPosition { row: 2, column: 4 }, error.position());
     assert_eq!(&ErrorKind::UnexpectedAttribute { element: "COLLADA".into(), attribute: "foo".into(), expected: COLLADA_ATTRIBS }, error.kind());
+}
+
+#[test]
+fn asset_minimal() {
+    static DOCUMENT: &'static str = r#"
+    <?xml version="1.0" encoding="utf-8"?>
+    <COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.4.1">
+        <asset>
+        </asset>
+    </COLLADA>
+    "#;
+
+    let collada = Collada::from_str(DOCUMENT).unwrap();
+    assert_eq!(Asset::default(), collada.asset);
+}
+
+#[test]
+fn contributor_minimal() {
+    static DOCUMENT: &'static str = r#"
+    <?xml version="1.0" encoding="utf-8"?>
+    <COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.4.1">
+        <asset>
+            <contributor>
+            </contributor>
+        </asset>
+    </COLLADA>
+    "#;
+
+    let collada = Collada::from_str(DOCUMENT).unwrap();
+    assert_eq!(vec![Contributor::default()], collada.asset.contributors);
 }
