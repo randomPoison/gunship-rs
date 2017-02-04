@@ -158,8 +158,9 @@ impl Collada {
     ///
     /// `from_str()` and `read()` just create the `xml::EventReader` and then defer to `parse()`.
     fn parse<R: Read>(mut reader: EventReader<R>) -> Result<Collada> {
-        fn expect_start_element<R: Read>(
+        fn required_start_element<R: Read>(
             reader: &mut EventReader<R>,
+            parent: &str,
             search_names: &'static [&'static str]
         ) -> Result<(OwnedName, Vec<OwnedAttribute>, Namespace)> {
             match reader.next()? {
@@ -169,7 +170,7 @@ impl Collada {
                             position: reader.position(),
                             kind: ErrorKind::UnexpectedElement {
                                 element: name.local_name,
-                                parent: "COLLADA".into(),
+                                parent: parent.into(),
                                 expected: search_names,
                             },
                         })
@@ -192,7 +193,48 @@ impl Collada {
                     return Err(Error {
                         position: reader.position(),
                         kind: ErrorKind::UnexpectedCharacterData {
-                            element: "COLLADA".into(),
+                            element: parent.into(),
+                            data: data,
+                        }
+                    })
+                }
+
+                ProcessingInstruction { .. } => { unimplemented!(); }
+
+                event @ _ => { panic!("Unexpected event: {:?}", event); }
+            }
+        }
+
+        fn optional_start_element<R: Read>(
+            reader: &mut EventReader<R>,
+            parent: &str,
+            search_names: &'static [&'static str]
+        ) -> Result<Option<(OwnedName, Vec<OwnedAttribute>, Namespace)>> {
+            match reader.next()? {
+                StartElement { name, attributes, namespace } => {
+                    if !search_names.contains(&&*name.local_name) {
+                        return Err(Error {
+                            position: reader.position(),
+                            kind: ErrorKind::UnexpectedElement {
+                                element: name.local_name,
+                                parent: parent.into(),
+                                expected: search_names,
+                            },
+                        })
+                    }
+
+                    return Ok(Some((name, attributes, namespace)));
+                }
+
+                EndElement { .. } => {
+                    return Ok(None);
+                }
+
+                Characters(data) => {
+                    return Err(Error {
+                        position: reader.position(),
+                        kind: ErrorKind::UnexpectedCharacterData {
+                            element: parent.into(),
                             data: data,
                         }
                     })
@@ -312,15 +354,16 @@ impl Collada {
         // The next event must be the `<asset>` tag. No text data is allowed, and
         // whitespace/comments aren't emitted.
         static EXPECTED_ELEMENTS: &'static [&'static str] = &["asset"];
-        let (_name, _, _) = expect_start_element(&mut reader, EXPECTED_ELEMENTS)?;
+        let (_name, _, _) = required_start_element(&mut reader, "COLLADA", EXPECTED_ELEMENTS)?;
+
+        let mut asset = Asset::default();
 
         // Parse the children of the `<asset>` tag.
-        // static ASSET_CHILDREN
-        // loop {
-        //     match expect_start_or_end_element(&mut reader, "asset", ASSET_CHILDREN)? {
-        //
-        //     }
-        // }
+        static ASSET_CHILDREN: &'static [&'static str] = &["contributor"];
+        while let Some((_name, _, _)) = optional_start_element(&mut reader, "asset", ASSET_CHILDREN)? {
+            let contributor = parse_contributor(&mut reader)?;
+            asset.contributors.push(contributor);
+        }
 
         // Eat any events until we get to the `</COLLADA>` tag.
         // TODO: Actually parse the body of the document.
@@ -343,6 +386,18 @@ impl Collada {
 
         Ok(collada)
     }
+}
+
+fn parse_contributor<R: Read>(reader: &mut EventReader<R>) -> Result<Contributor> {
+    // Eat any events until we get to the `</contributor>` tag.
+    // TODO: Actually parse the body of the document.
+    loop {
+        match reader.next()? {
+            EndElement { ref name } if name.local_name == "contributor" => { break }
+            _ => {}
+        }
+    }
+    return Ok(Contributor::default())
 }
 
 /// A COLLADA parsing error.
@@ -535,9 +590,7 @@ impl<'a> Display for StringListDisplay<'a> {
 ///
 /// # COLLADA Versions
 ///
-/// - `coverage` and `extras` were added in COLLADA version `1.5.0`.
-/// - In version `1.4.1` there may be at most 1 contributor, in version `1.5.0` there may be any
-///   number of contributors.
+/// `coverage` and `extras` were added in COLLADA version `1.5.0`.
 #[derive(Debug, Clone, Default)]
 pub struct Asset {
     /// The list of contributors who worked on the asset.
