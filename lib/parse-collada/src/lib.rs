@@ -65,11 +65,21 @@ pub use xml::reader::Error as XmlError;
 
 use std::io::Read;
 use std::fmt::{self, Display, Formatter};
+use xml::attribute::OwnedAttribute;
 use xml::common::Position;
-use xml::EventReader;
+use xml::name::OwnedName;
+use xml::namespace::Namespace;
+use xml::reader::{EventReader, ParserConfig};
 use xml::reader::XmlEvent::*;
 
 pub static COLLADA_ATTRIBS: &'static [&'static str] = &["version", "xmlns", "base"];
+static PARSER_CONFIG: ParserConfig = ParserConfig {
+    trim_whitespace: true,
+    whitespace_to_characters: true,
+    cdata_to_characters: true,
+    ignore_comments: true,
+    coalesce_characters: true,
+};
 
 /// Represents a parsed COLLADA document.
 #[derive(Debug, Clone)]
@@ -100,6 +110,7 @@ impl Collada {
     /// static DOCUMENT: &'static str = r#"
     ///     <?xml version="1.0" encoding="utf-8"?>
     ///     <COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.4.1">
+    ///         <asset />
     ///     </COLLADA>
     /// "#;
     ///
@@ -114,7 +125,7 @@ impl Collada {
     ///
     /// [crate]: index.html
     pub fn from_str(source: &str) -> Result<Collada> {
-        let reader = EventReader::from_str(source);
+        let reader = EventReader::new_with_config(source.as_bytes(), PARSER_CONFIG.clone());
         Collada::parse(reader)
     }
 
@@ -139,7 +150,7 @@ impl Collada {
     ///
     /// [crate]: index.html
     pub fn read<R: Read>(reader: R) -> Result<Collada> {
-        let reader = EventReader::new(reader);
+        let reader = EventReader::new_with_config(reader, PARSER_CONFIG.clone());
         Collada::parse(reader)
     }
 
@@ -147,6 +158,52 @@ impl Collada {
     ///
     /// `from_str()` and `read()` just create the `xml::EventReader` and then defer to `parse()`.
     fn parse<R: Read>(mut reader: EventReader<R>) -> Result<Collada> {
+        fn expect_start_element<R: Read>(
+            reader: &mut EventReader<R>,
+            search_names: &'static [&'static str]
+        ) -> Result<(OwnedName, Vec<OwnedAttribute>, Namespace)> {
+            match reader.next()? {
+                StartElement { name, attributes, namespace } => {
+                    if !search_names.contains(&&*name.local_name) {
+                        return Err(Error {
+                            position: reader.position(),
+                            kind: ErrorKind::UnexpectedElement {
+                                element: name.local_name,
+                                parent: "COLLADA".into(),
+                                expected: search_names,
+                            },
+                        })
+                    }
+
+                    return Ok((name, attributes, namespace));
+                }
+
+                EndElement { name } => {
+                    return Err(Error {
+                        position: reader.position(),
+                        kind: ErrorKind::MissingElement {
+                            expected: search_names,
+                            parent: name.local_name,
+                        },
+                    })
+                }
+
+                Characters(data) => {
+                    return Err(Error {
+                        position: reader.position(),
+                        kind: ErrorKind::UnexpectedCharacterData {
+                            element: "COLLADA".into(),
+                            data: data,
+                        }
+                    })
+                }
+
+                ProcessingInstruction { .. } => { unimplemented!(); }
+
+                event @ _ => { panic!("Unexpected event: {:?}", event); }
+            }
+        }
+
         let mut collada = Collada {
             version: String::new(),
             asset: Asset::default(),
@@ -164,7 +221,7 @@ impl Collada {
 
         // The next element will always be the `<COLLADA>` tag. This will specify what version of
         // the COLLADA spec is being used, which is how we'll determine our sub-parser.
-        match reader.next()? {
+        let (name, attributes) = match reader.next()? {
             StartElement { name, attributes, namespace: _ } => {
                 // If the element isn't the `<COLLADA>` tag then the document is malformed,
                 // return an error.
@@ -177,68 +234,7 @@ impl Collada {
                     })
                 }
 
-                // Valide the attributes on the `<COLLADA>` tag.
-                // Use boolean flags to track if specific attributes have been encountered.
-                let mut has_found_version = false;
-                let mut has_found_base = false;
-
-                for attribute in attributes {
-                    // NOTE: I'm using `if` blocks instead of `match` here because using `match`
-                    // won't allow for the name to be moved out of `attribute`. Using `if` saves
-                    // some unnecessary allocations. I expect at some point Rust will get smart
-                    // enough that this will no longer be an issue, at which point we should
-                    // change this to use `match`, as that keeps better with Rust best practices.
-                    if attribute.name.local_name == "version" {
-                        if !has_found_version {
-                            collada.version = attribute.value;
-                            has_found_version = true;
-                        } else {
-                            return Err(Error {
-                                position: reader.position(),
-                                kind: ErrorKind::UnexpectedAttribute {
-                                    element: name.local_name,
-                                    attribute: "version".to_owned(),
-                                    expected: COLLADA_ATTRIBS,
-                                },
-                            })
-                        }
-                    } else if attribute.name.local_name == "base" {
-                        if !has_found_base {
-                            // TODO: Do we need to validate the URI?
-                            collada.base_uri = Some(AnyUri(attribute.value));
-                            has_found_base = true;
-                        } else {
-                            return Err(Error {
-                                position: reader.position(),
-                                kind: ErrorKind::UnexpectedAttribute {
-                                    element: name.local_name,
-                                    attribute: "base".to_owned(),
-                                    expected: COLLADA_ATTRIBS,
-                                },
-                            })
-                        }
-                    } else {
-                        return Err(Error {
-                            position: reader.position(),
-                            kind: ErrorKind::UnexpectedAttribute {
-                                element: name.local_name,
-                                attribute: attribute.name.local_name,
-                                expected: COLLADA_ATTRIBS,
-                            },
-                        })
-                    }
-                }
-
-                // Verify that all required attributes have been found.
-                if !has_found_version {
-                    return Err(Error {
-                        position: reader.position(),
-                        kind: ErrorKind::MissingAttribute {
-                            element: name.local_name,
-                            attribute: "version",
-                        },
-                    })
-                }
+                (name, attributes)
             }
 
             // I'm *almost* 100% certain that the only event that can follow the `StartDocument`
@@ -247,8 +243,84 @@ impl Collada {
             // (according to how we configure the parser), and those are the only things allowed
             // between `StartDocument` and the first `StartElement`. If xml-rs changes its
             // behavior this will need to be updated.
-            event @ _ => panic!("Unexpected event: {:?}", event),
+            event @ _ => { panic!("Unexpected event: {:?}", event); }
+        };
+
+        // Valide the attributes on the `<COLLADA>` tag.
+        // Use boolean flags to track if specific attributes have been encountered.
+        let mut has_found_version = false;
+        let mut has_found_base = false;
+
+        for attribute in attributes {
+            // NOTE: I'm using `if` blocks instead of `match` here because using `match`
+            // won't allow for the name to be moved out of `attribute`. Using `if` saves
+            // some unnecessary allocations. I expect at some point Rust will get smart
+            // enough that this will no longer be an issue, at which point we should
+            // change this to use `match`, as that keeps better with Rust best practices.
+            if attribute.name.local_name == "version" {
+                if !has_found_version {
+                    collada.version = attribute.value;
+                    has_found_version = true;
+                } else {
+                    return Err(Error {
+                        position: reader.position(),
+                        kind: ErrorKind::UnexpectedAttribute {
+                            element: name.local_name,
+                            attribute: "version".to_owned(),
+                            expected: COLLADA_ATTRIBS,
+                        },
+                    })
+                }
+            } else if attribute.name.local_name == "base" {
+                if !has_found_base {
+                    // TODO: Do we need to validate the URI?
+                    collada.base_uri = Some(AnyUri(attribute.value));
+                    has_found_base = true;
+                } else {
+                    return Err(Error {
+                        position: reader.position(),
+                        kind: ErrorKind::UnexpectedAttribute {
+                            element: name.local_name,
+                            attribute: "base".to_owned(),
+                            expected: COLLADA_ATTRIBS,
+                        },
+                    })
+                }
+            } else {
+                return Err(Error {
+                    position: reader.position(),
+                    kind: ErrorKind::UnexpectedAttribute {
+                        element: name.local_name,
+                        attribute: attribute.name.local_name,
+                        expected: COLLADA_ATTRIBS,
+                    },
+                })
+            }
         }
+
+        // Verify that all required attributes have been found.
+        if !has_found_version {
+            return Err(Error {
+                position: reader.position(),
+                kind: ErrorKind::MissingAttribute {
+                    element: name.local_name,
+                    attribute: "version",
+                },
+            })
+        }
+
+        // The next event must be the `<asset>` tag. No text data is allowed, and
+        // whitespace/comments aren't emitted.
+        static EXPECTED_ELEMENTS: &'static [&'static str] = &["asset"];
+        let (_name, _, _) = expect_start_element(&mut reader, EXPECTED_ELEMENTS)?;
+
+        // Parse the children of the `<asset>` tag.
+        // static ASSET_CHILDREN
+        // loop {
+        //     match expect_start_or_end_element(&mut reader, "asset", ASSET_CHILDREN)? {
+        //
+        //     }
+        // }
 
         // Eat any events until we get to the `</COLLADA>` tag.
         // TODO: Actually parse the body of the document.
@@ -318,7 +390,27 @@ pub enum ErrorKind {
         attribute: &'static str,
     },
 
+    /// A required elent was missing.
+    ///
+    /// Some elements in the COLLADA document have required children, or require that at least one
+    /// of a set of children are present. If such a required element is missing, this error is
+    /// returned.
+    MissingElement {
+        /// The element that was expecting a child element.
+        parent: String,
+
+        /// The set of required child elements.
+        ///
+        /// If there is only one expected child then it is a required child. If there are multiple
+        /// expected children then at least one of them is required.
+        expected: &'static [&'static str],
+    },
+
     /// An element had an attribute that isn't allowed.
+    ///
+    /// Elements in a COLLADA document are restricted to having only specific attributes. The
+    /// presence of an attribute that's not part of the COLLADA specification will cause this
+    /// error to be returned.
     UnexpectedAttribute {
         /// The element that had the unexpected attribute.
         element: String,
@@ -330,7 +422,7 @@ pub enum ErrorKind {
         expected: &'static [&'static str],
     },
 
-    /// An element had a child element that wasn't allowed.
+    /// An element had a child element that isn't allowed.
     UnexpectedElement {
         parent: String,
         element: String,
@@ -342,6 +434,16 @@ pub enum ErrorKind {
         element: String,
     },
 
+    /// An element contained non-markup text that isn't allowed.
+    ///
+    /// Most elements may only have other tags as children, only a small subset of COLLADA
+    /// elements contain actual data. If an element that only is allowed to have children contains
+    /// text data it is considered an error.
+    UnexpectedCharacterData {
+        element: String,
+        data: String,
+    },
+
     /// The XML in the document was malformed in some way.
     XmlError(XmlError),
 }
@@ -351,6 +453,10 @@ impl Display for ErrorKind {
         match *self {
             ErrorKind::MissingAttribute { ref element, ref attribute } => {
                 write!(formatter, "<{}> is missing the required attribute \"{}\"", element, attribute)
+            }
+
+            ErrorKind::MissingElement { expected, ref parent } => {
+                write!(formatter, "<{}> is missing a required child element: {}", parent, StringListDisplay(expected))
             }
 
             ErrorKind::UnexpectedAttribute { ref element, ref attribute, expected } => {
@@ -375,6 +481,10 @@ impl Display for ErrorKind {
 
             ErrorKind::UnexpectedRootElement { ref element } => {
                 write!(formatter, "Document began with <{}> instead of <COLLADA>", element)
+            }
+
+            ErrorKind::UnexpectedCharacterData { ref element, data: _ } => {
+                write!(formatter, "<{}> contained non-markup text data which isn't allowed", element)
             }
 
             ErrorKind::XmlError(ref error) => {

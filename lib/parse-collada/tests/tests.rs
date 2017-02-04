@@ -7,6 +7,7 @@ fn collada_element() {
     static DOCUMENT: &'static str =
 r#"<?xml version="1.0" encoding="utf-8"?>
 <COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.4.1">
+    <asset />
 </COLLADA>
 "#;
 
@@ -22,7 +23,9 @@ r#"
 
 <COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.4.1">
 
-</COLLADA>
+        <asset          />
+
+</COLLADA      >
 
 "#;
 
@@ -34,6 +37,7 @@ r#"
 fn no_xml_decl() {
     static DOCUMENT: &'static str =
 r#"<COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.4.1">
+    <asset />
 </COLLADA>
 "#;
 
@@ -47,6 +51,7 @@ fn doctype() {
 r#"<?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE note SYSTEM "Note.dtd">
 <COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.4.1">
+    <asset />
 </COLLADA>
 "#;
 
@@ -59,6 +64,7 @@ fn collada_element_missing_version() {
     static DOCUMENT: &'static str =
 r#"<?xml version="1.0" encoding="utf-8"?>
 <COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema">
+    <asset />
 </COLLADA>
 "#;
 
@@ -72,6 +78,7 @@ fn collada_element_unexpected_attrib() {
     static DOCUMENT: &'static str =
 r#"<?xml version="1.0" encoding="utf-8"?>
 <COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.4.1" foo="bar">
+    <asset />
 </COLLADA>
 "#;
 
