@@ -221,7 +221,7 @@ impl Collada {
                         kind: ErrorKind::UnexpectedAttribute {
                             element: name.local_name,
                             attribute: "version".to_owned(),
-                            expected: COLLADA_ATTRIBS,
+                            expected: COLLADA_ATTRIBS.into(),
                         },
                     })
                 }
@@ -236,7 +236,7 @@ impl Collada {
                         kind: ErrorKind::UnexpectedAttribute {
                             element: name.local_name,
                             attribute: "base".to_owned(),
-                            expected: COLLADA_ATTRIBS,
+                            expected: COLLADA_ATTRIBS.into(),
                         },
                     })
                 }
@@ -246,7 +246,7 @@ impl Collada {
                     kind: ErrorKind::UnexpectedAttribute {
                         element: name.local_name,
                         attribute: attribute.name.local_name,
-                        expected: COLLADA_ATTRIBS,
+                        expected: COLLADA_ATTRIBS.into(),
                     },
                 })
             }
@@ -265,8 +265,7 @@ impl Collada {
 
         // The next event must be the `<asset>` tag. No text data is allowed, and
         // whitespace/comments aren't emitted.
-        static EXPECTED_ELEMENTS: &'static [&'static str] = &["asset"];
-        let (_name, _, _) = required_start_element(&mut reader, "COLLADA", EXPECTED_ELEMENTS)?;
+        let (_name, _, _) = required_start_element(&mut reader, "COLLADA", "asset")?;
         collada.asset = parse_asset(&mut reader)?;
 
         // Eat any events until we get to the `</COLLADA>` tag.
@@ -295,17 +294,17 @@ impl Collada {
 fn required_start_element<R: Read>(
     reader: &mut EventReader<R>,
     parent: &str,
-    search_names: &'static [&'static str]
+    search_name: &'static str,
 ) -> Result<(OwnedName, Vec<OwnedAttribute>, Namespace)> {
     match reader.next()? {
         StartElement { name, attributes, namespace } => {
-            if !search_names.contains(&&*name.local_name) {
+            if search_name != name.local_name {
                 return Err(Error {
                     position: reader.position(),
                     kind: ErrorKind::UnexpectedElement {
                         element: name.local_name,
                         parent: parent.into(),
-                        expected: search_names,
+                        expected: vec![search_name],
                     },
                 })
             }
@@ -317,7 +316,7 @@ fn required_start_element<R: Read>(
             return Err(Error {
                 position: reader.position(),
                 kind: ErrorKind::MissingElement {
-                    expected: search_names,
+                    expected: search_name,
                     parent: name.local_name,
                 },
             })
@@ -352,7 +351,7 @@ fn optional_start_element<R: Read>(
                     kind: ErrorKind::UnexpectedElement {
                         element: name.local_name,
                         parent: parent.into(),
-                        expected: search_names,
+                        expected: search_names.into(),
                     },
                 })
             }
@@ -362,6 +361,70 @@ fn optional_start_element<R: Read>(
 
         EndElement { .. } => {
             return Ok(None);
+        }
+
+        Characters(data) => {
+            return Err(Error {
+                position: reader.position(),
+                kind: ErrorKind::UnexpectedCharacterData {
+                    element: parent.into(),
+                    data: data,
+                }
+            })
+        }
+
+        ProcessingInstruction { .. } => { unimplemented!(); }
+
+        event @ _ => { panic!("Unexpected event: {:?}", event); }
+    }
+}
+
+fn text_only_element<R: Read>(
+    reader: &mut EventReader<R>,
+    parent: &str,
+) -> Result<Option<String>> {
+    match reader.next()? {
+        Characters(data) => {
+            end_element(reader, parent)?;
+            return Ok(Some(data))
+        }
+
+        StartElement { name, attributes: _, namespace: _ } => {
+            return Err(Error {
+                position: reader.position(),
+                kind: ErrorKind::UnexpectedElement {
+                    element: name.local_name,
+                    parent: parent.into(),
+                    expected: vec![],
+                },
+            })
+        }
+
+        EndElement { .. } => {
+            return Ok(None);
+        }
+
+        ProcessingInstruction { .. } => { unimplemented!(); }
+
+        event @ _ => { panic!("Unexpected event: {:?}", event); }
+    }
+}
+
+fn end_element<R: Read>(reader: &mut EventReader<R>, parent: &str) -> Result<()> {
+    match reader.next()? {
+        EndElement { .. } => {
+            return Ok(());
+        }
+
+        StartElement { name, attributes: _, namespace: _ } => {
+            return Err(Error {
+                position: reader.position(),
+                kind: ErrorKind::UnexpectedElement {
+                    element: name.local_name,
+                    parent: parent.into(),
+                    expected: vec![],
+                },
+            })
         }
 
         Characters(data) => {
@@ -394,33 +457,59 @@ fn parse_asset<R: Read>(reader: &mut EventReader<R>) -> Result<Asset> {
 }
 
 fn parse_contributor<R: Read>(reader: &mut EventReader<R>) -> Result<Contributor> {
-    // Eat any events until we get to the `</contributor>` tag.
-    // TODO: Actually parse the body of the document.
-    loop {
-        match reader.next()? {
-            EndElement { ref name } if name.local_name == "contributor" => { break }
-            _ => {}
+    let mut contributor = Contributor::default();
+
+    static EXPECTED_ELEMENTS: &'static [&'static str] = &[
+        "author",
+        "authoring_tool",
+        "comments",
+        "copyright",
+        "source_data",
+    ];
+
+    let mut current_element = 0;
+    while let Some((element_name, _, _)) = optional_start_element(reader, "contributor", &EXPECTED_ELEMENTS[current_element..])? {
+        match &*element_name.local_name {
+            "author" => {
+                contributor.author = text_only_element(reader, "author")?
+            }
+
+            "authoring_tool" => {
+                contributor.authoring_tool = text_only_element(reader, "authoring_tool")?;
+            }
+
+            "comments" => {
+                contributor.comments = text_only_element(reader, "authoring_tool")?;
+            }
+
+            "copyright" => {
+                contributor.copyright = text_only_element(reader, "copyright")?;
+            }
+
+            "source_data" => {
+                contributor.source_data = text_only_element(reader, "source_data")?.map(Into::into);
+            }
+
+            _ => { panic!("Unexpected element name: {}", element_name); }
         }
+
+        current_element = EXPECTED_ELEMENTS
+            .iter()
+            .position(|&name| name == element_name.local_name)
+            .expect("Element wasn't in expected elements");
     }
-    return Ok(Contributor::default())
+
+    Ok(contributor)
 }
 
 /// A COLLADA parsing error.
 ///
 /// Contains where in the document the error occurred (i.e. line number and column), and
 /// details about the nature of the error.
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Error {
-    position: TextPosition,
-    kind: ErrorKind,
-}
-
-impl Error {
-    /// Gets the position in the document where the error occurred.
-    pub fn position(&self) -> TextPosition { self.position }
-
-    /// Gets detailed information about the error.
-    pub fn kind(&self) -> &ErrorKind { &self.kind }
+    pub position: TextPosition,
+    pub kind: ErrorKind,
 }
 
 impl From<xml::reader::Error> for Error {
@@ -439,9 +528,12 @@ impl Display for Error {
 }
 
 /// The specific error variant.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ErrorKind {
     /// An element was missing a required attribute.
+    ///
+    /// Some elements in the COLLADA specification have required attributes. If such a requried
+    /// attribute is missing, then this error is returned.
     MissingAttribute {
         /// The element that was missing an attribute.
         element: String,
@@ -463,7 +555,7 @@ pub enum ErrorKind {
         ///
         /// If there is only one expected child then it is a required child. If there are multiple
         /// expected children then at least one of them is required.
-        expected: &'static [&'static str],
+        expected: &'static str,
     },
 
     /// An element had an attribute that isn't allowed.
@@ -479,18 +571,39 @@ pub enum ErrorKind {
         attribute: String,
 
         /// The set of attributes allowed for this element.
-        expected: &'static [&'static str],
+        expected: Vec<&'static str>,
     },
 
     /// An element had a child element that isn't allowed.
+    ///
+    /// The COLLADA specification determines what children an element may have, as well as what
+    /// order those children may appear in. If an element has a child that is not allowed, or an
+    /// allowed child appears out of order, then this error is returned.
     UnexpectedElement {
+        /// The element that had the unexpected child.
         parent: String,
+
+        /// The element that is not allowed or is out of order.
         element: String,
-        expected: &'static [&'static str],
+
+        /// The set of expected child elements for `parent`.
+        ///
+        /// If `element` is in `expected` then it means the element is a valid child but appeared
+        /// out of order.
+        expected: Vec<&'static str>,
     },
 
     /// The document started with an element other than `<COLLADA>`.
+    ///
+    /// The only valid root element for a COLLADA document is the `<COLLADA>` element. This is
+    /// consistent across all supported versions of the COLLADA specificaiton. Any other root
+    /// element returns this error.
+    ///
+    /// The presence of an invalid root element will generally indicate that a non-COLLADA
+    /// document was accidentally passed to the parser. Double check that you are using the
+    /// intended document.
     UnexpectedRootElement {
+        /// The element that appeared at the root of the document.
         element: String,
     },
 
@@ -500,7 +613,15 @@ pub enum ErrorKind {
     /// elements contain actual data. If an element that only is allowed to have children contains
     /// text data it is considered an error.
     UnexpectedCharacterData {
+        /// The element that contained the unexpected text data.
         element: String,
+
+        /// The data that was found.
+        ///
+        /// The `Display` message for this error does not include the value of `data` as it is
+        /// often not relevant to end users, who can often go and check the original COLLADA
+        /// document if they wish to know what the erroneous text was. It is preserved in the
+        /// error object to assist in debugging.
         data: String,
     },
 
@@ -516,26 +637,26 @@ impl Display for ErrorKind {
             }
 
             ErrorKind::MissingElement { expected, ref parent } => {
-                write!(formatter, "<{}> is missing a required child element: {}", parent, StringListDisplay(expected))
+                write!(formatter, "<{}> is missing a required child element: {}", parent, expected)
             }
 
-            ErrorKind::UnexpectedAttribute { ref element, ref attribute, expected } => {
+            ErrorKind::UnexpectedAttribute { ref element, ref attribute, ref expected } => {
                 write!(
                     formatter,
                     "<{}> had an an attribute \"{}\" that is not allowed, only the following attributes are allowed for <{0}>: {}",
                     element,
                     attribute,
-                    StringListDisplay(expected),
+                    StringListDisplay(&*expected),
                 )
             }
 
-            ErrorKind::UnexpectedElement { ref parent, ref element, expected } => {
+            ErrorKind::UnexpectedElement { ref parent, ref element, ref expected } => {
                 write!(
                     formatter,
                     "<{}> had a child <{}> which is not allowed, <{0}> may only have the following children: {}",
                     parent,
                     element,
-                    StringListDisplay(expected),
+                    StringListDisplay(&*expected),
                 )
             }
 
@@ -570,6 +691,18 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// [anyURI]: http://www.datypic.com/sc/xsd/t-xsd_anyURI.html
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AnyUri(String);
+
+impl From<String> for AnyUri {
+    fn from(from: String) -> AnyUri {
+        AnyUri(from)
+    }
+}
+
+impl<'a> From<&'a str> for AnyUri {
+    fn from(from: &'a str) -> AnyUri {
+        AnyUri(from.into())
+    }
+}
 
 /// Helper struct for pretty-printing lists of strings.
 struct StringListDisplay<'a>(&'a [&'a str]);

@@ -67,9 +67,16 @@ fn collada_missing_version() {
     </COLLADA>
     "#;
 
-    let error = Collada::from_str(DOCUMENT).unwrap_err();
-    assert_eq!(TextPosition { row: 2, column: 4 }, error.position());
-    assert_eq!(&ErrorKind::MissingAttribute { element: "COLLADA".into(), attribute: "version".into() }, error.kind());
+    let expected = Error {
+        position: TextPosition { row: 2, column: 4 },
+        kind: ErrorKind::MissingAttribute {
+            element: "COLLADA".into(),
+            attribute: "version".into()
+        },
+    };
+
+    let actual = Collada::from_str(DOCUMENT).unwrap_err();
+    assert_eq!(expected, actual);
 }
 
 #[test]
@@ -81,22 +88,37 @@ fn collada_unexpected_attrib() {
     </COLLADA>
     "#;
 
-    let error = Collada::from_str(DOCUMENT).unwrap_err();
-    assert_eq!(TextPosition { row: 2, column: 4 }, error.position());
-    assert_eq!(&ErrorKind::UnexpectedAttribute { element: "COLLADA".into(), attribute: "foo".into(), expected: COLLADA_ATTRIBS }, error.kind());
+    let expected = Error {
+        position: TextPosition { row: 2, column: 4 },
+        kind: ErrorKind::UnexpectedAttribute {
+            element: "COLLADA".into(),
+            attribute: "foo".into(),
+            expected: COLLADA_ATTRIBS.into(),
+        },
+    };
+
+    let actual = Collada::from_str(DOCUMENT).unwrap_err();
+    assert_eq!(expected, actual);
 }
 
 #[test]
 fn collada_missing_asset() {
     static DOCUMENT: &'static str = r#"
     <?xml version="1.0" encoding="utf-8"?>
-    <COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.4.1" foo="bar">
+    <COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.4.1">
     </COLLADA>
     "#;
 
-    let error = Collada::from_str(DOCUMENT).unwrap_err();
-    assert_eq!(TextPosition { row: 2, column: 4 }, error.position());
-    assert_eq!(&ErrorKind::UnexpectedAttribute { element: "COLLADA".into(), attribute: "foo".into(), expected: COLLADA_ATTRIBS }, error.kind());
+    let expected = Error {
+        position: TextPosition { row: 3, column: 4 },
+        kind: ErrorKind::MissingElement {
+            parent: "COLLADA".into(),
+            expected: "asset",
+        },
+    };
+
+    let actual = Collada::from_str(DOCUMENT).unwrap_err();
+    assert_eq!(expected, actual);
 }
 
 #[test]
@@ -128,3 +150,67 @@ fn contributor_minimal() {
     let collada = Collada::from_str(DOCUMENT).unwrap();
     assert_eq!(vec![Contributor::default()], collada.asset.contributors);
 }
+
+#[test]
+fn contributor_full() {
+    static DOCUMENT: &'static str = r#"
+    <?xml version="1.0" encoding="utf-8"?>
+    <COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.4.1">
+        <asset>
+            <contributor>
+                <author>David LeGare</author>
+                <authoring_tool>Atom</authoring_tool>
+                <comments>This is a sample COLLADA document.</comments>
+                <copyright>David LeGare, free for public use</copyright>
+                <source_data>C:/models/tank.s3d</source_data>
+            </contributor>
+        </asset>
+    </COLLADA>
+    "#;
+
+    let expected = Contributor {
+        author: Some("David LeGare".into()),
+        author_email: None,
+        author_website: None,
+        authoring_tool: Some("Atom".into()),
+        comments: Some("This is a sample COLLADA document.".into()),
+        copyright: Some("David LeGare, free for public use".into()),
+        source_data: Some("C:/models/tank.s3d".into()),
+    };
+
+    let collada = Collada::from_str(DOCUMENT).unwrap();
+    assert_eq!(vec![expected], collada.asset.contributors);
+}
+
+#[test]
+fn contributor_wrong_order() {
+    static DOCUMENT: &'static str = r#"
+    <?xml version="1.0" encoding="utf-8"?>
+    <COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.4.1">
+        <asset>
+            <contributor>
+                <author>David LeGare</author>
+                <comments>This is a sample COLLADA document.</comments>
+                <authoring_tool>Atom</authoring_tool>
+                <copyright>David LeGare, free for public use</copyright>
+                <source_data>C:/models/tank.s3d</source_data>
+            </contributor>
+        </asset>
+    </COLLADA>
+    "#;
+
+    let expected = Error {
+        position: TextPosition { row: 7, column: 16 },
+        kind: ErrorKind::UnexpectedElement {
+            parent: "contributor".into(),
+            element: "authoring_tool".into(),
+            expected: vec!["author", "authoring_tool", "comments", "copyright", "source_data"],
+        },
+    };
+
+    let actual = Collada::from_str(DOCUMENT).unwrap_err();
+    assert_eq!(expected, actual);
+}
+// contributor_illegal_child
+// contributor_wrong_version
+// contributor_illegal_attribute
