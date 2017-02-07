@@ -341,11 +341,14 @@ fn required_start_element<R: Read>(
 fn optional_start_element<R: Read>(
     reader: &mut EventReader<R>,
     parent: &str,
-    search_names: &'static [&'static str]
+    search_names: &'static [&'static str],
+    current_element: usize,
 ) -> Result<Option<(OwnedName, Vec<OwnedAttribute>, Namespace)>> {
+    let current_search_names = &search_names[current_element ..];
+
     match reader.next()? {
         StartElement { name, attributes, namespace } => {
-            if !search_names.contains(&&*name.local_name) {
+            if !current_search_names.contains(&&*name.local_name) {
                 return Err(Error {
                     position: reader.position(),
                     kind: ErrorKind::UnexpectedElement {
@@ -448,7 +451,7 @@ fn parse_asset<R: Read>(reader: &mut EventReader<R>) -> Result<Asset> {
 
     // Parse the children of the `<asset>` tag.
     static ASSET_CHILDREN: &'static [&'static str] = &["contributor"];
-    while let Some((_name, _, _)) = optional_start_element(reader, "asset", ASSET_CHILDREN)? {
+    while let Some((_name, _, _)) = optional_start_element(reader, "asset", ASSET_CHILDREN, 0)? {
         let contributor = parse_contributor(reader)?;
         asset.contributors.push(contributor);
     }
@@ -468,7 +471,7 @@ fn parse_contributor<R: Read>(reader: &mut EventReader<R>) -> Result<Contributor
     ];
 
     let mut current_element = 0;
-    while let Some((element_name, _, _)) = optional_start_element(reader, "contributor", &EXPECTED_ELEMENTS[current_element..])? {
+    while let Some((element_name, _, _)) = optional_start_element(reader, "contributor", EXPECTED_ELEMENTS, current_element)? {
         match &*element_name.local_name {
             "author" => {
                 contributor.author = text_only_element(reader, "author")?
