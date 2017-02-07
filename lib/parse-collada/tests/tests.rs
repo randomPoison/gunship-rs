@@ -93,7 +93,7 @@ fn collada_unexpected_attrib() {
         kind: ErrorKind::UnexpectedAttribute {
             element: "COLLADA".into(),
             attribute: "foo".into(),
-            expected: COLLADA_ATTRIBS.into(),
+            expected: vec!["version", "xmlns", "base"],
         },
     };
 
