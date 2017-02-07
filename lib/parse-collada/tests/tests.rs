@@ -211,6 +211,125 @@ fn contributor_wrong_order() {
     let actual = Collada::from_str(DOCUMENT).unwrap_err();
     assert_eq!(expected, actual);
 }
-// contributor_illegal_child
-// contributor_wrong_version
-// contributor_illegal_attribute
+
+#[test]
+fn contributor_illegal_child() {
+    static DOCUMENT: &'static str = r#"
+    <?xml version="1.0" encoding="utf-8"?>
+    <COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.4.1">
+        <asset>
+            <contributor>
+                <author>David LeGare</author>
+                <authoring_tool>Atom</authoring_tool>
+                <comments>This is a sample COLLADA document.</comments>
+                <copyright>David LeGare, free for public use</copyright>
+                <source_data>C:/models/tank.s3d</source_data>
+                <foo>Some foo data</foo>
+            </contributor>
+        </asset>
+    </COLLADA>
+    "#;
+
+    let expected = Error {
+        position: TextPosition { row: 10, column: 16 },
+        kind: ErrorKind::UnexpectedElement {
+            parent: "contributor".into(),
+            element: "foo".into(),
+            expected: vec!["author", "authoring_tool", "comments", "copyright", "source_data"],
+        },
+    };
+
+    let actual = Collada::from_str(DOCUMENT).unwrap_err();
+    assert_eq!(expected, actual);
+}
+
+#[test]
+fn contributor_wrong_version() {
+    static DOCUMENT: &'static str = r#"
+    <?xml version="1.0" encoding="utf-8"?>
+    <COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.4.1">
+        <asset>
+            <contributor>
+                <author>David LeGare</author>
+                <author_email>dl@email.com</author_email>
+                <authoring_tool>Atom</authoring_tool>
+                <comments>This is a sample COLLADA document.</comments>
+                <copyright>David LeGare, free for public use</copyright>
+                <source_data>C:/models/tank.s3d</source_data>
+            </contributor>
+        </asset>
+    </COLLADA>
+    "#;
+
+    let expected = Error {
+        position: TextPosition { row: 6, column: 16 },
+        kind: ErrorKind::UnexpectedElement {
+            parent: "contributor".into(),
+            element: "author_email".into(),
+            expected: vec!["author", "authoring_tool", "comments", "copyright", "source_data"],
+        },
+    };
+
+    let actual = Collada::from_str(DOCUMENT).unwrap_err();
+    assert_eq!(expected, actual);
+}
+
+#[test]
+fn contributor_illegal_attribute() {
+    static DOCUMENT: &'static str = r#"
+    <?xml version="1.0" encoding="utf-8"?>
+    <COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.4.1">
+        <asset>
+            <contributor foo="bar">
+                <author>David LeGare</author>
+                <authoring_tool>Atom</authoring_tool>
+                <comments>This is a sample COLLADA document.</comments>
+                <copyright>David LeGare, free for public use</copyright>
+                <source_data>C:/models/tank.s3d</source_data>
+            </contributor>
+        </asset>
+    </COLLADA>
+    "#;
+
+    let expected = Error {
+        position: TextPosition { row: 4, column: 12 },
+        kind: ErrorKind::UnexpectedAttribute {
+            element: "contributor".into(),
+            attribute: "foo".into(),
+            expected: vec![],
+        },
+    };
+
+    let actual = Collada::from_str(DOCUMENT).unwrap_err();
+    assert_eq!(expected, actual);
+}
+
+#[test]
+fn contributor_illegal_child_attribute() {
+    static DOCUMENT: &'static str = r#"
+    <?xml version="1.0" encoding="utf-8"?>
+    <COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.4.1">
+        <asset>
+            <contributor>
+                <author>David LeGare</author>
+                <authoring_tool>Atom</authoring_tool>
+                <comments foo="bar">This is a sample COLLADA document.</comments>
+                <copyright>David LeGare, free for public use</copyright>
+                <source_data>C:/models/tank.s3d</source_data>
+            </contributor>
+        </asset>
+    </COLLADA>
+    "#;
+
+    let expected = Error {
+        position: TextPosition { row: 7, column: 16 },
+        kind: ErrorKind::UnexpectedAttribute {
+            element: "comments".into(),
+            attribute: "foo".into(),
+            expected: vec![],
+        },
+    };
+
+    let actual = Collada::from_str(DOCUMENT).unwrap_err();
+    assert_eq!(expected, actual);
+}

@@ -451,15 +451,27 @@ fn parse_asset<R: Read>(reader: &mut EventReader<R>) -> Result<Asset> {
 
     // Parse the children of the `<asset>` tag.
     static ASSET_CHILDREN: &'static [&'static str] = &["contributor"];
-    while let Some((_name, _, _)) = optional_start_element(reader, "asset", ASSET_CHILDREN, 0)? {
-        let contributor = parse_contributor(reader)?;
+    while let Some((_name, attributes, _)) = optional_start_element(reader, "asset", ASSET_CHILDREN, 0)? {
+        let contributor = parse_contributor(reader, attributes)?;
         asset.contributors.push(contributor);
     }
 
     Ok(asset)
 }
 
-fn parse_contributor<R: Read>(reader: &mut EventReader<R>) -> Result<Contributor> {
+fn parse_contributor<R: Read>(reader: &mut EventReader<R>, attributes: Vec<OwnedAttribute>) -> Result<Contributor> {
+    // Make sure the `<contributor>` element has no attributes.
+    if attributes.len() != 0 {
+        return Err(Error {
+            position: reader.position(),
+            kind: ErrorKind::UnexpectedAttribute {
+                element: "contributor".into(),
+                attribute: attributes[0].name.local_name.clone(),
+                expected: vec![],
+            },
+        })
+    }
+
     let mut contributor = Contributor::default();
 
     static EXPECTED_ELEMENTS: &'static [&'static str] = &[
@@ -470,26 +482,47 @@ fn parse_contributor<R: Read>(reader: &mut EventReader<R>) -> Result<Contributor
         "source_data",
     ];
 
+    fn verify_attributes<R: Read>(reader: &EventReader<R>, name: &OwnedName, attributes: Vec<OwnedAttribute>) -> Result<()> {
+        // Make sure the child element has no attributes.
+        if attributes.len() != 0 {
+            return Err(Error {
+                position: reader.position(),
+                kind: ErrorKind::UnexpectedAttribute {
+                    element: name.local_name.clone(),
+                    attribute: attributes[0].name.local_name.clone(),
+                    expected: vec![],
+                },
+            })
+        }
+
+        Ok(())
+    }
+
     let mut current_element = 0;
-    while let Some((element_name, _, _)) = optional_start_element(reader, "contributor", EXPECTED_ELEMENTS, current_element)? {
+    while let Some((element_name, element_attributes, _)) = optional_start_element(reader, "contributor", EXPECTED_ELEMENTS, current_element)? {
         match &*element_name.local_name {
             "author" => {
+                verify_attributes(reader, &element_name, element_attributes)?;
                 contributor.author = text_only_element(reader, "author")?
             }
 
             "authoring_tool" => {
+                verify_attributes(reader, &element_name, element_attributes)?;
                 contributor.authoring_tool = text_only_element(reader, "authoring_tool")?;
             }
 
             "comments" => {
+                verify_attributes(reader, &element_name, element_attributes)?;
                 contributor.comments = text_only_element(reader, "authoring_tool")?;
             }
 
             "copyright" => {
+                verify_attributes(reader, &element_name, element_attributes)?;
                 contributor.copyright = text_only_element(reader, "copyright")?;
             }
 
             "source_data" => {
+                verify_attributes(reader, &element_name, element_attributes)?;
                 contributor.source_data = text_only_element(reader, "source_data")?.map(Into::into);
             }
 
