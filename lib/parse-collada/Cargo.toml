@@ -5,4 +5,5 @@ version = "0.3.0"
 authors = ["David LeGare <excaliburhissheath@gmail.com>"]
 
 [dependencies]
+chrono = "0.3"
 xml-rs = "0.3.5"

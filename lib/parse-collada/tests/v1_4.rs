@@ -7,7 +7,10 @@ fn collada_minimal() {
     static DOCUMENT: &'static str = r#"
     <?xml version="1.0" encoding="utf-8"?>
     <COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.4.1">
-        <asset />
+        <asset>
+            <created>2017-02-07T20:44:30Z</created>
+            <modified>2017-02-07T20:44:30Z</modified>
+        </asset>
     </COLLADA>
     "#;
 
@@ -47,6 +50,8 @@ fn asset_minimal() {
     <?xml version="1.0" encoding="utf-8"?>
     <COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.4.1">
         <asset>
+            <created>2017-02-07T20:44:30Z</created>
+            <modified>2017-02-07T20:44:30Z</modified>
         </asset>
     </COLLADA>
     "#;
@@ -61,8 +66,9 @@ fn contributor_minimal() {
     <?xml version="1.0" encoding="utf-8"?>
     <COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.4.1">
         <asset>
-            <contributor>
-            </contributor>
+            <contributor />
+            <created>2017-02-07T20:44:30Z</created>
+            <modified>2017-02-07T20:44:30Z</modified>
         </asset>
     </COLLADA>
     "#;
@@ -84,6 +90,8 @@ fn contributor_full() {
                 <copyright>David LeGare, free for public use</copyright>
                 <source_data>C:/models/tank.s3d</source_data>
             </contributor>
+            <created>2017-02-07T20:44:30Z</created>
+            <modified>2017-02-07T20:44:30Z</modified>
         </asset>
     </COLLADA>
     "#;
@@ -115,6 +123,8 @@ fn contributor_wrong_order() {
                 <copyright>David LeGare, free for public use</copyright>
                 <source_data>C:/models/tank.s3d</source_data>
             </contributor>
+            <created>2017-02-07T20:44:30Z</created>
+            <modified>2017-02-07T20:44:30Z</modified>
         </asset>
     </COLLADA>
     "#;
@@ -146,6 +156,8 @@ fn contributor_illegal_child() {
                 <source_data>C:/models/tank.s3d</source_data>
                 <foo>Some foo data</foo>
             </contributor>
+            <created>2017-02-07T20:44:30Z</created>
+            <modified>2017-02-07T20:44:30Z</modified>
         </asset>
     </COLLADA>
     "#;
@@ -177,6 +189,8 @@ fn contributor_wrong_version() {
                 <copyright>David LeGare, free for public use</copyright>
                 <source_data>C:/models/tank.s3d</source_data>
             </contributor>
+            <created>2017-02-07T20:44:30Z</created>
+            <modified>2017-02-07T20:44:30Z</modified>
         </asset>
     </COLLADA>
     "#;
@@ -207,6 +221,8 @@ fn contributor_illegal_attribute() {
                 <copyright>David LeGare, free for public use</copyright>
                 <source_data>C:/models/tank.s3d</source_data>
             </contributor>
+            <created>2017-02-07T20:44:30Z</created>
+            <modified>2017-02-07T20:44:30Z</modified>
         </asset>
     </COLLADA>
     "#;
@@ -237,6 +253,8 @@ fn contributor_illegal_child_attribute() {
                 <copyright>David LeGare, free for public use</copyright>
                 <source_data>C:/models/tank.s3d</source_data>
             </contributor>
+            <created>2017-02-07T20:44:30Z</created>
+            <modified>2017-02-07T20:44:30Z</modified>
         </asset>
     </COLLADA>
     "#;

@@ -58,8 +58,10 @@
 //! [Collada]: struct.Collada.html
 //! [Collada::read]: struct.Collada.html#method.read
 
+extern crate chrono;
 extern crate xml;
 
+pub use chrono::{DateTime, UTC};
 pub use v1_5::*;
 pub use xml::common::TextPosition;
 pub use xml::reader::Error as XmlError;
@@ -126,6 +128,14 @@ pub enum ErrorKind {
         /// expected children then at least one of them is required.
         expected: &'static str,
     },
+
+    /// A datetime string was formatted incorrectly.
+    ///
+    /// Datetime strings in COLLADA are in the [ISO 8601][ISO 8601] format, and improperly
+    /// formatted datetime values will cause this error to be returned.
+    ///
+    /// [ISO 8601]: https://en.wikipedia.org/wiki/ISO_8601
+    TimeError(chrono::ParseError),
 
     /// An element had an attribute that isn't allowed.
     ///
@@ -213,6 +223,10 @@ impl Display for ErrorKind {
                 write!(formatter, "<{}> is missing a required child element: {}", parent, expected)
             }
 
+            ErrorKind::TimeError(ref error) => {
+                write!(formatter, "{}", error)
+            }
+
             ErrorKind::UnexpectedAttribute { ref element, ref attribute, ref expected } => {
                 write!(
                     formatter,
@@ -278,6 +292,32 @@ impl From<String> for AnyUri {
 impl<'a> From<&'a str> for AnyUri {
     fn from(from: &'a str) -> AnyUri {
         AnyUri(from.into())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum UpAxis {
+    X,
+    Y,
+    Z,
+}
+
+impl Default for UpAxis {
+    fn default() -> UpAxis { UpAxis::Y }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Unit {
+    pub meter: f64,
+    pub name: String,
+}
+
+impl Default for Unit {
+    fn default() -> Unit {
+        Unit {
+            meter: 1.0,
+            name: "meter".into(),
+        }
     }
 }
 

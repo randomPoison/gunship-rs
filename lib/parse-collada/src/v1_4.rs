@@ -1,4 +1,4 @@
-use {AnyUri, Result, Error, ErrorKind, utils, v1_5};
+use {AnyUri, DateTime, Error, ErrorKind, Result, Unit, UpAxis, utils, UTC, v1_5};
 use std::io::Read;
 use xml::attribute::OwnedAttribute;
 use xml::common::Position;
@@ -7,16 +7,10 @@ use xml::reader::EventReader;
 use xml::reader::XmlEvent::*;
 
 pub fn parse<R: Read>(mut reader: EventReader<R>, version: String, base: Option<AnyUri>) -> Result<Collada> {
-    let mut collada = Collada {
-        version: version,
-        asset: Asset::default(),
-        base_uri: base,
-    };
-
     // The next event must be the `<asset>` tag. No text data is allowed, and
     // whitespace/comments aren't emitted.
     let (_name, _, _) = utils::required_start_element(&mut reader, "COLLADA", "asset")?;
-    collada.asset = parse_asset(&mut reader)?;
+    let asset = parse_asset(&mut reader)?;
 
     // Eat any events until we get to the `</COLLADA>` tag.
     // TODO: Actually parse the body of the document.
@@ -37,20 +31,163 @@ pub fn parse<R: Read>(mut reader: EventReader<R>, version: String, base: Option<
         event @ _ => { panic!("Unexpected event: {:?}", event); }
     }
 
-    Ok(collada)
+    Ok(Collada {
+        version: version,
+        asset: asset,
+        base_uri: base,
+    })
 }
 
 fn parse_asset<R: Read>(reader: &mut EventReader<R>) -> Result<Asset> {
-    let mut asset = Asset::default();
+    let mut contributors = Vec::default();
+    let mut created = None;
+    let mut keywords = None;
+    let modified;
+    let mut revision = None;
+    let mut subject = None;
+    let mut title = None;
+    let mut unit = None;
+    let mut up_axis = None;
 
     // Parse the children of the `<asset>` tag.
-    static ASSET_CHILDREN: &'static [&'static str] = &["contributor"];
-    while let Some((_name, attributes, _)) = utils::optional_start_element(reader, "asset", ASSET_CHILDREN, 0)? {
-        let contributor = parse_contributor(reader, attributes)?;
-        asset.contributors.push(contributor);
+    while let Some((name, attributes, _)) = utils::optional_start_element(reader, "asset", &["contributor", "created"], 0)? {
+        match &*name.local_name {
+            "contributor" => {
+                let contributor = parse_contributor(reader, attributes)?;
+                contributors.push(contributor);
+            }
+
+            "created" => {
+                let date_time = utils::text_only_element(reader, "asset")?
+                    .unwrap_or_default()
+                    .parse()
+                    .map_err(|error| Error {
+                        position: reader.position(),
+                        kind: ErrorKind::TimeError(error),
+                    })?;
+                created = Some(date_time);
+                break;
+            }
+
+            _ => { panic!("Unexpected element: {:?}", name.local_name); }
+        }
     }
 
-    Ok(asset)
+    let created = match created {
+        Some(created) => { created }
+        None => {
+            return Err(Error {
+                position: reader.position(),
+                kind: ErrorKind::MissingElement {
+                    parent: "asset".into(),
+                    expected: "created",
+                }
+            })
+        }
+    };
+
+    match utils::optional_start_element(reader, "asset", &["keywords", "modified"], 0)? {
+        Some((name, attributes, _)) => {
+            match &*name.local_name {
+                "keywords" => {
+                    if attributes.len() > 0 {
+                        return Err(Error {
+                            position: reader.position(),
+                            kind: ErrorKind::UnexpectedAttribute {
+                                element: "keywords".into(),
+                                attribute: attributes[0].name.local_name.clone(),
+                                expected: vec![],
+                            }
+                        })
+                    }
+
+                    keywords = utils::text_only_element(reader, "keywords")?;
+
+                    // If the first element was `<keywords>` then the next element must be `<modified>`.
+                    let (_, attributes, _) = utils::required_start_element(reader, "asset", "modified")?;
+
+                    if attributes.len() > 0 {
+                        return Err(Error {
+                            position: reader.position(),
+                            kind: ErrorKind::UnexpectedAttribute {
+                                element: "keywords".into(),
+                                attribute: attributes[0].name.local_name.clone(),
+                                expected: vec![],
+                            }
+                        })
+                    }
+
+                    let date_time = utils::text_only_element(reader, "asset")?
+                        .unwrap_or_default()
+                        .parse()
+                        .map_err(|error| Error {
+                            position: reader.position(),
+                            kind: ErrorKind::TimeError(error),
+                        })?;
+                    modified = Some(date_time);
+                },
+
+                "modified" => {
+                    if attributes.len() > 0 {
+                        return Err(Error {
+                            position: reader.position(),
+                            kind: ErrorKind::UnexpectedAttribute {
+                                element: "modified".into(),
+                                attribute: attributes[0].name.local_name.clone(),
+                                expected: vec![],
+                            }
+                        })
+                    }
+
+                    let date_time = utils::text_only_element(reader, "asset")?
+                        .unwrap_or_default()
+                        .parse()
+                        .map_err(|error| Error {
+                            position: reader.position(),
+                            kind: ErrorKind::TimeError(error),
+                        })?;
+                    modified = Some(date_time);
+                },
+
+                _ => { panic!("Unexpected element: {:?}", name.local_name); }
+            }
+        }
+
+        None => {
+            return Err(Error {
+                position: reader.position(),
+                kind: ErrorKind::MissingElement {
+                    parent: "asset".into(),
+                    expected: "modified",
+                },
+            })
+        }
+    }
+
+    let modified = match modified {
+        Some(modified) => { modified }
+        None => {
+            return Err(Error {
+                position: reader.position(),
+                kind: ErrorKind::MissingElement {
+                    parent: "asset".into(),
+                    expected: "modified",
+                }
+            })
+        }
+    };
+
+    Ok(Asset {
+        contributors: contributors,
+        created: created,
+        keywords: keywords,
+        modified: modified,
+        revision: revision,
+        subject: subject,
+        title: title,
+        unit: unit.unwrap_or_default(),
+        up_axis: up_axis.unwrap_or_default(),
+    })
 }
 
 fn parse_contributor<R: Read>(reader: &mut EventReader<R>, attributes: Vec<OwnedAttribute>) -> Result<Contributor> {
@@ -133,7 +270,7 @@ fn parse_contributor<R: Read>(reader: &mut EventReader<R>, attributes: Vec<Owned
 }
 
 /// Represents a parsed COLLADA document.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Collada {
     /// The version string for the COLLADA specification used by the document.
     ///
@@ -167,10 +304,18 @@ impl Into<v1_5::Collada> for Collada {
 /// # COLLADA Versions
 ///
 /// `coverage` and `extras` were added in COLLADA version `1.5.0`.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Asset {
     /// The list of contributors who worked on the asset.
     pub contributors: Vec<Contributor>,
+    pub created: DateTime<UTC>,
+    pub keywords: Option<String>,
+    pub modified: DateTime<UTC>,
+    pub revision: Option<String>,
+    pub subject: Option<String>,
+    pub title: Option<String>,
+    pub unit: Unit,
+    pub up_axis: UpAxis,
 }
 
 impl Into<v1_5::Asset> for Asset {

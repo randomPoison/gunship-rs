@@ -160,7 +160,7 @@ pub fn required_start_element<R: Read>(
 pub fn optional_start_element<R: Read>(
     reader: &mut EventReader<R>,
     parent: &str,
-    search_names: &'static [&'static str],
+    search_names: &[&'static str],
     current_element: usize,
 ) -> Result<Option<(OwnedName, Vec<OwnedAttribute>, Namespace)>> {
     let current_search_names = &search_names[current_element ..];
