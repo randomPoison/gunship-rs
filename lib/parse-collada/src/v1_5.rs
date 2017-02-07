@@ -73,6 +73,8 @@ fn parse_contributor<R: Read>(reader: &mut EventReader<R>, attributes: Vec<Owned
 
     static EXPECTED_ELEMENTS: &'static [&'static str] = &[
         "author",
+        "author_email",
+        "author_website",
         "authoring_tool",
         "comments",
         "copyright",
@@ -100,7 +102,17 @@ fn parse_contributor<R: Read>(reader: &mut EventReader<R>, attributes: Vec<Owned
         match &*element_name.local_name {
             "author" => {
                 verify_attributes(reader, &element_name, element_attributes)?;
-                contributor.author = utils::text_only_element(reader, "author")?
+                contributor.author = utils::text_only_element(reader, "author")?;
+            }
+
+            "author_email" => {
+                verify_attributes(reader, &element_name, element_attributes)?;
+                contributor.author_email = utils::text_only_element(reader, "author_email")?;
+            }
+
+            "author_website" => {
+                verify_attributes(reader, &element_name, element_attributes)?;
+                contributor.author_website = utils::text_only_element(reader, "author_website")?.map(Into::into);
             }
 
             "authoring_tool" => {
@@ -136,7 +148,7 @@ fn parse_contributor<R: Read>(reader: &mut EventReader<R>, attributes: Vec<Owned
 }
 
 /// Represents a parsed COLLADA document.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Collada {
     /// The version string for the COLLADA specification used by the document.
     ///

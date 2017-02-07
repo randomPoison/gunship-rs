@@ -133,7 +133,7 @@ fn parse_contributor<R: Read>(reader: &mut EventReader<R>, attributes: Vec<Owned
 }
 
 /// Represents a parsed COLLADA document.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Collada {
     /// The version string for the COLLADA specification used by the document.
     ///
