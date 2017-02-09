@@ -2,7 +2,6 @@ use {AnyUri, DateTime, Error, ErrorKind, Result, Unit, UpAxis, utils, UTC, v1_5}
 use std::io::Read;
 use xml::attribute::OwnedAttribute;
 use xml::common::Position;
-use xml::name::OwnedName;
 use xml::reader::EventReader;
 use xml::reader::XmlEvent::*;
 
@@ -177,6 +176,97 @@ fn parse_asset<R: Read>(reader: &mut EventReader<R>) -> Result<Asset> {
         }
     };
 
+    let expected_elements = &["revision", "subject", "title", "unit", "up_axis"];
+    let mut current_element = 0;
+    while let Some((name, attributes, _)) = utils::optional_start_element(reader, "asset", expected_elements, current_element)? {
+        match &*name.local_name {
+            "revision" => {
+                utils::verify_attributes(reader, &name, attributes)?;
+                revision = utils::text_only_element(reader, "asset")?;
+            }
+
+            "subject" => {
+                utils::verify_attributes(reader, &name, attributes)?;
+                subject = utils::text_only_element(reader, "asset")?;
+            }
+
+            "title" => {
+                utils::verify_attributes(reader, &name, attributes)?;
+                title = utils::text_only_element(reader, "asset")?;
+            }
+
+            "unit" => {
+                let mut unit_attrib = None;
+                let mut meter_attrib = None;
+
+                for attribute in attributes {
+                    match &*attribute.name.local_name {
+                        "unit" => {
+                            // TODO: Validate that this follows the xsd:NMTOKEN format.
+                            // http://www.datypic.com/sc/xsd/t-xsd_NMTOKEN.html
+                            unit_attrib = Some(attribute.value);
+                        }
+
+                        "meter" => {
+                            let parsed = attribute.value
+                                .parse()
+                                .map_err(|error| {
+                                    Error {
+                                        position: reader.position(),
+                                        kind: ErrorKind::ParseFloatError(error),
+                                    }
+                                })?;
+                            meter_attrib = Some(parsed);
+                        }
+
+                        attrib_name @ _ => {
+                            return Err(Error {
+                                position: reader.position(),
+                                kind: ErrorKind::UnexpectedAttribute {
+                                    element: "unit".into(),
+                                    attribute: attrib_name.into(),
+                                    expected: vec!["unit", "meter"],
+                                },
+                            })
+                        }
+                    }
+                }
+
+                unit = Some(Unit {
+                    meter: meter_attrib.unwrap_or(1.0),
+                    name: unit_attrib.unwrap_or_else(|| "meter".into()),
+                });
+            }
+
+            "up_axis" => {
+                let text = utils::text_only_element(reader, "up_axis")?.unwrap_or_default();
+                let parsed = match &*text {
+                    "X_UP" => { UpAxis::X }
+                    "Y_UP" => { UpAxis::Y }
+                    "Z_UP" => { UpAxis::Z }
+                    _ => {
+                        return Err(Error {
+                            position: reader.position(),
+                            kind: ErrorKind::UnexpectedValue {
+                                element: "up_axis".into(),
+                                value: text,
+                            },
+                        });
+                    }
+                };
+
+                up_axis = Some(parsed);
+            }
+
+            _ => { panic!("Unexpected element: {:?}", name.local_name); }
+        }
+
+        current_element = expected_elements
+            .iter()
+            .position(|&needle| needle == name.local_name)
+            .expect("Element wasn't in expected elements");
+    }
+
     Ok(Asset {
         contributors: contributors,
         created: created,
@@ -213,47 +303,31 @@ fn parse_contributor<R: Read>(reader: &mut EventReader<R>, attributes: Vec<Owned
         "source_data",
     ];
 
-    fn verify_attributes<R: Read>(reader: &EventReader<R>, name: &OwnedName, attributes: Vec<OwnedAttribute>) -> Result<()> {
-        // Make sure the child element has no attributes.
-        if attributes.len() != 0 {
-            return Err(Error {
-                position: reader.position(),
-                kind: ErrorKind::UnexpectedAttribute {
-                    element: name.local_name.clone(),
-                    attribute: attributes[0].name.local_name.clone(),
-                    expected: vec![],
-                },
-            })
-        }
-
-        Ok(())
-    }
-
     let mut current_element = 0;
     while let Some((element_name, element_attributes, _)) = utils::optional_start_element(reader, "contributor", EXPECTED_ELEMENTS, current_element)? {
         match &*element_name.local_name {
             "author" => {
-                verify_attributes(reader, &element_name, element_attributes)?;
-                contributor.author = utils::text_only_element(reader, "author")?
+                utils::verify_attributes(reader, &element_name, element_attributes)?;
+                contributor.author = utils::text_only_element(reader, "author")?;
             }
 
             "authoring_tool" => {
-                verify_attributes(reader, &element_name, element_attributes)?;
+                utils::verify_attributes(reader, &element_name, element_attributes)?;
                 contributor.authoring_tool = utils::text_only_element(reader, "authoring_tool")?;
             }
 
             "comments" => {
-                verify_attributes(reader, &element_name, element_attributes)?;
+                utils::verify_attributes(reader, &element_name, element_attributes)?;
                 contributor.comments = utils::text_only_element(reader, "authoring_tool")?;
             }
 
             "copyright" => {
-                verify_attributes(reader, &element_name, element_attributes)?;
+                utils::verify_attributes(reader, &element_name, element_attributes)?;
                 contributor.copyright = utils::text_only_element(reader, "copyright")?;
             }
 
             "source_data" => {
-                verify_attributes(reader, &element_name, element_attributes)?;
+                utils::verify_attributes(reader, &element_name, element_attributes)?;
                 contributor.source_data = utils::text_only_element(reader, "source_data")?.map(Into::into);
             }
 

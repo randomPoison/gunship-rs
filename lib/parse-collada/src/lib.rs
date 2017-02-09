@@ -67,6 +67,7 @@ pub use xml::common::TextPosition;
 pub use xml::reader::Error as XmlError;
 
 use std::fmt::{self, Display, Formatter};
+use std::num::ParseFloatError;
 use xml::common::Position;
 
 mod utils;
@@ -129,6 +130,9 @@ pub enum ErrorKind {
         expected: &'static str,
     },
 
+    /// A floating point value was formatted incorrectly.
+    ParseFloatError(ParseFloatError),
+
     /// A datetime string was formatted incorrectly.
     ///
     /// Datetime strings in COLLADA are in the [ISO 8601][ISO 8601] format, and improperly
@@ -151,6 +155,24 @@ pub enum ErrorKind {
 
         /// The set of attributes allowed for this element.
         expected: Vec<&'static str>,
+    },
+
+    /// An element contained non-markup text that isn't allowed.
+    ///
+    /// Most elements may only have other tags as children, only a small subset of COLLADA
+    /// elements contain actual data. If an element that only is allowed to have children contains
+    /// text data it is considered an error.
+    UnexpectedCharacterData {
+        /// The element that contained the unexpected text data.
+        element: String,
+
+        /// The data that was found.
+        ///
+        /// The `Display` message for this error does not include the value of `data` as it is
+        /// often not relevant to end users, who can often go and check the original COLLADA
+        /// document if they wish to know what the erroneous text was. It is preserved in the
+        /// error object to assist in debugging.
+        data: String,
     },
 
     /// An element had a child element that isn't allowed.
@@ -186,22 +208,9 @@ pub enum ErrorKind {
         element: String,
     },
 
-    /// An element contained non-markup text that isn't allowed.
-    ///
-    /// Most elements may only have other tags as children, only a small subset of COLLADA
-    /// elements contain actual data. If an element that only is allowed to have children contains
-    /// text data it is considered an error.
-    UnexpectedCharacterData {
-        /// The element that contained the unexpected text data.
+    UnexpectedValue {
         element: String,
-
-        /// The data that was found.
-        ///
-        /// The `Display` message for this error does not include the value of `data` as it is
-        /// often not relevant to end users, who can often go and check the original COLLADA
-        /// document if they wish to know what the erroneous text was. It is preserved in the
-        /// error object to assist in debugging.
-        data: String,
+        value: String,
     },
 
     UnsupportedVersion {
@@ -223,6 +232,10 @@ impl Display for ErrorKind {
                 write!(formatter, "<{}> is missing a required child element: {}", parent, expected)
             }
 
+            ErrorKind::ParseFloatError(ref error) => {
+                write!(formatter, "{}", error)
+            }
+
             ErrorKind::TimeError(ref error) => {
                 write!(formatter, "{}", error)
             }
@@ -235,6 +248,10 @@ impl Display for ErrorKind {
                     attribute,
                     StringListDisplay(&*expected),
                 )
+            }
+
+            ErrorKind::UnexpectedCharacterData { ref element, data: _ } => {
+                write!(formatter, "<{}> contained non-markup text data which isn't allowed", element)
             }
 
             ErrorKind::UnexpectedElement { ref parent, ref element, ref expected } => {
@@ -251,8 +268,8 @@ impl Display for ErrorKind {
                 write!(formatter, "Document began with <{}> instead of <COLLADA>", element)
             }
 
-            ErrorKind::UnexpectedCharacterData { ref element, data: _ } => {
-                write!(formatter, "<{}> contained non-markup text data which isn't allowed", element)
+            ErrorKind::UnexpectedValue { ref element, ref value } => {
+                write!(formatter, "<{}> contained an unexpected value {:?}", element, value)
             }
 
             ErrorKind::UnsupportedVersion { ref version } => {

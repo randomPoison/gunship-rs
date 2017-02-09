@@ -264,3 +264,19 @@ pub fn end_element<R: Read>(reader: &mut EventReader<R>, parent: &str) -> Result
         event @ _ => { panic!("Unexpected event: {:?}", event); }
     }
 }
+
+pub fn verify_attributes<R: Read>(reader: &EventReader<R>, name: &OwnedName, attributes: Vec<OwnedAttribute>) -> Result<()> {
+    // Make sure the child element has no attributes.
+    if attributes.len() != 0 {
+        return Err(Error {
+            position: reader.position(),
+            kind: ErrorKind::UnexpectedAttribute {
+                element: name.local_name.clone(),
+                attribute: attributes[0].name.local_name.clone(),
+                expected: vec![],
+            },
+        })
+    }
+
+    Ok(())
+}
