@@ -15,6 +15,30 @@ pub static PARSER_CONFIG: ParserConfig = ParserConfig {
     coalesce_characters: true,
 };
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChildOccurrences {
+    Optional,
+    Required,
+    Many,
+}
+
+pub struct ElementConfiguration<'a, R: 'a + Read> {
+    pub children: &'a [ChildConfiguration<'a, R>],
+}
+
+impl<'a, R: 'a + Read> ElementConfiguration<'a, R> {
+    pub fn parse(self, reader: &mut EventReader<R>) -> Result<()> {
+        let mut current_child = 0;
+        unimplemented!()
+    }
+}
+
+pub struct ChildConfiguration<'a, R: 'a + Read> {
+    pub name: &'static str,
+    pub occurrences: ChildOccurrences,
+    pub action: &'a FnMut(&mut EventReader<R>, Vec<OwnedAttribute>) -> Result<()>,
+}
+
 pub fn parse<R: Read>(mut reader: EventReader<R>) -> Result<v1_5::Collada> {
     pub static COLLADA_ATTRIBS: &'static [&'static str] = &["version", "xmlns", "base"];
 
@@ -266,13 +290,13 @@ pub fn end_element<R: Read>(reader: &mut EventReader<R>, parent: &str) -> Result
 }
 
 /// Meaning, of course, "verify that there are no attributes".
-pub fn verify_attributes<R: Read>(reader: &EventReader<R>, name: &OwnedName, attributes: Vec<OwnedAttribute>) -> Result<()> {
+pub fn verify_attributes<R: Read>(reader: &EventReader<R>, name: &str, attributes: Vec<OwnedAttribute>) -> Result<()> {
     // Make sure the child element has no attributes.
     if attributes.len() != 0 {
         return Err(Error {
             position: reader.position(),
             kind: ErrorKind::UnexpectedAttribute {
-                element: name.local_name.clone(),
+                element: name.into(),
                 attribute: attributes[0].name.local_name.clone(),
                 expected: vec![],
             },

@@ -1,5 +1,7 @@
 use {AnyUri, DateTime, Error, ErrorKind, Result, Unit, UpAxis, utils, UTC, v1_5};
 use std::io::Read;
+use utils::*;
+use utils::ChildOccurrences::*;
 use xml::attribute::OwnedAttribute;
 use xml::common::Position;
 use xml::reader::EventReader;
@@ -41,14 +43,14 @@ fn parse_asset<R: Read>(reader: &mut EventReader<R>) -> Result<Asset> {
     let mut contributors = Vec::default();
     let mut created = None;
     let mut keywords = None;
-    let modified;
+    let mut modified = None;
     let mut revision = None;
     let mut subject = None;
     let mut title = None;
     let mut unit = None;
     let mut up_axis = None;
 
-    // Parse the children of the `<asset>` tag.
+    // Parse optional `<contributor>` element(s) and required `<created>` element.
     while let Some((name, attributes, _)) = utils::optional_start_element(reader, "asset", &["contributor", "created"], 0)? {
         match &*name.local_name {
             "contributor" => {
@@ -72,6 +74,7 @@ fn parse_asset<R: Read>(reader: &mut EventReader<R>) -> Result<Asset> {
         }
     }
 
+    // Verify that `<created>` is present.
     let created = match created {
         Some(created) => { created }
         None => {
@@ -85,6 +88,7 @@ fn parse_asset<R: Read>(reader: &mut EventReader<R>) -> Result<Asset> {
         }
     };
 
+    // Parse optional `<keywords>` and required `<modified>`.
     match utils::optional_start_element(reader, "asset", &["keywords", "modified"], 0)? {
         Some((name, attributes, _)) => {
             match &*name.local_name {
@@ -163,6 +167,7 @@ fn parse_asset<R: Read>(reader: &mut EventReader<R>) -> Result<Asset> {
         }
     }
 
+    // Verify that `<modified>` is present.
     let modified = match modified {
         Some(modified) => { modified }
         None => {
@@ -182,17 +187,17 @@ fn parse_asset<R: Read>(reader: &mut EventReader<R>) -> Result<Asset> {
         println!("matching child: {:?}", name);
         match &*name.local_name {
             "revision" => {
-                utils::verify_attributes(reader, &name, attributes)?;
+                utils::verify_attributes(reader, "revision", attributes)?;
                 revision = utils::text_only_element(reader, "asset")?;
             }
 
             "subject" => {
-                utils::verify_attributes(reader, &name, attributes)?;
+                utils::verify_attributes(reader, "subject", attributes)?;
                 subject = utils::text_only_element(reader, "asset")?;
             }
 
             "title" => {
-                utils::verify_attributes(reader, &name, attributes)?;
+                utils::verify_attributes(reader, "title", attributes)?;
                 title = utils::text_only_element(reader, "asset")?;
             }
 
@@ -285,66 +290,80 @@ fn parse_asset<R: Read>(reader: &mut EventReader<R>) -> Result<Asset> {
 }
 
 fn parse_contributor<R: Read>(reader: &mut EventReader<R>, attributes: Vec<OwnedAttribute>) -> Result<Contributor> {
-    // Make sure the `<contributor>` element has no attributes.
-    if attributes.len() != 0 {
-        return Err(Error {
-            position: reader.position(),
-            kind: ErrorKind::UnexpectedAttribute {
-                element: "contributor".into(),
-                attribute: attributes[0].name.local_name.clone(),
-                expected: vec![],
+    utils::verify_attributes(reader, "contributor", attributes)?;
+
+    let mut author = None;
+    let mut authoring_tool = None;
+    let mut comments = None;
+    let mut copyright = None;
+    let mut source_data = None;
+
+    ElementConfiguration {
+        children: &[
+            ChildConfiguration {
+                name: "author",
+                occurrences: Optional,
+
+                action: &|reader, attributes| {
+                    utils::verify_attributes(reader, "author", attributes)?;
+                    author = utils::text_only_element(reader, "author")?;
+                    Ok(())
+                },
             },
-        })
-    }
 
-    let mut contributor = Contributor::default();
+            ChildConfiguration {
+                name: "authoring_tool",
+                occurrences: Optional,
 
-    static EXPECTED_ELEMENTS: &'static [&'static str] = &[
-        "author",
-        "authoring_tool",
-        "comments",
-        "copyright",
-        "source_data",
-    ];
+                action: &|reader, attributes| {
+                    utils::verify_attributes(reader, "authoring_tool", attributes)?;
+                    authoring_tool = utils::text_only_element(reader, "authoring_tool")?;
+                    Ok(())
+                },
+            },
 
-    let mut current_element = 0;
-    while let Some((element_name, element_attributes, _)) = utils::optional_start_element(reader, "contributor", EXPECTED_ELEMENTS, current_element)? {
-        match &*element_name.local_name {
-            "author" => {
-                utils::verify_attributes(reader, &element_name, element_attributes)?;
-                contributor.author = utils::text_only_element(reader, "author")?;
-            }
+            ChildConfiguration {
+                name: "comments",
+                occurrences: Optional,
 
-            "authoring_tool" => {
-                utils::verify_attributes(reader, &element_name, element_attributes)?;
-                contributor.authoring_tool = utils::text_only_element(reader, "authoring_tool")?;
-            }
+                action: &|reader, attributes| {
+                    utils::verify_attributes(reader, "comments", attributes)?;
+                    comments = utils::text_only_element(reader, "comments")?;
+                    Ok(())
+                },
+            },
 
-            "comments" => {
-                utils::verify_attributes(reader, &element_name, element_attributes)?;
-                contributor.comments = utils::text_only_element(reader, "authoring_tool")?;
-            }
+            ChildConfiguration {
+                name: "copyright",
+                occurrences: Optional,
 
-            "copyright" => {
-                utils::verify_attributes(reader, &element_name, element_attributes)?;
-                contributor.copyright = utils::text_only_element(reader, "copyright")?;
-            }
+                action: &|reader, attributes| {
+                    utils::verify_attributes(reader, "copyright", attributes)?;
+                    copyright = utils::text_only_element(reader, "copyright")?;
+                    Ok(())
+                },
+            },
 
-            "source_data" => {
-                utils::verify_attributes(reader, &element_name, element_attributes)?;
-                contributor.source_data = utils::text_only_element(reader, "source_data")?.map(Into::into);
-            }
+            ChildConfiguration {
+                name: "source_data",
+                occurrences: Optional,
 
-            _ => { panic!("Unexpected element name: {}", element_name); }
-        }
+                action: &|reader, attributes| {
+                    utils::verify_attributes(reader, "source_data", attributes)?;
+                    source_data = utils::text_only_element(reader, "source_data")?.map(Into::into);
+                    Ok(())
+                },
+            },
+        ],
+    }.parse(reader)?;
 
-        current_element = EXPECTED_ELEMENTS
-            .iter()
-            .position(|&name| name == element_name.local_name)
-            .expect("Element wasn't in expected elements");
-    }
-
-    Ok(contributor)
+    Ok(Contributor {
+        author: author,
+        authoring_tool: authoring_tool,
+        comments: comments,
+        copyright: copyright,
+        source_data: source_data,
+    })
 }
 
 #[derive(Debug, Clone, PartialEq)]
