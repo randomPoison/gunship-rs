@@ -103,6 +103,47 @@ fn asset_full() {
 }
 
 #[test]
+fn asset_wrong_version() {
+    static DOCUMENT: &'static str = r#"
+    <?xml version="1.0" encoding="utf-8"?>
+    <COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.4.1">
+        <asset>
+            <contributor />
+            <contributor />
+            <contributor />
+            <coverage>
+                <geographic_location>
+                    <longitude>-105.2830</longitude>
+                    <latitude>40.0170</latitude>
+                    <altitude mode="relativeToGround">0</altitude>
+                </geographic_location>
+            </coverage
+            <created>2017-02-07T20:44:30Z</created>
+            <keywords>foo bar baz</keywords>
+            <modified>2017-02-07T20:44:30Z</modified>
+            <revision>7</revision>
+            <subject>A thing</subject>
+            <title>Model of a thing</title>
+            <unit meter="7" name="septimeter" />
+            <up_axis>Z_UP</up_axis>
+        </asset>
+    </COLLADA>
+    "#;
+
+    let expected = Error {
+        position: TextPosition { row: 7, column: 12 },
+        kind: ErrorKind::UnexpectedElement {
+            parent: "asset".into(),
+            element: "coverage".into(),
+            expected: vec!["contributor", "created", "keywords", "modified", "revision", "subject", "title", "unit", "up_axis"],
+        },
+    };
+
+    let actual = Collada::from_str(DOCUMENT).unwrap_err();
+    assert_eq!(expected, actual);
+}
+
+#[test]
 fn contributor_minimal() {
     static DOCUMENT: &'static str = r#"
     <?xml version="1.0" encoding="utf-8"?>

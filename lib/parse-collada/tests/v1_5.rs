@@ -147,7 +147,7 @@ fn collada_missing_asset() {
 fn asset_full() {
     static DOCUMENT: &'static str = r#"
     <?xml version="1.0" encoding="utf-8"?>
-    <COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.4.1">
+    <COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.5.0">
         <asset>
             <contributor />
             <contributor />
