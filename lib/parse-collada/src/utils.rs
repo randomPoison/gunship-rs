@@ -265,6 +265,7 @@ pub fn end_element<R: Read>(reader: &mut EventReader<R>, parent: &str) -> Result
     }
 }
 
+/// Meaning, of course, "verify that there are no attributes".
 pub fn verify_attributes<R: Read>(reader: &EventReader<R>, name: &OwnedName, attributes: Vec<OwnedAttribute>) -> Result<()> {
     // Make sure the child element has no attributes.
     if attributes.len() != 0 {

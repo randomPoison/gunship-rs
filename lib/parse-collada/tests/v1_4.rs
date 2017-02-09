@@ -3,7 +3,7 @@ extern crate parse_collada;
 use ::parse_collada::*;
 
 #[test]
-fn collada_minimal() {
+fn collada_asset_minimal() {
     static DOCUMENT: &'static str = r#"
     <?xml version="1.0" encoding="utf-8"?>
     <COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.4.1">
@@ -14,10 +14,26 @@ fn collada_minimal() {
     </COLLADA>
     "#;
 
+
     let expected = Collada {
         version: "1.4.1".into(),
         base_uri: None,
-        asset: Asset::default(),
+        asset: Asset {
+            contributors: vec![],
+            coverage: None,
+            created: "2017-02-07T20:44:30Z".parse::<DateTime<UTC>>().unwrap(),
+            keywords: None,
+            modified: "2017-02-07T20:44:30Z".parse::<DateTime<UTC>>().unwrap(),
+            revision: None,
+            subject: None,
+            title: None,
+            unit: Unit {
+                meter: 1.0,
+                name: "meter".into(),
+            },
+            up_axis: UpAxis::Y,
+            extras: vec![],
+        },
     };
 
     let actual = Collada::from_str(DOCUMENT).unwrap();
@@ -45,19 +61,45 @@ fn collada_missing_asset() {
 }
 
 #[test]
-fn asset_minimal() {
+fn asset_full() {
     static DOCUMENT: &'static str = r#"
     <?xml version="1.0" encoding="utf-8"?>
     <COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.4.1">
         <asset>
+            <contributor />
+            <contributor />
+            <contributor />
             <created>2017-02-07T20:44:30Z</created>
+            <keywords>foo bar baz</keywords>
             <modified>2017-02-07T20:44:30Z</modified>
+            <revision>7</revision>
+            <subject>A thing</subject>
+            <title>Model of a thing</title>
+            <unit meter="7" name="septimeter" />
+            <up_axis>Z_UP</up_axis>
         </asset>
     </COLLADA>
     "#;
 
+    let expected = Asset {
+        contributors: vec![Contributor::default(), Contributor::default(), Contributor::default()],
+        coverage: None,
+        created: "2017-02-07T20:44:30Z".parse::<DateTime<UTC>>().unwrap(),
+        keywords: Some("foo bar baz".into()),
+        modified: "2017-02-07T20:44:30Z".parse::<DateTime<UTC>>().unwrap(),
+        revision: Some("7".into()),
+        subject: Some("A thing".into()),
+        title: Some("Model of a thing".into()),
+        unit: Unit {
+            meter: 7.0,
+            name: "septimeter".into(),
+        },
+        up_axis: UpAxis::Z,
+        extras: Vec::default(),
+    };
+
     let collada = Collada::from_str(DOCUMENT).unwrap();
-    assert_eq!(Asset::default(), collada.asset);
+    assert_eq!(expected, collada.asset);
 }
 
 #[test]

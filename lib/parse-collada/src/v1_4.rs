@@ -179,6 +179,7 @@ fn parse_asset<R: Read>(reader: &mut EventReader<R>) -> Result<Asset> {
     let expected_elements = &["revision", "subject", "title", "unit", "up_axis"];
     let mut current_element = 0;
     while let Some((name, attributes, _)) = utils::optional_start_element(reader, "asset", expected_elements, current_element)? {
+        println!("matching child: {:?}", name);
         match &*name.local_name {
             "revision" => {
                 utils::verify_attributes(reader, &name, attributes)?;
@@ -201,7 +202,7 @@ fn parse_asset<R: Read>(reader: &mut EventReader<R>) -> Result<Asset> {
 
                 for attribute in attributes {
                     match &*attribute.name.local_name {
-                        "unit" => {
+                        "name" => {
                             // TODO: Validate that this follows the xsd:NMTOKEN format.
                             // http://www.datypic.com/sc/xsd/t-xsd_NMTOKEN.html
                             unit_attrib = Some(attribute.value);
@@ -236,10 +237,13 @@ fn parse_asset<R: Read>(reader: &mut EventReader<R>) -> Result<Asset> {
                     meter: meter_attrib.unwrap_or(1.0),
                     name: unit_attrib.unwrap_or_else(|| "meter".into()),
                 });
+
+                utils::end_element(reader, "asset")?;
             }
 
             "up_axis" => {
                 let text = utils::text_only_element(reader, "up_axis")?.unwrap_or_default();
+                println!("up axis text: {:?}", text);
                 let parsed = match &*text {
                     "X_UP" => { UpAxis::X }
                     "Y_UP" => { UpAxis::Y }
@@ -343,20 +347,10 @@ fn parse_contributor<R: Read>(reader: &mut EventReader<R>, attributes: Vec<Owned
     Ok(contributor)
 }
 
-/// Represents a parsed COLLADA document.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Collada {
-    /// The version string for the COLLADA specification used by the document.
-    ///
-    /// Only "1.4.0", "1.4.1", and "1.5.0" are supported currently.
     pub version: String,
-
-    /// Global metadata about the COLLADA document.
     pub asset: Asset,
-
-    /// The base uri for any relative URIs in the document.
-    ///
-    /// Specified by the `base` attribute on the root `<COLLADA>` element.
     pub base_uri: Option<AnyUri>,
 }
 
@@ -370,17 +364,8 @@ impl Into<v1_5::Collada> for Collada {
     }
 }
 
-/// Asset-management information about an element.
-///
-/// Includes both asset metadata, such as a list of contributors and keywords, as well
-/// as functional information, such as units of distance and the up axis for the asset.
-///
-/// # COLLADA Versions
-///
-/// `coverage` and `extras` were added in COLLADA version `1.5.0`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Asset {
-    /// The list of contributors who worked on the asset.
     pub contributors: Vec<Contributor>,
     pub created: DateTime<UTC>,
     pub keywords: Option<String>,
@@ -396,37 +381,26 @@ impl Into<v1_5::Asset> for Asset {
     fn into(self) -> v1_5::Asset {
         v1_5::Asset {
             contributors: self.contributors.into_iter().map(Into::into).collect(),
+            coverage: None,
+            created: self.created,
+            keywords: self.keywords,
+            modified: self.modified,
+            revision: self.revision,
+            subject: self.subject,
+            title: self.title,
+            unit: self.unit,
+            up_axis: self.up_axis,
+            extras: Vec::default(),
         }
     }
 }
 
-/// Information about a contributor to an asset.
-///
-/// Contributor data is largely free-form text data meant to informally describe either the author
-/// or the author's work on the asset. The exceptions are `author_email`, `author_website`, and
-/// `source_data`, which are strictly formatted data (be it a URI or email address).
-///
-/// # COLLADA Versions
-///
-/// `author_email` and `author_website` were added in COLLADA version `1.5.0`.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Contributor {
-    /// The author's name, if present.
     pub author: Option<String>,
-
-    /// The name of the authoring tool.
     pub authoring_tool: Option<String>,
-
-    /// Free-form comments from the author.
     pub comments: Option<String>,
-
-    /// Copyright information about the asset. Does not adhere to a formatting standard.
     pub copyright: Option<String>,
-
-    /// A URI reference to the source data for the asset.
-    ///
-    /// For example, if the asset based off a file `tank.s3d`, the value might be
-    /// `c:/models/tank.s3d`.
     pub source_data: Option<AnyUri>,
 }
 

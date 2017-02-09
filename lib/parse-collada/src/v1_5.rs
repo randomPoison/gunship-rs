@@ -1,4 +1,4 @@
-use {AnyUri, Result, Error, ErrorKind, utils};
+use {AnyUri, DateTime, Result, Error, ErrorKind, Unit, UpAxis, UTC, utils};
 use std::io::Read;
 use xml::attribute::OwnedAttribute;
 use xml::common::Position;
@@ -10,16 +10,10 @@ use xml::reader::XmlEvent::*;
 ///
 /// `from_str()` and `read()` just create the `xml::EventReader` and then defer to `parse()`.
 pub fn parse<R: Read>(mut reader: EventReader<R>, version: String, base: Option<AnyUri>) -> Result<Collada> {
-    let mut collada = Collada {
-        version: version,
-        asset: Asset::default(),
-        base_uri: base,
-    };
-
     // The next event must be the `<asset>` tag. No text data is allowed, and
     // whitespace/comments aren't emitted.
     let (_name, _, _) = utils::required_start_element(&mut reader, "COLLADA", "asset")?;
-    collada.asset = parse_asset(&mut reader)?;
+    let asset = parse_asset(&mut reader)?;
 
     // Eat any events until we get to the `</COLLADA>` tag.
     // TODO: Actually parse the body of the document.
@@ -40,20 +34,15 @@ pub fn parse<R: Read>(mut reader: EventReader<R>, version: String, base: Option<
         event @ _ => { panic!("Unexpected event: {:?}", event); }
     }
 
-    Ok(collada)
+    Ok(Collada {
+        version: version,
+        asset: asset,
+        base_uri: base,
+    })
 }
 
 fn parse_asset<R: Read>(reader: &mut EventReader<R>) -> Result<Asset> {
-    let mut asset = Asset::default();
-
-    // Parse the children of the `<asset>` tag.
-    static ASSET_CHILDREN: &'static [&'static str] = &["contributor"];
-    while let Some((_name, attributes, _)) = utils::optional_start_element(reader, "asset", ASSET_CHILDREN, 0)? {
-        let contributor = parse_contributor(reader, attributes)?;
-        asset.contributors.push(contributor);
-    }
-
-    Ok(asset)
+    unimplemented!()
 }
 
 fn parse_contributor<R: Read>(reader: &mut EventReader<R>, attributes: Vec<OwnedAttribute>) -> Result<Contributor> {
@@ -148,20 +137,20 @@ fn parse_contributor<R: Read>(reader: &mut EventReader<R>, attributes: Vec<Owned
 }
 
 /// Represents a parsed COLLADA document.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Collada {
     /// The version string for the COLLADA specification used by the document.
     ///
     /// Only "1.4.0", "1.4.1", and "1.5.0" are supported currently.
     pub version: String,
 
-    /// Global metadata about the COLLADA document.
-    pub asset: Asset,
-
     /// The base uri for any relative URIs in the document.
     ///
     /// Specified by the `base` attribute on the root `<COLLADA>` element.
     pub base_uri: Option<AnyUri>,
+
+    /// Global metadata about the COLLADA document.
+    pub asset: Asset,
 }
 
 impl Collada {
@@ -229,10 +218,20 @@ impl Collada {
 /// # COLLADA Versions
 ///
 /// `coverage` and `extras` were added in COLLADA version `1.5.0`.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Asset {
     /// The list of contributors who worked on the asset.
     pub contributors: Vec<Contributor>,
+    pub coverage: Option<GeographicLocation>,
+    pub created: DateTime<UTC>,
+    pub keywords: Option<String>,
+    pub modified: DateTime<UTC>,
+    pub revision: Option<String>,
+    pub subject: Option<String>,
+    pub title: Option<String>,
+    pub unit: Unit,
+    pub up_axis: UpAxis,
+    pub extras: Vec<Extra>,
 }
 
 /// Information about a contributor to an asset.
@@ -273,3 +272,19 @@ pub struct Contributor {
     /// `c:/models/tank.s3d`.
     pub source_data: Option<AnyUri>,
 }
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct GeographicLocation {
+    latitude: f64,
+    longitude: f64,
+    mode: Altitude,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Altitude {
+    Absolute(f64),
+    RelativeToGround(f64),
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Extra;
