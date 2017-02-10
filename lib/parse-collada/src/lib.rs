@@ -121,7 +121,7 @@ pub enum ErrorKind {
     /// returned.
     MissingElement {
         /// The element that was expecting a child element.
-        parent: String,
+        parent: &'static str,
 
         /// The set of required child elements.
         ///
@@ -182,7 +182,7 @@ pub enum ErrorKind {
     /// allowed child appears out of order, then this error is returned.
     UnexpectedElement {
         /// The element that had the unexpected child.
-        parent: String,
+        parent: &'static str,
 
         /// The element that is not allowed or is out of order.
         element: String,

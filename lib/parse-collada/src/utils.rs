@@ -15,6 +15,12 @@ pub static PARSER_CONFIG: ParserConfig = ParserConfig {
     coalesce_characters: true,
 };
 
+#[derive(Debug)]
+struct ElementStart {
+    name: OwnedName,
+    attributes: Vec<OwnedAttribute>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ChildOccurrences {
     Optional,
@@ -23,20 +29,85 @@ pub enum ChildOccurrences {
 }
 
 pub struct ElementConfiguration<'a, R: 'a + Read> {
-    pub children: &'a [ChildConfiguration<'a, R>],
+    pub name: &'static str,
+    pub children: &'a mut [ChildConfiguration<'a, R>],
 }
 
 impl<'a, R: 'a + Read> ElementConfiguration<'a, R> {
-    pub fn parse(self, reader: &mut EventReader<R>) -> Result<()> {
+    pub fn parse(mut self, reader: &mut EventReader<R>) -> Result<()> {
+        // Keep track of the text position for the root element so that it can be used for error
+        // messages.
+        let root_position = reader.position();
         let mut current_child = 0;
-        unimplemented!()
+
+        'elements: while let Some(element) = start_element(reader, self.name)? {
+            for child_index in current_child..self.children.len() {
+                let child = &mut self.children[child_index];
+
+                if child.name == element.name.local_name {
+                    // We've found a valid child, hooray!
+                    (child.action)(reader, element.attributes)?;
+
+                    // Either advance current_child or don't, depending on if it's allowed to repeat.
+                    if child.occurrences != ChildOccurrences::Many {
+                        current_child = child_index + 1;
+                    }
+
+                    continue 'elements;
+                } else if child.occurrences == ChildOccurrences::Required {
+                    // We skipped a required child and that is no good and also very bad.
+                    return Err(Error {
+                        position: root_position,
+                        kind: ErrorKind::MissingElement {
+                            parent: self.name,
+                            expected: child.name,
+                        },
+                    });
+                }
+
+                current_child = child_index + 1;
+            }
+
+            // Child didn't appear in list of children, error o'clock.
+            return Err(Error {
+                position: reader.position(),
+                kind: ErrorKind::UnexpectedElement {
+                    parent: self.name,
+                    element: element.name.local_name,
+                    expected: self.collect_expected_children(),
+                },
+            })
+        }
+
+        // Verify that there are no remaining required children.
+        for child in &self.children[current_child..] {
+            if child.occurrences == ChildOccurrences::Required {
+                return Err(Error {
+                    position: root_position,
+                    kind: ErrorKind::MissingElement {
+                        parent: self.name,
+                        expected: child.name,
+                    },
+                });
+            }
+        }
+
+        Ok(())
+    }
+
+    fn collect_expected_children(&self) -> Vec<&'static str> {
+        let mut names = Vec::with_capacity(self.children.len());
+        for child in self.children.iter() {
+            names.push(child.name);
+        }
+        names
     }
 }
 
 pub struct ChildConfiguration<'a, R: 'a + Read> {
     pub name: &'static str,
     pub occurrences: ChildOccurrences,
-    pub action: &'a FnMut(&mut EventReader<R>, Vec<OwnedAttribute>) -> Result<()>,
+    pub action: &'a mut FnMut(&mut EventReader<R>, Vec<OwnedAttribute>) -> Result<()>,
 }
 
 pub fn parse<R: Read>(mut reader: EventReader<R>) -> Result<v1_5::Collada> {
@@ -136,7 +207,7 @@ pub fn parse<R: Read>(mut reader: EventReader<R>) -> Result<v1_5::Collada> {
 
 pub fn required_start_element<R: Read>(
     reader: &mut EventReader<R>,
-    parent: &str,
+    parent: &'static str,
     search_name: &'static str,
 ) -> Result<(OwnedName, Vec<OwnedAttribute>, Namespace)> {
     match reader.next()? {
@@ -156,11 +227,13 @@ pub fn required_start_element<R: Read>(
         }
 
         EndElement { name } => {
+            debug_assert_eq!(parent, name.local_name);
+
             return Err(Error {
                 position: reader.position(),
                 kind: ErrorKind::MissingElement {
+                    parent: parent,
                     expected: search_name,
-                    parent: name.local_name,
                 },
             })
         }
@@ -181,9 +254,44 @@ pub fn required_start_element<R: Read>(
     }
 }
 
-pub fn optional_start_element<R: Read>(
+// TODO: This should really be `optional_start_element` since it doesn't fail if no element starts,
+// but there's already a fn with that name. Once we unify the parsing code we can kill the old one
+// and fix the name of this one.
+fn start_element<R: Read>(
     reader: &mut EventReader<R>,
     parent: &str,
+) -> Result<Option<ElementStart>> {
+    match reader.next()? {
+        StartElement { name, attributes, namespace: _ } => {
+            return Ok(Some(ElementStart { name: name, attributes: attributes }));
+        }
+
+        EndElement { name } => {
+            debug_assert_eq!(parent, name.local_name);
+            return Ok(None);
+        }
+
+        Characters(data) => {
+            return Err(Error {
+                position: reader.position(),
+                kind: ErrorKind::UnexpectedCharacterData {
+                    element: parent.into(),
+                    data: data,
+                }
+            })
+        }
+
+        // TODO: How do we handle processing instructions? I suspect we want to just skip them, but
+        // I'm not sure.
+        ProcessingInstruction { .. } => { unimplemented!(); }
+
+        event @ _ => { panic!("Unexpected event: {:?}", event); }
+    }
+}
+
+pub fn optional_start_element<R: Read>(
+    reader: &mut EventReader<R>,
+    parent: &'static str,
     search_names: &[&'static str],
     current_element: usize,
 ) -> Result<Option<(OwnedName, Vec<OwnedAttribute>, Namespace)>> {
@@ -195,8 +303,8 @@ pub fn optional_start_element<R: Read>(
                 return Err(Error {
                     position: reader.position(),
                     kind: ErrorKind::UnexpectedElement {
+                        parent: parent,
                         element: name.local_name,
-                        parent: parent.into(),
                         expected: search_names.into(),
                     },
                 })
@@ -227,7 +335,7 @@ pub fn optional_start_element<R: Read>(
 
 pub fn text_only_element<R: Read>(
     reader: &mut EventReader<R>,
-    parent: &str,
+    parent: &'static str,
 ) -> Result<Option<String>> {
     match reader.next()? {
         Characters(data) => {
@@ -239,8 +347,8 @@ pub fn text_only_element<R: Read>(
             return Err(Error {
                 position: reader.position(),
                 kind: ErrorKind::UnexpectedElement {
+                    parent: parent,
                     element: name.local_name,
-                    parent: parent.into(),
                     expected: vec![],
                 },
             })
@@ -256,7 +364,7 @@ pub fn text_only_element<R: Read>(
     }
 }
 
-pub fn end_element<R: Read>(reader: &mut EventReader<R>, parent: &str) -> Result<()> {
+pub fn end_element<R: Read>(reader: &mut EventReader<R>, parent: &'static str) -> Result<()> {
     match reader.next()? {
         EndElement { .. } => {
             return Ok(());
@@ -266,8 +374,8 @@ pub fn end_element<R: Read>(reader: &mut EventReader<R>, parent: &str) -> Result
             return Err(Error {
                 position: reader.position(),
                 kind: ErrorKind::UnexpectedElement {
+                    parent: parent,
                     element: name.local_name,
-                    parent: parent.into(),
                     expected: vec![],
                 },
             })

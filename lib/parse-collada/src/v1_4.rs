@@ -43,7 +43,7 @@ fn parse_asset<R: Read>(reader: &mut EventReader<R>) -> Result<Asset> {
     let mut contributors = Vec::default();
     let mut created = None;
     let mut keywords = None;
-    let mut modified = None;
+    let modified;
     let mut revision = None;
     let mut subject = None;
     let mut title = None;
@@ -299,12 +299,13 @@ fn parse_contributor<R: Read>(reader: &mut EventReader<R>, attributes: Vec<Owned
     let mut source_data = None;
 
     ElementConfiguration {
-        children: &[
+        name: "contributor",
+        children: &mut [
             ChildConfiguration {
                 name: "author",
                 occurrences: Optional,
 
-                action: &|reader, attributes| {
+                action: &mut |reader, attributes| {
                     utils::verify_attributes(reader, "author", attributes)?;
                     author = utils::text_only_element(reader, "author")?;
                     Ok(())
@@ -315,7 +316,7 @@ fn parse_contributor<R: Read>(reader: &mut EventReader<R>, attributes: Vec<Owned
                 name: "authoring_tool",
                 occurrences: Optional,
 
-                action: &|reader, attributes| {
+                action: &mut |reader, attributes| {
                     utils::verify_attributes(reader, "authoring_tool", attributes)?;
                     authoring_tool = utils::text_only_element(reader, "authoring_tool")?;
                     Ok(())
@@ -326,7 +327,7 @@ fn parse_contributor<R: Read>(reader: &mut EventReader<R>, attributes: Vec<Owned
                 name: "comments",
                 occurrences: Optional,
 
-                action: &|reader, attributes| {
+                action: &mut |reader, attributes| {
                     utils::verify_attributes(reader, "comments", attributes)?;
                     comments = utils::text_only_element(reader, "comments")?;
                     Ok(())
@@ -337,7 +338,7 @@ fn parse_contributor<R: Read>(reader: &mut EventReader<R>, attributes: Vec<Owned
                 name: "copyright",
                 occurrences: Optional,
 
-                action: &|reader, attributes| {
+                action: &mut |reader, attributes| {
                     utils::verify_attributes(reader, "copyright", attributes)?;
                     copyright = utils::text_only_element(reader, "copyright")?;
                     Ok(())
@@ -348,7 +349,7 @@ fn parse_contributor<R: Read>(reader: &mut EventReader<R>, attributes: Vec<Owned
                 name: "source_data",
                 occurrences: Optional,
 
-                action: &|reader, attributes| {
+                action: &mut |reader, attributes| {
                     utils::verify_attributes(reader, "source_data", attributes)?;
                     source_data = utils::text_only_element(reader, "source_data")?.map(Into::into);
                     Ok(())
