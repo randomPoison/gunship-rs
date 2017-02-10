@@ -108,7 +108,7 @@ pub enum ErrorKind {
     /// attribute is missing, then this error is returned.
     MissingAttribute {
         /// The element that was missing an attribute.
-        element: String,
+        element: &'static str,
 
         /// The attribute that expected to be present.
         attribute: &'static str,
@@ -148,7 +148,7 @@ pub enum ErrorKind {
     /// error to be returned.
     UnexpectedAttribute {
         /// The element that had the unexpected attribute.
-        element: String,
+        element: &'static str,
 
         /// The unexpected attribute.
         attribute: String,
@@ -164,7 +164,7 @@ pub enum ErrorKind {
     /// text data it is considered an error.
     UnexpectedCharacterData {
         /// The element that contained the unexpected text data.
-        element: String,
+        element: &'static str,
 
         /// The data that was found.
         ///

@@ -35,6 +35,8 @@ pub struct ElementConfiguration<'a, R: 'a + Read> {
 
 impl<'a, R: 'a + Read> ElementConfiguration<'a, R> {
     pub fn parse(mut self, reader: &mut EventReader<R>) -> Result<()> {
+        println!("Parsing {:?}", self.name);
+
         // Keep track of the text position for the root element so that it can be used for error
         // messages.
         let root_position = reader.position();
@@ -42,30 +44,49 @@ impl<'a, R: 'a + Read> ElementConfiguration<'a, R> {
 
         'elements: while let Some(element) = start_element(reader, self.name)? {
             for child_index in current_child..self.children.len() {
-                let child = &mut self.children[child_index];
+                let child_name = {
+                    let child = &mut self.children[child_index];
 
-                if child.name == element.name.local_name {
-                    // We've found a valid child, hooray!
-                    (child.action)(reader, element.attributes)?;
+                    if child.name == element.name.local_name {
+                        // We've found a valid child, hooray!
+                        (child.action)(reader, element.attributes)?;
 
-                    // Either advance current_child or don't, depending on if it's allowed to repeat.
-                    if child.occurrences != ChildOccurrences::Many {
+                        // Either advance current_child or don't, depending on if it's allowed to repeat.
+                        if child.occurrences != ChildOccurrences::Many {
+                            current_child = child_index + 1;
+                        }
+
+                        continue 'elements;
+                    } else if child.occurrences != ChildOccurrences::Required {
                         current_child = child_index + 1;
+                        continue;
                     }
 
-                    continue 'elements;
-                } else if child.occurrences == ChildOccurrences::Required {
+                    child.name
+                };
+
+                // If the child we found was a valid child (just in the wrong spot) then we
+                // want to return a `MissingElement` error, but if the child we found was
+                // not a valid child, then we want to return an `UnexpectedElement` error.
+                if self.is_valid_child(&*element.name.local_name) {
                     // We skipped a required child and that is no good and also very bad.
                     return Err(Error {
                         position: root_position,
                         kind: ErrorKind::MissingElement {
                             parent: self.name,
-                            expected: child.name,
+                            expected: child_name,
+                        },
+                    });
+                } else {
+                    return Err(Error {
+                        position: reader.position(),
+                        kind: ErrorKind::UnexpectedElement {
+                            parent: self.name,
+                            element: element.name.local_name,
+                            expected: self.collect_expected_children(),
                         },
                     });
                 }
-
-                current_child = child_index + 1;
             }
 
             // Child didn't appear in list of children, error o'clock.
@@ -102,6 +123,16 @@ impl<'a, R: 'a + Read> ElementConfiguration<'a, R> {
         }
         names
     }
+
+    fn is_valid_child(&self, name: &str) -> bool {
+        for child in self.children.iter() {
+            if child.name == name {
+                return true;
+            }
+        }
+
+        false
+    }
 }
 
 pub struct ChildConfiguration<'a, R: 'a + Read> {
@@ -124,7 +155,7 @@ pub fn parse<R: Read>(mut reader: EventReader<R>) -> Result<v1_5::Collada> {
 
     // The next element will always be the `<COLLADA>` tag. This will specify what version of
     // the COLLADA spec is being used, which is how we'll determine our sub-parser.
-    let (name, attributes) = match reader.next()? {
+    let attributes = match reader.next()? {
         StartElement { name, attributes, namespace: _ } => {
             // If the element isn't the `<COLLADA>` tag then the document is malformed,
             // return an error.
@@ -137,7 +168,7 @@ pub fn parse<R: Read>(mut reader: EventReader<R>) -> Result<v1_5::Collada> {
                 })
             }
 
-            (name, attributes)
+            attributes
         }
 
         // I'm *almost* 100% certain that the only event that can follow the `StartDocument`
@@ -169,7 +200,7 @@ pub fn parse<R: Read>(mut reader: EventReader<R>) -> Result<v1_5::Collada> {
             return Err(Error {
                 position: reader.position(),
                 kind: ErrorKind::UnexpectedAttribute {
-                    element: name.local_name,
+                    element: "COLLADA",
                     attribute: attribute.name.local_name,
                     expected: COLLADA_ATTRIBS.into(),
                 },
@@ -184,7 +215,7 @@ pub fn parse<R: Read>(mut reader: EventReader<R>) -> Result<v1_5::Collada> {
             return Err(Error {
                 position: reader.position(),
                 kind: ErrorKind::MissingAttribute {
-                    element: name.local_name,
+                    element: "COLLADA",
                     attribute: "version",
                 },
             })
@@ -259,7 +290,7 @@ pub fn required_start_element<R: Read>(
 // and fix the name of this one.
 fn start_element<R: Read>(
     reader: &mut EventReader<R>,
-    parent: &str,
+    parent: &'static str,
 ) -> Result<Option<ElementStart>> {
     match reader.next()? {
         StartElement { name, attributes, namespace: _ } => {
@@ -275,7 +306,7 @@ fn start_element<R: Read>(
             return Err(Error {
                 position: reader.position(),
                 kind: ErrorKind::UnexpectedCharacterData {
-                    element: parent.into(),
+                    element: parent,
                     data: data,
                 }
             })
@@ -398,13 +429,13 @@ pub fn end_element<R: Read>(reader: &mut EventReader<R>, parent: &'static str) -
 }
 
 /// Meaning, of course, "verify that there are no attributes".
-pub fn verify_attributes<R: Read>(reader: &EventReader<R>, name: &str, attributes: Vec<OwnedAttribute>) -> Result<()> {
+pub fn verify_attributes<R: Read>(reader: &EventReader<R>, name: &'static str, attributes: Vec<OwnedAttribute>) -> Result<()> {
     // Make sure the child element has no attributes.
     if attributes.len() != 0 {
         return Err(Error {
             position: reader.position(),
             kind: ErrorKind::UnexpectedAttribute {
-                element: name.into(),
+                element: name,
                 attribute: attributes[0].name.local_name.clone(),
                 expected: vec![],
             },

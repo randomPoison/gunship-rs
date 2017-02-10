@@ -10,8 +10,8 @@ use xml::reader::XmlEvent::*;
 pub fn parse<R: Read>(mut reader: EventReader<R>, version: String, base: Option<AnyUri>) -> Result<Collada> {
     // The next event must be the `<asset>` tag. No text data is allowed, and
     // whitespace/comments aren't emitted.
-    let (_name, _, _) = utils::required_start_element(&mut reader, "COLLADA", "asset")?;
-    let asset = parse_asset(&mut reader)?;
+    let (_name, attributes, _) = utils::required_start_element(&mut reader, "COLLADA", "asset")?;
+    let asset = parse_asset(&mut reader, attributes)?;
 
     // Eat any events until we get to the `</COLLADA>` tag.
     // TODO: Actually parse the body of the document.
@@ -39,88 +39,69 @@ pub fn parse<R: Read>(mut reader: EventReader<R>, version: String, base: Option<
     })
 }
 
-fn parse_asset<R: Read>(reader: &mut EventReader<R>) -> Result<Asset> {
+fn parse_asset<R: Read>(reader: &mut EventReader<R>, attributes: Vec<OwnedAttribute>) -> Result<Asset> {
+    utils::verify_attributes(reader, "asset", attributes)?;
+
     let mut contributors = Vec::default();
     let mut created = None;
     let mut keywords = None;
-    let modified;
+    let mut modified = None;
     let mut revision = None;
     let mut subject = None;
     let mut title = None;
     let mut unit = None;
     let mut up_axis = None;
 
-    // Parse optional `<contributor>` element(s) and required `<created>` element.
-    while let Some((name, attributes, _)) = utils::optional_start_element(reader, "asset", &["contributor", "created"], 0)? {
-        match &*name.local_name {
-            "contributor" => {
-                let contributor = parse_contributor(reader, attributes)?;
-                contributors.push(contributor);
-            }
+    ElementConfiguration {
+        name: "asset",
+        children: &mut [
+            ChildConfiguration {
+                name: "contributor",
+                occurrences: Many,
 
-            "created" => {
-                let date_time = utils::text_only_element(reader, "asset")?
-                    .unwrap_or_default()
-                    .parse()
-                    .map_err(|error| Error {
-                        position: reader.position(),
-                        kind: ErrorKind::TimeError(error),
-                    })?;
-                created = Some(date_time);
-                break;
-            }
+                action: &mut |reader, attributes| {
+                    let contributor = parse_contributor(reader, attributes)?;
+                    contributors.push(contributor);
+                    Ok(())
+                },
+            },
 
-            _ => { panic!("Unexpected element: {:?}", name.local_name); }
-        }
-    }
+            ChildConfiguration {
+                name: "created",
+                occurrences: Required,
 
-    // Verify that `<created>` is present.
-    let created = match created {
-        Some(created) => { created }
-        None => {
-            return Err(Error {
-                position: reader.position(),
-                kind: ErrorKind::MissingElement {
-                    parent: "asset".into(),
-                    expected: "created",
-                }
-            })
-        }
-    };
-
-    // Parse optional `<keywords>` and required `<modified>`.
-    match utils::optional_start_element(reader, "asset", &["keywords", "modified"], 0)? {
-        Some((name, attributes, _)) => {
-            match &*name.local_name {
-                "keywords" => {
-                    if attributes.len() > 0 {
-                        return Err(Error {
+                action: &mut |reader, attributes| {
+                    utils::verify_attributes(reader, "created", attributes)?;
+                    let date_time = utils::text_only_element(reader, "created")?
+                        .unwrap_or_default()
+                        .parse()
+                        .map_err(|error| Error {
                             position: reader.position(),
-                            kind: ErrorKind::UnexpectedAttribute {
-                                element: "keywords".into(),
-                                attribute: attributes[0].name.local_name.clone(),
-                                expected: vec![],
-                            }
-                        })
-                    }
+                            kind: ErrorKind::TimeError(error),
+                        })?;
+                    created = Some(date_time);
+                    Ok(())
+                },
+            },
 
+            ChildConfiguration {
+                name: "keywords",
+                occurrences: Optional,
+
+                action: &mut |reader, attributes| {
+                    utils::verify_attributes(reader, "keywords", attributes)?;
                     keywords = utils::text_only_element(reader, "keywords")?;
+                    Ok(())
+                },
+            },
 
-                    // If the first element was `<keywords>` then the next element must be `<modified>`.
-                    let (_, attributes, _) = utils::required_start_element(reader, "asset", "modified")?;
+            ChildConfiguration {
+                name: "modified",
+                occurrences: Required,
 
-                    if attributes.len() > 0 {
-                        return Err(Error {
-                            position: reader.position(),
-                            kind: ErrorKind::UnexpectedAttribute {
-                                element: "keywords".into(),
-                                attribute: attributes[0].name.local_name.clone(),
-                                expected: vec![],
-                            }
-                        })
-                    }
-
-                    let date_time = utils::text_only_element(reader, "asset")?
+                action: &mut |reader, attributes| {
+                    utils::verify_attributes(reader, "modified", attributes)?;
+                    let date_time = utils::text_only_element(reader, "modified")?
                         .unwrap_or_default()
                         .parse()
                         .map_err(|error| Error {
@@ -128,159 +109,127 @@ fn parse_asset<R: Read>(reader: &mut EventReader<R>) -> Result<Asset> {
                             kind: ErrorKind::TimeError(error),
                         })?;
                     modified = Some(date_time);
+                    Ok(())
                 },
+            },
 
-                "modified" => {
-                    if attributes.len() > 0 {
-                        return Err(Error {
-                            position: reader.position(),
-                            kind: ErrorKind::UnexpectedAttribute {
-                                element: "modified".into(),
-                                attribute: attributes[0].name.local_name.clone(),
-                                expected: vec![],
+            ChildConfiguration {
+                name: "revision",
+                occurrences: Optional,
+
+                action: &mut |reader, attributes| {
+                    utils::verify_attributes(reader, "revision", attributes)?;
+                    revision = utils::text_only_element(reader, "revision")?;
+                    Ok(())
+                },
+            },
+
+            ChildConfiguration {
+                name: "subject",
+                occurrences: Optional,
+
+                action: &mut |reader, attributes| {
+                    utils::verify_attributes(reader, "subject", attributes)?;
+                    subject = utils::text_only_element(reader, "subject")?;
+                    Ok(())
+                },
+            },
+
+            ChildConfiguration {
+                name: "title",
+                occurrences: Optional,
+
+                action: &mut |reader, attributes| {
+                    utils::verify_attributes(reader, "title", attributes)?;
+                    title = utils::text_only_element(reader, "title")?;
+                    Ok(())
+                },
+            },
+
+            ChildConfiguration {
+                name: "unit",
+                occurrences: Optional,
+
+                action: &mut |reader, attributes| {
+                    let mut unit_attrib = None;
+                    let mut meter_attrib = None;
+
+                    for attribute in attributes {
+                        match &*attribute.name.local_name {
+                            "name" => {
+                                // TODO: Validate that this follows the xsd:NMTOKEN format.
+                                // http://www.datypic.com/sc/xsd/t-xsd_NMTOKEN.html
+                                unit_attrib = Some(attribute.value);
                             }
-                        })
+
+                            "meter" => {
+                                let parsed = attribute.value
+                                    .parse()
+                                    .map_err(|error| {
+                                        Error {
+                                            position: reader.position(),
+                                            kind: ErrorKind::ParseFloatError(error),
+                                        }
+                                    })?;
+                                meter_attrib = Some(parsed);
+                            }
+
+                            attrib_name @ _ => {
+                                return Err(Error {
+                                    position: reader.position(),
+                                    kind: ErrorKind::UnexpectedAttribute {
+                                        element: "unit",
+                                        attribute: attrib_name.into(),
+                                        expected: vec!["unit", "meter"],
+                                    },
+                                })
+                            }
+                        }
                     }
 
-                    let date_time = utils::text_only_element(reader, "asset")?
-                        .unwrap_or_default()
-                        .parse()
-                        .map_err(|error| Error {
-                            position: reader.position(),
-                            kind: ErrorKind::TimeError(error),
-                        })?;
-                    modified = Some(date_time);
+                    unit = Some(Unit {
+                        meter: meter_attrib.unwrap_or(1.0),
+                        name: unit_attrib.unwrap_or_else(|| "meter".into()),
+                    });
+
+                    utils::end_element(reader, "unit")
                 },
+            },
 
-                _ => { panic!("Unexpected element: {:?}", name.local_name); }
-            }
-        }
+            ChildConfiguration {
+                name: "up_axis",
+                occurrences: Optional,
 
-        None => {
-            return Err(Error {
-                position: reader.position(),
-                kind: ErrorKind::MissingElement {
-                    parent: "asset".into(),
-                    expected: "modified",
-                },
-            })
-        }
-    }
-
-    // Verify that `<modified>` is present.
-    let modified = match modified {
-        Some(modified) => { modified }
-        None => {
-            return Err(Error {
-                position: reader.position(),
-                kind: ErrorKind::MissingElement {
-                    parent: "asset".into(),
-                    expected: "modified",
-                }
-            })
-        }
-    };
-
-    let expected_elements = &["revision", "subject", "title", "unit", "up_axis"];
-    let mut current_element = 0;
-    while let Some((name, attributes, _)) = utils::optional_start_element(reader, "asset", expected_elements, current_element)? {
-        println!("matching child: {:?}", name);
-        match &*name.local_name {
-            "revision" => {
-                utils::verify_attributes(reader, "revision", attributes)?;
-                revision = utils::text_only_element(reader, "asset")?;
-            }
-
-            "subject" => {
-                utils::verify_attributes(reader, "subject", attributes)?;
-                subject = utils::text_only_element(reader, "asset")?;
-            }
-
-            "title" => {
-                utils::verify_attributes(reader, "title", attributes)?;
-                title = utils::text_only_element(reader, "asset")?;
-            }
-
-            "unit" => {
-                let mut unit_attrib = None;
-                let mut meter_attrib = None;
-
-                for attribute in attributes {
-                    match &*attribute.name.local_name {
-                        "name" => {
-                            // TODO: Validate that this follows the xsd:NMTOKEN format.
-                            // http://www.datypic.com/sc/xsd/t-xsd_NMTOKEN.html
-                            unit_attrib = Some(attribute.value);
-                        }
-
-                        "meter" => {
-                            let parsed = attribute.value
-                                .parse()
-                                .map_err(|error| {
-                                    Error {
-                                        position: reader.position(),
-                                        kind: ErrorKind::ParseFloatError(error),
-                                    }
-                                })?;
-                            meter_attrib = Some(parsed);
-                        }
-
-                        attrib_name @ _ => {
+                action: &mut |reader, attributes| {
+                    utils::verify_attributes(reader, "up_axis", attributes)?;
+                    let text = utils::text_only_element(reader, "up_axis")?.unwrap_or_default();
+                    let parsed = match &*text {
+                        "X_UP" => { UpAxis::X }
+                        "Y_UP" => { UpAxis::Y }
+                        "Z_UP" => { UpAxis::Z }
+                        _ => {
                             return Err(Error {
                                 position: reader.position(),
-                                kind: ErrorKind::UnexpectedAttribute {
-                                    element: "unit".into(),
-                                    attribute: attrib_name.into(),
-                                    expected: vec!["unit", "meter"],
+                                kind: ErrorKind::UnexpectedValue {
+                                    element: "up_axis".into(),
+                                    value: text,
                                 },
-                            })
+                            });
                         }
-                    }
-                }
+                    };
 
-                unit = Some(Unit {
-                    meter: meter_attrib.unwrap_or(1.0),
-                    name: unit_attrib.unwrap_or_else(|| "meter".into()),
-                });
-
-                utils::end_element(reader, "asset")?;
-            }
-
-            "up_axis" => {
-                let text = utils::text_only_element(reader, "up_axis")?.unwrap_or_default();
-                println!("up axis text: {:?}", text);
-                let parsed = match &*text {
-                    "X_UP" => { UpAxis::X }
-                    "Y_UP" => { UpAxis::Y }
-                    "Z_UP" => { UpAxis::Z }
-                    _ => {
-                        return Err(Error {
-                            position: reader.position(),
-                            kind: ErrorKind::UnexpectedValue {
-                                element: "up_axis".into(),
-                                value: text,
-                            },
-                        });
-                    }
-                };
-
-                up_axis = Some(parsed);
-            }
-
-            _ => { panic!("Unexpected element: {:?}", name.local_name); }
-        }
-
-        current_element = expected_elements
-            .iter()
-            .position(|&needle| needle == name.local_name)
-            .expect("Element wasn't in expected elements");
-    }
+                    up_axis = Some(parsed);
+                    Ok(())
+                },
+            },
+        ],
+    }.parse(reader)?;
 
     Ok(Asset {
         contributors: contributors,
-        created: created,
+        created: created.expect("Required element was not found"),
         keywords: keywords,
-        modified: modified,
+        modified: modified.expect("Required element was not found"),
         revision: revision,
         subject: subject,
         title: title,

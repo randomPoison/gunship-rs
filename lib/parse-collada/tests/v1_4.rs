@@ -117,7 +117,7 @@ fn asset_wrong_version() {
                     <latitude>40.0170</latitude>
                     <altitude mode="relativeToGround">0</altitude>
                 </geographic_location>
-            </coverage
+            </coverage>
             <created>2017-02-07T20:44:30Z</created>
             <keywords>foo bar baz</keywords>
             <modified>2017-02-07T20:44:30Z</modified>
@@ -133,7 +133,7 @@ fn asset_wrong_version() {
     let expected = Error {
         position: TextPosition { row: 7, column: 12 },
         kind: ErrorKind::UnexpectedElement {
-            parent: "asset".into(),
+            parent: "asset",
             element: "coverage".into(),
             expected: vec!["contributor", "created", "keywords", "modified", "revision", "subject", "title", "unit", "up_axis"],
         },

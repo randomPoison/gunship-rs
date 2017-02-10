@@ -70,57 +70,41 @@ fn parse_contributor<R: Read>(reader: &mut EventReader<R>, attributes: Vec<Owned
         "source_data",
     ];
 
-    fn verify_attributes<R: Read>(reader: &EventReader<R>, name: &OwnedName, attributes: Vec<OwnedAttribute>) -> Result<()> {
-        // Make sure the child element has no attributes.
-        if attributes.len() != 0 {
-            return Err(Error {
-                position: reader.position(),
-                kind: ErrorKind::UnexpectedAttribute {
-                    element: name.local_name.clone(),
-                    attribute: attributes[0].name.local_name.clone(),
-                    expected: vec![],
-                },
-            })
-        }
-
-        Ok(())
-    }
-
     let mut current_element = 0;
     while let Some((element_name, element_attributes, _)) = utils::optional_start_element(reader, "contributor", EXPECTED_ELEMENTS, current_element)? {
         match &*element_name.local_name {
             "author" => {
-                verify_attributes(reader, &element_name, element_attributes)?;
+                utils::verify_attributes(reader, "author", element_attributes)?;
                 contributor.author = utils::text_only_element(reader, "author")?;
             }
 
             "author_email" => {
-                verify_attributes(reader, &element_name, element_attributes)?;
+                utils::verify_attributes(reader, "author_email", element_attributes)?;
                 contributor.author_email = utils::text_only_element(reader, "author_email")?;
             }
 
             "author_website" => {
-                verify_attributes(reader, &element_name, element_attributes)?;
+                utils::verify_attributes(reader, "author_website", element_attributes)?;
                 contributor.author_website = utils::text_only_element(reader, "author_website")?.map(Into::into);
             }
 
             "authoring_tool" => {
-                verify_attributes(reader, &element_name, element_attributes)?;
+                utils::verify_attributes(reader, "authoring_tool", element_attributes)?;
                 contributor.authoring_tool = utils::text_only_element(reader, "authoring_tool")?;
             }
 
             "comments" => {
-                verify_attributes(reader, &element_name, element_attributes)?;
+                utils::verify_attributes(reader, "comments", element_attributes)?;
                 contributor.comments = utils::text_only_element(reader, "authoring_tool")?;
             }
 
             "copyright" => {
-                verify_attributes(reader, &element_name, element_attributes)?;
+                utils::verify_attributes(reader, "copyright", element_attributes)?;
                 contributor.copyright = utils::text_only_element(reader, "copyright")?;
             }
 
             "source_data" => {
-                verify_attributes(reader, &element_name, element_attributes)?;
+                utils::verify_attributes(reader, "source_data", element_attributes)?;
                 contributor.source_data = utils::text_only_element(reader, "source_data")?.map(Into::into);
             }
 
