@@ -7,7 +7,7 @@ use xml::common::Position;
 use xml::reader::EventReader;
 use xml::reader::XmlEvent::*;
 
-pub fn parse<R: Read>(mut reader: EventReader<R>, version: String, base: Option<AnyUri>) -> Result<Collada> {
+pub fn parse_collada<R: Read>(mut reader: EventReader<R>, version: String, base: Option<AnyUri>) -> Result<Collada> {
     // The next event must be the `<asset>` tag. No text data is allowed, and
     // whitespace/comments aren't emitted.
     let (_name, attributes, _) = utils::required_start_element(&mut reader, "COLLADA", "asset")?;

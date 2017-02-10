@@ -1,19 +1,20 @@
 use {AnyUri, DateTime, Result, Error, ErrorKind, Unit, UpAxis, UTC, utils};
 use std::io::Read;
+use utils::*;
+use utils::ChildOccurrences::*;
 use xml::attribute::OwnedAttribute;
 use xml::common::Position;
-use xml::name::OwnedName;
 use xml::reader::EventReader;
 use xml::reader::XmlEvent::*;
 
 /// The logic behind parsing the COLLADA document.
 ///
 /// `from_str()` and `read()` just create the `xml::EventReader` and then defer to `parse()`.
-pub fn parse<R: Read>(mut reader: EventReader<R>, version: String, base: Option<AnyUri>) -> Result<Collada> {
+pub fn parse_collada<R: Read>(mut reader: EventReader<R>, version: String, base: Option<AnyUri>) -> Result<Collada> {
     // The next event must be the `<asset>` tag. No text data is allowed, and
     // whitespace/comments aren't emitted.
-    let (_name, _, _) = utils::required_start_element(&mut reader, "COLLADA", "asset")?;
-    let asset = parse_asset(&mut reader)?;
+    let (_name, attributes, _) = utils::required_start_element(&mut reader, "COLLADA", "asset")?;
+    let asset = parse_asset(&mut reader, attributes)?;
 
     // Eat any events until we get to the `</COLLADA>` tag.
     // TODO: Actually parse the body of the document.
@@ -41,83 +42,355 @@ pub fn parse<R: Read>(mut reader: EventReader<R>, version: String, base: Option<
     })
 }
 
-fn parse_asset<R: Read>(reader: &mut EventReader<R>) -> Result<Asset> {
-    unimplemented!()
+fn parse_asset<R: Read>(reader: &mut EventReader<R>, attributes: Vec<OwnedAttribute>) -> Result<Asset> {
+    utils::verify_attributes(reader, "asset", attributes)?;
+
+    let mut contributors = Vec::default();
+    let mut coverage = None;
+    let mut created = None;
+    let mut keywords = None;
+    let mut modified = None;
+    let mut revision = None;
+    let mut subject = None;
+    let mut title = None;
+    let mut unit = None;
+    let mut up_axis = None;
+    let mut extras = Vec::default();
+
+    ElementConfiguration {
+        name: "asset",
+        children: &mut [
+            ChildConfiguration {
+                name: "contributor",
+                occurrences: Many,
+
+                action: &mut |reader, attributes| {
+                    let contributor = parse_contributor(reader, attributes)?;
+                    contributors.push(contributor);
+                    Ok(())
+                },
+            },
+
+            ChildConfiguration {
+                name: "coverage",
+                occurrences: Optional,
+
+                action: &mut |reader, attributes| {
+                    utils::verify_attributes(reader, "coverage", attributes)?;
+
+                    ElementConfiguration {
+                        name: "coverage",
+                        children: &mut [
+                            ChildConfiguration {
+                                name: "geographic_location",
+                                occurrences: Optional,
+
+                                action: &mut |reader, attributes| {
+                                    coverage = Some(parse_geographic_location(reader, attributes)?);
+                                    Ok(())
+                                },
+                            }
+                        ],
+                    }.parse(reader)
+                },
+            },
+
+            ChildConfiguration {
+                name: "created",
+                occurrences: Required,
+
+                action: &mut |reader, attributes| {
+                    utils::verify_attributes(reader, "created", attributes)?;
+                    let date_time = utils::text_only_element(reader, "created")?
+                        .unwrap_or_default()
+                        .parse()
+                        .map_err(|error| Error {
+                            position: reader.position(),
+                            kind: ErrorKind::TimeError(error),
+                        })?;
+                    created = Some(date_time);
+                    Ok(())
+                },
+            },
+
+            ChildConfiguration {
+                name: "keywords",
+                occurrences: Optional,
+
+                action: &mut |reader, attributes| {
+                    utils::verify_attributes(reader, "keywords", attributes)?;
+                    keywords = utils::text_only_element(reader, "keywords")?;
+                    Ok(())
+                },
+            },
+
+            ChildConfiguration {
+                name: "modified",
+                occurrences: Required,
+
+                action: &mut |reader, attributes| {
+                    utils::verify_attributes(reader, "modified", attributes)?;
+                    let date_time = utils::text_only_element(reader, "modified")?
+                        .unwrap_or_default()
+                        .parse()
+                        .map_err(|error| Error {
+                            position: reader.position(),
+                            kind: ErrorKind::TimeError(error),
+                        })?;
+                    modified = Some(date_time);
+                    Ok(())
+                },
+            },
+
+            ChildConfiguration {
+                name: "revision",
+                occurrences: Optional,
+
+                action: &mut |reader, attributes| {
+                    utils::verify_attributes(reader, "revision", attributes)?;
+                    revision = utils::text_only_element(reader, "revision")?;
+                    Ok(())
+                },
+            },
+
+            ChildConfiguration {
+                name: "subject",
+                occurrences: Optional,
+
+                action: &mut |reader, attributes| {
+                    utils::verify_attributes(reader, "subject", attributes)?;
+                    subject = utils::text_only_element(reader, "subject")?;
+                    Ok(())
+                },
+            },
+
+            ChildConfiguration {
+                name: "title",
+                occurrences: Optional,
+
+                action: &mut |reader, attributes| {
+                    utils::verify_attributes(reader, "title", attributes)?;
+                    title = utils::text_only_element(reader, "title")?;
+                    Ok(())
+                },
+            },
+
+            ChildConfiguration {
+                name: "unit",
+                occurrences: Optional,
+
+                action: &mut |reader, attributes| {
+                    let mut unit_attrib = None;
+                    let mut meter_attrib = None;
+
+                    for attribute in attributes {
+                        match &*attribute.name.local_name {
+                            "name" => {
+                                // TODO: Validate that this follows the xsd:NMTOKEN format.
+                                // http://www.datypic.com/sc/xsd/t-xsd_NMTOKEN.html
+                                unit_attrib = Some(attribute.value);
+                            }
+
+                            "meter" => {
+                                let parsed = attribute.value
+                                    .parse()
+                                    .map_err(|error| {
+                                        Error {
+                                            position: reader.position(),
+                                            kind: ErrorKind::ParseFloatError(error),
+                                        }
+                                    })?;
+                                meter_attrib = Some(parsed);
+                            }
+
+                            attrib_name @ _ => {
+                                return Err(Error {
+                                    position: reader.position(),
+                                    kind: ErrorKind::UnexpectedAttribute {
+                                        element: "unit",
+                                        attribute: attrib_name.into(),
+                                        expected: vec!["unit", "meter"],
+                                    },
+                                })
+                            }
+                        }
+                    }
+
+                    unit = Some(Unit {
+                        meter: meter_attrib.unwrap_or(1.0),
+                        name: unit_attrib.unwrap_or_else(|| "meter".into()),
+                    });
+
+                    utils::end_element(reader, "unit")
+                },
+            },
+
+            ChildConfiguration {
+                name: "up_axis",
+                occurrences: Optional,
+
+                action: &mut |reader, attributes| {
+                    utils::verify_attributes(reader, "up_axis", attributes)?;
+                    let text = utils::text_only_element(reader, "up_axis")?.unwrap_or_default();
+                    let parsed = match &*text {
+                        "X_UP" => { UpAxis::X }
+                        "Y_UP" => { UpAxis::Y }
+                        "Z_UP" => { UpAxis::Z }
+                        _ => {
+                            return Err(Error {
+                                position: reader.position(),
+                                kind: ErrorKind::UnexpectedValue {
+                                    element: "up_axis".into(),
+                                    value: text,
+                                },
+                            });
+                        }
+                    };
+
+                    up_axis = Some(parsed);
+                    Ok(())
+                },
+            },
+
+            ChildConfiguration {
+                name: "extra",
+                occurrences: Many,
+
+                action: &mut |reader, attributes| {
+                    let extra = parse_extra(reader, attributes)?;
+                    extras.push(extra);
+                    Ok(())
+                },
+            }
+        ],
+    }.parse(reader)?;
+
+    Ok(Asset {
+        contributors: contributors,
+        coverage: coverage,
+        created: created.expect("Required element was not found"),
+        keywords: keywords,
+        modified: modified.expect("Required element was not found"),
+        revision: revision,
+        subject: subject,
+        title: title,
+        unit: unit.unwrap_or_default(),
+        up_axis: up_axis.unwrap_or_default(),
+        extras: extras,
+    })
 }
 
 fn parse_contributor<R: Read>(reader: &mut EventReader<R>, attributes: Vec<OwnedAttribute>) -> Result<Contributor> {
-    // Make sure the `<contributor>` element has no attributes.
-    if attributes.len() != 0 {
-        return Err(Error {
-            position: reader.position(),
-            kind: ErrorKind::UnexpectedAttribute {
-                element: "contributor".into(),
-                attribute: attributes[0].name.local_name.clone(),
-                expected: vec![],
+    utils::verify_attributes(reader, "contributor", attributes)?;
+
+    let mut author = None;
+    let mut author_email = None;
+    let mut author_website = None;
+    let mut authoring_tool = None;
+    let mut comments = None;
+    let mut copyright = None;
+    let mut source_data = None;
+
+    ElementConfiguration {
+        name: "contributor",
+        children: &mut [
+            ChildConfiguration {
+                name: "author",
+                occurrences: Optional,
+
+                action: &mut |reader, attributes| {
+                    utils::verify_attributes(reader, "author", attributes)?;
+                    author = utils::text_only_element(reader, "author")?;
+                    Ok(())
+                },
             },
-        })
-    }
 
-    let mut contributor = Contributor::default();
+            ChildConfiguration {
+                name: "author_email",
+                occurrences: Optional,
 
-    static EXPECTED_ELEMENTS: &'static [&'static str] = &[
-        "author",
-        "author_email",
-        "author_website",
-        "authoring_tool",
-        "comments",
-        "copyright",
-        "source_data",
-    ];
+                action: &mut |reader, attributes| {
+                    utils::verify_attributes(reader, "author_email", attributes)?;
+                    author_email = utils::text_only_element(reader, "author_email")?;
+                    Ok(())
+                },
+            },
 
-    let mut current_element = 0;
-    while let Some((element_name, element_attributes, _)) = utils::optional_start_element(reader, "contributor", EXPECTED_ELEMENTS, current_element)? {
-        match &*element_name.local_name {
-            "author" => {
-                utils::verify_attributes(reader, "author", element_attributes)?;
-                contributor.author = utils::text_only_element(reader, "author")?;
-            }
+            ChildConfiguration {
+                name: "author_website",
+                occurrences: Optional,
 
-            "author_email" => {
-                utils::verify_attributes(reader, "author_email", element_attributes)?;
-                contributor.author_email = utils::text_only_element(reader, "author_email")?;
-            }
+                action: &mut |reader, attributes| {
+                    utils::verify_attributes(reader, "author_website", attributes)?;
+                    author_website = utils::text_only_element(reader, "author_website")?.map(Into::into);
+                    Ok(())
+                },
+            },
 
-            "author_website" => {
-                utils::verify_attributes(reader, "author_website", element_attributes)?;
-                contributor.author_website = utils::text_only_element(reader, "author_website")?.map(Into::into);
-            }
+            ChildConfiguration {
+                name: "authoring_tool",
+                occurrences: Optional,
 
-            "authoring_tool" => {
-                utils::verify_attributes(reader, "authoring_tool", element_attributes)?;
-                contributor.authoring_tool = utils::text_only_element(reader, "authoring_tool")?;
-            }
+                action: &mut |reader, attributes| {
+                    utils::verify_attributes(reader, "authoring_tool", attributes)?;
+                    authoring_tool = utils::text_only_element(reader, "authoring_tool")?;
+                    Ok(())
+                },
+            },
 
-            "comments" => {
-                utils::verify_attributes(reader, "comments", element_attributes)?;
-                contributor.comments = utils::text_only_element(reader, "authoring_tool")?;
-            }
+            ChildConfiguration {
+                name: "comments",
+                occurrences: Optional,
 
-            "copyright" => {
-                utils::verify_attributes(reader, "copyright", element_attributes)?;
-                contributor.copyright = utils::text_only_element(reader, "copyright")?;
-            }
+                action: &mut |reader, attributes| {
+                    utils::verify_attributes(reader, "comments", attributes)?;
+                    comments = utils::text_only_element(reader, "comments")?;
+                    Ok(())
+                },
+            },
 
-            "source_data" => {
-                utils::verify_attributes(reader, "source_data", element_attributes)?;
-                contributor.source_data = utils::text_only_element(reader, "source_data")?.map(Into::into);
-            }
+            ChildConfiguration {
+                name: "copyright",
+                occurrences: Optional,
 
-            _ => { panic!("Unexpected element name: {}", element_name); }
-        }
+                action: &mut |reader, attributes| {
+                    utils::verify_attributes(reader, "copyright", attributes)?;
+                    copyright = utils::text_only_element(reader, "copyright")?;
+                    Ok(())
+                },
+            },
 
-        current_element = EXPECTED_ELEMENTS
-            .iter()
-            .position(|&name| name == element_name.local_name)
-            .expect("Element wasn't in expected elements");
-    }
+            ChildConfiguration {
+                name: "source_data",
+                occurrences: Optional,
 
-    Ok(contributor)
+                action: &mut |reader, attributes| {
+                    utils::verify_attributes(reader, "source_data", attributes)?;
+                    source_data = utils::text_only_element(reader, "source_data")?.map(Into::into);
+                    Ok(())
+                },
+            },
+        ],
+    }.parse(reader)?;
+
+    Ok(Contributor {
+        author: author,
+        author_email: author_email,
+        author_website: author_website,
+        authoring_tool: authoring_tool,
+        comments: comments,
+        copyright: copyright,
+        source_data: source_data,
+    })
+}
+
+fn parse_geographic_location<R: Read>(reader: &mut EventReader<R>, attributes: Vec<OwnedAttribute>) -> Result<GeographicLocation> {
+    verify_attributes(reader, "geographic_location", attributes)?;
+    unimplemented!()
+}
+
+fn parse_extra<R: Read>(_: &mut EventReader<R>, _: Vec<OwnedAttribute>) -> Result<Extra> {
+    Ok(Extra)
 }
 
 /// Represents a parsed COLLADA document.

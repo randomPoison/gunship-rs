@@ -6,7 +6,10 @@ use ::parse_collada::*;
 fn no_xml_decl() {
     static DOCUMENT: &'static str = r#"
     <COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.5.0">
-        <asset />
+        <asset>
+            <created>2017-02-07T20:44:30Z</created>
+            <modified>2017-02-07T20:44:30Z</modified>
+        </asset>
     </COLLADA>
     "#;
 
@@ -19,7 +22,10 @@ fn doctype() {
     <?xml version="1.0" encoding="utf-8"?>
     <!DOCTYPE note SYSTEM "Note.dtd">
     <COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.5.0">
-        <asset />
+        <asset>
+            <created>2017-02-07T20:44:30Z</created>
+            <modified>2017-02-07T20:44:30Z</modified>
+        </asset>
     </COLLADA>
     "#;
 
@@ -33,7 +39,10 @@ fn extra_whitespace() {
 
     <COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.5.0">
 
-        <asset          />
+        <asset        >
+            <created>    2017-02-07T20:44:30Z        </created       >
+            <modified    > 2017-02-07T20:44:30Z             </modified      >
+        </asset>
 
     </COLLADA      >
 
@@ -85,7 +94,10 @@ fn collada_missing_version() {
     static DOCUMENT: &'static str = r#"
     <?xml version="1.0" encoding="utf-8"?>
     <COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema">
-        <asset />
+        <asset>
+            <created>2017-02-07T20:44:30Z</created>
+            <modified>2017-02-07T20:44:30Z</modified>
+        </asset>
     </COLLADA>
     "#;
 
@@ -106,7 +118,10 @@ fn collada_unexpected_attrib() {
     static DOCUMENT: &'static str = r#"
     <?xml version="1.0" encoding="utf-8"?>
     <COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.5.0" foo="bar">
-        <asset />
+        <asset>
+            <created>2017-02-07T20:44:30Z</created>
+            <modified>2017-02-07T20:44:30Z</modified>
+        </asset>
     </COLLADA>
     "#;
 
@@ -198,8 +213,9 @@ fn contributor_minimal() {
     <?xml version="1.0" encoding="utf-8"?>
     <COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.5.0">
         <asset>
-            <contributor>
-            </contributor>
+            <contributor />
+            <created>2017-02-07T20:44:30Z</created>
+            <modified>2017-02-07T20:44:30Z</modified>
         </asset>
     </COLLADA>
     "#;
@@ -223,6 +239,8 @@ fn contributor_full() {
                 <copyright>David LeGare, free for public use</copyright>
                 <source_data>C:/models/tank.s3d</source_data>
             </contributor>
+            <created>2017-02-07T20:44:30Z</created>
+            <modified>2017-02-07T20:44:30Z</modified>
         </asset>
     </COLLADA>
     "#;
