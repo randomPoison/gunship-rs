@@ -1,5 +1,6 @@
 use {AnyUri, Result, Error, ErrorKind, v1_4, v1_5};
 use std::io::Read;
+use std::str::FromStr;
 use xml::attribute::OwnedAttribute;
 use xml::common::Position;
 use xml::name::OwnedName;
@@ -35,8 +36,6 @@ pub struct ElementConfiguration<'a, R: 'a + Read> {
 
 impl<'a, R: 'a + Read> ElementConfiguration<'a, R> {
     pub fn parse(mut self, reader: &mut EventReader<R>) -> Result<()> {
-        println!("Parsing {:?}", self.name);
-
         // Keep track of the text position for the root element so that it can be used for error
         // messages.
         let root_position = reader.position();
@@ -320,14 +319,70 @@ fn start_element<R: Read>(
     }
 }
 
-pub fn text_only_element<R: Read>(
+pub fn required_text_contents<R, T>(
     reader: &mut EventReader<R>,
     parent: &'static str,
-) -> Result<Option<String>> {
+) -> Result<T>
+    where
+    R: Read,
+    T: FromStr,
+    ErrorKind: From<<T as FromStr>::Err>
+{
     match reader.next()? {
         Characters(data) => {
+            let result = T::from_str(&*data)
+                .map_err(|error| Error {
+                    position: reader.position(),
+                    kind: error.into(),
+                })?;
             end_element(reader, parent)?;
-            return Ok(Some(data))
+            return Ok(result);
+        }
+
+        StartElement { name, attributes: _, namespace: _ } => {
+            return Err(Error {
+                position: reader.position(),
+                kind: ErrorKind::UnexpectedElement {
+                    parent: parent,
+                    element: name.local_name,
+                    expected: vec![],
+                },
+            })
+        }
+
+        EndElement { .. } => {
+            return Err(Error {
+                position: reader.position(),
+                kind: ErrorKind::MissingValue {
+                    element: parent,
+                },
+            });
+        }
+
+        ProcessingInstruction { .. } => { unimplemented!(); }
+
+        event @ _ => { panic!("Unexpected event: {:?}", event); }
+    }
+}
+
+pub fn optional_text_contents<R, T>(
+    reader: &mut EventReader<R>,
+    parent: &'static str,
+) -> Result<Option<T>>
+    where
+    R: Read,
+    T: FromStr,
+    ErrorKind: From<<T as FromStr>::Err>
+{
+    match reader.next()? {
+        Characters(data) => {
+            let result = T::from_str(&*data)
+                .map_err(|error| Error {
+                    position: reader.position(),
+                    kind: error.into(),
+                })?;
+            end_element(reader, parent)?;
+            return Ok(Some(result));
         }
 
         StartElement { name, attributes: _, namespace: _ } => {

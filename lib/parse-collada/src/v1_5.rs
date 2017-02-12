@@ -101,14 +101,7 @@ fn parse_asset<R: Read>(reader: &mut EventReader<R>, attributes: Vec<OwnedAttrib
 
                 action: &mut |reader, attributes| {
                     utils::verify_attributes(reader, "created", attributes)?;
-                    let date_time = utils::text_only_element(reader, "created")?
-                        .unwrap_or_default()
-                        .parse()
-                        .map_err(|error| Error {
-                            position: reader.position(),
-                            kind: ErrorKind::TimeError(error),
-                        })?;
-                    created = Some(date_time);
+                    created = utils::optional_text_contents(reader, "created")?;
                     Ok(())
                 },
             },
@@ -119,7 +112,7 @@ fn parse_asset<R: Read>(reader: &mut EventReader<R>, attributes: Vec<OwnedAttrib
 
                 action: &mut |reader, attributes| {
                     utils::verify_attributes(reader, "keywords", attributes)?;
-                    keywords = utils::text_only_element(reader, "keywords")?;
+                    keywords = utils::optional_text_contents(reader, "keywords")?;
                     Ok(())
                 },
             },
@@ -130,14 +123,7 @@ fn parse_asset<R: Read>(reader: &mut EventReader<R>, attributes: Vec<OwnedAttrib
 
                 action: &mut |reader, attributes| {
                     utils::verify_attributes(reader, "modified", attributes)?;
-                    let date_time = utils::text_only_element(reader, "modified")?
-                        .unwrap_or_default()
-                        .parse()
-                        .map_err(|error| Error {
-                            position: reader.position(),
-                            kind: ErrorKind::TimeError(error),
-                        })?;
-                    modified = Some(date_time);
+                    modified = utils::optional_text_contents(reader, "modified")?;
                     Ok(())
                 },
             },
@@ -148,7 +134,7 @@ fn parse_asset<R: Read>(reader: &mut EventReader<R>, attributes: Vec<OwnedAttrib
 
                 action: &mut |reader, attributes| {
                     utils::verify_attributes(reader, "revision", attributes)?;
-                    revision = utils::text_only_element(reader, "revision")?;
+                    revision = utils::optional_text_contents(reader, "revision")?;
                     Ok(())
                 },
             },
@@ -159,7 +145,7 @@ fn parse_asset<R: Read>(reader: &mut EventReader<R>, attributes: Vec<OwnedAttrib
 
                 action: &mut |reader, attributes| {
                     utils::verify_attributes(reader, "subject", attributes)?;
-                    subject = utils::text_only_element(reader, "subject")?;
+                    subject = utils::optional_text_contents(reader, "subject")?;
                     Ok(())
                 },
             },
@@ -170,7 +156,7 @@ fn parse_asset<R: Read>(reader: &mut EventReader<R>, attributes: Vec<OwnedAttrib
 
                 action: &mut |reader, attributes| {
                     utils::verify_attributes(reader, "title", attributes)?;
-                    title = utils::text_only_element(reader, "title")?;
+                    title = utils::optional_text_contents(reader, "title")?;
                     Ok(())
                 },
             },
@@ -231,7 +217,7 @@ fn parse_asset<R: Read>(reader: &mut EventReader<R>, attributes: Vec<OwnedAttrib
 
                 action: &mut |reader, attributes| {
                     utils::verify_attributes(reader, "up_axis", attributes)?;
-                    let text = utils::text_only_element(reader, "up_axis")?.unwrap_or_default();
+                    let text: String = utils::optional_text_contents(reader, "up_axis")?.unwrap_or_default();
                     let parsed = match &*text {
                         "X_UP" => { UpAxis::X }
                         "Y_UP" => { UpAxis::Y }
@@ -239,7 +225,7 @@ fn parse_asset<R: Read>(reader: &mut EventReader<R>, attributes: Vec<OwnedAttrib
                         _ => {
                             return Err(Error {
                                 position: reader.position(),
-                                kind: ErrorKind::UnexpectedValue {
+                                kind: ErrorKind::InvalidValue {
                                     element: "up_axis".into(),
                                     value: text,
                                 },
@@ -300,7 +286,7 @@ fn parse_contributor<R: Read>(reader: &mut EventReader<R>, attributes: Vec<Owned
 
                 action: &mut |reader, attributes| {
                     utils::verify_attributes(reader, "author", attributes)?;
-                    author = utils::text_only_element(reader, "author")?;
+                    author = utils::optional_text_contents(reader, "author")?;
                     Ok(())
                 },
             },
@@ -311,7 +297,7 @@ fn parse_contributor<R: Read>(reader: &mut EventReader<R>, attributes: Vec<Owned
 
                 action: &mut |reader, attributes| {
                     utils::verify_attributes(reader, "author_email", attributes)?;
-                    author_email = utils::text_only_element(reader, "author_email")?;
+                    author_email = utils::optional_text_contents(reader, "author_email")?;
                     Ok(())
                 },
             },
@@ -322,7 +308,7 @@ fn parse_contributor<R: Read>(reader: &mut EventReader<R>, attributes: Vec<Owned
 
                 action: &mut |reader, attributes| {
                     utils::verify_attributes(reader, "author_website", attributes)?;
-                    author_website = utils::text_only_element(reader, "author_website")?.map(Into::into);
+                    author_website = utils::optional_text_contents(reader, "author_website")?.map(String::into);
                     Ok(())
                 },
             },
@@ -333,7 +319,7 @@ fn parse_contributor<R: Read>(reader: &mut EventReader<R>, attributes: Vec<Owned
 
                 action: &mut |reader, attributes| {
                     utils::verify_attributes(reader, "authoring_tool", attributes)?;
-                    authoring_tool = utils::text_only_element(reader, "authoring_tool")?;
+                    authoring_tool = utils::optional_text_contents(reader, "authoring_tool")?;
                     Ok(())
                 },
             },
@@ -344,7 +330,7 @@ fn parse_contributor<R: Read>(reader: &mut EventReader<R>, attributes: Vec<Owned
 
                 action: &mut |reader, attributes| {
                     utils::verify_attributes(reader, "comments", attributes)?;
-                    comments = utils::text_only_element(reader, "comments")?;
+                    comments = utils::optional_text_contents(reader, "comments")?;
                     Ok(())
                 },
             },
@@ -355,7 +341,7 @@ fn parse_contributor<R: Read>(reader: &mut EventReader<R>, attributes: Vec<Owned
 
                 action: &mut |reader, attributes| {
                     utils::verify_attributes(reader, "copyright", attributes)?;
-                    copyright = utils::text_only_element(reader, "copyright")?;
+                    copyright = utils::optional_text_contents(reader, "copyright")?;
                     Ok(())
                 },
             },
@@ -366,7 +352,7 @@ fn parse_contributor<R: Read>(reader: &mut EventReader<R>, attributes: Vec<Owned
 
                 action: &mut |reader, attributes| {
                     utils::verify_attributes(reader, "source_data", attributes)?;
-                    source_data = utils::text_only_element(reader, "source_data")?.map(Into::into);
+                    source_data = utils::optional_text_contents(reader, "source_data")?.map(String::into);
                     Ok(())
                 },
             },
@@ -386,10 +372,110 @@ fn parse_contributor<R: Read>(reader: &mut EventReader<R>, attributes: Vec<Owned
 
 fn parse_geographic_location<R: Read>(reader: &mut EventReader<R>, attributes: Vec<OwnedAttribute>) -> Result<GeographicLocation> {
     verify_attributes(reader, "geographic_location", attributes)?;
-    unimplemented!()
+
+    let mut latitude = None;
+    let mut longitude = None;
+    let mut altitude = None;
+
+    ElementConfiguration {
+        name: "geographic_location",
+        children: &mut [
+            ChildConfiguration {
+                name: "longitude",
+                occurrences: Required,
+
+                action: &mut |reader, attributes| {
+                    utils::verify_attributes(reader, "longitude", attributes)?;
+                    longitude = utils::optional_text_contents(reader, "longitude")?;
+                    Ok(())
+                },
+            },
+
+            ChildConfiguration {
+                name: "latitude",
+                occurrences: Required,
+
+                action: &mut |reader, attributes| {
+                    utils::verify_attributes(reader, "latitude", attributes)?;
+                    latitude = utils::optional_text_contents(reader, "latitude")?;
+                    Ok(())
+                },
+            },
+
+            ChildConfiguration {
+                name: "altitude",
+                occurrences: Required,
+
+                action: &mut |reader, attributes| {
+                    let mut mode = None;
+                    for attribute in attributes {
+                        match &*attribute.name.local_name {
+                            "mode" => {
+                                mode = Some(attribute.value);
+                            }
+
+                            attrib_name @ _ => {
+                                return Err(Error {
+                                    position: reader.position(),
+                                    kind: ErrorKind::UnexpectedAttribute {
+                                        element: "altitude",
+                                        attribute: attrib_name.into(),
+                                        expected: vec!["mode"],
+                                    },
+                                });
+                            }
+                        }
+                    }
+
+                    let mode = match mode {
+                        Some(mode) => { mode }
+                        None => {
+                            return Err(Error {
+                                position: reader.position(),
+                                kind: ErrorKind::MissingAttribute {
+                                    element: "altitude",
+                                    attribute: "mode",
+                                },
+                            });
+                        }
+                    };
+
+                    match &*mode {
+                        "absolute" => {
+                            let value = utils::required_text_contents(reader, "altitude")?;
+                            altitude = Some(Altitude::Absolute(value));
+                        }
+
+                        "relativeToGround" => {
+                            let value = utils::required_text_contents(reader, "altitude")?;
+                            altitude = Some(Altitude::RelativeToGround(value));
+                        }
+
+                        _ => {
+                            return Err(Error {
+                                position: reader.position(),
+                                kind: ErrorKind::InvalidValue {
+                                    element: "altitude",
+                                    value: mode,
+                                },
+                            });
+                        }
+                    }
+
+                    Ok(())
+                },
+            },
+        ],
+    }.parse(reader)?;
+
+    Ok(GeographicLocation {
+        latitude: latitude.expect("Missing requried value"),
+        longitude: longitude.expect("Missing required value"),
+        altitude: altitude.expect("Missing required value"),
+    })
 }
 
-fn parse_extra<R: Read>(_: &mut EventReader<R>, _: Vec<OwnedAttribute>) -> Result<Extra> {
+fn parse_extra<R: Read>(reader: &mut EventReader<R>, attributes: Vec<OwnedAttribute>) -> Result<Extra> {
     Ok(Extra)
 }
 
@@ -532,9 +618,9 @@ pub struct Contributor {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct GeographicLocation {
-    latitude: f64,
-    longitude: f64,
-    mode: Altitude,
+    pub latitude: f64,
+    pub longitude: f64,
+    pub altitude: Altitude,
 }
 
 #[derive(Debug, Clone, PartialEq)]

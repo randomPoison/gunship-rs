@@ -130,6 +130,11 @@ pub enum ErrorKind {
         expected: &'static str,
     },
 
+    /// An element was missing required text data.
+    MissingValue {
+        element: &'static str,
+    },
+
     /// A floating point value was formatted incorrectly.
     ParseFloatError(ParseFloatError),
 
@@ -208,8 +213,9 @@ pub enum ErrorKind {
         element: String,
     },
 
-    UnexpectedValue {
-        element: String,
+    /// An element or attribute contained text data that was formatted incorrectly.
+    InvalidValue {
+        element: &'static str,
         value: String,
     },
 
@@ -221,6 +227,24 @@ pub enum ErrorKind {
     XmlError(XmlError),
 }
 
+impl From<::chrono::format::ParseError> for ErrorKind {
+    fn from(from: ::chrono::format::ParseError) -> ErrorKind {
+        ErrorKind::TimeError(from)
+    }
+}
+
+impl From<::std::num::ParseFloatError> for ErrorKind {
+    fn from(from: ::std::num::ParseFloatError) -> ErrorKind {
+        ErrorKind::ParseFloatError(from)
+    }
+}
+
+impl From<::std::string::ParseError> for ErrorKind {
+    fn from(from: ::std::string::ParseError) -> ErrorKind {
+        match from {}
+    }
+}
+
 impl Display for ErrorKind {
     fn fmt(&self, formatter: &mut Formatter) -> ::std::result::Result<(), fmt::Error> {
         match *self {
@@ -230,6 +254,10 @@ impl Display for ErrorKind {
 
             ErrorKind::MissingElement { expected, ref parent } => {
                 write!(formatter, "<{}> is missing a required child element: {}", parent, expected)
+            }
+
+            ErrorKind::MissingValue { element } => {
+                write!(formatter, "<{}> is missing required text data", element)
             }
 
             ErrorKind::ParseFloatError(ref error) => {
@@ -268,7 +296,7 @@ impl Display for ErrorKind {
                 write!(formatter, "Document began with <{}> instead of <COLLADA>", element)
             }
 
-            ErrorKind::UnexpectedValue { ref element, ref value } => {
+            ErrorKind::InvalidValue { ref element, ref value } => {
                 write!(formatter, "<{}> contained an unexpected value {:?}", element, value)
             }
 

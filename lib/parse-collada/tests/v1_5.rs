@@ -173,7 +173,7 @@ fn asset_full() {
                     <latitude>40.0170</latitude>
                     <altitude mode="relativeToGround">0</altitude>
                 </geographic_location>
-            </coverage
+            </coverage>
             <created>2017-02-07T20:44:30Z</created>
             <keywords>foo bar baz</keywords>
             <modified>2017-02-07T20:44:30Z</modified>
@@ -188,7 +188,11 @@ fn asset_full() {
 
     let expected = Asset {
         contributors: vec![Contributor::default(), Contributor::default(), Contributor::default()],
-        coverage: None,
+        coverage: Some(GeographicLocation {
+            longitude: -105.2830,
+            latitude: 40.0170,
+            altitude: Altitude::RelativeToGround(0.0),
+        }),
         created: "2017-02-07T20:44:30Z".parse::<DateTime<UTC>>().unwrap(),
         keywords: Some("foo bar baz".into()),
         modified: "2017-02-07T20:44:30Z".parse::<DateTime<UTC>>().unwrap(),

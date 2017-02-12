@@ -72,8 +72,8 @@ fn parse_asset<R: Read>(reader: &mut EventReader<R>, attributes: Vec<OwnedAttrib
 
                 action: &mut |reader, attributes| {
                     utils::verify_attributes(reader, "created", attributes)?;
-                    let date_time = utils::text_only_element(reader, "created")?
-                        .unwrap_or_default()
+                    let date_time_string: String = utils::optional_text_contents(reader, "created")?.unwrap_or_default();
+                    let date_time = date_time_string
                         .parse()
                         .map_err(|error| Error {
                             position: reader.position(),
@@ -90,7 +90,7 @@ fn parse_asset<R: Read>(reader: &mut EventReader<R>, attributes: Vec<OwnedAttrib
 
                 action: &mut |reader, attributes| {
                     utils::verify_attributes(reader, "keywords", attributes)?;
-                    keywords = utils::text_only_element(reader, "keywords")?;
+                    keywords = utils::optional_text_contents(reader, "keywords")?;
                     Ok(())
                 },
             },
@@ -101,14 +101,7 @@ fn parse_asset<R: Read>(reader: &mut EventReader<R>, attributes: Vec<OwnedAttrib
 
                 action: &mut |reader, attributes| {
                     utils::verify_attributes(reader, "modified", attributes)?;
-                    let date_time = utils::text_only_element(reader, "modified")?
-                        .unwrap_or_default()
-                        .parse()
-                        .map_err(|error| Error {
-                            position: reader.position(),
-                            kind: ErrorKind::TimeError(error),
-                        })?;
-                    modified = Some(date_time);
+                    modified = utils::optional_text_contents(reader, "modified")?;
                     Ok(())
                 },
             },
@@ -119,7 +112,7 @@ fn parse_asset<R: Read>(reader: &mut EventReader<R>, attributes: Vec<OwnedAttrib
 
                 action: &mut |reader, attributes| {
                     utils::verify_attributes(reader, "revision", attributes)?;
-                    revision = utils::text_only_element(reader, "revision")?;
+                    revision = utils::optional_text_contents(reader, "revision")?;
                     Ok(())
                 },
             },
@@ -130,7 +123,7 @@ fn parse_asset<R: Read>(reader: &mut EventReader<R>, attributes: Vec<OwnedAttrib
 
                 action: &mut |reader, attributes| {
                     utils::verify_attributes(reader, "subject", attributes)?;
-                    subject = utils::text_only_element(reader, "subject")?;
+                    subject = utils::optional_text_contents(reader, "subject")?;
                     Ok(())
                 },
             },
@@ -141,7 +134,7 @@ fn parse_asset<R: Read>(reader: &mut EventReader<R>, attributes: Vec<OwnedAttrib
 
                 action: &mut |reader, attributes| {
                     utils::verify_attributes(reader, "title", attributes)?;
-                    title = utils::text_only_element(reader, "title")?;
+                    title = utils::optional_text_contents(reader, "title")?;
                     Ok(())
                 },
             },
@@ -202,7 +195,7 @@ fn parse_asset<R: Read>(reader: &mut EventReader<R>, attributes: Vec<OwnedAttrib
 
                 action: &mut |reader, attributes| {
                     utils::verify_attributes(reader, "up_axis", attributes)?;
-                    let text = utils::text_only_element(reader, "up_axis")?.unwrap_or_default();
+                    let text: String = utils::optional_text_contents(reader, "up_axis")?.unwrap_or_default();
                     let parsed = match &*text {
                         "X_UP" => { UpAxis::X }
                         "Y_UP" => { UpAxis::Y }
@@ -210,7 +203,7 @@ fn parse_asset<R: Read>(reader: &mut EventReader<R>, attributes: Vec<OwnedAttrib
                         _ => {
                             return Err(Error {
                                 position: reader.position(),
-                                kind: ErrorKind::UnexpectedValue {
+                                kind: ErrorKind::InvalidValue {
                                     element: "up_axis".into(),
                                     value: text,
                                 },
@@ -256,7 +249,7 @@ fn parse_contributor<R: Read>(reader: &mut EventReader<R>, attributes: Vec<Owned
 
                 action: &mut |reader, attributes| {
                     utils::verify_attributes(reader, "author", attributes)?;
-                    author = utils::text_only_element(reader, "author")?;
+                    author = utils::optional_text_contents(reader, "author")?;
                     Ok(())
                 },
             },
@@ -267,7 +260,7 @@ fn parse_contributor<R: Read>(reader: &mut EventReader<R>, attributes: Vec<Owned
 
                 action: &mut |reader, attributes| {
                     utils::verify_attributes(reader, "authoring_tool", attributes)?;
-                    authoring_tool = utils::text_only_element(reader, "authoring_tool")?;
+                    authoring_tool = utils::optional_text_contents(reader, "authoring_tool")?;
                     Ok(())
                 },
             },
@@ -278,7 +271,7 @@ fn parse_contributor<R: Read>(reader: &mut EventReader<R>, attributes: Vec<Owned
 
                 action: &mut |reader, attributes| {
                     utils::verify_attributes(reader, "comments", attributes)?;
-                    comments = utils::text_only_element(reader, "comments")?;
+                    comments = utils::optional_text_contents(reader, "comments")?;
                     Ok(())
                 },
             },
@@ -289,7 +282,7 @@ fn parse_contributor<R: Read>(reader: &mut EventReader<R>, attributes: Vec<Owned
 
                 action: &mut |reader, attributes| {
                     utils::verify_attributes(reader, "copyright", attributes)?;
-                    copyright = utils::text_only_element(reader, "copyright")?;
+                    copyright = utils::optional_text_contents(reader, "copyright")?;
                     Ok(())
                 },
             },
@@ -300,7 +293,7 @@ fn parse_contributor<R: Read>(reader: &mut EventReader<R>, attributes: Vec<Owned
 
                 action: &mut |reader, attributes| {
                     utils::verify_attributes(reader, "source_data", attributes)?;
-                    source_data = utils::text_only_element(reader, "source_data")?.map(Into::into);
+                    source_data = utils::optional_text_contents(reader, "source_data")?.map(String::into);
                     Ok(())
                 },
             },
