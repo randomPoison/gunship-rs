@@ -21,9 +21,9 @@ fn collada_asset_minimal() {
         asset: Asset {
             contributors: vec![],
             coverage: None,
-            created: "2017-02-07T20:44:30Z".parse::<DateTime<UTC>>().unwrap(),
+            created: "2017-02-07T20:44:30Z".parse().unwrap(),
             keywords: None,
-            modified: "2017-02-07T20:44:30Z".parse::<DateTime<UTC>>().unwrap(),
+            modified: "2017-02-07T20:44:30Z".parse().unwrap(),
             revision: None,
             subject: None,
             title: None,
@@ -84,15 +84,60 @@ fn asset_full() {
     let expected = Asset {
         contributors: vec![Contributor::default(), Contributor::default(), Contributor::default()],
         coverage: None,
-        created: "2017-02-07T20:44:30Z".parse::<DateTime<UTC>>().unwrap(),
+        created: "2017-02-07T20:44:30Z".parse().unwrap(),
         keywords: Some("foo bar baz".into()),
-        modified: "2017-02-07T20:44:30Z".parse::<DateTime<UTC>>().unwrap(),
+        modified: "2017-02-07T20:44:30Z".parse().unwrap(),
         revision: Some("7".into()),
         subject: Some("A thing".into()),
         title: Some("Model of a thing".into()),
         unit: Unit {
             meter: 7.0,
             name: "septimeter".into(),
+        },
+        up_axis: UpAxis::Z,
+        extras: Vec::default(),
+    };
+
+    let collada = Collada::from_str(DOCUMENT).unwrap();
+    assert_eq!(expected, collada.asset);
+}
+
+#[test]
+fn asset_blender() {
+    static DOCUMENT: &'static str = r#"
+    <?xml version="1.0" encoding="utf-8"?>
+    <COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.4.1">
+        <asset>
+            <contributor>
+                <author>Blender User</author>
+                <authoring_tool>Blender 2.78.0 commit date:2016-10-24, commit time:12:20, hash:e8299c8</authoring_tool>
+            </contributor>
+            <created>2017-02-01T09:29:54</created>
+            <modified>2017-02-01T09:29:54</modified>
+            <unit name="meter" meter="1"/>
+            <up_axis>Z_UP</up_axis>
+        </asset>
+    </COLLADA>
+    "#;
+
+    let expected = Asset {
+        contributors: vec![
+            Contributor {
+                author: Some("Blender User".into()),
+                authoring_tool: Some("Blender 2.78.0 commit date:2016-10-24, commit time:12:20, hash:e8299c8".into()),
+                .. Contributor::default()
+            },
+        ],
+        coverage: None,
+        created: "2017-02-01T09:29:54".parse().unwrap(),
+        keywords: None,
+        modified: "2017-02-01T09:29:54".parse().unwrap(),
+        revision: None,
+        subject: None,
+        title: None,
+        unit: Unit {
+            meter: 1.0,
+            name: "meter".into(),
         },
         up_axis: UpAxis::Z,
         extras: Vec::default(),

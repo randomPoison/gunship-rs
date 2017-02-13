@@ -1,4 +1,5 @@
 use {AnyUri, Result, Error, ErrorKind, v1_4, v1_5};
+use std::fmt::{self, Display, Formatter};
 use std::io::Read;
 use std::str::FromStr;
 use xml::attribute::OwnedAttribute;
@@ -454,4 +455,21 @@ pub fn verify_attributes<R: Read>(reader: &EventReader<R>, name: &'static str, a
     }
 
     Ok(())
+}
+
+/// Helper struct for pretty-printing lists of strings.
+pub struct StringListDisplay<'a>(pub &'a [&'a str]);
+
+impl<'a> Display for StringListDisplay<'a> {
+    fn fmt(&self, formatter: &mut Formatter) -> ::std::result::Result<(), fmt::Error> {
+        if self.0.len() > 0 {
+            write!(formatter, "{}", self.0[0])?;
+
+            for string in &self.0[1..] {
+                write!(formatter, ", {}", string)?;
+            }
+        }
+
+        Ok(())
+    }
 }

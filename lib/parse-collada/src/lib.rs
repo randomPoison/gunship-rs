@@ -61,13 +61,14 @@
 extern crate chrono;
 extern crate xml;
 
-pub use chrono::{DateTime, UTC};
+pub use chrono::*;
 pub use v1_5::*;
 pub use xml::common::TextPosition;
 pub use xml::reader::Error as XmlError;
 
 use std::fmt::{self, Display, Formatter};
 use std::num::ParseFloatError;
+use utils::StringListDisplay;
 use xml::common::Position;
 
 mod utils;
@@ -366,19 +367,21 @@ impl Default for Unit {
     }
 }
 
-/// Helper struct for pretty-printing lists of strings.
-struct StringListDisplay<'a>(&'a [&'a str]);
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DateTime {
+    Utc(chrono::DateTime<UTC>),
+    Naive(NaiveDateTime),
+}
 
-impl<'a> Display for StringListDisplay<'a> {
-    fn fmt(&self, formatter: &mut Formatter) -> ::std::result::Result<(), fmt::Error> {
-        if self.0.len() > 0 {
-            write!(formatter, "{}", self.0[0])?;
+impl ::std::str::FromStr for DateTime {
+    type Err = chrono::ParseError;
 
-            for string in &self.0[1..] {
-                write!(formatter, ", {}", string)?;
-            }
-        }
-
-        Ok(())
+    fn from_str(source: &str) -> ::std::result::Result<DateTime, chrono::ParseError> {
+        source
+            .parse()
+            .map(|datetime| DateTime::Utc(datetime))
+            .or_else(|_| {
+                NaiveDateTime::from_str(source).map(|naive| DateTime::Naive(naive))
+            })
     }
 }

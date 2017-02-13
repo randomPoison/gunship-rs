@@ -1,4 +1,4 @@
-use {AnyUri, DateTime, Error, ErrorKind, Result, Unit, UpAxis, utils, UTC, v1_5};
+use {AnyUri, DateTime, Error, ErrorKind, Result, Unit, UpAxis, utils, v1_5};
 use std::io::Read;
 use utils::*;
 use utils::ChildOccurrences::*;
@@ -329,9 +329,9 @@ impl Into<v1_5::Collada> for Collada {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Asset {
     pub contributors: Vec<Contributor>,
-    pub created: DateTime<UTC>,
+    pub created: DateTime,
     pub keywords: Option<String>,
-    pub modified: DateTime<UTC>,
+    pub modified: DateTime,
     pub revision: Option<String>,
     pub subject: Option<String>,
     pub title: Option<String>,

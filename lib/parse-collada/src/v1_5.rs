@@ -1,4 +1,4 @@
-use {AnyUri, DateTime, Result, Error, ErrorKind, Unit, UpAxis, UTC, utils};
+use {AnyUri, DateTime, Result, Error, ErrorKind, Unit, UpAxis, utils};
 use std::io::Read;
 use utils::*;
 use utils::ChildOccurrences::*;
@@ -508,7 +508,10 @@ impl Collada {
     /// static DOCUMENT: &'static str = r#"
     ///     <?xml version="1.0" encoding="utf-8"?>
     ///     <COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.4.1">
-    ///         <asset />
+    ///         <asset>
+    ///             <created>2017-02-07T20:44:30Z</created>
+    ///             <modified>2017-02-07T20:44:30Z</modified>
+    ///         </asset>
     ///     </COLLADA>
     /// "#;
     ///
@@ -566,9 +569,9 @@ pub struct Asset {
     /// The list of contributors who worked on the asset.
     pub contributors: Vec<Contributor>,
     pub coverage: Option<GeographicLocation>,
-    pub created: DateTime<UTC>,
+    pub created: DateTime,
     pub keywords: Option<String>,
-    pub modified: DateTime<UTC>,
+    pub modified: DateTime,
     pub revision: Option<String>,
     pub subject: Option<String>,
     pub title: Option<String>,
