@@ -1,4 +1,5 @@
 use {AnyUri, Result, Error, ErrorKind, v1_4, v1_5};
+use self::ChildOccurrences::*;
 use std::fmt::{self, Display, Formatter};
 use std::io::Read;
 use std::str::FromStr;
@@ -28,6 +29,7 @@ pub enum ChildOccurrences {
     Optional,
     Required,
     Many,
+    RequiredMany,
 }
 
 pub struct ElementConfiguration<'a, R: 'a + Read> {
@@ -40,56 +42,48 @@ impl<'a, R: 'a + Read> ElementConfiguration<'a, R> {
         // Keep track of the text position for the root element so that it can be used for error
         // messages.
         let root_position = reader.position();
+
+        // The index of the next child we are expecting.
         let mut current_child = 0;
 
+        // Whether or not we have encountered the current child at least once. This is only used
+        // for `RequiredMany` children to ensure they are found at least once.
+        let mut has_encountered_child = false;
+
         'elements: while let Some(element) = start_element(reader, self.name)? {
-            for child_index in current_child..self.children.len() {
-                let child_name = {
-                    let child = &mut self.children[child_index];
+            while current_child < self.children.len() {
+                let child = &mut self.children[current_child];
 
-                    if child.name == element.name.local_name {
-                        // We've found a valid child, hooray!
-                        (child.action)(reader, element.attributes)?;
+                if child.name == element.name.local_name {
+                    has_encountered_child = true;
 
-                        // Either advance current_child or don't, depending on if it's allowed to repeat.
-                        if child.occurrences != ChildOccurrences::Many {
-                            current_child = child_index + 1;
+                    // We've found a valid child, hooray! Allow it to run its parsing code.
+                    (child.action)(reader, element.attributes)?;
+
+                    // Either advance current_child or don't, depending on if it's allowed to repeat.
+                    match child.occurrences {
+                        Optional | Required => {
+                            // Advance current child.
+                            has_encountered_child = false;
+                            current_child += 1;
                         }
-
-                        continue 'elements;
-                    } else if child.occurrences != ChildOccurrences::Required {
-                        current_child = child_index + 1;
-                        continue;
+                        Many | RequiredMany => { /* Don't advance current child. */ }
                     }
 
-                    child.name
-                };
-
-                // If the child we found was a valid child (just in the wrong spot) then we
-                // want to return a `MissingElement` error, but if the child we found was
-                // not a valid child, then we want to return an `UnexpectedElement` error.
-                if self.is_valid_child(&*element.name.local_name) {
-                    // We skipped a required child and that is no good and also very bad.
-                    return Err(Error {
-                        position: root_position,
-                        kind: ErrorKind::MissingElement {
-                            parent: self.name,
-                            expected: child_name,
-                        },
-                    });
-                } else {
-                    return Err(Error {
-                        position: reader.position(),
-                        kind: ErrorKind::UnexpectedElement {
-                            parent: self.name,
-                            element: element.name.local_name,
-                            expected: self.collect_expected_children(),
-                        },
-                    });
+                    continue 'elements;
                 }
+
+                // The element didn't match the current child. Check to see if the current child
+                // is required. If so, we return an error if we never encountered it.
+                if child.occurrences == Required || (child.occurrences == RequiredMany && !has_encountered_child) {
+                    break;
+                }
+
+                // Advance the current child.
+                has_encountered_child = false;
+                current_child += 1;
             }
 
-            // Child didn't appear in list of children, error o'clock.
             return Err(Error {
                 position: reader.position(),
                 kind: ErrorKind::UnexpectedElement {
@@ -97,9 +91,10 @@ impl<'a, R: 'a + Read> ElementConfiguration<'a, R> {
                     element: element.name.local_name,
                     expected: self.collect_expected_children(),
                 },
-            })
+            });
         }
 
+        // No more child elements are present, and none of the children we encountered were invalid.
         // Verify that there are no remaining required children.
         for child in &self.children[current_child..] {
             if child.occurrences == ChildOccurrences::Required {
@@ -122,16 +117,6 @@ impl<'a, R: 'a + Read> ElementConfiguration<'a, R> {
             names.push(child.name);
         }
         names
-    }
-
-    fn is_valid_child(&self, name: &str) -> bool {
-        for child in self.children.iter() {
-            if child.name == name {
-                return true;
-            }
-        }
-
-        false
     }
 }
 
