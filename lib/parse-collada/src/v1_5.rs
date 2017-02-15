@@ -1,4 +1,4 @@
-use {AnyUri, DateTime, Result, Error, ErrorKind, Unit, UpAxis, utils};
+use {AnyUri, DateTime, Result, Error, ErrorKind, Unit, UpAxis, utils, XmlEvent};
 use std::io::Read;
 use utils::*;
 use utils::ChildOccurrences::*;
@@ -476,7 +476,131 @@ fn parse_geographic_location<R: Read>(reader: &mut EventReader<R>, attributes: V
 }
 
 fn parse_extra<R: Read>(reader: &mut EventReader<R>, attributes: Vec<OwnedAttribute>) -> Result<Extra> {
-    Ok(Extra)
+    let mut id = None;
+    let mut name = None;
+    let mut type_hint = None;
+    let mut asset = None;
+    let mut techniques = Vec::new();
+
+    for attribute in attributes {
+        match &*attribute.name.local_name {
+            "id" => { id = Some(attribute.value); }
+
+            "name" => { name = Some(attribute.value); }
+
+            "type" => { type_hint = Some(attribute.value); }
+
+            attrib_name @ _ => {
+                return Err(Error {
+                    position: reader.position(),
+                    kind: ErrorKind::UnexpectedAttribute {
+                        element: "extra",
+                        attribute: attrib_name.into(),
+                        expected: vec!["id", "name", "type"],
+                    },
+                })
+            }
+        }
+    }
+
+    ElementConfiguration {
+        name: "extra",
+        children: &mut [
+            ChildConfiguration {
+                name: "asset",
+                occurrences: Optional,
+
+                action: &mut |reader, attributes| {
+                    asset = Some(parse_asset(reader, attributes)?);
+                    Ok(())
+                },
+            },
+
+            ChildConfiguration {
+                name: "technique",
+                occurrences: RequiredMany,
+
+                action: &mut |reader, attributes| {
+                    let technique = parse_technique(reader, attributes)?;
+                    techniques.push(technique);
+                    Ok(())
+                },
+            },
+        ],
+    }.parse(reader)?;
+
+    Ok(Extra {
+        id: id,
+        name: name,
+        type_hint: type_hint,
+        asset: asset,
+        techniques: techniques,
+    })
+}
+
+fn parse_technique<R: Read>(reader: &mut EventReader<R>, attributes: Vec<OwnedAttribute>) -> Result<Technique> {
+    let mut profile = None;
+    let mut xmlns = None;
+    let mut data = Vec::default();
+
+    for attribute in attributes {
+        match &*attribute.name.local_name {
+            "profile" => { profile = Some(attribute.value); }
+
+            "xmlns" => { xmlns = Some(attribute.value.into()); }
+
+            _ => {
+                return Err(Error {
+                    position: reader.position(),
+                    kind: ErrorKind::UnexpectedAttribute {
+                        element: "technique",
+                        attribute: attribute.name.local_name.clone(),
+                        expected: vec!["profile", "xmlns"],
+                    },
+                });
+            }
+        }
+    }
+
+    let profile = match profile {
+        Some(profile) => { profile }
+
+        None => {
+            return Err(Error {
+                position: reader.position(),
+                kind: ErrorKind::MissingAttribute {
+                    element: "technique",
+                    attribute: "profile",
+                },
+            });
+        }
+    };
+
+    let mut depth = 0;
+    loop {
+        let event = reader.next()?;
+        match event {
+            XmlEvent::StartElement { ref name, .. } if name.local_name == "technique" => { depth += 1; }
+
+            XmlEvent::EndElement { ref name } if name.local_name == "technique" => {
+                if depth == 0 {
+                    break;
+                } else {
+                    depth -= 1;
+                }
+            }
+
+            _ => {}
+        }
+
+        data.push(event);
+    }
+
+    Ok(Technique {
+        profile: profile,
+        xmlns: xmlns,
+        data: data,
+    })
 }
 
 /// Represents a parsed COLLADA document.
@@ -632,5 +756,18 @@ pub enum Altitude {
     RelativeToGround(f64),
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct Extra;
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Extra {
+    pub id: Option<String>,
+    pub name: Option<String>,
+    pub type_hint: Option<String>,
+    pub asset: Option<Asset>,
+    pub techniques: Vec<Technique>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Technique {
+    pub profile: String,
+    pub xmlns: Option<AnyUri>,
+    pub data: Vec<XmlEvent>,
+}

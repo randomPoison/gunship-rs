@@ -64,7 +64,7 @@ extern crate xml;
 pub use chrono::*;
 pub use v1_5::*;
 pub use xml::common::TextPosition;
-pub use xml::reader::Error as XmlError;
+pub use xml::reader::{Error as XmlError, XmlEvent};
 
 use std::fmt::{self, Display, Formatter};
 use std::num::ParseFloatError;
