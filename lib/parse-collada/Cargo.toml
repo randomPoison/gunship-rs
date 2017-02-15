@@ -6,4 +6,5 @@ authors = ["David LeGare <excaliburhissheath@gmail.com>"]
 
 [dependencies]
 chrono = "0.3"
+parse-collada-derive = { path = "../parse-collada-derive" }
 xml-rs = "0.3.5"

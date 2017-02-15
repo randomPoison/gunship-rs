@@ -59,6 +59,8 @@
 //! [Collada::read]: struct.Collada.html#method.read
 
 extern crate chrono;
+#[macro_use]
+extern crate parse_collada_derive;
 extern crate xml;
 
 pub use chrono::*;

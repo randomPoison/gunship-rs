@@ -17,6 +17,10 @@ pub static PARSER_CONFIG: ParserConfig = ParserConfig {
     coalesce_characters: true,
 };
 
+pub trait ColladaElement: Sized {
+    fn parse<R: Read>(reader: &mut EventReader<R>, attributes: Vec<OwnedAttribute>) -> Result<Self>;
+}
+
 #[derive(Debug)]
 struct ElementStart {
     name: OwnedName,

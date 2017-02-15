@@ -60,7 +60,7 @@ fn parse_asset<R: Read>(reader: &mut EventReader<R>, attributes: Vec<OwnedAttrib
                 occurrences: Many,
 
                 action: &mut |reader, attributes| {
-                    let contributor = parse_contributor(reader, attributes)?;
+                    let contributor = Contributor::parse(reader, attributes)?;
                     contributors.push(contributor);
                     Ok(())
                 },
@@ -357,12 +357,21 @@ impl Into<v1_5::Asset> for Asset {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, ColladaElement)]
 pub struct Contributor {
+    #[child(element = "author")]
     pub author: Option<String>,
+
+    #[child(element = "authoring_tool")]
     pub authoring_tool: Option<String>,
+
+    #[child(element = "comments")]
     pub comments: Option<String>,
+
+    #[child(element = "copyright")]
     pub copyright: Option<String>,
+
+    #[child(element = "source_data")]
     pub source_data: Option<AnyUri>,
 }
 
