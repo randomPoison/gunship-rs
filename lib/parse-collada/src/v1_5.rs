@@ -1,4 +1,4 @@
-use {AnyUri, DateTime, Result, Error, ErrorKind, Unit, UpAxis, utils};
+use {AnyUri, DateTime, Result, Error, ErrorKind, Unit, UpAxis, utils, XmlEvent};
 use std::io::Read;
 use utils::*;
 use utils::ChildOccurrences::*;
@@ -10,6 +10,8 @@ use xml::reader::XmlEvent::*;
 /// The logic behind parsing the COLLADA document.
 ///
 /// `from_str()` and `read()` just create the `xml::EventReader` and then defer to `parse()`.
+///
+/// TODO: This is currently publicly exported. That shouldn't happen.
 pub fn parse_collada<R: Read>(mut reader: EventReader<R>, version: String, base: Option<AnyUri>) -> Result<Collada> {
     // The next event must be the `<asset>` tag. No text data is allowed, and
     // whitespace/comments aren't emitted.
@@ -476,7 +478,131 @@ fn parse_geographic_location<R: Read>(reader: &mut EventReader<R>, attributes: V
 }
 
 fn parse_extra<R: Read>(reader: &mut EventReader<R>, attributes: Vec<OwnedAttribute>) -> Result<Extra> {
-    Ok(Extra)
+    let mut id = None;
+    let mut name = None;
+    let mut type_hint = None;
+    let mut asset = None;
+    let mut techniques = Vec::new();
+
+    for attribute in attributes {
+        match &*attribute.name.local_name {
+            "id" => { id = Some(attribute.value); }
+
+            "name" => { name = Some(attribute.value); }
+
+            "type" => { type_hint = Some(attribute.value); }
+
+            attrib_name @ _ => {
+                return Err(Error {
+                    position: reader.position(),
+                    kind: ErrorKind::UnexpectedAttribute {
+                        element: "extra",
+                        attribute: attrib_name.into(),
+                        expected: vec!["id", "name", "type"],
+                    },
+                })
+            }
+        }
+    }
+
+    ElementConfiguration {
+        name: "extra",
+        children: &mut [
+            ChildConfiguration {
+                name: "asset",
+                occurrences: Optional,
+
+                action: &mut |reader, attributes| {
+                    asset = Some(parse_asset(reader, attributes)?);
+                    Ok(())
+                },
+            },
+
+            ChildConfiguration {
+                name: "technique",
+                occurrences: RequiredMany,
+
+                action: &mut |reader, attributes| {
+                    let technique = parse_technique(reader, attributes)?;
+                    techniques.push(technique);
+                    Ok(())
+                },
+            },
+        ],
+    }.parse(reader)?;
+
+    Ok(Extra {
+        id: id,
+        name: name,
+        type_hint: type_hint,
+        asset: asset,
+        techniques: techniques,
+    })
+}
+
+fn parse_technique<R: Read>(reader: &mut EventReader<R>, attributes: Vec<OwnedAttribute>) -> Result<Technique> {
+    let mut profile = None;
+    let mut xmlns = None;
+    let mut data = Vec::default();
+
+    for attribute in attributes {
+        match &*attribute.name.local_name {
+            "profile" => { profile = Some(attribute.value); }
+
+            "xmlns" => { xmlns = Some(attribute.value.into()); }
+
+            _ => {
+                return Err(Error {
+                    position: reader.position(),
+                    kind: ErrorKind::UnexpectedAttribute {
+                        element: "technique",
+                        attribute: attribute.name.local_name.clone(),
+                        expected: vec!["profile", "xmlns"],
+                    },
+                });
+            }
+        }
+    }
+
+    let profile = match profile {
+        Some(profile) => { profile }
+
+        None => {
+            return Err(Error {
+                position: reader.position(),
+                kind: ErrorKind::MissingAttribute {
+                    element: "technique",
+                    attribute: "profile",
+                },
+            });
+        }
+    };
+
+    let mut depth = 0;
+    loop {
+        let event = reader.next()?;
+        match event {
+            XmlEvent::StartElement { ref name, .. } if name.local_name == "technique" => { depth += 1; }
+
+            XmlEvent::EndElement { ref name } if name.local_name == "technique" => {
+                if depth == 0 {
+                    break;
+                } else {
+                    depth -= 1;
+                }
+            }
+
+            _ => {}
+        }
+
+        data.push(event);
+    }
+
+    Ok(Technique {
+        profile: profile,
+        xmlns: xmlns,
+        data: data,
+    })
 }
 
 /// Represents a parsed COLLADA document.
@@ -619,18 +745,97 @@ pub struct Contributor {
     pub source_data: Option<AnyUri>,
 }
 
+/// Defines geographic location information for an [`Asset`][Asset].
+///
+/// A geographic location is given in latitude, longitude, and altitude coordinates as defined by
+/// [WGS 84][WGS 84] world geodetic system.
+///
+/// [Asset]: struct.Asset.html
+/// [WGS 84]: https://en.wikipedia.org/wiki/World_Geodetic_System#A_new_World_Geodetic_System:_WGS_84
 #[derive(Debug, Clone, PartialEq)]
 pub struct GeographicLocation {
-    pub latitude: f64,
+    /// The longitude of the location. Will be in the range -180.0 to 180.0.
     pub longitude: f64,
+
+    /// The latitude of the location. Will be in the range -180.0 to 180.0.
+    pub latitude: f64,
+
+    /// Specifies the altitude, either relative to global sea level or relative to ground level.
     pub altitude: Altitude,
 }
 
+/// Specifies the altitude of a [`GeographicLocation`][GeographicLocation].
+///
+/// [GeographicLocation]: struct.GeographicLocation.html
 #[derive(Debug, Clone, PartialEq)]
 pub enum Altitude {
+    /// The altitude is relative to global sea level.
     Absolute(f64),
+
+    /// The altitude is relative to ground level at the specified latitude and longitude.
     RelativeToGround(f64),
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct Extra;
+/// Provides arbitrary additional information about an element.
+///
+/// COLLADA allows for applications to provide extra information about any given piece of data,
+/// including application-specific information that's not part of the COLLADA specification. This
+/// data can be any syntactically valid XML data, and is not parsed as part of this library, save
+/// for a few specific 3rd party applications that are directly supported.
+///
+/// # Choosing a Technique
+///
+/// There may be more than one [`Technique`][Technique] provided in `techniques`, but generally
+/// only one is used by the consuming application. The application should pick a technique
+/// with a supported profile. If there are multiple techniques with supported profiles the
+/// application is free to pick whichever technique is preferred.
+///
+/// [Technique]: struct.Technique.html
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Extra {
+    /// The identifier of the element, if present. Will be unique within the document.
+    pub id: Option<String>,
+
+    /// The text string name of the element, if present.
+    pub name: Option<String>,
+
+    /// A hint as to the type of information this element represents, if present. Must be
+    /// must be understood by the consuming application.
+    pub type_hint: Option<String>,
+
+    /// Asset-management information for this element, if present.
+    ///
+    /// While this is technically allowed in all `<extra>` elements, it is likely only present in
+    /// elements that describe a new "asset" of some kind, rather than in `<extra>` elements that
+    /// provide application-specific information about an existing one.
+    pub asset: Option<Asset>,
+
+    /// The arbitrary additional information, containing unprocessed XML events. There will always
+    /// be at least one item in `techniques`.
+    pub techniques: Vec<Technique>,
+}
+
+/// Arbitrary additional information represented as XML events.
+///
+/// ```txt
+/// TODO: Provide more information about processing techniques.
+/// ```
+#[derive(Debug, Clone, PartialEq)]
+pub struct Technique {
+    /// A vendor-defined string that indicates the platform or capability target for the technique.
+    /// Consuming applications need not support all (or any) profiles, and can safely ignore
+    /// techniques with unknown or unsupported profiles.
+    pub profile: String,
+
+    /// The schema used for validating the contents of the `<technique>` element.
+    ///
+    /// Currently, validation is not performed by this library, and is left up to the consuming
+    /// application.
+    pub xmlns: Option<AnyUri>,
+
+    /// The raw XML events for the data contained within the technique. These events do not contain
+    /// the `StartElement` and `EndElement` events for the `<technique>` element itself. As such,
+    /// the contents of `data` do not represent a valid XML document, as they may not have a single
+    /// root element.
+    pub data: Vec<XmlEvent>,
+}

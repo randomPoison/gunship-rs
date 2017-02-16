@@ -3,55 +3,6 @@ extern crate parse_collada;
 use ::parse_collada::*;
 
 #[test]
-fn no_xml_decl() {
-    static DOCUMENT: &'static str = r#"
-    <COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.5.0">
-        <asset>
-            <created>2017-02-07T20:44:30Z</created>
-            <modified>2017-02-07T20:44:30Z</modified>
-        </asset>
-    </COLLADA>
-    "#;
-
-    let _ = Collada::from_str(DOCUMENT).unwrap();
-}
-
-#[test]
-fn doctype() {
-    static DOCUMENT: &'static str = r#"
-    <?xml version="1.0" encoding="utf-8"?>
-    <!DOCTYPE note SYSTEM "Note.dtd">
-    <COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.5.0">
-        <asset>
-            <created>2017-02-07T20:44:30Z</created>
-            <modified>2017-02-07T20:44:30Z</modified>
-        </asset>
-    </COLLADA>
-    "#;
-
-    let _ = Collada::from_str(DOCUMENT).unwrap();
-}
-
-#[test]
-fn extra_whitespace() {
-    static DOCUMENT: &'static str = r#"
-    <?xml version="1.0" encoding="utf-8"?>
-
-    <COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.5.0">
-
-        <asset        >
-            <created>    2017-02-07T20:44:30Z        </created       >
-            <modified    > 2017-02-07T20:44:30Z             </modified      >
-        </asset>
-
-    </COLLADA      >
-
-    "#;
-
-    let _ = Collada::from_str(DOCUMENT).unwrap();
-}
-
-#[test]
 fn collada_asset_minimal() {
     static DOCUMENT: &'static str = r#"
     <?xml version="1.0" encoding="utf-8"?>
@@ -182,6 +133,8 @@ fn asset_full() {
             <title>Model of a thing</title>
             <unit meter="7" name="septimeter" />
             <up_axis>Z_UP</up_axis>
+            <extra />
+            <extra />
         </asset>
     </COLLADA>
     "#;
@@ -204,7 +157,7 @@ fn asset_full() {
             name: "septimeter".into(),
         },
         up_axis: UpAxis::Z,
-        extras: Vec::default(),
+        extras: vec![Extra::default(), Extra::default()],
     };
 
     let collada = Collada::from_str(DOCUMENT).unwrap();
@@ -382,4 +335,80 @@ fn contributor_illegal_child_attribute() {
 
     let actual = Collada::from_str(DOCUMENT).unwrap_err();
     assert_eq!(expected, actual);
+}
+
+#[test]
+fn extra_minimal() {
+    static DOCUMENT: &'static str = r#"
+    <?xml version="1.0" encoding="utf-8"?>
+    <COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.5.0">
+        <asset>
+            <created>2017-02-07T20:44:30Z</created>
+            <modified>2017-02-07T20:44:30Z</modified>
+            <extra>
+                <technique profile="cool" />
+            </extra>
+        </asset>
+    </COLLADA>
+    "#;
+
+    let expected = Extra {
+        id: None,
+        name: None,
+        type_hint: None,
+        asset: None,
+        techniques: vec![Technique { profile: "cool".into(), xmlns: None, data: Vec::default() }],
+    };
+
+    let actual = Collada::from_str(DOCUMENT).unwrap();
+    assert_eq!(expected, actual.asset.extras[0]);
+}
+
+#[test]
+fn extra_full() {
+    static DOCUMENT: &'static str = r#"
+    <?xml version="1.0" encoding="utf-8"?>
+    <COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.5.0">
+        <asset>
+            <created>2017-02-07T20:44:30Z</created>
+            <modified>2017-02-07T20:44:30Z</modified>
+            <extra id="myExtra" name="Betty" type="extra">
+                <asset>
+                    <created>2017-02-07T20:44:30Z</created>
+                    <modified>2017-02-07T20:44:30Z</modified>
+                </asset>
+                <technique profile="foo" />
+                <technique profile="bar" />
+                <technique profile="baz" />
+            </extra>
+        </asset>
+    </COLLADA>
+    "#;
+
+    let expected = Extra {
+        id: Some("myExtra".into()),
+        name: Some("Betty".into()),
+        type_hint: Some("extra".into()),
+        asset: Some(Asset {
+            contributors: vec![],
+            coverage: None,
+            created: "2017-02-07T20:44:30Z".parse().unwrap(),
+            keywords: None,
+            modified: "2017-02-07T20:44:30Z".parse().unwrap(),
+            revision: None,
+            subject: None,
+            title: None,
+            unit: Unit::default(),
+            up_axis: UpAxis::default(),
+            extras: Vec::default(),
+        }),
+        techniques: vec![
+            Technique { profile: "foo".into(), xmlns: None, data: Vec::default() },
+            Technique { profile: "bar".into(), xmlns: None, data: Vec::default() },
+            Technique { profile: "baz".into(), xmlns: None, data: Vec::default() },
+        ],
+    };
+
+    let actual = Collada::from_str(DOCUMENT).unwrap();
+    assert_eq!(expected, actual.asset.extras[0]);
 }
