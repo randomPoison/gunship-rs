@@ -58,14 +58,14 @@
 //! [Collada]: struct.Collada.html
 //! [Collada::read]: struct.Collada.html#method.read
 
-extern crate chrono;
+pub extern crate chrono;
 extern crate xml;
 
-pub use chrono::*;
 pub use v1_5::*;
 pub use xml::common::TextPosition;
 pub use xml::reader::{Error as XmlError, XmlEvent};
 
+use chrono::*;
 use std::fmt::{self, Display, Formatter};
 use std::num::ParseFloatError;
 use utils::StringListDisplay;
@@ -132,11 +132,19 @@ pub enum ErrorKind {
     },
 
     /// An element was missing required text data.
+    ///
+    /// Some elements in the COLLADA document are required to contain some kind of data. If such
+    /// an element is missing any required data, this error is returned.
     MissingValue {
         element: &'static str,
     },
 
     /// A floating point value was formatted incorrectly.
+    ///
+    /// Floating point values are parsed according to Rust's [standard handling for floating point
+    /// numbers][f64::from_str].
+    ///
+    /// [f64::from_str]: https://doc.rust-lang.org/std/primitive.f64.html#method.from_str
     ParseFloatError(ParseFloatError),
 
     /// A datetime string was formatted incorrectly.
@@ -220,11 +228,19 @@ pub enum ErrorKind {
         value: String,
     },
 
+    /// The COLLADA document specified an unsupported version of the specification.
+    ///
+    /// The root `<COLLADA>` element of every COLLADA document must have a `version` attribute
+    /// declaring which version of the specification the document conforms to. This library
+    /// supports versions `1.4.0`, `1.4.1`, and `1.5.0`. If any other version is used, this error
+    /// is returned.
     UnsupportedVersion {
         version: String,
     },
 
     /// The XML in the document was malformed in some way.
+    ///
+    /// Not much more to say about this one ¯\_(ツ)_/¯
     XmlError(XmlError),
 }
 
@@ -341,6 +357,18 @@ impl<'a> From<&'a str> for AnyUri {
     }
 }
 
+/// Describes the coordinate system for an [`Asset`][Asset].
+///
+/// All coordinates in a COLLADA document are right-handed, so describing the up axis alone is
+/// enough to determine the other two axis. The table below shows all three possibilites:
+///
+/// | Value       | Right Axis | Up Axis    | In Axis    |
+/// |-------------|------------|------------|------------|
+/// | `UpAxis::X` | Negative Y | Positive X | Positive Z |
+/// | `UpAxis::Y` | Positive X | Positive Y | Positive Z |
+/// | `UpAxis::Z` | Positive X | Positive Z | Negative Y |
+///
+/// [Asset]: struct.Asset.html
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum UpAxis {
     X,
@@ -352,9 +380,22 @@ impl Default for UpAxis {
     fn default() -> UpAxis { UpAxis::Y }
 }
 
+/// Defines the unit of distance for an [`Asset`][Asset].
+///
+/// The unit of distance applies to all spatial measurements for the [`Asset`][Asset], unless
+/// overridden by a more local `Unit`. A `Unit` is self-describing, providing both its name and
+/// length in meters, and does not need to be consistent with any real-world measurement.
+///
+/// [Asset]: struct.Asset.html
 #[derive(Debug, Clone, PartialEq)]
 pub struct Unit {
+    /// The name of the distance unit. For example, “meter”, “centimeter”, “inch”, or “parsec”.
+    /// This can be the name of a real measurement, or an imaginary name. Defaults to `1.0`.
     pub meter: f64,
+
+    /// How many real-world meters in one distance unit as a floating-point number. For example,
+    /// 1.0 for the name "meter"; 1000 for the name "kilometer"; 0.3048 for the name
+    /// "foot". Defaults to "meter".
     pub name: String,
 }
 
@@ -367,9 +408,24 @@ impl Default for Unit {
     }
 }
 
+/// A datetime value, with or without a timezone.
+///
+/// Timestamps in a COLLADA document adhere to [ISO 8601][ISO 8601], which specifies a standard
+/// format for writing a date and time value, with or without a timezone. Since the timezone
+/// component is optional, the `DateTime` object will preserve the timezone if one was specified,
+/// or it will be considered a "naive" datetime if it does not.
+///
+/// The [`chrono`][chrono] crate is used for handling datetime types, and its API is re-exported
+/// for convenience.
+///
+/// [ISO 8601]: https://en.wikipedia.org/wiki/ISO_8601
+/// [chrono]: https://docs.rs/chrono
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DateTime {
-    Utc(chrono::DateTime<UTC>),
+    /// A timestamp with a known timezone, specified as a fixed offset from UTC.
+    Utc(chrono::DateTime<FixedOffset>),
+
+    /// A timestamp with no timezone.
     Naive(NaiveDateTime),
 }
 
