@@ -10,6 +10,8 @@ use xml::reader::XmlEvent::*;
 /// The logic behind parsing the COLLADA document.
 ///
 /// `from_str()` and `read()` just create the `xml::EventReader` and then defer to `parse()`.
+///
+/// TODO: This is currently publicly exported. That shouldn't happen.
 pub fn parse_collada<R: Read>(mut reader: EventReader<R>, version: String, base: Option<AnyUri>) -> Result<Collada> {
     // The next event must be the `<asset>` tag. No text data is allowed, and
     // whitespace/comments aren't emitted.
@@ -743,31 +745,97 @@ pub struct Contributor {
     pub source_data: Option<AnyUri>,
 }
 
+/// Defines geographic location information for an [`Asset`][Asset].
+///
+/// A geographic location is given in latitude, longitude, and altitude coordinates as defined by
+/// [WGS 84][WGS 84] world geodetic system.
+///
+/// [Asset]: struct.Asset.html
+/// [WGS 84]: https://en.wikipedia.org/wiki/World_Geodetic_System#A_new_World_Geodetic_System:_WGS_84
 #[derive(Debug, Clone, PartialEq)]
 pub struct GeographicLocation {
-    pub latitude: f64,
+    /// The longitude of the location. Will be in the range -180.0 to 180.0.
     pub longitude: f64,
+
+    /// The latitude of the location. Will be in the range -180.0 to 180.0.
+    pub latitude: f64,
+
+    /// Specifies the altitude, either relative to global sea level or relative to ground level.
     pub altitude: Altitude,
 }
 
+/// Specifies the altitude of a [`GeographicLocation`][GeographicLocation].
+///
+/// [GeographicLocation]: struct.GeographicLocation.html
 #[derive(Debug, Clone, PartialEq)]
 pub enum Altitude {
+    /// The altitude is relative to global sea level.
     Absolute(f64),
+
+    /// The altitude is relative to ground level at the specified latitude and longitude.
     RelativeToGround(f64),
 }
 
+/// Provides arbitrary additional information about an element.
+///
+/// COLLADA allows for applications to provide extra information about any given piece of data,
+/// including application-specific information that's not part of the COLLADA specification. This
+/// data can be any syntactically valid XML data, and is not parsed as part of this library, save
+/// for a few specific 3rd party applications that are directly supported.
+///
+/// # Choosing a Technique
+///
+/// There may be more than one [`Technique`][Technique] provided in `techniques`, but generally
+/// only one is used by the consuming application. The application should pick a technique
+/// with a supported profile. If there are multiple techniques with supported profiles the
+/// application is free to pick whichever technique is preferred.
+///
+/// [Technique]: struct.Technique.html
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Extra {
+    /// The identifier of the element, if present. Will be unique within the document.
     pub id: Option<String>,
+
+    /// The text string name of the element, if present.
     pub name: Option<String>,
+
+    /// A hint as to the type of information this element represents, if present. Must be
+    /// must be understood by the consuming application.
     pub type_hint: Option<String>,
+
+    /// Asset-management information for this element, if present.
+    ///
+    /// While this is technically allowed in all `<extra>` elements, it is likely only present in
+    /// elements that describe a new "asset" of some kind, rather than in `<extra>` elements that
+    /// provide application-specific information about an existing one.
     pub asset: Option<Asset>,
+
+    /// The arbitrary additional information, containing unprocessed XML events. There will always
+    /// be at least one item in `techniques`.
     pub techniques: Vec<Technique>,
 }
 
+/// Arbitrary additional information represented as XML events.
+///
+/// ```txt
+/// TODO: Provide more information about processing techniques.
+/// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Technique {
+    /// A vendor-defined string that indicates the platform or capability target for the technique.
+    /// Consuming applications need not support all (or any) profiles, and can safely ignore
+    /// techniques with unknown or unsupported profiles.
     pub profile: String,
+
+    /// The schema used for validating the contents of the `<technique>` element.
+    ///
+    /// Currently, validation is not performed by this library, and is left up to the consuming
+    /// application.
     pub xmlns: Option<AnyUri>,
+
+    /// The raw XML events for the data contained within the technique. These events do not contain
+    /// the `StartElement` and `EndElement` events for the `<technique>` element itself. As such,
+    /// the contents of `data` do not represent a valid XML document, as they may not have a single
+    /// root element.
     pub data: Vec<XmlEvent>,
 }
