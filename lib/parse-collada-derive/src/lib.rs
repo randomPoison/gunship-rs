@@ -39,6 +39,31 @@ fn impl_hello_world(ast: DeriveInput) -> Result<quote::Tokens, String> {
 
     let element_name = element_name.ok_or(r#"Type must have `#[name = "..."]` attribute when using `#[derive(ColladaElement)]`"#)?;
 
+    // Generate declarations for the member variables of the struct.
+    // -------------------------------------------------------------
+    let member_decls = {
+        match ast.body {
+            Body::Enum(_) => { panic!("`#[derive(ColladaElement)]` does not yet support enum types"); }
+
+            Body::Struct(VariantData::Unit) => { quote! {} }
+
+            Body::Struct(VariantData::Tuple(_)) => { panic!("`#[derive(ColladaElement)]` does not yet support tuple structs"); }
+
+            Body::Struct(VariantData::Struct(ref fields)) => {
+                let decls = fields
+                    .iter()
+                    .map(|field| {
+                        let ident = field.ident.as_ref().unwrap();
+                        quote! { let mut #ident = None; }
+                    });
+
+                quote! {
+                    #( #decls )*
+                }
+            }
+        }
+    };
+
     // Generate code for parsing attributes.
     // -------------------------------------
     let attributes_impl = {
@@ -57,14 +82,46 @@ fn impl_hello_world(ast: DeriveInput) -> Result<quote::Tokens, String> {
         }
     };
 
+    // Generate code to construct final result.
+    // ----------------------------------------
+    let result_decl = {
+        match ast.body {
+            Body::Enum(_) => { panic!("`#[derive(ColladaElement)]` does not yet support enum types"); }
+
+            Body::Struct(VariantData::Unit) => { quote! {} }
+
+            Body::Struct(VariantData::Tuple(_)) => { panic!("`#[derive(ColladaElement)]` does not yet support tuple structs"); }
+
+            Body::Struct(VariantData::Struct(ref fields)) => {
+                let decls = fields
+                    .iter()
+                    .map(|field| {
+                        let ident = field.ident.as_ref().unwrap();
+                        quote! { #ident: #ident.unwrap() }
+                    });
+
+                quote! {
+                    Ok(#type_name {
+                        #( #decls ),*
+                    })
+                }
+            }
+        }
+    };
+
     // Put all the pieces together.
     // ----------------------------
     Ok(quote! {
         impl ColladaElement for #type_name {
             fn parse<R: Read>(reader: &mut EventReader<R>, attributes: Vec<OwnedAttribute>) -> Result<Self> {
+                #member_decls
+
                 #attributes_impl
 
                 #children_impl
+
+                #result_decl
+            }
             }
         }
     })
