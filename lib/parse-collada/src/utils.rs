@@ -18,6 +18,8 @@ pub static PARSER_CONFIG: ParserConfig = ParserConfig {
     coalesce_characters: true,
 };
 
+/// Helper trait for handling parsing. This is automatically generated for most types with the
+/// `parse-collada-derive` crate.
 pub trait ColladaElement: Sized {
     fn parse<R: Read>(reader: &mut EventReader<R>, attributes: Vec<OwnedAttribute>) -> Result<Self>;
 }

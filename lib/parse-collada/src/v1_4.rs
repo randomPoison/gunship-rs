@@ -231,7 +231,7 @@ fn parse_asset<R: Read>(reader: &mut EventReader<R>, attributes: Vec<OwnedAttrib
     })
 }
 
-fn parse_contributor<R: Read>(reader: &mut EventReader<R>, attributes: Vec<OwnedAttribute>) -> Result<Contributor> {
+fn _parse_contributor<R: Read>(reader: &mut EventReader<R>, attributes: Vec<OwnedAttribute>) -> Result<Contributor> {
     utils::verify_attributes(reader, "contributor", attributes)?;
 
     let mut author = None;
@@ -358,20 +358,21 @@ impl Into<v1_5::Asset> for Asset {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, ColladaElement)]
+#[name = "contributor"]
 pub struct Contributor {
-    #[child(element = "author")]
+    #[child]
     pub author: Option<String>,
 
-    #[child(element = "authoring_tool")]
+    #[child]
     pub authoring_tool: Option<String>,
 
-    #[child(element = "comments")]
+    #[child]
     pub comments: Option<String>,
 
-    #[child(element = "copyright")]
+    #[child]
     pub copyright: Option<String>,
 
-    #[child(element = "source_data")]
+    #[child]
     pub source_data: Option<AnyUri>,
 }
 
