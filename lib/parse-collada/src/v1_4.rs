@@ -60,7 +60,7 @@ fn parse_asset<R: Read>(reader: &mut EventReader<R>, attributes: Vec<OwnedAttrib
                 occurrences: Many,
 
                 action: &mut |reader, attributes| {
-                    let contributor = Contributor::parse(reader, attributes)?;
+                    let contributor = Contributor::parse_element(reader, attributes)?;
                     contributors.push(contributor);
                     Ok(())
                 },
@@ -216,7 +216,7 @@ fn parse_asset<R: Read>(reader: &mut EventReader<R>, attributes: Vec<OwnedAttrib
                 },
             },
         ],
-    }.parse(reader)?;
+    }.parse_children(reader)?;
 
     Ok(Asset {
         contributors: contributors,
@@ -293,12 +293,12 @@ fn _parse_contributor<R: Read>(reader: &mut EventReader<R>, attributes: Vec<Owne
 
                 action: &mut |reader, attributes| {
                     utils::verify_attributes(reader, "source_data", attributes)?;
-                    source_data = utils::optional_text_contents(reader, "source_data")?.map(String::into);
+                    source_data = utils::optional_text_contents(reader, "source_data")?;
                     Ok(())
                 },
             },
         ],
-    }.parse(reader)?;
+    }.parse_children(reader)?;
 
     Ok(Contributor {
         author: author,

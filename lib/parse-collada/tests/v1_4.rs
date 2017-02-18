@@ -231,7 +231,7 @@ fn contributor_full() {
         authoring_tool: Some("Atom".into()),
         comments: Some("This is a sample COLLADA document.".into()),
         copyright: Some("David LeGare, free for public use".into()),
-        source_data: Some("C:/models/tank.s3d".into()),
+        source_data: Some("C:/models/tank.s3d".parse().unwrap()),
     };
 
     let collada = Collada::from_str(DOCUMENT).unwrap();

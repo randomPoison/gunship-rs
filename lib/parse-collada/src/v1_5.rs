@@ -93,7 +93,7 @@ fn parse_asset<R: Read>(reader: &mut EventReader<R>, attributes: Vec<OwnedAttrib
                                 },
                             }
                         ],
-                    }.parse(reader)
+                    }.parse_children(reader)
                 },
             },
 
@@ -251,7 +251,7 @@ fn parse_asset<R: Read>(reader: &mut EventReader<R>, attributes: Vec<OwnedAttrib
                 },
             }
         ],
-    }.parse(reader)?;
+    }.parse_children(reader)?;
 
     Ok(Asset {
         contributors: contributors,
@@ -359,7 +359,7 @@ fn parse_contributor<R: Read>(reader: &mut EventReader<R>, attributes: Vec<Owned
                 },
             },
         ],
-    }.parse(reader)?;
+    }.parse_children(reader)?;
 
     Ok(Contributor {
         author: author,
@@ -468,7 +468,7 @@ fn parse_geographic_location<R: Read>(reader: &mut EventReader<R>, attributes: V
                 },
             },
         ],
-    }.parse(reader)?;
+    }.parse_children(reader)?;
 
     Ok(GeographicLocation {
         latitude: latitude.expect("Missing requried value"),
@@ -529,7 +529,7 @@ fn parse_extra<R: Read>(reader: &mut EventReader<R>, attributes: Vec<OwnedAttrib
                 },
             },
         ],
-    }.parse(reader)?;
+    }.parse_children(reader)?;
 
     Ok(Extra {
         id: id,

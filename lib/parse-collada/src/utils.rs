@@ -21,7 +21,9 @@ pub static PARSER_CONFIG: ParserConfig = ParserConfig {
 /// Helper trait for handling parsing. This is automatically generated for most types with the
 /// `parse-collada-derive` crate.
 pub trait ColladaElement: Sized {
-    fn parse<R: Read>(reader: &mut EventReader<R>, attributes: Vec<OwnedAttribute>) -> Result<Self>;
+    fn parse_element<R: Read>(reader: &mut EventReader<R>, attributes: Vec<OwnedAttribute>) -> Result<Self>;
+
+    fn name() -> &'static str;
 }
 
 #[derive(Debug)]
@@ -44,7 +46,7 @@ pub struct ElementConfiguration<'a, R: 'a + Read> {
 }
 
 impl<'a, R: 'a + Read> ElementConfiguration<'a, R> {
-    pub fn parse(mut self, reader: &mut EventReader<R>) -> Result<()> {
+    pub fn parse_children(mut self, reader: &mut EventReader<R>) -> Result<()> {
         // Keep track of the text position for the root element so that it can be used for error
         // messages.
         let root_position = reader.position();

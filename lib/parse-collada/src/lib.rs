@@ -353,9 +353,12 @@ impl From<String> for AnyUri {
     }
 }
 
-impl<'a> From<&'a str> for AnyUri {
-    fn from(from: &'a str) -> AnyUri {
-        AnyUri(from.into())
+// TODO: Actually parse the string and verify that it's a valid URI.
+impl ::std::str::FromStr for AnyUri {
+    type Err = ::std::string::ParseError;
+
+    fn from_str(string: &str) -> ::std::result::Result<AnyUri, ::std::string::ParseError> {
+        Ok(AnyUri(string.into()))
     }
 }
 
