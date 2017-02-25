@@ -11,7 +11,7 @@ pub fn parse_collada<R: Read>(mut reader: EventReader<R>, version: String, base:
     // The next event must be the `<asset>` tag. No text data is allowed, and
     // whitespace/comments aren't emitted.
     let (_name, attributes, _) = utils::required_start_element(&mut reader, "COLLADA", "asset")?;
-    let asset = parse_asset(&mut reader, attributes)?;
+    let asset = Asset::parse_element(&mut reader, attributes)?;
 
     // Eat any events until we get to the `</COLLADA>` tag.
     // TODO: Actually parse the body of the document.
@@ -39,7 +39,7 @@ pub fn parse_collada<R: Read>(mut reader: EventReader<R>, version: String, base:
     })
 }
 
-fn parse_asset<R: Read>(reader: &mut EventReader<R>, attributes: Vec<OwnedAttribute>) -> Result<Asset> {
+fn _parse_asset<R: Read>(reader: &mut EventReader<R>, attributes: Vec<OwnedAttribute>) -> Result<Asset> {
     utils::verify_attributes(reader, "asset", attributes)?;
 
     let mut contributors = Vec::default();
@@ -231,84 +231,6 @@ fn parse_asset<R: Read>(reader: &mut EventReader<R>, attributes: Vec<OwnedAttrib
     })
 }
 
-fn _parse_contributor<R: Read>(reader: &mut EventReader<R>, attributes: Vec<OwnedAttribute>) -> Result<Contributor> {
-    utils::verify_attributes(reader, "contributor", attributes)?;
-
-    let mut author = None;
-    let mut authoring_tool = None;
-    let mut comments = None;
-    let mut copyright = None;
-    let mut source_data = None;
-
-    ElementConfiguration {
-        name: "contributor",
-        children: &mut [
-            ChildConfiguration {
-                name: "author",
-                occurrences: Optional,
-
-                action: &mut |reader, attributes| {
-                    utils::verify_attributes(reader, "author", attributes)?;
-                    author = utils::optional_text_contents(reader, "author")?;
-                    Ok(())
-                },
-            },
-
-            ChildConfiguration {
-                name: "authoring_tool",
-                occurrences: Optional,
-
-                action: &mut |reader, attributes| {
-                    utils::verify_attributes(reader, "authoring_tool", attributes)?;
-                    authoring_tool = utils::optional_text_contents(reader, "authoring_tool")?;
-                    Ok(())
-                },
-            },
-
-            ChildConfiguration {
-                name: "comments",
-                occurrences: Optional,
-
-                action: &mut |reader, attributes| {
-                    utils::verify_attributes(reader, "comments", attributes)?;
-                    comments = utils::optional_text_contents(reader, "comments")?;
-                    Ok(())
-                },
-            },
-
-            ChildConfiguration {
-                name: "copyright",
-                occurrences: Optional,
-
-                action: &mut |reader, attributes| {
-                    utils::verify_attributes(reader, "copyright", attributes)?;
-                    copyright = utils::optional_text_contents(reader, "copyright")?;
-                    Ok(())
-                },
-            },
-
-            ChildConfiguration {
-                name: "source_data",
-                occurrences: Optional,
-
-                action: &mut |reader, attributes| {
-                    utils::verify_attributes(reader, "source_data", attributes)?;
-                    source_data = utils::optional_text_contents(reader, "source_data")?;
-                    Ok(())
-                },
-            },
-        ],
-    }.parse_children(reader)?;
-
-    Ok(Contributor {
-        author: author,
-        authoring_tool: authoring_tool,
-        comments: comments,
-        copyright: copyright,
-        source_data: source_data,
-    })
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub struct Collada {
     pub version: String,
@@ -326,16 +248,34 @@ impl Into<v1_5::Collada> for Collada {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, ColladaElement)]
+#[name = "asset"]
 pub struct Asset {
+    #[child]
     pub contributors: Vec<Contributor>,
+
+    #[child]
     pub created: DateTime,
+
+    #[child]
     pub keywords: Option<String>,
+
+    #[child]
     pub modified: DateTime,
+
+    #[child]
     pub revision: Option<String>,
+
+    #[child]
     pub subject: Option<String>,
+
+    #[child]
     pub title: Option<String>,
+
+    #[child]
     pub unit: Unit,
+
+    #[child]
     pub up_axis: UpAxis,
 }
 
