@@ -4,6 +4,7 @@ extern crate syn;
 extern crate quote;
 
 use proc_macro::TokenStream;
+use quote::{Tokens, ToTokens};
 use syn::*;
 
 #[proc_macro_derive(ColladaElement, attributes(name, attribute, child))]
@@ -29,7 +30,7 @@ fn process_derive_input(input: DeriveInput) -> Result<ElementConfiguration, Stri
     let element_name = {
         let mut element_name = None;
 
-        for attribute in ast.attrs {
+        for attribute in input.attrs {
             match attribute.value {
                 MetaItem::NameValue(attr_name, Lit::Str(value, _)) => {
                     if attr_name == "name" {
@@ -121,8 +122,10 @@ struct ElementConfiguration {
     children: Vec<Child>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum AttributeOccurrences {
-    RequiredOptional,
+    Optional,
+    Required,
 }
 
 struct Attribute {
@@ -144,6 +147,7 @@ struct Child {
     ty: DataType,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ChildOccurrences {
     Optional,
     Required,
@@ -151,130 +155,134 @@ enum ChildOccurrences {
     RequiredMany,
 }
 
+impl ToTokens for ChildOccurrences {
+    fn to_tokens(&self, tokens: &mut Tokens) {
+        match *self {
+            ChildOccurrences::Optional => { tokens.append("Optional"); }
+
+            ChildOccurrences::Required => { tokens.append("Required"); }
+
+            ChildOccurrences::OptionalMany => { tokens.append("OptionalMany"); }
+
+            ChildOccurrences::RequiredMany => { tokens.append("RequiredMany"); }
+        }
+    }
+}
+
 fn generate_impl(derive_input: DeriveInput) -> Result<quote::Tokens, String> {
-    let ElementConfiguration { struct_ident, element_name, children, attributes } = process_derive_input(derive_input)?;
+    let ElementConfiguration { struct_ident, element_name, attributes, children } = process_derive_input(derive_input)?;
 
     // Generate declarations for the member variables of the struct.
     // -------------------------------------------------------------
     let member_decls = {
-        match ast.body {
-            Body::Enum(_) => { panic!("`#[derive(ColladaElement)]` does not yet support enum types"); }
+        let attribs = attributes.iter()
+            .map(|attrib| {
+                let ident = attrib.member_name;
+                quote! { let mut #ident = None; }
+            });
+        let childs = children.iter()
+            .map(|child| {
+                let ident = child.member_name;
+                quote! { let mut #ident = None; }
+            });
 
-            Body::Struct(VariantData::Unit) => { quote! {} }
-
-            Body::Struct(VariantData::Tuple(_)) => { panic!("`#[derive(ColladaElement)]` does not yet support tuple structs"); }
-
-            Body::Struct(VariantData::Struct(ref fields)) => {
-                let decls = fields
-                    .iter()
-                    .map(|field| {
-                        let ident = field.ident.as_ref().unwrap();
-                        quote! { let mut #ident = None; }
-                    });
-
-                quote! {
-                    #( #decls )*
-                }
-            }
+        quote! {
+            #( #attribs )*
+            #( #childs )*
         }
     };
 
     // Generate code for parsing attributes.
     // -------------------------------------
     let attributes_impl = {
-        // TODO: Actualy look at the members and find out what attributes we should be looking for.
-        // For now we'll return a default impl that assumes there should be no attributes.
+        let matches = attributes.iter()
+            .map(|attrib| {
+                let &Attribute { ref member_name, ref attrib_name, .. } = attrib;
+                quote! {
+                    #attrib_name => { #member_name = Some(attribute.value.parse()?); }
+                }
+            });
+
+        let attrib_names = attributes.iter()
+            .map(|attrib| { &*attrib.attrib_name });
+
+        let required_attribs = attributes.iter()
+            .filter(|attrib| { attrib.occurrences == AttributeOccurrences::Required })
+            .map(|attrib| {
+                let &Attribute { ref member_name, ref attrib_name, .. } = attrib;
+                quote! {
+                    let #member_name = #member_name.ok_or(Error {
+                        position: reader.position(),
+                        kind: ErrorKind::MissingAttribute {
+                            element: #element_name,
+                            attribute: #attrib_name,
+                        },
+                    })?;
+                }
+            });
+
         quote! {
-            ::utils::verify_attributes(reader, #element_name, attributes)?;
+            for attribute in attributes {
+                match &*attribute.name.local_name {
+                    #( #matches )*
+
+                    attrib_name @ _ => {
+                        return Err(Error {
+                            position: reader.position(),
+                            kind: ErrorKind::UnexpectedAttribute {
+                                element: #element_name,
+                                attribute: attrib_name.into(),
+                                expected: vec![ #( #attrib_names ),* ],
+                            },
+                        })
+                    }
+                }
+            }
+
+            #( #required_attribs )*
         }
     };
 
     // Generate code for parsing children.
     // -----------------------------------
     let children_impl = {
-        match ast.body {
-            Body::Enum(_) => { panic!("`#[derive(ColladaElement)]` does not yet support enum types"); }
+        let decls = children.iter()
+            .map(|child| {
+                let &Child { ref member_name, ref element_name, occurrences, ref ty } = child;
 
-            Body::Struct(VariantData::Unit) => { quote! {} }
+                let handle_result = match occurrences {
+                    ChildOccurrences::Optional | ChildOccurrences::Required => {
+                        quote! { #member_name = Some(result); }
+                    }
 
-            Body::Struct(VariantData::Tuple(_)) => { panic!("`#[derive(ColladaElement)]` does not yet support tuple structs"); }
-
-            Body::Struct(VariantData::Struct(ref fields)) => {
-                let decls = fields.iter()
-                    .filter_map(|field| {
-                        // Determine whether the element is a child or attribute based on the
-                        // attributes for the field. Here we only care about children.
-                        for attribute in &field.attrs {
-                            // Determine the name of the child element based on the attributes on
-                            // the element.
-                            let child_element_name = match attribute.value {
-                                // Children declared as `#[child]`.
-                                MetaItem::Word(ref ident) => {
-                                    if ident == "child" {
-                                        field.ident.clone().unwrap().to_string()
-                                    } else {
-                                        continue;
-                                    }
-                                }
-
-                                // Children declared as `#[child(element = "foo")]`
-                                MetaItem::List(..) => {
-                                    unimplemented!()
-                                }
-
-                                MetaItem::NameValue(..) => { continue; }
-                            };
-
-                            let field_ident = field.ident.clone().unwrap();
-
-                            let occurrences = {
-                                // TODO: Determine child occurrences based on type:
-                                //
-                                // - `Option<T>` is optional.
-                                // - `Vec<T>` is many.
-                                // - `Vec<T>` with `#[required]` attribute is required many.
-                                // - All others are required.
-                                quote! { Optional }
-                            };
-
-                            let child_action = {
-                                // TODO: Determine child action based on type. Specific types (e.g.
-                                // `String`) get special handling, but anything that implements
-                                // `ColladaElement` will use that impl.
-                                quote! {
-                                    utils::verify_attributes(reader, #child_element_name, attributes)?;
-                                    #field_ident = utils::optional_text_contents(reader, #child_element_name).map(Into::into)?;
-                                    Ok(())
-                                }
-                            };
-
-                            return Some(quote! {
-                                ChildConfiguration {
-                                    name: #child_element_name,
-                                    occurrences: #occurrences,
-
-                                    action: &mut |reader, attributes| {
-                                        #child_action
-                                    },
-                                }
-                            });
-                        }
-
-                        None
-                    },
-                );
+                    ChildOccurrences::OptionalMany | ChildOccurrences::RequiredMany => {
+                        quote! { #member_name.push(result); }
+                    }
+                };
 
                 quote! {
-                    ElementConfiguration {
+                    ChildConfiguration {
                         name: #element_name,
-                        children: &mut [
-                            #(
-                                #decls
-                            ),*
-                        ],
-                    }.parse_children(reader)?;
+                        occurrences: #occurrences,
+
+                        action: &mut |reader, attributes| {
+                            let result = #ty::parse_element()?;
+
+                            #handle_result
+
+                            Ok(())
+                        },
+                    }
                 }
-            }
+            });
+
+        quote! {
+            ElementConfiguration {
+                name: #element_name,
+                children: &mut [
+                    #( #decls ),*
+                ],
+            }.parse_children(reader)?;
         }
     };
 
