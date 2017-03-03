@@ -207,7 +207,7 @@ impl ToTokens for ChildOccurrences {
 
             ChildOccurrences::Required => { tokens.append("Required"); }
 
-            ChildOccurrences::OptionalMany => { tokens.append("OptionalMany"); }
+            ChildOccurrences::OptionalMany => { tokens.append("Many"); }
 
             ChildOccurrences::RequiredMany => { tokens.append("RequiredMany"); }
         }
@@ -383,18 +383,18 @@ fn generate_impl(derive_input: DeriveInput) -> Result<quote::Tokens, String> {
         let attribs = attributes.iter()
             .map(|attrib| {
                 let ident = &attrib.member_name;
-                quote! { let mut #ident = None; }
+                quote! { #ident: #ident }
             });
         let childs = children.iter()
             .map(|child| {
                 let ident = &child.member_name;
-                quote! { let mut #ident = None; }
+                quote! { #ident: #ident }
             });
 
         quote! {
             Ok(#struct_ident {
-                #( #attribs )*
-                #( #childs )*
+                #( #attribs ),*
+                #( #childs ),*
             })
         }
     };
