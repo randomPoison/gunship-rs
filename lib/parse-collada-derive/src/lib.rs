@@ -65,7 +65,7 @@ fn process_derive_input(input: DeriveInput) -> Result<ElementConfiguration, Stri
         let member_name = field.ident.unwrap();
 
         // Determine the data type and occurrences for the member.
-        let path = match field.ty.clone() {
+        let mut path = match field.ty.clone() {
             Ty::Path(None, path) => { path }
             _ => { return Err("`#[derive(ColladaElement)]` doesn't support this member type")?; }
         };
@@ -75,7 +75,7 @@ fn process_derive_input(input: DeriveInput) -> Result<ElementConfiguration, Stri
         // - `Option<T>` is optional with inner type `T`.
         // - `Vec<T>` is repeating with inner type `T`.
         // - Everything else is required with inner type as declared.
-        let segment = path.segments[0].clone();
+        let segment = path.segments.pop().expect("Somehow got an empty path ?_?");
 
         // We only support angle bracket parameters (because we're only looking for `Option<T>`
         // and `Vec<T>`), so extract the parameter data and throw away all others.
@@ -102,9 +102,55 @@ fn process_derive_input(input: DeriveInput) -> Result<ElementConfiguration, Stri
             }
         };
 
+        // Determine the data type of the inner type, e.g. if it's `String` or another ColladaElement.
+        let data_type = match inner_type {
+            Ty::Path(None, mut path) => {
+                let segment = path.segments.pop().expect("Somehow got an empty path ?_?");
+                if segment.ident.as_ref() == "String" {
+                    DataType::String
+                } else {
+                    DataType::ColladaElement(segment.ident)
+                }
+            },
+
+            _ => { return Err("`#[derive(ColladaElement)]` doesn't support this member type")?; }
+        };
+
         // Determine whether we're looking at a child or an attribute based on whether the member
         // has a `#[child]` or an `#[attribute]` attribute.
-        unimplemented!();
+        for attribute in field.attrs {
+            match attribute.name() {
+                "child" => {
+                    children.push(Child {
+                        member_name: member_name.clone(),
+                        element_name: member_name.to_string(),
+                        occurrences: occurrences,
+                        ty: data_type,
+                    });
+                    break;
+                }
+
+                "attribute" => {
+                    let occurrences = match occurrences {
+                        ChildOccurrences::Optional => AttributeOccurrences::Optional,
+                        ChildOccurrences::Required => AttributeOccurrences::Required,
+
+                        ChildOccurrences::OptionalMany | ChildOccurrences::RequiredMany => {
+                            return Err("Attribute may not be repeating, meaning it may not be of type `Vec<T>`".into());
+                        }
+                    };
+
+                    attributes.push(Attribute {
+                        member_name: member_name.clone(),
+                        attrib_name: member_name.to_string(),
+                        occurrences: occurrences,
+                    });
+                    break;
+                }
+
+                _ => {}
+            }
+        }
     }
 
     Ok(ElementConfiguration {
@@ -132,7 +178,6 @@ struct Attribute {
     member_name: Ident,
     attrib_name: String,
     occurrences: AttributeOccurrences,
-    ty: DataType,
 }
 
 enum DataType {
