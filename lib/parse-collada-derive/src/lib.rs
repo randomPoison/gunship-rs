@@ -65,7 +65,7 @@ fn process_derive_input(input: DeriveInput) -> Result<ElementConfiguration, Stri
         let member_name = field.ident.unwrap();
 
         // Determine the data type and occurrences for the member.
-        let path = match field.ty {
+        let path = match field.ty.clone() {
             Ty::Path(None, path) => { path }
             _ => { return Err("`#[derive(ColladaElement)]` doesn't support this member type")?; }
         };
@@ -177,12 +177,12 @@ fn generate_impl(derive_input: DeriveInput) -> Result<quote::Tokens, String> {
     let member_decls = {
         let attribs = attributes.iter()
             .map(|attrib| {
-                let ident = attrib.member_name;
+                let ident = &attrib.member_name;
                 quote! { let mut #ident = None; }
             });
         let childs = children.iter()
             .map(|child| {
-                let ident = child.member_name;
+                let ident = &child.member_name;
                 quote! { let mut #ident = None; }
             });
 
@@ -250,13 +250,62 @@ fn generate_impl(derive_input: DeriveInput) -> Result<quote::Tokens, String> {
             .map(|child| {
                 let &Child { ref member_name, ref element_name, occurrences, ref ty } = child;
 
-                let handle_result = match occurrences {
-                    ChildOccurrences::Optional | ChildOccurrences::Required => {
-                        quote! { #member_name = Some(result); }
+                let handle_result = match (occurrences, ty) {
+                    (ChildOccurrences::Optional, &DataType::String) => {
+                        quote! {
+                            #member_name = utils::optional_text_contents(reader, #element_name)?;
+                        }
                     }
 
-                    ChildOccurrences::OptionalMany | ChildOccurrences::RequiredMany => {
-                        quote! { #member_name.push(result); }
+                    (ChildOccurrences::Required, &DataType::String) => {
+                        quote! {
+                            let result = utils::required_text_contents(reader, #element_name)?;
+                            #member_name = Some(result);
+                        }
+                    }
+
+                    (ChildOccurrences::OptionalMany, &DataType::String) => {
+                        quote! {
+                            if let Some(result) = utils::optional_text_contents(reader, #element_name)? {
+                                #member_name.push(result);
+                            }
+                        }
+                    }
+
+                    (ChildOccurrences::RequiredMany, &DataType::String) => {
+                        quote! {
+                            if let Some(result) = utils::optional_text_contents(reader, #element_name)? {
+                                #member_name.push(result);
+                            }
+                        }
+                    }
+
+                    (ChildOccurrences::Optional, &DataType::ColladaElement(ref ident)) => {
+                        quote! {
+                            let result = #ident::parse_element()?;
+                            #member_name = Some(result);
+                        }
+                    }
+
+                    (ChildOccurrences::Required, &DataType::ColladaElement(ref ident)) => {
+                        quote! {
+                            let result = #ident::parse_element()?;
+                            #member_name = Some(result);
+                        }
+                    }
+
+                    (ChildOccurrences::OptionalMany, &DataType::ColladaElement(ref ident)) => {
+                        quote! {
+                            let result = #ident::parse_element()?;
+                            #member_name.push(result);
+                        }
+                    }
+
+                    (ChildOccurrences::RequiredMany, &DataType::ColladaElement(ref ident)) => {
+                        quote! {
+                            let result = #ident::parse_element()?;
+                            #member_name.push(result);
+                        }
                     }
                 };
 
@@ -266,10 +315,7 @@ fn generate_impl(derive_input: DeriveInput) -> Result<quote::Tokens, String> {
                         occurrences: #occurrences,
 
                         action: &mut |reader, attributes| {
-                            let result = #ty::parse_element()?;
-
                             #handle_result
-
                             Ok(())
                         },
                     }
@@ -289,34 +335,29 @@ fn generate_impl(derive_input: DeriveInput) -> Result<quote::Tokens, String> {
     // Generate code to construct final result.
     // ----------------------------------------
     let result_decl = {
-        match ast.body {
-            Body::Enum(_) => { panic!("`#[derive(ColladaElement)]` does not yet support enum types"); }
+        let attribs = attributes.iter()
+            .map(|attrib| {
+                let ident = &attrib.member_name;
+                quote! { let mut #ident = None; }
+            });
+        let childs = children.iter()
+            .map(|child| {
+                let ident = &child.member_name;
+                quote! { let mut #ident = None; }
+            });
 
-            Body::Struct(VariantData::Unit) => { quote! {} }
-
-            Body::Struct(VariantData::Tuple(_)) => { panic!("`#[derive(ColladaElement)]` does not yet support tuple structs"); }
-
-            Body::Struct(VariantData::Struct(ref fields)) => {
-                let decls = fields
-                    .iter()
-                    .map(|field| {
-                        let ident = field.ident.as_ref().unwrap();
-                        quote! { #ident: #ident }
-                    });
-
-                quote! {
-                    Ok(#type_name {
-                        #( #decls ),*
-                    })
-                }
-            }
+        quote! {
+            Ok(#struct_ident {
+                #( #attribs )*
+                #( #childs )*
+            })
         }
     };
 
     // Put all the pieces together.
     // ----------------------------
     Ok(quote! {
-        impl ColladaElement for #type_name {
+        impl ColladaElement for #struct_ident {
             fn parse_element<R: Read>(reader: &mut EventReader<R>, attributes: Vec<OwnedAttribute>) -> Result<Self> {
                 // use utils;
                 // use utils::{ElementConfiguration, ChildConfiguration};
