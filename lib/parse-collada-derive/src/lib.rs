@@ -7,7 +7,7 @@ use proc_macro::TokenStream;
 use quote::{Tokens, ToTokens};
 use syn::*;
 
-#[proc_macro_derive(ColladaElement, attributes(name, attribute, child))]
+#[proc_macro_derive(ColladaElement, attributes(name, attribute, child, text_data))]
 pub fn derive(input: TokenStream) -> TokenStream {
     // Parse the string representation.
     let ast = syn::parse_derive_input(&input.to_string()).unwrap();
@@ -15,8 +15,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
     // Build the impl.
     match generate_impl(ast) {
         Ok(gen) => {
-            let result = gen.parse().unwrap();
-            result
+            gen.parse().unwrap()
         }
         Err(error) => { panic!("{}", error) }
     }
@@ -104,12 +103,24 @@ fn process_derive_input(input: DeriveInput) -> Result<ElementConfiguration, Stri
 
         // Determine the data type of the inner type, e.g. if it's `String` or another ColladaElement.
         let data_type = match inner_type {
-            Ty::Path(None, mut path) => {
-                let segment = path.segments.pop().expect("Somehow got an empty path ?_?");
+            Ty::Path(None, ref path) => {
+                let segment = path.segments.clone().pop().expect("Somehow got an empty path ?_?");
                 if segment.ident.as_ref() == "String" {
-                    DataType::String
+                    DataType::TextData(inner_type.clone())
                 } else {
-                    DataType::ColladaElement(segment.ident)
+                    // Check for a `#[text_data]` attribute.
+                    let mut has_text_data_attr = false;
+                    for attribute in &field.attrs {
+                        if attribute.name() == "text_data" {
+                            has_text_data_attr = true;
+                        }
+                    }
+
+                    if has_text_data_attr {
+                        DataType::TextData(inner_type.clone())
+                    } else {
+                        DataType::ColladaElement(inner_type.clone())
+                    }
                 }
             },
 
@@ -144,6 +155,7 @@ fn process_derive_input(input: DeriveInput) -> Result<ElementConfiguration, Stri
                         member_name: member_name.clone(),
                         attrib_name: member_name.to_string(),
                         occurrences: occurrences,
+                        ty: inner_type,
                     });
                     break;
                 }
@@ -178,11 +190,12 @@ struct Attribute {
     member_name: Ident,
     attrib_name: String,
     occurrences: AttributeOccurrences,
+    ty: Ty,
 }
 
 enum DataType {
-    String,
-    ColladaElement(Ident),
+    TextData(Ty),
+    ColladaElement(Ty),
 }
 
 struct Child {
@@ -227,8 +240,16 @@ fn generate_impl(derive_input: DeriveInput) -> Result<quote::Tokens, String> {
             });
         let childs = children.iter()
             .map(|child| {
-                let ident = &child.member_name;
-                quote! { let mut #ident = None; }
+                let &Child { ref member_name, occurrences, .. } = child;
+                match occurrences {
+                    ChildOccurrences::Optional | ChildOccurrences::Required => {
+                        quote! { let mut #member_name = None; }
+                    }
+
+                    ChildOccurrences::OptionalMany | ChildOccurrences::RequiredMany => {
+                        quote! { let mut #member_name = Vec::new(); }
+                    }
+                }
             });
 
         quote! {
@@ -242,9 +263,16 @@ fn generate_impl(derive_input: DeriveInput) -> Result<quote::Tokens, String> {
     let attributes_impl = {
         let matches = attributes.iter()
             .map(|attrib| {
-                let &Attribute { ref member_name, ref attrib_name, .. } = attrib;
+                let &Attribute { ref member_name, ref attrib_name, ref ty, .. } = attrib;
                 quote! {
-                    #attrib_name => { #member_name = Some(attribute.value.parse()?); }
+                    #attrib_name => {
+                        let result = #ty::from_str(&*attribute.value)
+                            .map_err(|error| Error {
+                                position: reader.position(),
+                                kind: error.into(),
+                            })?;
+                        #member_name = Some(result);
+                    }
                 }
             });
 
@@ -296,59 +324,59 @@ fn generate_impl(derive_input: DeriveInput) -> Result<quote::Tokens, String> {
                 let &Child { ref member_name, ref element_name, occurrences, ref ty } = child;
 
                 let handle_result = match (occurrences, ty) {
-                    (ChildOccurrences::Optional, &DataType::String) => {
+                    (ChildOccurrences::Optional, &DataType::TextData(_)) => {
                         quote! {
                             #member_name = utils::optional_text_contents(reader, #element_name)?;
                         }
                     }
 
-                    (ChildOccurrences::Required, &DataType::String) => {
+                    (ChildOccurrences::Required, &DataType::TextData(_)) => {
                         quote! {
                             let result = utils::required_text_contents(reader, #element_name)?;
                             #member_name = Some(result);
                         }
                     }
 
-                    (ChildOccurrences::OptionalMany, &DataType::String) => {
+                    (ChildOccurrences::OptionalMany, &DataType::TextData(_)) => {
                         quote! {
                             if let Some(result) = utils::optional_text_contents(reader, #element_name)? {
-                                #member_name.push(result);
+                                #member_name.push(result.parse()?);
                             }
                         }
                     }
 
-                    (ChildOccurrences::RequiredMany, &DataType::String) => {
+                    (ChildOccurrences::RequiredMany, &DataType::TextData(_)) => {
                         quote! {
                             if let Some(result) = utils::optional_text_contents(reader, #element_name)? {
-                                #member_name.push(result);
+                                #member_name.push(result.parse()?);
                             }
                         }
                     }
 
                     (ChildOccurrences::Optional, &DataType::ColladaElement(ref ident)) => {
                         quote! {
-                            let result = #ident::parse_element()?;
+                            let result = #ident::parse_element(reader, attributes)?;
                             #member_name = Some(result);
                         }
                     }
 
                     (ChildOccurrences::Required, &DataType::ColladaElement(ref ident)) => {
                         quote! {
-                            let result = #ident::parse_element()?;
+                            let result = #ident::parse_element(reader, attributes)?;
                             #member_name = Some(result);
                         }
                     }
 
                     (ChildOccurrences::OptionalMany, &DataType::ColladaElement(ref ident)) => {
                         quote! {
-                            let result = #ident::parse_element()?;
+                            let result = #ident::parse_element(reader, attributes)?;
                             #member_name.push(result);
                         }
                     }
 
                     (ChildOccurrences::RequiredMany, &DataType::ColladaElement(ref ident)) => {
                         quote! {
-                            let result = #ident::parse_element()?;
+                            let result = #ident::parse_element(reader, attributes)?;
                             #member_name.push(result);
                         }
                     }
@@ -367,6 +395,18 @@ fn generate_impl(derive_input: DeriveInput) -> Result<quote::Tokens, String> {
                 }
             });
 
+        let required_childs = children.iter()
+            .filter_map(|child| {
+                let &Child { ref member_name, occurrences, .. } = child;
+                if occurrences == ChildOccurrences::Required {
+                    Some(quote! {
+                        let #member_name = #member_name.expect("Required child was `None`");
+                    })
+                } else {
+                    None
+                }
+            });
+
         quote! {
             ElementConfiguration {
                 name: #element_name,
@@ -374,6 +414,8 @@ fn generate_impl(derive_input: DeriveInput) -> Result<quote::Tokens, String> {
                     #( #decls ),*
                 ],
             }.parse_children(reader)?;
+
+            #( #required_childs )*
         }
     };
 
@@ -402,10 +444,13 @@ fn generate_impl(derive_input: DeriveInput) -> Result<quote::Tokens, String> {
     // Put all the pieces together.
     // ----------------------------
     Ok(quote! {
-        impl ColladaElement for #struct_ident {
-            fn parse_element<R: Read>(reader: &mut EventReader<R>, attributes: Vec<OwnedAttribute>) -> Result<Self> {
-                // use utils;
-                // use utils::{ElementConfiguration, ChildConfiguration};
+        impl ::utils::ColladaElement for #struct_ident {
+            fn parse_element<R: ::std::io::Read>(
+                reader: &mut ::xml::reader::EventReader<R>,
+                attributes: Vec<::xml::attribute::OwnedAttribute>
+            ) -> Result<Self> {
+                use std::str::FromStr;
+                use utils::*;
 
                 #member_decls
 

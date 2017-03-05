@@ -72,13 +72,7 @@ fn _parse_asset<R: Read>(reader: &mut EventReader<R>, attributes: Vec<OwnedAttri
 
                 action: &mut |reader, attributes| {
                     utils::verify_attributes(reader, "created", attributes)?;
-                    let date_time_string: String = utils::optional_text_contents(reader, "created")?.unwrap_or_default();
-                    let date_time = date_time_string
-                        .parse()
-                        .map_err(|error| Error {
-                            position: reader.position(),
-                            kind: ErrorKind::TimeError(error),
-                        })?;
+                    let date_time = utils::required_text_contents(reader, "created")?;
                     created = Some(date_time);
                     Ok(())
                 },
@@ -101,7 +95,8 @@ fn _parse_asset<R: Read>(reader: &mut EventReader<R>, attributes: Vec<OwnedAttri
 
                 action: &mut |reader, attributes| {
                     utils::verify_attributes(reader, "modified", attributes)?;
-                    modified = utils::optional_text_contents(reader, "modified")?;
+                    let date_time = utils::required_text_contents(reader, "modified")?;
+                    modified = Some(date_time);
                     Ok(())
                 },
             },
@@ -144,6 +139,8 @@ fn _parse_asset<R: Read>(reader: &mut EventReader<R>, attributes: Vec<OwnedAttri
                 occurrences: Optional,
 
                 action: &mut |reader, attributes| {
+                    use std::str::FromStr;
+
                     let mut unit_attrib = None;
                     let mut meter_attrib = None;
 
@@ -156,13 +153,10 @@ fn _parse_asset<R: Read>(reader: &mut EventReader<R>, attributes: Vec<OwnedAttri
                             }
 
                             "meter" => {
-                                let parsed = attribute.value
-                                    .parse()
-                                    .map_err(|error| {
-                                        Error {
-                                            position: reader.position(),
-                                            kind: ErrorKind::ParseFloatError(error),
-                                        }
+                                let parsed = f64::from_str(&*attribute.value)
+                                    .map_err(|error| Error {
+                                        position: reader.position(),
+                                        kind: error.into(),
                                     })?;
                                 meter_attrib = Some(parsed);
                             }
@@ -255,12 +249,14 @@ pub struct Asset {
     pub contributors: Vec<Contributor>,
 
     #[child]
+    #[text_data]
     pub created: DateTime,
 
     #[child]
     pub keywords: Option<String>,
 
     #[child]
+    #[text_data]
     pub modified: DateTime,
 
     #[child]
@@ -313,6 +309,7 @@ pub struct Contributor {
     pub copyright: Option<String>,
 
     #[child]
+    #[text_data]
     pub source_data: Option<AnyUri>,
 }
 
