@@ -64,7 +64,7 @@ fn process_derive_input(input: DeriveInput) -> Result<ElementConfiguration, Stri
         let member_name = field.ident.unwrap();
 
         // Determine the data type and occurrences for the member.
-        let mut path = match field.ty.clone() {
+        let path = match field.ty.clone() {
             Ty::Path(None, path) => { path }
             _ => { return Err("`#[derive(ColladaElement)]` doesn't support this member type")?; }
         };
@@ -74,12 +74,12 @@ fn process_derive_input(input: DeriveInput) -> Result<ElementConfiguration, Stri
         // - `Option<T>` is optional with inner type `T`.
         // - `Vec<T>` is repeating with inner type `T`.
         // - Everything else is required with inner type as declared.
-        let segment = path.segments.pop().expect("Somehow got an empty path ?_?");
+        let segment = path.segments.last().expect("Somehow got an empty path ?_?");
 
         // We only support angle bracket parameters (because we're only looking for `Option<T>`
         // and `Vec<T>`), so extract the parameter data and throw away all others.
         let parameter_data = match segment.parameters {
-            PathParameters::AngleBracketed(param) => { param }
+            PathParameters::AngleBracketed(ref param) => { param }
             _ => { return Err("Round brace function parameters are not supported")?; }
         };
 
@@ -104,7 +104,7 @@ fn process_derive_input(input: DeriveInput) -> Result<ElementConfiguration, Stri
         // Determine the data type of the inner type, e.g. if it's `String` or another ColladaElement.
         let data_type = match inner_type {
             Ty::Path(None, ref path) => {
-                let segment = path.segments.clone().pop().expect("Somehow got an empty path ?_?");
+                let segment = path.segments.last().expect("Somehow got an empty path ?_?");
                 if segment.ident.as_ref() == "String" {
                     DataType::TextData(inner_type.clone())
                 } else {
@@ -260,7 +260,7 @@ fn generate_impl(derive_input: DeriveInput) -> Result<quote::Tokens, String> {
 
     // Generate code for parsing attributes.
     // -------------------------------------
-    let attributes_impl = {
+    let attributes_impl = if attributes.len() != 0 {
         let matches = attributes.iter()
             .map(|attrib| {
                 let &Attribute { ref member_name, ref attrib_name, ref ty, .. } = attrib;
@@ -314,6 +314,10 @@ fn generate_impl(derive_input: DeriveInput) -> Result<quote::Tokens, String> {
 
             #( #required_attribs )*
         }
+    } else {
+        quote! {
+            utils::verify_attributes(reader, #element_name, attributes)?;
+        }
     };
 
     // Generate code for parsing children.
@@ -326,12 +330,14 @@ fn generate_impl(derive_input: DeriveInput) -> Result<quote::Tokens, String> {
                 let handle_result = match (occurrences, ty) {
                     (ChildOccurrences::Optional, &DataType::TextData(_)) => {
                         quote! {
+                            utils::verify_attributes(reader, #element_name, attributes)?;
                             #member_name = utils::optional_text_contents(reader, #element_name)?;
                         }
                     }
 
                     (ChildOccurrences::Required, &DataType::TextData(_)) => {
                         quote! {
+                            utils::verify_attributes(reader, #element_name, attributes)?;
                             let result = utils::required_text_contents(reader, #element_name)?;
                             #member_name = Some(result);
                         }
@@ -339,6 +345,7 @@ fn generate_impl(derive_input: DeriveInput) -> Result<quote::Tokens, String> {
 
                     (ChildOccurrences::OptionalMany, &DataType::TextData(_)) => {
                         quote! {
+                            utils::verify_attributes(reader, #element_name, attributes)?;
                             if let Some(result) = utils::optional_text_contents(reader, #element_name)? {
                                 #member_name.push(result.parse()?);
                             }
@@ -347,6 +354,7 @@ fn generate_impl(derive_input: DeriveInput) -> Result<quote::Tokens, String> {
 
                     (ChildOccurrences::RequiredMany, &DataType::TextData(_)) => {
                         quote! {
+                            utils::verify_attributes(reader, #element_name, attributes)?;
                             if let Some(result) = utils::optional_text_contents(reader, #element_name)? {
                                 #member_name.push(result.parse()?);
                             }
@@ -445,6 +453,7 @@ fn generate_impl(derive_input: DeriveInput) -> Result<quote::Tokens, String> {
     // ----------------------------
     Ok(quote! {
         impl ::utils::ColladaElement for #struct_ident {
+            #[allow(unused_imports)]
             fn parse_element<R: ::std::io::Read>(
                 reader: &mut ::xml::reader::EventReader<R>,
                 attributes: Vec<::xml::attribute::OwnedAttribute>
