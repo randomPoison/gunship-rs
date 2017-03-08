@@ -136,7 +136,7 @@ fn process_derive_input(input: DeriveInput) -> Result<ElementConfiguration, Stri
                         member_name: member_name.clone(),
                         element_name: member_name.to_string(),
                         occurrences: occurrences,
-                        ty: data_type,
+                        data_type: data_type,
                     });
                     break;
                 }
@@ -202,7 +202,7 @@ struct Child {
     member_name: Ident,
     element_name: String,
     occurrences: ChildOccurrences,
-    ty: DataType,
+    data_type: DataType,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -325,9 +325,23 @@ fn generate_impl(derive_input: DeriveInput) -> Result<quote::Tokens, String> {
     let children_impl = {
         let decls = children.iter()
             .map(|child| {
-                let &Child { ref member_name, ref element_name, occurrences, ref ty } = child;
+                let &Child { ref member_name, ref element_name, occurrences, ref data_type } = child;
 
-                let handle_result = match (occurrences, ty) {
+                let name = match *data_type {
+                    DataType::TextData(_) => {
+                        quote! {
+                            #element_name
+                        }
+                    }
+
+                    DataType::ColladaElement(ref ty) => {
+                        quote! {
+                            #ty::name()
+                        }
+                    }
+                };
+
+                let handle_result = match (occurrences, data_type) {
                     (ChildOccurrences::Optional, &DataType::TextData(_)) => {
                         quote! {
                             utils::verify_attributes(reader, #element_name, attributes)?;
@@ -392,7 +406,7 @@ fn generate_impl(derive_input: DeriveInput) -> Result<quote::Tokens, String> {
 
                 quote! {
                     ChildConfiguration {
-                        name: #element_name,
+                        name: #name,
                         occurrences: #occurrences,
 
                         action: &mut |reader, attributes| {
