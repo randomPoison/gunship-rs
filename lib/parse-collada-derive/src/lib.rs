@@ -7,7 +7,7 @@ use proc_macro::TokenStream;
 use quote::{Tokens, ToTokens};
 use syn::*;
 
-#[proc_macro_derive(ColladaElement, attributes(name, attribute, child, text_data))]
+#[proc_macro_derive(ColladaElement, attributes(name, attribute, child, text_data, optional_with_default))]
 pub fn derive(input: TokenStream) -> TokenStream {
     // Parse the string representation.
     let ast = syn::parse_derive_input(&input.to_string()).unwrap();
@@ -83,19 +83,33 @@ fn process_derive_input(input: DeriveInput) -> Result<ElementConfiguration, Stri
             _ => { return Err("Round brace function parameters are not supported")?; }
         };
 
+        let mut optional_with_default = false;
+        for attribute in &field.attrs {
+            if attribute.name() == "optional_with_default" {
+                optional_with_default = true;
+            }
+        }
+
         // Depending on the number of parameters (0 or 1) we determine the occurrences and the
         // type of the actual data.
         let (occurrences, inner_type) = if parameter_data.types.len() == 0 {
             // No type parameters, so we're not looking at `Option<T>` or `Vec<T>`. That means the
-            // child is required and that the field's type is the type of the child data.
-            (ChildOccurrences::Required, field.ty)
+            // child is required (or that a default value will be used if the child isn't present)
+            // and that the field's type is the type of the child data.
+            if optional_with_default {
+                (ChildOccurrences::OptionalWithDefault, field.ty)
+            } else {
+                (ChildOccurrences::Required, field.ty)
+            }
         } else {
             // There's 1 type parameter, so determine if we're looking at an `Option<T>`, which
             // means optional occurrences of a `T`, or a `Vec<T>`, which means optional many
             // occurrences of `T`.
             let inner_type = parameter_data.types[0].clone();
             match segment.ident.as_ref() {
-                "Option" => { (ChildOccurrences::Optional, inner_type) }
+                "Option" => {
+                    (ChildOccurrences::Optional, inner_type)
+                }
                 "Vec" => { (ChildOccurrences::OptionalMany, inner_type) }
                 _ => { return Err("Unexpected child type with parameters, only `Vec<T>` and `Option<T>` are allowed to have type parameters")?; }
             }
@@ -144,6 +158,7 @@ fn process_derive_input(input: DeriveInput) -> Result<ElementConfiguration, Stri
                 "attribute" => {
                     let occurrences = match occurrences {
                         ChildOccurrences::Optional => AttributeOccurrences::Optional,
+                        ChildOccurrences::OptionalWithDefault => AttributeOccurrences::OptionalWithDefault,
                         ChildOccurrences::Required => AttributeOccurrences::Required,
 
                         ChildOccurrences::OptionalMany | ChildOccurrences::RequiredMany => {
@@ -183,6 +198,7 @@ struct ElementConfiguration {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum AttributeOccurrences {
     Optional,
+    OptionalWithDefault,
     Required,
 }
 
@@ -208,6 +224,7 @@ struct Child {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ChildOccurrences {
     Optional,
+    OptionalWithDefault,
     Required,
     OptionalMany,
     RequiredMany,
@@ -217,6 +234,8 @@ impl ToTokens for ChildOccurrences {
     fn to_tokens(&self, tokens: &mut Tokens) {
         match *self {
             ChildOccurrences::Optional => { tokens.append("Optional"); }
+
+            ChildOccurrences::OptionalWithDefault => { tokens.append("OptionalWithDefault"); }
 
             ChildOccurrences::Required => { tokens.append("Required"); }
 
@@ -242,7 +261,7 @@ fn generate_impl(derive_input: DeriveInput) -> Result<quote::Tokens, String> {
             .map(|child| {
                 let &Child { ref member_name, occurrences, .. } = child;
                 match occurrences {
-                    ChildOccurrences::Optional | ChildOccurrences::Required => {
+                    ChildOccurrences::Optional | ChildOccurrences::OptionalWithDefault | ChildOccurrences::Required => {
                         quote! { let mut #member_name = None; }
                     }
 
@@ -349,6 +368,13 @@ fn generate_impl(derive_input: DeriveInput) -> Result<quote::Tokens, String> {
                         }
                     }
 
+                    (ChildOccurrences::OptionalWithDefault, &DataType::TextData(_)) => {
+                        quote! {
+                            utils::verify_attributes(reader, #element_name, attributes)?;
+                            #member_name = utils::optional_text_contents(reader, #element_name)?;
+                        }
+                    }
+
                     (ChildOccurrences::Required, &DataType::TextData(_)) => {
                         quote! {
                             utils::verify_attributes(reader, #element_name, attributes)?;
@@ -376,6 +402,13 @@ fn generate_impl(derive_input: DeriveInput) -> Result<quote::Tokens, String> {
                     }
 
                     (ChildOccurrences::Optional, &DataType::ColladaElement(ref ident)) => {
+                        quote! {
+                            let result = #ident::parse_element(reader, attributes)?;
+                            #member_name = Some(result);
+                        }
+                    }
+
+                    (ChildOccurrences::OptionalWithDefault, &DataType::ColladaElement(ref ident)) => {
                         quote! {
                             let result = #ident::parse_element(reader, attributes)?;
                             #member_name = Some(result);
@@ -420,12 +453,20 @@ fn generate_impl(derive_input: DeriveInput) -> Result<quote::Tokens, String> {
         let required_childs = children.iter()
             .filter_map(|child| {
                 let &Child { ref member_name, occurrences, .. } = child;
-                if occurrences == ChildOccurrences::Required {
-                    Some(quote! {
-                        let #member_name = #member_name.expect("Required child was `None`");
-                    })
-                } else {
-                    None
+                match occurrences {
+                    ChildOccurrences::Required => {
+                        Some(quote! {
+                            let #member_name = #member_name.expect("Required child was `None`");
+                        })
+                    }
+
+                    ChildOccurrences::OptionalWithDefault => {
+                        Some(quote! {
+                            let #member_name = #member_name.unwrap_or_default();
+                        })
+                    }
+
+                    _ => { None }
                 }
             });
 

@@ -269,9 +269,11 @@ pub struct Asset {
     pub title: Option<String>,
 
     #[child]
+    #[optional_with_default]
     pub unit: Unit,
 
     #[child]
+    #[optional_with_default]
     pub up_axis: UpAxis,
 }
 

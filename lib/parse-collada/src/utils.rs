@@ -35,6 +35,7 @@ struct ElementStart {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ChildOccurrences {
     Optional,
+    OptionalWithDefault,
     Required,
     Many,
     RequiredMany,
@@ -68,9 +69,9 @@ impl<'a, R: 'a + Read> ElementConfiguration<'a, R> {
                     // We've found a valid child, hooray! Allow it to run its parsing code.
                     (child.action)(reader, element.attributes)?;
 
-                    // Either advance current_child or don't, depending on if it's allowed to repeat.
+                    // Either advance `current_child` or don't, depending on if it's allowed to repeat.
                     match child.occurrences {
-                        Optional | Required => {
+                        Optional | OptionalWithDefault | Required => {
                             // Advance current child.
                             has_encountered_child = false;
                             current_child += 1;
@@ -320,7 +321,7 @@ pub fn required_text_contents<R, T>(
     where
     R: Read,
     T: FromStr,
-    ErrorKind: From<<T as FromStr>::Err>
+    ErrorKind: From<<T as FromStr>::Err>,
 {
     match reader.next()? {
         Characters(data) => {
