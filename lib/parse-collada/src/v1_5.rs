@@ -731,6 +731,7 @@ pub struct Extra {
     /// A hint as to the type of information this element represents, if present. Must be
     /// must be understood by the consuming application.
     #[attribute]
+    #[name = "type"]
     pub type_hint: Option<String>,
 
     /// Asset-management information for this element, if present.

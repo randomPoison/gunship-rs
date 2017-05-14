@@ -63,6 +63,43 @@ fn process_derive_input(input: DeriveInput) -> Result<ElementConfiguration, Stri
         // We only support struct-structs, so all fields will have an ident.
         let member_name = field.ident.unwrap();
 
+        // Validate the attributes for the field.
+        // --------------------------------------
+        let mut is_child = false;
+        let mut is_attribute = false;
+        let mut is_text_data = false;
+        let mut is_required = false;
+        let mut optional_with_default = false;
+
+        for attribute in field.attrs {
+            match attribute.name() {
+                "child" => { is_child = true; }
+                "attribute" => { is_attribute = true; }
+                "text_data" => { is_text_data = true; }
+                "required" => { is_required = true; }
+                "optional_with_default" => { optional_with_default = true; }
+                "name" => { unimplemented!(); }
+
+                // Ignore all unknown attributes. The compiler won't allow any unexpected
+                // attributes, so we don't need to worry about catching things like typos.
+                _ => {}
+            }
+        }
+
+        // Verify that there is either a `#[child]` attribute or an `#[attribute]` attribute,
+        // but not both.
+        if !(is_child || is_attribute) {
+            return Err(format!(
+                "Missing `#[child]` or `#[attribute]` attribute on member {:?}, one is required",
+                member_name,
+            ));
+        } else if is_child && is_attribute {
+            return Err(format!(
+                "Both `#[child]` and `#[attribute]` attributes present on member {:?}, only one must be present",
+                member_name,
+            ));
+        }
+
         // Determine the data type and occurrences for the member.
         let path = match field.ty.clone() {
             Ty::Path(None, path) => { path }
@@ -82,13 +119,6 @@ fn process_derive_input(input: DeriveInput) -> Result<ElementConfiguration, Stri
             PathParameters::AngleBracketed(ref param) => { param }
             _ => { return Err("Round brace function parameters are not supported")?; }
         };
-
-        let mut optional_with_default = false;
-        for attribute in &field.attrs {
-            if attribute.name() == "optional_with_default" {
-                optional_with_default = true;
-            }
-        }
 
         // Depending on the number of parameters (0 or 1) we determine the occurrences and the
         // type of the actual data.
@@ -110,27 +140,26 @@ fn process_derive_input(input: DeriveInput) -> Result<ElementConfiguration, Stri
                 "Option" => {
                     (ChildOccurrences::Optional, inner_type)
                 }
-                "Vec" => { (ChildOccurrences::OptionalMany, inner_type) }
+                "Vec" => {
+                    if is_required {
+                        (ChildOccurrences::RequiredMany, inner_type)
+                    } else {
+                        (ChildOccurrences::OptionalMany, inner_type)
+                    }
+                }
                 _ => { return Err("Unexpected child type with parameters, only `Vec<T>` and `Option<T>` are allowed to have type parameters")?; }
             }
         };
 
-        // Determine the data type of the inner type, e.g. if it's `String` or another ColladaElement.
+        // Determine the data type of the inner type, i.e. if it's `String` or another
+        // `ColladaElement`.
         let data_type = match inner_type {
             Ty::Path(None, ref path) => {
                 let segment = path.segments.last().expect("Somehow got an empty path ?_?");
                 if segment.ident.as_ref() == "String" {
                     DataType::TextData(inner_type.clone())
                 } else {
-                    // Check for a `#[text_data]` attribute.
-                    let mut has_text_data_attr = false;
-                    for attribute in &field.attrs {
-                        if attribute.name() == "text_data" {
-                            has_text_data_attr = true;
-                        }
-                    }
-
-                    if has_text_data_attr {
+                    if is_text_data {
                         DataType::TextData(inner_type.clone())
                     } else {
                         DataType::ColladaElement(inner_type.clone())
@@ -143,40 +172,31 @@ fn process_derive_input(input: DeriveInput) -> Result<ElementConfiguration, Stri
 
         // Determine whether we're looking at a child or an attribute based on whether the member
         // has a `#[child]` or an `#[attribute]` attribute.
-        for attribute in field.attrs {
-            match attribute.name() {
-                "child" => {
-                    children.push(Child {
-                        member_name: member_name.clone(),
-                        element_name: member_name.to_string(),
-                        occurrences: occurrences,
-                        data_type: data_type,
-                    });
-                    break;
+        if is_child {
+            children.push(Child {
+                member_name: member_name.clone(),
+                element_name: member_name.to_string(),
+                occurrences: occurrences,
+                data_type: data_type,
+            });
+        } else {
+            // Map the `ChildOccurrences` to an `AttributeOccurrences`.
+            let occurrences = match occurrences {
+                ChildOccurrences::Optional => AttributeOccurrences::Optional,
+                ChildOccurrences::OptionalWithDefault => AttributeOccurrences::OptionalWithDefault,
+                ChildOccurrences::Required => AttributeOccurrences::Required,
+
+                ChildOccurrences::OptionalMany | ChildOccurrences::RequiredMany => {
+                    return Err("Attribute may not be repeating, meaning it may not be of type `Vec<T>`".into());
                 }
+            };
 
-                "attribute" => {
-                    let occurrences = match occurrences {
-                        ChildOccurrences::Optional => AttributeOccurrences::Optional,
-                        ChildOccurrences::OptionalWithDefault => AttributeOccurrences::OptionalWithDefault,
-                        ChildOccurrences::Required => AttributeOccurrences::Required,
-
-                        ChildOccurrences::OptionalMany | ChildOccurrences::RequiredMany => {
-                            return Err("Attribute may not be repeating, meaning it may not be of type `Vec<T>`".into());
-                        }
-                    };
-
-                    attributes.push(Attribute {
-                        member_name: member_name.clone(),
-                        attrib_name: member_name.to_string(),
-                        occurrences: occurrences,
-                        ty: inner_type,
-                    });
-                    break;
-                }
-
-                _ => {}
-            }
+            attributes.push(Attribute {
+                member_name: member_name.clone(),
+                attrib_name: member_name.to_string(),
+                occurrences: occurrences,
+                ty: inner_type,
+            });
         }
     }
 
