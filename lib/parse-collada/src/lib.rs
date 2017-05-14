@@ -59,6 +59,8 @@
 //! [Collada::read]: struct.Collada.html#method.read
 
 pub extern crate chrono;
+#[macro_use]
+extern crate parse_collada_derive;
 extern crate xml;
 
 pub use v1_5::*;
@@ -67,9 +69,12 @@ pub use xml::reader::{Error as XmlError, XmlEvent};
 
 use chrono::*;
 use std::fmt::{self, Display, Formatter};
+use std::io::Read;
 use std::num::ParseFloatError;
-use utils::StringListDisplay;
+use utils::{ColladaElement, StringListDisplay};
 use xml::common::Position;
+use xml::EventReader;
+use xml::attribute::OwnedAttribute;
 
 mod utils;
 mod v1_4;
@@ -351,9 +356,12 @@ impl From<String> for AnyUri {
     }
 }
 
-impl<'a> From<&'a str> for AnyUri {
-    fn from(from: &'a str) -> AnyUri {
-        AnyUri(from.into())
+// TODO: Actually parse the string and verify that it's a valid URI.
+impl ::std::str::FromStr for AnyUri {
+    type Err = ::std::string::ParseError;
+
+    fn from_str(string: &str) -> ::std::result::Result<AnyUri, ::std::string::ParseError> {
+        Ok(AnyUri(string.into()))
     }
 }
 
@@ -376,6 +384,31 @@ pub enum UpAxis {
     Z,
 }
 
+impl ColladaElement for UpAxis {
+    fn parse_element<R: Read>(reader: &mut EventReader<R>, attributes: Vec<OwnedAttribute>) -> Result<UpAxis> {
+        utils::verify_attributes(reader, "up_axis", attributes)?;
+        let text: String = utils::optional_text_contents(reader, "up_axis")?.unwrap_or_default();
+        let parsed = match &*text {
+            "X_UP" => { UpAxis::X }
+            "Y_UP" => { UpAxis::Y }
+            "Z_UP" => { UpAxis::Z }
+            _ => {
+                return Err(Error {
+                    position: reader.position(),
+                    kind: ErrorKind::InvalidValue {
+                        element: "up_axis".into(),
+                        value: text,
+                    },
+                });
+            }
+        };
+
+        Ok(parsed)
+    }
+
+    fn name() -> &'static str { "up_axis" }
+}
+
 impl Default for UpAxis {
     fn default() -> UpAxis { UpAxis::Y }
 }
@@ -387,15 +420,19 @@ impl Default for UpAxis {
 /// length in meters, and does not need to be consistent with any real-world measurement.
 ///
 /// [Asset]: struct.Asset.html
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, ColladaElement)]
+#[name = "unit"]
 pub struct Unit {
     /// The name of the distance unit. For example, “meter”, “centimeter”, “inch”, or “parsec”.
     /// This can be the name of a real measurement, or an imaginary name. Defaults to `1.0`.
+    #[attribute]
+    #[text_data]
     pub meter: f64,
 
     /// How many real-world meters in one distance unit as a floating-point number. For example,
     /// 1.0 for the name "meter"; 1000 for the name "kilometer"; 0.3048 for the name
     /// "foot". Defaults to "meter".
+    #[attribute]
     pub name: String,
 }
 

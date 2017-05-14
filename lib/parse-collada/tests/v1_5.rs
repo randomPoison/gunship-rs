@@ -22,7 +22,7 @@ fn collada_asset_minimal() {
             contributors: vec![],
             coverage: None,
             created: "2017-02-07T20:44:30Z".parse().unwrap(),
-            keywords: None,
+            keywords: Vec::new(),
             modified: "2017-02-07T20:44:30Z".parse().unwrap(),
             revision: None,
             subject: None,
@@ -147,7 +147,7 @@ fn asset_full() {
             altitude: Altitude::RelativeToGround(0.0),
         }),
         created: "2017-02-07T20:44:30Z".parse().unwrap(),
-        keywords: Some("foo bar baz".into()),
+        keywords: vec!["foo".into(), "bar".into(), "baz".into()],
         modified: "2017-02-07T20:44:30Z".parse().unwrap(),
         revision: Some("7".into()),
         subject: Some("A thing".into()),
@@ -205,11 +205,11 @@ fn contributor_full() {
     let expected = Contributor {
         author: Some("David LeGare".into()),
         author_email: Some("dl@email.com".into()),
-        author_website: Some("david.com".into()),
+        author_website: Some("david.com".parse().unwrap()),
         authoring_tool: Some("Atom".into()),
         comments: Some("This is a sample COLLADA document.".into()),
         copyright: Some("David LeGare, free for public use".into()),
-        source_data: Some("C:/models/tank.s3d".into()),
+        source_data: Some("C:/models/tank.s3d".parse().unwrap()),
     };
 
     let collada = Collada::from_str(DOCUMENT).unwrap();
@@ -393,7 +393,7 @@ fn extra_full() {
             contributors: vec![],
             coverage: None,
             created: "2017-02-07T20:44:30Z".parse().unwrap(),
-            keywords: None,
+            keywords: Vec::new(),
             modified: "2017-02-07T20:44:30Z".parse().unwrap(),
             revision: None,
             subject: None,

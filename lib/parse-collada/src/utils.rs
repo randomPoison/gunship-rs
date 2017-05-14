@@ -18,6 +18,14 @@ pub static PARSER_CONFIG: ParserConfig = ParserConfig {
     coalesce_characters: true,
 };
 
+/// Helper trait for handling parsing. This is automatically generated for most types with the
+/// `parse-collada-derive` crate.
+pub trait ColladaElement: Sized {
+    fn parse_element<R: Read>(reader: &mut EventReader<R>, attributes: Vec<OwnedAttribute>) -> Result<Self>;
+
+    fn name() -> &'static str;
+}
+
 #[derive(Debug)]
 struct ElementStart {
     name: OwnedName,
@@ -27,6 +35,7 @@ struct ElementStart {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ChildOccurrences {
     Optional,
+    OptionalWithDefault,
     Required,
     Many,
     RequiredMany,
@@ -38,7 +47,7 @@ pub struct ElementConfiguration<'a, R: 'a + Read> {
 }
 
 impl<'a, R: 'a + Read> ElementConfiguration<'a, R> {
-    pub fn parse(mut self, reader: &mut EventReader<R>) -> Result<()> {
+    pub fn parse_children(mut self, reader: &mut EventReader<R>) -> Result<()> {
         // Keep track of the text position for the root element so that it can be used for error
         // messages.
         let root_position = reader.position();
@@ -60,9 +69,9 @@ impl<'a, R: 'a + Read> ElementConfiguration<'a, R> {
                     // We've found a valid child, hooray! Allow it to run its parsing code.
                     (child.action)(reader, element.attributes)?;
 
-                    // Either advance current_child or don't, depending on if it's allowed to repeat.
+                    // Either advance `current_child` or don't, depending on if it's allowed to repeat.
                     match child.occurrences {
-                        Optional | Required => {
+                        Optional | OptionalWithDefault | Required => {
                             // Advance current child.
                             has_encountered_child = false;
                             current_child += 1;
@@ -312,7 +321,7 @@ pub fn required_text_contents<R, T>(
     where
     R: Read,
     T: FromStr,
-    ErrorKind: From<<T as FromStr>::Err>
+    ErrorKind: From<<T as FromStr>::Err>,
 {
     match reader.next()? {
         Characters(data) => {

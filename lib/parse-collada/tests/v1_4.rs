@@ -22,7 +22,7 @@ fn collada_asset_minimal() {
             contributors: vec![],
             coverage: None,
             created: "2017-02-07T20:44:30Z".parse().unwrap(),
-            keywords: None,
+            keywords: Vec::new(),
             modified: "2017-02-07T20:44:30Z".parse().unwrap(),
             revision: None,
             subject: None,
@@ -85,7 +85,7 @@ fn asset_full() {
         contributors: vec![Contributor::default(), Contributor::default(), Contributor::default()],
         coverage: None,
         created: "2017-02-07T20:44:30Z".parse().unwrap(),
-        keywords: Some("foo bar baz".into()),
+        keywords: vec!["foo".into(), "bar".into(), "baz".into()],
         modified: "2017-02-07T20:44:30Z".parse().unwrap(),
         revision: Some("7".into()),
         subject: Some("A thing".into()),
@@ -130,7 +130,7 @@ fn asset_blender() {
         ],
         coverage: None,
         created: "2017-02-01T09:29:54".parse().unwrap(),
-        keywords: None,
+        keywords: Vec::new(),
         modified: "2017-02-01T09:29:54".parse().unwrap(),
         revision: None,
         subject: None,
@@ -231,7 +231,7 @@ fn contributor_full() {
         authoring_tool: Some("Atom".into()),
         comments: Some("This is a sample COLLADA document.".into()),
         copyright: Some("David LeGare, free for public use".into()),
-        source_data: Some("C:/models/tank.s3d".into()),
+        source_data: Some("C:/models/tank.s3d".parse().unwrap()),
     };
 
     let collada = Collada::from_str(DOCUMENT).unwrap();
