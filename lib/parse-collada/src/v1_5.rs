@@ -148,111 +148,6 @@ fn parse_contributor<R: Read>(reader: &mut EventReader<R>, attributes: Vec<Owned
     })
 }
 
-fn parse_geographic_location<R: Read>(reader: &mut EventReader<R>, attributes: Vec<OwnedAttribute>) -> Result<GeographicLocation> {
-    verify_attributes(reader, "geographic_location", attributes)?;
-
-    let mut latitude = None;
-    let mut longitude = None;
-    let mut altitude = None;
-
-    ElementConfiguration {
-        name: "geographic_location",
-        children: &mut [
-            ChildConfiguration {
-                name: "longitude",
-                occurrences: Required,
-
-                action: &mut |reader, attributes| {
-                    utils::verify_attributes(reader, "longitude", attributes)?;
-                    longitude = utils::optional_text_contents(reader, "longitude")?;
-                    Ok(())
-                },
-            },
-
-            ChildConfiguration {
-                name: "latitude",
-                occurrences: Required,
-
-                action: &mut |reader, attributes| {
-                    utils::verify_attributes(reader, "latitude", attributes)?;
-                    latitude = utils::optional_text_contents(reader, "latitude")?;
-                    Ok(())
-                },
-            },
-
-            ChildConfiguration {
-                name: "altitude",
-                occurrences: Required,
-
-                action: &mut |reader, attributes| {
-                    let mut mode = None;
-                    for attribute in attributes {
-                        match &*attribute.name.local_name {
-                            "mode" => {
-                                mode = Some(attribute.value);
-                            }
-
-                            attrib_name @ _ => {
-                                return Err(Error {
-                                    position: reader.position(),
-                                    kind: ErrorKind::UnexpectedAttribute {
-                                        element: "altitude",
-                                        attribute: attrib_name.into(),
-                                        expected: vec!["mode"],
-                                    },
-                                });
-                            }
-                        }
-                    }
-
-                    let mode = match mode {
-                        Some(mode) => { mode }
-                        None => {
-                            return Err(Error {
-                                position: reader.position(),
-                                kind: ErrorKind::MissingAttribute {
-                                    element: "altitude",
-                                    attribute: "mode",
-                                },
-                            });
-                        }
-                    };
-
-                    match &*mode {
-                        "absolute" => {
-                            let value = utils::required_text_contents(reader, "altitude")?;
-                            altitude = Some(Altitude::Absolute(value));
-                        }
-
-                        "relativeToGround" => {
-                            let value = utils::required_text_contents(reader, "altitude")?;
-                            altitude = Some(Altitude::RelativeToGround(value));
-                        }
-
-                        _ => {
-                            return Err(Error {
-                                position: reader.position(),
-                                kind: ErrorKind::InvalidValue {
-                                    element: "altitude",
-                                    value: mode,
-                                },
-                            });
-                        }
-                    }
-
-                    Ok(())
-                },
-            },
-        ],
-    }.parse_children(reader)?;
-
-    Ok(GeographicLocation {
-        latitude: latitude.expect("Missing requried value"),
-        longitude: longitude.expect("Missing required value"),
-        altitude: altitude.expect("Missing required value"),
-    })
-}
-
 /// Represents a parsed COLLADA document.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Collada {
@@ -444,7 +339,10 @@ impl ColladaElement for Asset {
                                     occurrences: Optional,
 
                                     action: &mut |reader, attributes| {
-                                        coverage = Some(parse_geographic_location(reader, attributes)?);
+                                        coverage = Some(GeographicLocation::parse_element(
+                                            reader,
+                                            attributes,
+                                        )?);
                                         Ok(())
                                     },
                                 }
@@ -678,15 +576,21 @@ pub struct Contributor {
 ///
 /// [Asset]: struct.Asset.html
 /// [WGS 84]: https://en.wikipedia.org/wiki/World_Geodetic_System#A_new_World_Geodetic_System:_WGS_84
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, ColladaElement)]
+#[name = "geographic_location"]
 pub struct GeographicLocation {
     /// The longitude of the location. Will be in the range -180.0 to 180.0.
+    #[child]
+    #[text_data]
     pub longitude: f64,
 
     /// The latitude of the location. Will be in the range -180.0 to 180.0.
+    #[child]
+    #[text_data]
     pub latitude: f64,
 
     /// Specifies the altitude, either relative to global sea level or relative to ground level.
+    #[child]
     pub altitude: Altitude,
 }
 
@@ -700,6 +604,67 @@ pub enum Altitude {
 
     /// The altitude is relative to ground level at the specified latitude and longitude.
     RelativeToGround(f64),
+}
+
+impl ColladaElement for Altitude {
+    fn parse_element<R: Read>(reader: &mut EventReader<R>, attributes: Vec<OwnedAttribute>) -> Result<Self> {
+        let mut mode = None;
+        for attribute in attributes {
+            match &*attribute.name.local_name {
+                "mode" => {
+                    mode = Some(attribute.value);
+                }
+
+                attrib_name @ _ => {
+                    return Err(Error {
+                        position: reader.position(),
+                        kind: ErrorKind::UnexpectedAttribute {
+                            element: "altitude",
+                            attribute: attrib_name.into(),
+                            expected: vec!["mode"],
+                        },
+                    });
+                }
+            }
+        }
+
+        let mode = match mode {
+            Some(mode) => { mode }
+            None => {
+                return Err(Error {
+                    position: reader.position(),
+                    kind: ErrorKind::MissingAttribute {
+                        element: "altitude",
+                        attribute: "mode",
+                    },
+                });
+            }
+        };
+
+        match &*mode {
+            "absolute" => {
+                let value = utils::required_text_contents(reader, "altitude")?;
+                Ok(Altitude::Absolute(value))
+            }
+
+            "relativeToGround" => {
+                let value = utils::required_text_contents(reader, "altitude")?;
+                Ok(Altitude::RelativeToGround(value))
+            }
+
+            _ => {
+                Err(Error {
+                    position: reader.position(),
+                    kind: ErrorKind::InvalidValue {
+                        element: "altitude",
+                        value: mode,
+                    },
+                })
+            }
+        }
+    }
+
+    fn name() -> &'static str { "altitude" }
 }
 
 /// Provides arbitrary additional information about an element.
