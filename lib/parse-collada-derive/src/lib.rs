@@ -62,6 +62,7 @@ fn process_derive_input(input: DeriveInput) -> Result<ElementConfiguration, Stri
     for field in fields {
         // We only support struct-structs, so all fields will have an ident.
         let member_name = field.ident.unwrap();
+        let mut special_name = member_name.clone().to_string();
 
         // Validate the attributes for the field.
         // --------------------------------------
@@ -78,7 +79,17 @@ fn process_derive_input(input: DeriveInput) -> Result<ElementConfiguration, Stri
                 "text_data" => { is_text_data = true; }
                 "required" => { is_required = true; }
                 "optional_with_default" => { optional_with_default = true; }
-                "name" => { unimplemented!(); }
+                "name" => {
+                    match attribute.value {
+                        MetaItem::NameValue(_, Lit::Str(value, _)) => {
+                            special_name = value;
+                        }
+
+                        _ => {
+                            return Err("Name attribute must take the form `#[name = \"foo\"]`")?;
+                        }
+                    }
+                }
 
                 // Ignore all unknown attributes. The compiler won't allow any unexpected
                 // attributes, so we don't need to worry about catching things like typos.
@@ -175,7 +186,7 @@ fn process_derive_input(input: DeriveInput) -> Result<ElementConfiguration, Stri
         if is_child {
             children.push(Child {
                 member_name: member_name.clone(),
-                element_name: member_name.to_string(),
+                element_name: special_name,
                 occurrences: occurrences,
                 data_type: data_type,
             });
@@ -193,7 +204,7 @@ fn process_derive_input(input: DeriveInput) -> Result<ElementConfiguration, Stri
 
             attributes.push(Attribute {
                 member_name: member_name.clone(),
-                attrib_name: member_name.to_string(),
+                attrib_name: special_name,
                 occurrences: occurrences,
                 ty: inner_type,
             });
