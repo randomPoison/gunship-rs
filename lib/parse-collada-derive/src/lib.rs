@@ -7,7 +7,7 @@ use proc_macro::TokenStream;
 use quote::{Tokens, ToTokens};
 use syn::*;
 
-#[proc_macro_derive(ColladaElement, attributes(name, attribute, child, text_data, optional_with_default))]
+#[proc_macro_derive(ColladaElement, attributes(name, attribute, child, text_data, optional_with_default, required))]
 pub fn derive(input: TokenStream) -> TokenStream {
     // Parse the string representation.
     let ast = syn::parse_derive_input(&input.to_string()).unwrap();
@@ -498,8 +498,8 @@ fn generate_impl(derive_input: DeriveInput) -> Result<quote::Tokens, String> {
 
         quote! {
             Ok(#struct_ident {
-                #( #attribs ),*
-                #( #childs ),*
+                #( #attribs, )*
+                #( #childs, )*
             })
         }
     };
