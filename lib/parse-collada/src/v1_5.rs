@@ -44,110 +44,6 @@ pub fn parse_collada<R: Read>(mut reader: EventReader<R>, version: String, base:
     })
 }
 
-fn parse_contributor<R: Read>(reader: &mut EventReader<R>, attributes: Vec<OwnedAttribute>) -> Result<Contributor> {
-    utils::verify_attributes(reader, "contributor", attributes)?;
-
-    let mut author = None;
-    let mut author_email = None;
-    let mut author_website = None;
-    let mut authoring_tool = None;
-    let mut comments = None;
-    let mut copyright = None;
-    let mut source_data = None;
-
-    ElementConfiguration {
-        name: "contributor",
-        children: &mut [
-            ChildConfiguration {
-                name: "author",
-                occurrences: Optional,
-
-                action: &mut |reader, attributes| {
-                    utils::verify_attributes(reader, "author", attributes)?;
-                    author = utils::optional_text_contents(reader, "author")?;
-                    Ok(())
-                },
-            },
-
-            ChildConfiguration {
-                name: "author_email",
-                occurrences: Optional,
-
-                action: &mut |reader, attributes| {
-                    utils::verify_attributes(reader, "author_email", attributes)?;
-                    author_email = utils::optional_text_contents(reader, "author_email")?;
-                    Ok(())
-                },
-            },
-
-            ChildConfiguration {
-                name: "author_website",
-                occurrences: Optional,
-
-                action: &mut |reader, attributes| {
-                    utils::verify_attributes(reader, "author_website", attributes)?;
-                    author_website = utils::optional_text_contents(reader, "author_website")?.map(String::into);
-                    Ok(())
-                },
-            },
-
-            ChildConfiguration {
-                name: "authoring_tool",
-                occurrences: Optional,
-
-                action: &mut |reader, attributes| {
-                    utils::verify_attributes(reader, "authoring_tool", attributes)?;
-                    authoring_tool = utils::optional_text_contents(reader, "authoring_tool")?;
-                    Ok(())
-                },
-            },
-
-            ChildConfiguration {
-                name: "comments",
-                occurrences: Optional,
-
-                action: &mut |reader, attributes| {
-                    utils::verify_attributes(reader, "comments", attributes)?;
-                    comments = utils::optional_text_contents(reader, "comments")?;
-                    Ok(())
-                },
-            },
-
-            ChildConfiguration {
-                name: "copyright",
-                occurrences: Optional,
-
-                action: &mut |reader, attributes| {
-                    utils::verify_attributes(reader, "copyright", attributes)?;
-                    copyright = utils::optional_text_contents(reader, "copyright")?;
-                    Ok(())
-                },
-            },
-
-            ChildConfiguration {
-                name: "source_data",
-                occurrences: Optional,
-
-                action: &mut |reader, attributes| {
-                    utils::verify_attributes(reader, "source_data", attributes)?;
-                    source_data = utils::optional_text_contents(reader, "source_data")?.map(String::into);
-                    Ok(())
-                },
-            },
-        ],
-    }.parse_children(reader)?;
-
-    Ok(Contributor {
-        author: author,
-        author_email: author_email,
-        author_website: author_website,
-        authoring_tool: authoring_tool,
-        comments: comments,
-        copyright: copyright,
-        source_data: source_data,
-    })
-}
-
 /// Represents a parsed COLLADA document.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Collada {
@@ -318,7 +214,7 @@ impl ColladaElement for Asset {
                     occurrences: Many,
 
                     action: &mut |reader, attributes| {
-                        let contributor = parse_contributor(reader, attributes)?;
+                        let contributor = Contributor::parse_element(reader, attributes)?;
                         contributors.push(contributor);
                         Ok(())
                     },
@@ -539,33 +435,43 @@ impl ColladaElement for Asset {
 /// # COLLADA Versions
 ///
 /// `author_email` and `author_website` were added in COLLADA version `1.5.0`.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, ColladaElement)]
+#[name = "contributor"]
 pub struct Contributor {
     /// The author's name, if present.
+    #[child]
     pub author: Option<String>,
 
     /// The author's full email address, if present.
     // TODO: Should we use some `Email` type? The 1.5.0 COLLADA spec provides an RFC defining the
     // exact format this data follows (I assume it's just the RFC that defines valid email
     // addresses).
+    #[child]
     pub author_email: Option<String>,
 
     /// The URL for the author's website, if present.
+    #[child]
+    #[text_data]
     pub author_website: Option<AnyUri>,
 
     /// The name of the authoring tool.
+    #[child]
     pub authoring_tool: Option<String>,
 
     /// Free-form comments from the author.
+    #[child]
     pub comments: Option<String>,
 
     /// Copyright information about the asset. Does not adhere to a formatting standard.
+    #[child]
     pub copyright: Option<String>,
 
     /// A URI reference to the source data for the asset.
     ///
     /// For example, if the asset based off a file `tank.s3d`, the value might be
     /// `c:/models/tank.s3d`.
+    #[child]
+    #[text_data]
     pub source_data: Option<AnyUri>,
 }
 
