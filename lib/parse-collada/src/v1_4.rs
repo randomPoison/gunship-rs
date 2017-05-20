@@ -1,27 +1,112 @@
-use {AnyUri, DateTime, Result, Unit, UpAxis, utils, v1_5};
+use {AnyUri, DateTime, Error, ErrorKind, Extra, Result, Unit, UpAxis, utils, v1_5};
 use std::io::Read;
 use utils::*;
 use utils::ChildOccurrences::*;
 use xml::attribute::OwnedAttribute;
+use xml::common::Position;
 use xml::reader::EventReader;
 use xml::reader::XmlEvent::*;
 
-pub fn parse_collada<R: Read>(mut reader: EventReader<R>, version: String, base: Option<AnyUri>) -> Result<Collada> {
+pub fn parse_collada<R: Read>(
+    mut reader: EventReader<R>,
+    version: String,
+    base: Option<AnyUri>
+) -> Result<Collada> {
+    // Helper function to simplify the state machine logic around parsing the final
+    // `<extra>` elements.
+    fn parse_extras<R: Read>(reader: &mut EventReader<R>) -> Result<Option<Extra>> {
+        match utils::start_element(reader, "COLLADA")? {
+            Some(next_element) => {
+                if next_element.name.local_name == "extra" {
+                    let extra = Extra::parse_element(reader, next_element.attributes)?;
+                    Ok(Some(extra))
+                } else {
+                    return Err(Error {
+                        position: reader.position(),
+                        kind: ErrorKind::UnexpectedElement {
+                            element: next_element.name.local_name,
+                            parent: "COLLADA",
+                            expected: vec!["extra"],
+                        },
+                    });
+                }
+            }
+            None => { Ok(None) }
+        }
+    }
+
     // The next event must be the `<asset>` tag. No text data is allowed, and
     // whitespace/comments aren't emitted.
     let (_name, attributes, _) = utils::required_start_element(&mut reader, "COLLADA", "asset")?;
     let asset = Asset::parse_element(&mut reader, attributes)?;
 
-    // Eat any events until we get to the `</COLLADA>` tag.
-    // TODO: Actually parse the body of the document.
+    let mut extras = Vec::new();
+
     loop {
-        match reader.next()? {
-            EndElement { ref name } if name.local_name == "COLLADA" => { break }
-            _ => {}
+        match utils::start_element(&mut reader, "COLLADA")? {
+            Some(next_element) => {
+                match &*next_element.name.local_name {
+                    "library_animation_clips" => { unimplemented!(); }
+                    "library_animations" => { unimplemented!(); }
+                    "library_cameras" => { unimplemented!(); }
+                    "library_controllers" => { unimplemented!(); }
+                    "library_effects" => { unimplemented!(); }
+                    "library_force_fields" => { unimplemented!(); }
+                    "library_geometries" => { unimplemented!(); }
+                    "library_images" => { unimplemented!(); }
+                    "library_lights" => { unimplemented!(); }
+                    "library_materials" => { unimplemented!(); }
+                    "library_nodes" => { unimplemented!(); }
+                    "library_physics_materials" => { unimplemented!(); }
+                    "library_physics_models" => { unimplemented!(); }
+                    "library_physics_scenes" => { unimplemented!(); }
+                    "library_visual_scenes" => { unimplemented!(); }
+                    "scene" => {
+                        unimplemented!();
+                        while let Some(extra) = parse_extras(&mut reader)? { extras.push(extra); }
+                        break;
+                    }
+                    "extra" => {
+                        unimplemented!();
+                        while let Some(extra) = parse_extras(&mut reader)? { extras.push(extra); }
+                        break;
+                    }
+                    _ => {
+                        return Err(Error {
+                            position: reader.position(),
+                            kind: ErrorKind::UnexpectedElement {
+                                element: next_element.name.local_name,
+                                parent: "COLLADA",
+                                expected: vec![
+                                    "library_animation_clips",
+                                    "library_animations",
+                                    "library_cameras",
+                                    "library_controllers",
+                                    "library_effects",
+                                    "library_force_fields",
+                                    "library_geometries",
+                                    "library_images",
+                                    "library_lights",
+                                    "library_materials",
+                                    "library_nodes",
+                                    "library_physics_materials",
+                                    "library_physics_models",
+                                    "library_physics_scenes",
+                                    "library_visual_scenes",
+                                    "scene",
+                                    "extra",
+                                ],
+                            },
+                        });
+                    }
+                }
+            }
+
+            None => { break; }
         }
     }
 
-    // TODO: Verify the next event is the `EndDocument` event.
+    // Verify the next event is the `EndDocument` event.
     match reader.next()? {
         EndDocument => {}
 
@@ -35,6 +120,7 @@ pub fn parse_collada<R: Read>(mut reader: EventReader<R>, version: String, base:
         version: version,
         asset: asset,
         base_uri: base,
+        extra: extras,
     })
 }
 
@@ -43,6 +129,7 @@ pub struct Collada {
     pub version: String,
     pub asset: Asset,
     pub base_uri: Option<AnyUri>,
+    pub extra: Vec<Extra>,
 }
 
 impl Into<v1_5::Collada> for Collada {

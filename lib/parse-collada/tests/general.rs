@@ -3,6 +3,14 @@ extern crate parse_collada;
 use ::parse_collada::*;
 
 #[test]
+fn load_document() {
+    static TEST_DOCUMENT: &'static [u8] = include_bytes!("../resources/blender_cube.dae");
+
+    let document = String::from_utf8(TEST_DOCUMENT.into()).unwrap();
+    let _ = Collada::from_str(&*document).unwrap();
+}
+
+#[test]
 fn no_xml_decl() {
     static DOCUMENT: &'static str = r#"
     <COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.5.0">

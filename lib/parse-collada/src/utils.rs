@@ -27,9 +27,9 @@ pub trait ColladaElement: Sized {
 }
 
 #[derive(Debug)]
-struct ElementStart {
-    name: OwnedName,
-    attributes: Vec<OwnedAttribute>,
+pub struct ElementStart {
+    pub name: OwnedName,
+    pub attributes: Vec<OwnedAttribute>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -282,7 +282,7 @@ pub fn required_start_element<R: Read>(
 // TODO: This should really be `optional_start_element` since it doesn't fail if no element starts,
 // but there's already a fn with that name. Once we unify the parsing code we can kill the old one
 // and fix the name of this one.
-fn start_element<R: Read>(
+pub fn start_element<R: Read>(
     reader: &mut EventReader<R>,
     parent: &'static str,
 ) -> Result<Option<ElementStart>> {

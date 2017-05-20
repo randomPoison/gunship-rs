@@ -546,6 +546,7 @@ fn generate_impl(derive_input: DeriveInput) -> Result<quote::Tokens, String> {
             ) -> Result<Self> {
                 use std::str::FromStr;
                 use utils::*;
+                use utils::ChildOccurrences::*;
 
                 #member_decls
 
