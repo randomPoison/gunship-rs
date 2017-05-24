@@ -451,6 +451,28 @@ pub fn verify_attributes<R: Read>(reader: &EventReader<R>, name: &'static str, a
     Ok(())
 }
 
+// TODO: This is a temporary helper to allow us to ignore COLLADA elements that we don't care
+// about parsing yet. This should be removed once we've implemented the full COLLADA spec.
+pub fn stub_out<R>(reader: &mut EventReader<R>, stubbed_name: &str) -> Result<()> where R: Read {
+    let mut depth = 1;
+    loop {
+        match reader.next()? {
+            StartElement { name, attributes: _, namespace: _ } => {
+                if name.local_name == stubbed_name { depth += 1; }
+            }
+
+            EndElement { name } => {
+                if name.local_name == stubbed_name { depth -= 1; }
+                if depth == 0 { break; }
+            }
+
+            _ => {}
+        }
+    }
+
+    Ok(())
+}
+
 /// Helper struct for pretty-printing lists of strings.
 pub struct StringListDisplay<'a>(pub &'a [&'a str]);
 

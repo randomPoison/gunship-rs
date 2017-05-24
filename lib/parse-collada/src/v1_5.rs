@@ -1,4 +1,4 @@
-use {AnyUri, DateTime, Extra, Result, Error, ErrorKind, Unit, UpAxis, utils, XmlEvent};
+use {AnyUri, DateTime, Extra, Result, Error, ErrorKind, Unit, UpAxis, utils};
 use std::io::Read;
 use utils::*;
 use utils::ChildOccurrences::*;

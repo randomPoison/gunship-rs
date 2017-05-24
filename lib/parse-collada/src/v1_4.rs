@@ -46,28 +46,28 @@ pub fn parse_collada<R: Read>(
         match utils::start_element(&mut reader, "COLLADA")? {
             Some(next_element) => {
                 match &*next_element.name.local_name {
-                    "library_animation_clips" => { unimplemented!(); }
-                    "library_animations" => { unimplemented!(); }
-                    "library_cameras" => { unimplemented!(); }
-                    "library_controllers" => { unimplemented!(); }
-                    "library_effects" => { unimplemented!(); }
-                    "library_force_fields" => { unimplemented!(); }
-                    "library_geometries" => { unimplemented!(); }
-                    "library_images" => { unimplemented!(); }
-                    "library_lights" => { unimplemented!(); }
-                    "library_materials" => { unimplemented!(); }
-                    "library_nodes" => { unimplemented!(); }
-                    "library_physics_materials" => { unimplemented!(); }
-                    "library_physics_models" => { unimplemented!(); }
-                    "library_physics_scenes" => { unimplemented!(); }
-                    "library_visual_scenes" => { unimplemented!(); }
+                    "library_animation_clips" => { utils::stub_out(&mut reader, "library_animation_clips")?; }
+                    "library_animations" => { utils::stub_out(&mut reader, "library_animations")?; }
+                    "library_cameras" => { utils::stub_out(&mut reader, "library_cameras")?; }
+                    "library_controllers" => { utils::stub_out(&mut reader, "library_controllers")?; }
+                    "library_effects" => { utils::stub_out(&mut reader, "library_effects")?; }
+                    "library_force_fields" => { utils::stub_out(&mut reader, "library_force_fields")?; }
+                    "library_geometries" => { utils::stub_out(&mut reader, "library_geometries")?; }
+                    "library_images" => { utils::stub_out(&mut reader, "library_images")?; }
+                    "library_lights" => { utils::stub_out(&mut reader, "library_lights")?; }
+                    "library_materials" => { utils::stub_out(&mut reader, "library_materials")?; }
+                    "library_nodes" => { utils::stub_out(&mut reader, "library_nodes")?; }
+                    "library_physics_materials" => { utils::stub_out(&mut reader, "library_physics_materials")?; }
+                    "library_physics_models" => { utils::stub_out(&mut reader, "library_physics_models")?; }
+                    "library_physics_scenes" => { utils::stub_out(&mut reader, "library_physics_scenes")?; }
+                    "library_visual_scenes" => { utils::stub_out(&mut reader, "library_visual_scenes")?; }
                     "scene" => {
-                        unimplemented!();
+                        utils::stub_out(&mut reader, "scene")?;
                         while let Some(extra) = parse_extras(&mut reader)? { extras.push(extra); }
                         break;
                     }
                     "extra" => {
-                        unimplemented!();
+                        extras.push(Extra::parse_element(&mut reader, next_element.attributes)?);
                         while let Some(extra) = parse_extras(&mut reader)? { extras.push(extra); }
                         break;
                     }
