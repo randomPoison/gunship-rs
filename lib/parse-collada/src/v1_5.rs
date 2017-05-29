@@ -191,8 +191,18 @@ pub struct Asset {
 // out to be a common pattern in COLLADA, we should add direct support for handling it to
 // `parse-collada-derive`.
 impl ColladaElement for Asset {
-    fn parse_element<R: Read>(reader: &mut EventReader<R>, attributes: Vec<OwnedAttribute>) -> Result<Asset> {
-        utils::verify_attributes(reader, "asset", attributes)?;
+    fn name_test(name: &str) -> bool {
+        name == "asset"
+    }
+
+    fn parse_element<R>(
+        reader: &mut EventReader<R>,
+        element_start: ElementStart,
+    ) -> Result<Asset>
+    where
+        R: Read,
+    {
+        utils::verify_attributes(reader, "asset", element_start.attributes)?;
 
         let mut contributors = Vec::default();
         let mut coverage = None;
@@ -423,7 +433,9 @@ impl ColladaElement for Asset {
         })
     }
 
-    fn name() -> &'static str { "asset" }
+    fn add_names(names: &mut Vec<&'static str>) {
+        names.push("asset");
+    }
 }
 
 /// Information about a contributor to an asset.
@@ -513,9 +525,19 @@ pub enum Altitude {
 }
 
 impl ColladaElement for Altitude {
-    fn parse_element<R: Read>(reader: &mut EventReader<R>, attributes: Vec<OwnedAttribute>) -> Result<Self> {
+    fn name_test(name: &str) -> bool {
+        name == "altitude"
+    }
+
+    fn parse_element<R>(
+        reader: &mut EventReader<R>,
+        element_start: ElementStart,
+    ) -> Result<Self>
+    where
+        R: Read,
+    {
         let mut mode = None;
-        for attribute in attributes {
+        for attribute in element_start.attributes {
             match &*attribute.name.local_name {
                 "mode" => {
                     mode = Some(attribute.value);
@@ -570,5 +592,7 @@ impl ColladaElement for Altitude {
         }
     }
 
-    fn name() -> &'static str { "altitude" }
+    fn add_names(names: &mut Vec<&'static str>) {
+        names.push("altitude");
+    }
 }

@@ -156,8 +156,18 @@ pub struct Asset {
 }
 
 impl ColladaElement for Asset {
-    fn parse_element<R: Read>(reader: &mut EventReader<R>, attributes: Vec<OwnedAttribute>) -> Result<Asset> {
-        utils::verify_attributes(reader, "asset", attributes)?;
+    fn name_test(name: &str) -> bool {
+        name == "asset"
+    }
+
+    fn parse_element<R>(
+        reader: &mut EventReader<R>,
+        element_start: ElementStart,
+    ) -> Result<Asset>
+    where
+        R: Read,
+    {
+        utils::verify_attributes(reader, "asset", element_start.attributes)?;
 
         let mut contributors = Vec::default();
         let mut created = None;
@@ -289,7 +299,9 @@ impl ColladaElement for Asset {
         })
     }
 
-    fn name() -> &'static str { "asset" }
+    fn add_names(names: &mut Vec<&'static str>) {
+        names.push("asset");
+    }
 }
 
 impl Into<v1_5::Asset> for Asset {
@@ -343,3 +355,142 @@ impl Into<v1_5::Contributor> for Contributor {
         }
     }
 }
+
+#[derive(Debug, Clone, ColladaElement)]
+#[name = "library_geometries"]
+pub struct LibraryGeometries {
+    #[attribute]
+    pub id: String,
+
+    #[attribute]
+    pub name: String,
+
+    #[child]
+    pub asset: Option<Asset>,
+
+    #[child]
+    #[required]
+    pub geometry: Vec<Geometry>,
+
+    #[child]
+    pub extra: Vec<Extra>,
+}
+
+#[derive(Debug, Clone)]
+// #[name = "geometry"]
+pub struct Geometry {
+    // #[attribute]
+    pub id: String,
+
+    // #[attribute]
+    pub name: String,
+
+    // #[child]
+    pub asset: Option<Asset>,
+
+    // #[child]
+    // #[group]
+    pub geometric_element: GeometricElement,
+
+    // #[child]
+    pub extra: Vec<Extra>,
+}
+
+impl ColladaElement for Geometry {
+    fn name_test(name: &str) -> bool {
+        name == "geometry"
+    }
+
+    fn parse_element<R>(
+        reader: &mut EventReader<R>,
+        element_start: ElementStart,
+    ) -> Result<Geometry>
+    where
+        R: Read
+    {
+        // TODO: Handle attributes.
+
+        let mut asset = None;
+        let mut geometric_element = None;
+        let mut extra = Vec::new();
+
+        ElementConfiguration {
+            name: "geometry",
+            children: &mut [
+                ChildConfiguration {
+                    name: "asset".eq,
+                    occurrences: Optional,
+                    action: &mut |reader, attributes| {
+                        asset = Some(Asset::parse_element(reader, attributes)?);
+                        Ok(())
+                    },
+                },
+
+                ChildConfiguration {
+                    occurrences: Required,
+                    name: GeometricElement::name_test,
+                    action: &mut |reader, attributes, name| {
+                        geometric_element = GeometricElement::parse_group(reader, attributes, name)?;
+                        Ok(())
+                    },
+                },
+
+                ChildConfiguration {
+                    name: "extra".eq,
+                    occurrences: Many,
+                    action: &mut |reader, attributes| {
+                        extra.push(Extra::parse_element(reader, attributes)?);
+                        Ok(())
+                    }
+                },
+            ],
+        }.parse(reader)?;
+    }
+
+    fn add_names(names: &mut Vec<&'static str>) {
+        names.push("geometry");
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum GeometricElement {
+    ConvexMesh(ConvexMesh),
+    Mesh(Mesh),
+    Spline(Spline),
+}
+
+impl ColladaElement for GeometricElement {
+    fn name_test(name: &str) -> bool {
+        ConvexMesh::name_test(name) || Mesh::name_test(name) || Spline::name_test(name)
+    }
+
+    fn parse_element<R>(
+        reader: &mut EventReader<R>,
+        element_start: ElementStart,
+    ) -> Result<GeometricElement>
+    where
+        R: Read,
+    {
+        match &*element_start.name.local_name {
+            ConvexMesh::name() => { unimplemented!(); },
+            Mesh::name() => { unimplemented!(); },
+            Spline::name() => { unimplemented!(); },
+            _ => panic!("Trying to parse an invalid group member {}", element_start.name.local_name),
+        }
+    }
+
+    fn add_names(names: &mut Vec<&'static str>) {
+        ConvexMesh::add_names(names);
+        Mesh::add_names(names);
+        Spline::add_names(names);
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ConvexMesh;
+
+#[derive(Debug, Clone)]
+pub struct Mesh;
+
+#[derive(Debug, Clone)]
+pub struct Spline;

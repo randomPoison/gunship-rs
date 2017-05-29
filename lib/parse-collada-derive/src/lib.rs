@@ -556,10 +556,6 @@ fn generate_impl(derive_input: DeriveInput) -> Result<quote::Tokens, String> {
 
                 #result_decl
             }
-
-            fn name() -> &'static str {
-                #element_name
-            }
         }
     })
 }

@@ -21,9 +21,26 @@ pub static PARSER_CONFIG: ParserConfig = ParserConfig {
 /// Helper trait for handling parsing. This is automatically generated for most types with the
 /// `parse-collada-derive` crate.
 pub trait ColladaElement: Sized {
-    fn parse_element<R: Read>(reader: &mut EventReader<R>, attributes: Vec<OwnedAttribute>) -> Result<Self>;
+    /// Tests whether `name` is a valid name for the element or group.
+    ///
+    /// This allows multiple elements to be grouped together in a single enum type.
+    fn name_test(name: &str) -> bool;
 
-    fn name() -> &'static str;
+    /// Parses the current element from the event stream.
+    ///
+    /// Implementation should panic if `element_start` isn't valid for the current element.
+    fn parse_element<R>(
+        reader: &mut EventReader<R>,
+        element_start: ElementStart,
+    ) -> Result<Self>
+    where
+        R: Read;
+
+    /// Adds all valid names for the current element to `names`.
+    ///
+    /// This allows both single elements and element groups to add their name(s) to the list of
+    /// expected names when returning an error message.
+    fn add_names(names: &mut Vec<&'static str>);
 }
 
 #[derive(Debug)]
@@ -63,11 +80,11 @@ impl<'a, R: 'a + Read> ElementConfiguration<'a, R> {
             while current_child < self.children.len() {
                 let child = &mut self.children[current_child];
 
-                if child.name == element.name.local_name {
+                if child.name(&*element.name.local_name) {
                     has_encountered_child = true;
 
                     // We've found a valid child, hooray! Allow it to run its parsing code.
-                    (child.action)(reader, element.attributes)?;
+                    (child.action)(reader, element)?;
 
                     // Either advance `current_child` or don't, depending on if it's allowed to repeat.
                     match child.occurrences {
@@ -130,9 +147,9 @@ impl<'a, R: 'a + Read> ElementConfiguration<'a, R> {
 }
 
 pub struct ChildConfiguration<'a, R: 'a + Read> {
-    pub name: &'static str,
-    pub occurrences: ChildOccurrences,
-    pub action: &'a mut FnMut(&mut EventReader<R>, Vec<OwnedAttribute>) -> Result<()>,
+    name: &'a Fn(&str) -> bool,
+    occurrences: ChildOccurrences,
+    action: &'a mut FnMut(&mut EventReader<R>, Vec<OwnedAttribute>) -> Result<()>,
 }
 
 pub fn parse<R: Read>(mut reader: EventReader<R>) -> Result<v1_5::Collada> {

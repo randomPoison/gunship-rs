@@ -71,7 +71,7 @@ use chrono::*;
 use std::fmt::{self, Display, Formatter};
 use std::io::Read;
 use std::num::ParseFloatError;
-use utils::{ColladaElement, StringListDisplay};
+use utils::{ColladaElement, ElementStart, StringListDisplay};
 use xml::common::Position;
 use xml::EventReader;
 use xml::attribute::OwnedAttribute;
@@ -385,8 +385,18 @@ pub enum UpAxis {
 }
 
 impl ColladaElement for UpAxis {
-    fn parse_element<R: Read>(reader: &mut EventReader<R>, attributes: Vec<OwnedAttribute>) -> Result<UpAxis> {
-        utils::verify_attributes(reader, "up_axis", attributes)?;
+    fn name_test(name: &str) -> bool {
+        name == "up_axis"
+    }
+
+    fn parse_element<R>(
+        reader: &mut EventReader<R>,
+        element_start: ElementStart,
+    ) -> Result<UpAxis>
+    where
+        R: Read,
+    {
+        utils::verify_attributes(reader, "up_axis", element_start.attributes)?;
         let text: String = utils::optional_text_contents(reader, "up_axis")?.unwrap_or_default();
         let parsed = match &*text {
             "X_UP" => { UpAxis::X }
@@ -406,7 +416,9 @@ impl ColladaElement for UpAxis {
         Ok(parsed)
     }
 
-    fn name() -> &'static str { "up_axis" }
+    fn add_names(names: &mut Vec<&'static str>) {
+        names.push("up_axis");
+    }
 }
 
 impl Default for UpAxis {
@@ -552,12 +564,22 @@ pub struct Technique {
 }
 
 impl ColladaElement for Technique {
-    fn parse_element<R: Read>(reader: &mut EventReader<R>, attributes: Vec<OwnedAttribute>) -> Result<Technique> {
+    fn name_test(name: &str) -> bool {
+        name == "technique"
+    }
+
+    fn parse_element<R>(
+        reader: &mut EventReader<R>,
+        element_start: ElementStart,
+    ) -> Result<Technique>
+    where
+        R: Read,
+    {
         let mut profile = None;
         let mut xmlns = None;
         let mut data = Vec::default();
 
-        for attribute in attributes {
+        for attribute in element_start.attributes {
             match &*attribute.name.local_name {
                 "profile" => { profile = Some(attribute.value); }
 
@@ -617,7 +639,7 @@ impl ColladaElement for Technique {
         })
     }
 
-    fn name() -> &'static str {
-        "technique"
+    fn add_names(names: &mut Vec<&'static str>) {
+        names.push("technique");
     }
 }
