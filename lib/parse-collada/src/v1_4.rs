@@ -18,7 +18,7 @@ pub fn parse_collada<R: Read>(
         match utils::start_element(reader, "COLLADA")? {
             Some(next_element) => {
                 if next_element.name.local_name == "extra" {
-                    let extra = Extra::parse_element(reader, next_element.attributes)?;
+                    let extra = Extra::parse_element(reader, next_element)?;
                     Ok(Some(extra))
                 } else {
                     return Err(Error {
@@ -37,8 +37,8 @@ pub fn parse_collada<R: Read>(
 
     // The next event must be the `<asset>` tag. No text data is allowed, and
     // whitespace/comments aren't emitted.
-    let (_name, attributes, _) = utils::required_start_element(&mut reader, "COLLADA", "asset")?;
-    let asset = Asset::parse_element(&mut reader, attributes)?;
+    let start_element = utils::required_start_element(&mut reader, "COLLADA", "asset")?;
+    let asset = Asset::parse_element(&mut reader, start_element)?;
 
     let mut extras = Vec::new();
 
@@ -67,7 +67,7 @@ pub fn parse_collada<R: Read>(
                         break;
                     }
                     "extra" => {
-                        extras.push(Extra::parse_element(&mut reader, next_element.attributes)?);
+                        extras.push(Extra::parse_element(&mut reader, next_element)?);
                         while let Some(extra) = parse_extras(&mut reader)? { extras.push(extra); }
                         break;
                     }
@@ -183,33 +183,37 @@ impl ColladaElement for Asset {
             name: "asset",
             children: &mut [
                 ChildConfiguration {
-                    name: "contributor",
+                    name: &|name| { name == "contributor" },
                     occurrences: Many,
 
-                    action: &mut |reader, attributes| {
-                        let contributor = Contributor::parse_element(reader, attributes)?;
+                    action: &mut |reader, start_element| {
+                        let contributor = Contributor::parse_element(reader, start_element)?;
                         contributors.push(contributor);
                         Ok(())
                     },
+
+                    add_names: &|names| { names.push("contributor"); },
                 },
 
                 ChildConfiguration {
-                    name: "created",
+                    name: &|name| { name == "created" },
                     occurrences: Required,
 
-                    action: &mut |reader, attributes| {
-                        utils::verify_attributes(reader, "created", attributes)?;
+                    action: &mut |reader, start_element| {
+                        utils::verify_attributes(reader, "created", start_element.attributes)?;
                         created = utils::optional_text_contents(reader, "created")?;
                         Ok(())
                     },
+
+                    add_names: &|names| { names.push("created"); },
                 },
 
                 ChildConfiguration {
-                    name: "keywords",
+                    name: &|name| { name == "keywords" },
                     occurrences: Optional,
 
-                    action: &mut |reader, attributes| {
-                        utils::verify_attributes(reader, "keywords", attributes)?;
+                    action: &mut |reader, start_element| {
+                        utils::verify_attributes(reader, "keywords", start_element.attributes)?;
                         if let Some(keywords_string) = utils::optional_text_contents::<_, String>(reader, "keywords")? {
                             keywords = keywords_string
                                 .split_whitespace()
@@ -218,70 +222,84 @@ impl ColladaElement for Asset {
                         }
                         Ok(())
                     },
+
+                    add_names: &|names| { names.push("keywords"); },
                 },
 
                 ChildConfiguration {
-                    name: "modified",
+                    name: &|name| { name == "modified" },
                     occurrences: Required,
 
-                    action: &mut |reader, attributes| {
-                        utils::verify_attributes(reader, "modified", attributes)?;
+                    action: &mut |reader, start_element| {
+                        utils::verify_attributes(reader, "modified", start_element.attributes)?;
                         modified = utils::optional_text_contents(reader, "modified")?;
                         Ok(())
                     },
+
+                    add_names: &|names| { names.push("modified"); },
                 },
 
                 ChildConfiguration {
-                    name: "revision",
+                    name: &|name| { name == "revision" },
                     occurrences: Optional,
 
-                    action: &mut |reader, attributes| {
-                        utils::verify_attributes(reader, "revision", attributes)?;
+                    action: &mut |reader, start_element| {
+                        utils::verify_attributes(reader, "revision", start_element.attributes)?;
                         revision = utils::optional_text_contents(reader, "revision")?;
                         Ok(())
                     },
+
+                    add_names: &|names| { names.push("revision"); },
                 },
 
                 ChildConfiguration {
-                    name: "subject",
+                    name: &|name| { name == "subject" },
                     occurrences: Optional,
 
-                    action: &mut |reader, attributes| {
-                        utils::verify_attributes(reader, "subject", attributes)?;
+                    action: &mut |reader, start_element| {
+                        utils::verify_attributes(reader, "subject", start_element.attributes)?;
                         subject = utils::optional_text_contents(reader, "subject")?;
                         Ok(())
                     },
+
+                    add_names: &|names| { names.push("subject"); },
                 },
 
                 ChildConfiguration {
-                    name: "title",
+                    name: &|name| { name == "title" },
                     occurrences: Optional,
 
-                    action: &mut |reader, attributes| {
-                        utils::verify_attributes(reader, "title", attributes)?;
+                    action: &mut |reader, start_element| {
+                        utils::verify_attributes(reader, "title", start_element.attributes)?;
                         title = utils::optional_text_contents(reader, "title")?;
                         Ok(())
                     },
+
+                    add_names: &|names| { names.push("title"); },
                 },
 
                 ChildConfiguration {
-                    name: "unit",
+                    name: &|name| { name == "unit" },
                     occurrences: Optional,
 
-                    action: &mut |reader, attributes| {
-                        unit = Some(Unit::parse_element(reader, attributes)?);
+                    action: &mut |reader, start_element| {
+                        unit = Some(Unit::parse_element(reader, start_element)?);
                         Ok(())
                     },
+
+                    add_names: &|names| { names.push("unit"); },
                 },
 
                 ChildConfiguration {
-                    name: "up_axis",
+                    name: &|name| { name == "up_axis" },
                     occurrences: Optional,
 
-                    action: &mut |reader, attributes| {
-                        up_axis = Some(UpAxis::parse_element(reader, attributes)?);
+                    action: &mut |reader, start_element| {
+                        up_axis = Some(UpAxis::parse_element(reader, start_element)?);
                         Ok(())
                     },
+
+                    add_names: &|names| { names.push("up_axis"); },
                 },
             ],
         }.parse_children(reader)?;
@@ -418,33 +436,44 @@ impl ColladaElement for Geometry {
             name: "geometry",
             children: &mut [
                 ChildConfiguration {
-                    name: "asset".eq,
+                    name: &|name| { name == "asset" },
                     occurrences: Optional,
-                    action: &mut |reader, attributes| {
-                        asset = Some(Asset::parse_element(reader, attributes)?);
+                    action: &mut |reader, element_start| {
+                        asset = Some(Asset::parse_element(reader, element_start)?);
                         Ok(())
                     },
+                    add_names: &|names| { names.push("asset"); },
                 },
 
                 ChildConfiguration {
                     occurrences: Required,
-                    name: GeometricElement::name_test,
-                    action: &mut |reader, attributes, name| {
-                        geometric_element = GeometricElement::parse_group(reader, attributes, name)?;
+                    name: &GeometricElement::name_test,
+                    action: &mut |reader, element_start| {
+                        geometric_element = Some(GeometricElement::parse_element(reader, element_start)?);
                         Ok(())
                     },
+                    add_names: &GeometricElement::add_names,
                 },
 
                 ChildConfiguration {
-                    name: "extra".eq,
+                    name: &|name| { name == "extra" },
                     occurrences: Many,
-                    action: &mut |reader, attributes| {
-                        extra.push(Extra::parse_element(reader, attributes)?);
+                    action: &mut |reader, start_element| {
+                        extra.push(Extra::parse_element(reader, start_element)?);
                         Ok(())
-                    }
+                    },
+                    add_names: &|names| { names.push("extra"); },
                 },
             ],
-        }.parse(reader)?;
+        }.parse_children(reader)?;
+
+        Ok(Geometry {
+            id: String::from("TODO: please implement me"),
+            name: String::from("TODO: please implement me"),
+            asset,
+            geometric_element: geometric_element.expect("Required child `geometric_element` was `None`"),
+            extra,
+        })
     }
 
     fn add_names(names: &mut Vec<&'static str>) {
@@ -471,11 +500,14 @@ impl ColladaElement for GeometricElement {
     where
         R: Read,
     {
-        match &*element_start.name.local_name {
-            ConvexMesh::name() => { unimplemented!(); },
-            Mesh::name() => { unimplemented!(); },
-            Spline::name() => { unimplemented!(); },
-            _ => panic!("Trying to parse an invalid group member {}", element_start.name.local_name),
+        if ConvexMesh::name_test(&*element_start.name.local_name) {
+            unimplemented!();
+        } else if Mesh::name_test(&*element_start.name.local_name) {
+            unimplemented!();
+        } else if Spline::name_test(&*element_start.name.local_name) {
+            unimplemented!();
+        } else {
+            panic!("Unexpected group member for `GeometricElement` {}", element_start.name.local_name);
         }
     }
 
@@ -486,11 +518,14 @@ impl ColladaElement for GeometricElement {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, ColladaElement)]
+#[name = "convex_mesh"]
 pub struct ConvexMesh;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, ColladaElement)]
+#[name = "mesh"]
 pub struct Mesh;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, ColladaElement)]
+#[name = "spline"]
 pub struct Spline;

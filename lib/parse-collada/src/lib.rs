@@ -133,7 +133,7 @@ pub enum ErrorKind {
         ///
         /// If there is only one expected child then it is a required child. If there are multiple
         /// expected children then at least one of them is required.
-        expected: &'static str,
+        expected: Vec<&'static str>,
     },
 
     /// An element was missing required text data.
@@ -274,8 +274,16 @@ impl Display for ErrorKind {
                 write!(formatter, "<{}> is missing the required attribute \"{}\"", element, attribute)
             }
 
-            ErrorKind::MissingElement { expected, ref parent } => {
-                write!(formatter, "<{}> is missing a required child element: {}", parent, expected)
+            ErrorKind::MissingElement { ref expected, ref parent } => {
+                if expected.len() == 1 {
+                    write!(formatter, "<{}> is missing a required child element: {}", parent, expected[0])
+                } else {
+                    write!(formatter, "<{}> is missing a required child element (may be one of {}", parent, expected[0])?;
+                    for element in &expected[1..] {
+                        write!(formatter, ", {}", element)?;
+                    }
+                    write!(formatter, ")")
+                }
             }
 
             ErrorKind::MissingValue { element } => {

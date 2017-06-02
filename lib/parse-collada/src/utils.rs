@@ -80,7 +80,7 @@ impl<'a, R: 'a + Read> ElementConfiguration<'a, R> {
             while current_child < self.children.len() {
                 let child = &mut self.children[current_child];
 
-                if child.name(&*element.name.local_name) {
+                if (child.name)(&*element.name.local_name) {
                     has_encountered_child = true;
 
                     // We've found a valid child, hooray! Allow it to run its parsing code.
@@ -124,11 +124,14 @@ impl<'a, R: 'a + Read> ElementConfiguration<'a, R> {
         // Verify that there are no remaining required children.
         for child in &self.children[current_child..] {
             if child.occurrences == ChildOccurrences::Required {
+                let mut expected = Vec::new();
+                (child.add_names)(&mut expected);
+
                 return Err(Error {
                     position: root_position,
                     kind: ErrorKind::MissingElement {
                         parent: self.name,
-                        expected: child.name,
+                        expected: expected,
                     },
                 });
             }
@@ -140,16 +143,17 @@ impl<'a, R: 'a + Read> ElementConfiguration<'a, R> {
     fn collect_expected_children(&self) -> Vec<&'static str> {
         let mut names = Vec::with_capacity(self.children.len());
         for child in self.children.iter() {
-            names.push(child.name);
+            (child.add_names)(&mut names);
         }
         names
     }
 }
 
 pub struct ChildConfiguration<'a, R: 'a + Read> {
-    name: &'a Fn(&str) -> bool,
-    occurrences: ChildOccurrences,
-    action: &'a mut FnMut(&mut EventReader<R>, Vec<OwnedAttribute>) -> Result<()>,
+    pub name: &'a Fn(&str) -> bool,
+    pub occurrences: ChildOccurrences,
+    pub action: &'a mut FnMut(&mut EventReader<R>, ElementStart) -> Result<()>,
+    pub add_names: &'a Fn(&mut Vec<&'static str>),
 }
 
 pub fn parse<R: Read>(mut reader: EventReader<R>) -> Result<v1_5::Collada> {
@@ -251,7 +255,7 @@ pub fn required_start_element<R: Read>(
     reader: &mut EventReader<R>,
     parent: &'static str,
     search_name: &'static str,
-) -> Result<(OwnedName, Vec<OwnedAttribute>, Namespace)> {
+) -> Result<ElementStart> {
     match reader.next()? {
         StartElement { name, attributes, namespace } => {
             if search_name != name.local_name {
@@ -265,7 +269,7 @@ pub fn required_start_element<R: Read>(
                 })
             }
 
-            return Ok((name, attributes, namespace));
+            return Ok(ElementStart { name, attributes });
         }
 
         EndElement { name } => {
@@ -275,7 +279,7 @@ pub fn required_start_element<R: Read>(
                 position: reader.position(),
                 kind: ErrorKind::MissingElement {
                     parent: parent,
-                    expected: search_name,
+                    expected: vec![search_name],
                 },
             })
         }
@@ -305,7 +309,7 @@ pub fn start_element<R: Read>(
 ) -> Result<Option<ElementStart>> {
     match reader.next()? {
         StartElement { name, attributes, namespace: _ } => {
-            return Ok(Some(ElementStart { name: name, attributes: attributes }));
+            return Ok(Some(ElementStart { name, attributes }));
         }
 
         EndElement { name } => {

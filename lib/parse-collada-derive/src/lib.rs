@@ -48,6 +48,7 @@ fn process_derive_input(input: DeriveInput) -> Result<ElementConfiguration, Stri
     // ----------------------------------------------------------------------------------
     let mut children = Vec::new();
     let mut attributes = Vec::new();
+    let mut stub_me_out = false;
 
     let fields = match input.body {
         Body::Enum(_) => { return Err("`#[derive(ColladaElement)]` does not support enum types")?; }
@@ -56,7 +57,10 @@ fn process_derive_input(input: DeriveInput) -> Result<ElementConfiguration, Stri
 
         Body::Struct(VariantData::Tuple(_)) => { return Err("`#[derive(ColladaElement)]` does not support tuple structs")?; }
 
-        Body::Struct(VariantData::Unit) => { Vec::new() }
+        Body::Struct(VariantData::Unit) => {
+            stub_me_out = true;
+            Vec::new()
+        }
     };
 
     for field in fields {
@@ -216,6 +220,8 @@ fn process_derive_input(input: DeriveInput) -> Result<ElementConfiguration, Stri
         element_name: element_name,
         attributes: attributes,
         children: children,
+
+        stub_me_out,
     })
 }
 
@@ -224,6 +230,9 @@ struct ElementConfiguration {
     element_name: String,
     attributes: Vec<Attribute>,
     children: Vec<Child>,
+
+    /// Temporary flag to allow us to stub out elements until the entire spec is covered.
+    stub_me_out: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -278,7 +287,7 @@ impl ToTokens for ChildOccurrences {
 }
 
 fn generate_impl(derive_input: DeriveInput) -> Result<quote::Tokens, String> {
-    let ElementConfiguration { struct_ident, element_name, attributes, children } = process_derive_input(derive_input)?;
+    let ElementConfiguration { struct_ident, element_name, attributes, children, stub_me_out } = process_derive_input(derive_input)?;
 
     // Generate declarations for the member variables of the struct.
     // -------------------------------------------------------------
@@ -345,7 +354,7 @@ fn generate_impl(derive_input: DeriveInput) -> Result<quote::Tokens, String> {
             });
 
         quote! {
-            for attribute in attributes {
+            for attribute in element_start.attributes {
                 match &*attribute.name.local_name {
                     #( #matches )*
 
@@ -366,7 +375,7 @@ fn generate_impl(derive_input: DeriveInput) -> Result<quote::Tokens, String> {
         }
     } else {
         quote! {
-            utils::verify_attributes(reader, #element_name, attributes)?;
+            utils::verify_attributes(reader, #element_name, element_start.attributes)?;
         }
     };
 
@@ -380,13 +389,27 @@ fn generate_impl(derive_input: DeriveInput) -> Result<quote::Tokens, String> {
                 let name = match *data_type {
                     DataType::TextData(_) => {
                         quote! {
-                            #element_name
+                            &mut |test_name| { test_name == #element_name }
                         }
                     }
 
                     DataType::ColladaElement(ref ty) => {
                         quote! {
-                            #ty::name()
+                            &mut |test_name| { #ty::name_test(test_name) }
+                        }
+                    }
+                };
+
+                let add_names = match *data_type {
+                    DataType::TextData(_) => {
+                        quote! {
+                            &|names| { names.push(#element_name); }
+                        }
+                    }
+
+                    DataType::ColladaElement(ref ty) => {
+                        quote! {
+                            &|names| { #ty::add_names(names); }
                         }
                     }
                 };
@@ -394,21 +417,21 @@ fn generate_impl(derive_input: DeriveInput) -> Result<quote::Tokens, String> {
                 let handle_result = match (occurrences, data_type) {
                     (ChildOccurrences::Optional, &DataType::TextData(_)) => {
                         quote! {
-                            utils::verify_attributes(reader, #element_name, attributes)?;
+                            utils::verify_attributes(reader, #element_name, element_start.attributes)?;
                             #member_name = utils::optional_text_contents(reader, #element_name)?;
                         }
                     }
 
                     (ChildOccurrences::OptionalWithDefault, &DataType::TextData(_)) => {
                         quote! {
-                            utils::verify_attributes(reader, #element_name, attributes)?;
+                            utils::verify_attributes(reader, #element_name, element_start.attributes)?;
                             #member_name = utils::optional_text_contents(reader, #element_name)?;
                         }
                     }
 
                     (ChildOccurrences::Required, &DataType::TextData(_)) => {
                         quote! {
-                            utils::verify_attributes(reader, #element_name, attributes)?;
+                            utils::verify_attributes(reader, #element_name, element_start.attributes)?;
                             let result = utils::required_text_contents(reader, #element_name)?;
                             #member_name = Some(result);
                         }
@@ -416,7 +439,7 @@ fn generate_impl(derive_input: DeriveInput) -> Result<quote::Tokens, String> {
 
                     (ChildOccurrences::OptionalMany, &DataType::TextData(_)) => {
                         quote! {
-                            utils::verify_attributes(reader, #element_name, attributes)?;
+                            utils::verify_attributes(reader, #element_name, element_start.attributes)?;
                             if let Some(result) = utils::optional_text_contents(reader, #element_name)? {
                                 #member_name.push(result.parse()?);
                             }
@@ -425,7 +448,7 @@ fn generate_impl(derive_input: DeriveInput) -> Result<quote::Tokens, String> {
 
                     (ChildOccurrences::RequiredMany, &DataType::TextData(_)) => {
                         quote! {
-                            utils::verify_attributes(reader, #element_name, attributes)?;
+                            utils::verify_attributes(reader, #element_name, element_start.attributes)?;
                             if let Some(result) = utils::optional_text_contents(reader, #element_name)? {
                                 #member_name.push(result.parse()?);
                             }
@@ -434,35 +457,35 @@ fn generate_impl(derive_input: DeriveInput) -> Result<quote::Tokens, String> {
 
                     (ChildOccurrences::Optional, &DataType::ColladaElement(ref ident)) => {
                         quote! {
-                            let result = #ident::parse_element(reader, attributes)?;
+                            let result = #ident::parse_element(reader, element_start)?;
                             #member_name = Some(result);
                         }
                     }
 
                     (ChildOccurrences::OptionalWithDefault, &DataType::ColladaElement(ref ident)) => {
                         quote! {
-                            let result = #ident::parse_element(reader, attributes)?;
+                            let result = #ident::parse_element(reader, element_start)?;
                             #member_name = Some(result);
                         }
                     }
 
                     (ChildOccurrences::Required, &DataType::ColladaElement(ref ident)) => {
                         quote! {
-                            let result = #ident::parse_element(reader, attributes)?;
+                            let result = #ident::parse_element(reader, element_start)?;
                             #member_name = Some(result);
                         }
                     }
 
                     (ChildOccurrences::OptionalMany, &DataType::ColladaElement(ref ident)) => {
                         quote! {
-                            let result = #ident::parse_element(reader, attributes)?;
+                            let result = #ident::parse_element(reader, element_start)?;
                             #member_name.push(result);
                         }
                     }
 
                     (ChildOccurrences::RequiredMany, &DataType::ColladaElement(ref ident)) => {
                         quote! {
-                            let result = #ident::parse_element(reader, attributes)?;
+                            let result = #ident::parse_element(reader, element_start)?;
                             #member_name.push(result);
                         }
                     }
@@ -473,10 +496,12 @@ fn generate_impl(derive_input: DeriveInput) -> Result<quote::Tokens, String> {
                         name: #name,
                         occurrences: #occurrences,
 
-                        action: &mut |reader, attributes| {
+                        action: &mut |reader, element_start: ::utils::ElementStart| {
                             #handle_result
                             Ok(())
                         },
+
+                        add_names: #add_names,
                     }
                 }
             });
@@ -535,14 +560,24 @@ fn generate_impl(derive_input: DeriveInput) -> Result<quote::Tokens, String> {
         }
     };
 
-    // Put all the pieces together.
-    // ----------------------------
-    Ok(quote! {
-        impl ::utils::ColladaElement for #struct_ident {
+    let body = if stub_me_out {
+        quote! {
             #[allow(unused_imports)]
             fn parse_element<R: ::std::io::Read>(
                 reader: &mut ::xml::reader::EventReader<R>,
-                attributes: Vec<::xml::attribute::OwnedAttribute>
+                _: ::utils::ElementStart,
+            ) -> Result<Self> {
+                ::utils::stub_out(reader, #element_name)?;
+
+                Ok(Self {})
+            }
+        }
+    } else {
+        quote! {
+            #[allow(unused_imports)]
+            fn parse_element<R: ::std::io::Read>(
+                reader: &mut ::xml::reader::EventReader<R>,
+                element_start: ::utils::ElementStart,
             ) -> Result<Self> {
                 use std::str::FromStr;
                 use utils::*;
@@ -555,6 +590,22 @@ fn generate_impl(derive_input: DeriveInput) -> Result<quote::Tokens, String> {
                 #children_impl
 
                 #result_decl
+            }
+        }
+    };
+
+    // Put all the pieces together.
+    // ----------------------------
+    Ok(quote! {
+        impl ::utils::ColladaElement for #struct_ident {
+            fn name_test(name: &str) -> bool {
+                name == #element_name
+            }
+
+            #body
+
+            fn add_names(names: &mut Vec<&'static str>) {
+                names.push(#element_name);
             }
         }
     })

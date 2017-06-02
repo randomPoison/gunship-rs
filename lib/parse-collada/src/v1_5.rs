@@ -15,8 +15,8 @@ use xml::reader::XmlEvent::*;
 pub fn parse_collada<R: Read>(mut reader: EventReader<R>, version: String, base: Option<AnyUri>) -> Result<Collada> {
     // The next event must be the `<asset>` tag. No text data is allowed, and
     // whitespace/comments aren't emitted.
-    let (_name, attributes, _) = utils::required_start_element(&mut reader, "COLLADA", "asset")?;
-    let asset = Asset::parse_element(&mut reader, attributes)?;
+    let start_element = utils::required_start_element(&mut reader, "COLLADA", "asset")?;
+    let asset = Asset::parse_element(&mut reader, start_element)?;
 
     // Eat any events until we get to the `</COLLADA>` tag.
     // TODO: Actually parse the body of the document.
@@ -220,60 +220,68 @@ impl ColladaElement for Asset {
             name: "asset",
             children: &mut [
                 ChildConfiguration {
-                    name: "contributor",
+                    name: &|name| { name == "contributor" },
                     occurrences: Many,
 
-                    action: &mut |reader, attributes| {
-                        let contributor = Contributor::parse_element(reader, attributes)?;
+                    action: &mut |reader, element_start| {
+                        let contributor = Contributor::parse_element(reader, element_start)?;
                         contributors.push(contributor);
                         Ok(())
                     },
+
+                    add_names: &|names| { names.push("contributor"); },
                 },
 
                 ChildConfiguration {
-                    name: "coverage",
+                    name: &|name| { name == "coverage" },
                     occurrences: Optional,
 
-                    action: &mut |reader, attributes| {
-                        utils::verify_attributes(reader, "coverage", attributes)?;
+                    action: &mut |reader, element_start| {
+                        utils::verify_attributes(reader, "coverage", element_start.attributes)?;
 
                         ElementConfiguration {
                             name: "coverage",
                             children: &mut [
                                 ChildConfiguration {
-                                    name: "geographic_location",
+                                    name: &|name| { name == "geographic_location" },
                                     occurrences: Optional,
 
-                                    action: &mut |reader, attributes| {
+                                    action: &mut |reader, element_start| {
                                         coverage = Some(GeographicLocation::parse_element(
                                             reader,
-                                            attributes,
+                                            element_start,
                                         )?);
                                         Ok(())
                                     },
+
+                                    add_names: &|names| { names.push("geographic_location"); },
                                 }
                             ],
                         }.parse_children(reader)
                     },
+
+                    add_names: &|names| { names.push("coverage"); },
                 },
 
                 ChildConfiguration {
-                    name: "created",
+                    name: &|name| { name == "created" },
                     occurrences: Required,
 
-                    action: &mut |reader, attributes| {
-                        utils::verify_attributes(reader, "created", attributes)?;
+                    action: &mut |reader, element_start| {
+                        utils::verify_attributes(reader, "created", element_start.attributes)?;
                         created = utils::optional_text_contents(reader, "created")?;
                         Ok(())
                     },
+
+                    add_names: &|names| { names.push("created"); },
                 },
 
                 ChildConfiguration {
-                    name: "keywords",
+                    name: &|name| { name == "keywords" },
                     occurrences: Optional,
 
-                    action: &mut |reader, attributes| {
-                        utils::verify_attributes(reader, "keywords", attributes)?;
+                    action: &mut |reader, element_start| {
+                        utils::verify_attributes(reader, "keywords", element_start.attributes)?;
                         if let Some(keywords_string) = utils::optional_text_contents::<_, String>(reader, "keywords")? {
                             keywords = keywords_string
                                 .split_whitespace()
@@ -282,61 +290,71 @@ impl ColladaElement for Asset {
                         }
                         Ok(())
                     },
+
+                    add_names: &|names| { names.push("keywords"); },
                 },
 
                 ChildConfiguration {
-                    name: "modified",
+                    name: &|name| { name == "modified" },
                     occurrences: Required,
 
-                    action: &mut |reader, attributes| {
-                        utils::verify_attributes(reader, "modified", attributes)?;
+                    action: &mut |reader, element_start| {
+                        utils::verify_attributes(reader, "modified", element_start.attributes)?;
                         modified = utils::optional_text_contents(reader, "modified")?;
                         Ok(())
                     },
+
+                    add_names: &|names| { names.push("modified"); },
                 },
 
                 ChildConfiguration {
-                    name: "revision",
+                    name: &|name| { name == "revision" },
                     occurrences: Optional,
 
-                    action: &mut |reader, attributes| {
-                        utils::verify_attributes(reader, "revision", attributes)?;
+                    action: &mut |reader, element_start| {
+                        utils::verify_attributes(reader, "revision", element_start.attributes)?;
                         revision = utils::optional_text_contents(reader, "revision")?;
                         Ok(())
                     },
+
+                    add_names: &|names| { names.push("revision"); },
                 },
 
                 ChildConfiguration {
-                    name: "subject",
+                    name: &|name| { name == "subject" },
                     occurrences: Optional,
 
-                    action: &mut |reader, attributes| {
-                        utils::verify_attributes(reader, "subject", attributes)?;
+                    action: &mut |reader, element_start| {
+                        utils::verify_attributes(reader, "subject", element_start.attributes)?;
                         subject = utils::optional_text_contents(reader, "subject")?;
                         Ok(())
                     },
+
+                    add_names: &|names| { names.push("subject"); },
                 },
 
                 ChildConfiguration {
-                    name: "title",
+                    name: &|name| { name == "title" },
                     occurrences: Optional,
 
-                    action: &mut |reader, attributes| {
-                        utils::verify_attributes(reader, "title", attributes)?;
+                    action: &mut |reader, element_start| {
+                        utils::verify_attributes(reader, "title", element_start.attributes)?;
                         title = utils::optional_text_contents(reader, "title")?;
                         Ok(())
                     },
+
+                    add_names: &|names| { names.push("title"); },
                 },
 
                 ChildConfiguration {
-                    name: "unit",
+                    name: &|name| { name == "unit" },
                     occurrences: Optional,
 
-                    action: &mut |reader, attributes| {
+                    action: &mut |reader, element_start| {
                         let mut unit_attrib = None;
                         let mut meter_attrib = None;
 
-                        for attribute in attributes {
+                        for attribute in element_start.attributes {
                             match &*attribute.name.local_name {
                                 "name" => {
                                     // TODO: Validate that this follows the xsd:NMTOKEN format.
@@ -376,14 +394,16 @@ impl ColladaElement for Asset {
 
                         utils::end_element(reader, "unit")
                     },
+
+                    add_names: &|names| { names.push("unit"); },
                 },
 
                 ChildConfiguration {
-                    name: "up_axis",
+                    name: &|name| { name == "up_axis" },
                     occurrences: Optional,
 
-                    action: &mut |reader, attributes| {
-                        utils::verify_attributes(reader, "up_axis", attributes)?;
+                    action: &mut |reader, element_start| {
+                        utils::verify_attributes(reader, "up_axis", element_start.attributes)?;
                         let text: String = utils::optional_text_contents(reader, "up_axis")?.unwrap_or_default();
                         let parsed = match &*text {
                             "X_UP" => { UpAxis::X }
@@ -403,17 +423,21 @@ impl ColladaElement for Asset {
                         up_axis = Some(parsed);
                         Ok(())
                     },
+
+                    add_names: &|names| { names.push("up_axis"); },
                 },
 
                 ChildConfiguration {
-                    name: "extra",
+                    name: &|name| { name == "extra" },
                     occurrences: Many,
 
-                    action: &mut |reader, attributes| {
-                        let extra = Extra::parse_element(reader, attributes)?;
+                    action: &mut |reader, element_start| {
+                        let extra = Extra::parse_element(reader, element_start)?;
                         extras.push(extra);
                         Ok(())
                     },
+
+                    add_names: &|names| { names.push("extra"); },
                 }
             ],
         }.parse_children(reader)?;
