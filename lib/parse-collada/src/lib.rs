@@ -74,7 +74,6 @@ use std::num::ParseFloatError;
 use utils::{ColladaElement, ElementStart, StringListDisplay};
 use xml::common::Position;
 use xml::EventReader;
-use xml::attribute::OwnedAttribute;
 
 mod utils;
 mod v1_4;

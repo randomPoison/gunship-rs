@@ -6,7 +6,6 @@ use std::str::FromStr;
 use xml::attribute::OwnedAttribute;
 use xml::common::Position;
 use xml::name::OwnedName;
-use xml::namespace::Namespace;
 use xml::reader::{EventReader, ParserConfig};
 use xml::reader::XmlEvent::*;
 
