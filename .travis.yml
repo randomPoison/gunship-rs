@@ -7,7 +7,6 @@ rust:
 script:
   - (cd lib/bootstrap_rs && cargo build)
   - (cd lib/bootstrap_rs && cargo build --example window)
-  - (cd lib/parse-collada && cargo test)
 matrix:
   allow_failures:
     - rust: stable
