@@ -1,7 +1,0 @@
-[package]
-name = "parse_xml"
-version = "0.2.0"
-authors = ["David LeGare <excaliburhissheath@gmail.com>"]
-
-[dependencies]
-unicode-segmentation = "*"
