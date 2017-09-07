@@ -6,10 +6,6 @@
 //! the main difference being that it is much more poorly constructed and is being developed by
 //! someone much less OpenGL experience.
 
-#![feature(associated_consts)]
-#![feature(pub_restricted)]
-
-extern crate bootstrap_rs as bootstrap;
 extern crate bootstrap_gl as gl;
 
 use context::{Context, ContextInner};

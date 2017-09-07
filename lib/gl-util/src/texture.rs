@@ -29,14 +29,28 @@ impl Texture2d {
         let context = context.raw();
         let _guard = ::context::ContextGuard::new(context);
 
-        let expected_pixels = width * height * data_format.elements() / T::ELEMENTS;
+        // It's possible for multiple of the raw elements of `data` to make a single pixel, e.g.
+        // if `T` is `u8` and `data_format` is `TextureFormat::Rgba`, then 4 of the elements in
+        // `data` will make up one pixel. We account for that by determining how many data
+        // elements make up one pixel.
         assert!(
-            expected_pixels == data.len(),
+            data_format.elements() >= T::ELEMENTS,
+            "Cannot represent a data format with a data type that has more elements"
+        );
+        let data_elements_per_pixel = data_format.elements() / T::ELEMENTS;
+
+        // Ensure that the information passed in is consistent.
+        let expected_pixels = width * height;
+        let actual_pixels = data.len() / data_elements_per_pixel;
+        assert_eq!(
+            expected_pixels,
+            actual_pixels,
             "Wrong number of pixels in texture, width: {}, height: {}, expected pixels: {}, actual pixels: {}",
             width,
             height,
             expected_pixels,
-            data.len());
+            data.len(),
+        );
 
         let mut texture_object = TextureObject::null();
         unsafe { gl::gen_textures(1, &mut texture_object); }

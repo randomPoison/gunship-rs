@@ -4,9 +4,6 @@ version = "0.0.0"
 authors = ["David LeGare <excaliburhissheath@gmail.com>"]
 build = "build.rs"
 
-[dependencies]
-cell-extras = { git = "https://github.com/excaliburHisSheath/cell-extras" }
-
 [target.'cfg(target_os = "windows")'.dependencies]
 winapi = "*"
 user32-sys = "*"
@@ -16,6 +13,7 @@ gdi32-sys = "0.2"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc = "0.2"
+cell-extras = { git = "https://github.com/excaliburHisSheath/cell-extras" }
 cocoa = { git = "https://github.com/excaliburHisSheath/cocoa-rs" }
 core-graphics = "0.3"
 core-foundation = "0.2"

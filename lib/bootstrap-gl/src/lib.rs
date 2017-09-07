@@ -12,7 +12,6 @@
 //! parameters with special enum types that only contain variants that are valid options for that
 //! function.
 
-#![feature(const_fn)]
 #![allow(bad_style)]
 
 #[macro_use]

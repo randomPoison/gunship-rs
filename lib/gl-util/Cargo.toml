@@ -6,7 +6,6 @@ authors = ["David LeGare <excaliburhissheath@gmail.com>"]
 
 [dependencies]
 bootstrap-gl = { version = "0.1", path = "../bootstrap-gl" }
-bootstrap_rs = { version = "0.0", path = "../bootstrap_rs" }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 user32-sys = "0.1"

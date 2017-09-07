@@ -1,4 +1,3 @@
-use bootstrap::window::Window;
 use gl;
 use gl::*;
 use std::cell::RefCell;
@@ -13,14 +12,8 @@ pub struct Context {
 }
 
 impl Context {
-    /// Creates a new rendering context for the specified window.
-    pub fn from_window(window: &Window) -> Result<Context, Error> {
-        let device_context = window.platform().device_context();
-        Context::from_device_context(device_context)
-    }
-
     /// Initializes global OpenGL state and creates the OpenGL context needed to perform rendering.
-    fn from_device_context(device_context: gl::DeviceContext) -> Result<Context, Error> {
+    pub fn from_device_context(device_context: gl::DeviceContext) -> Result<Context, Error> {
         pub extern "system" fn debug_callback(
             source: DebugSource,
             message_type: DebugType,

@@ -66,7 +66,7 @@ impl AttributeLocation {
 pub struct BufferName(pub u32);
 
 impl BufferName {
-    pub const fn null() -> BufferName {
+    pub fn null() -> BufferName {
         BufferName(0)
     }
 
@@ -311,7 +311,7 @@ impl Default for PolygonMode {
 pub struct ProgramObject(pub u32);
 
 impl ProgramObject {
-    pub const fn null() -> ProgramObject {
+    pub fn null() -> ProgramObject {
         ProgramObject(0)
     }
 
@@ -410,7 +410,7 @@ pub enum ServerCapability {
 pub struct ShaderObject(pub u32);
 
 impl ShaderObject {
-    pub const fn null() -> ShaderObject {
+    pub fn null() -> ShaderObject {
         ShaderObject(0)
     }
 
@@ -632,7 +632,7 @@ pub enum TextureInternalFormat {
 pub struct TextureObject(pub u32);
 
 impl TextureObject {
-    pub const fn null() -> TextureObject {
+    pub fn null() -> TextureObject {
         TextureObject(0)
     }
 
@@ -692,7 +692,7 @@ impl UniformLocation {
 pub struct VertexArrayName(pub u32);
 
 impl VertexArrayName {
-    pub const fn null() -> VertexArrayName {
+    pub fn null() -> VertexArrayName {
         VertexArrayName(0)
     }
 

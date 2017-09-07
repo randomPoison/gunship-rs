@@ -4,8 +4,6 @@
 // The scheduler puts a `Condvar` and `Mutex` into some statics.
 #![feature(drop_types_in_const)]
 
-extern crate cell_extras;
-
 // This `extern_crate` should be within the macos platform module, but `macro_use` only works at
 // the root of the crate.
 #[cfg(target_os = "macos")]
